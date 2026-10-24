@@ -1,0 +1,5 @@
+{
+  "hosts": {
+    "example.test": ["api.example.test", "www.example.test"]
+  }
+}

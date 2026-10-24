@@ -1,0 +1,15 @@
+# binary
+/azhaq
+/azhaq-index-fixture
+/dist/
+
+# run graphs and CLI pointer
+.azhaq-last
+*.db
+*.db-wal
+*.db-shm
+
+# go
+*.test
+*.out
+coverage.out

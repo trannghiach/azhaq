@@ -1,0 +1,2 @@
+{"kind":"observation","entity_type":"Hostname","entity_key":"api.example.test","collector":"index-fixture","obs_kind":"hostname","payload":{"fqdn":"api.example.test","via":"ingest"}}
+{"kind":"hint","seed":{"type":"Hostname","keys":{"fqdn":"api.example.test"}}}

@@ -1,0 +1,5 @@
+{
+  "domains": ["example.test"],
+  "hosts": ["www.example.test"],
+  "urls": ["https://www.example.test/"]
+}
