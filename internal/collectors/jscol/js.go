@@ -157,6 +157,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var maps []sourceMap
 	var ops []string
 	opSeen := map[string]bool{}
+	var secrets []map[string]any
+	secretSeen := map[string]bool{}
 	for i := 0; i < len(queue); i++ {
 		if ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
@@ -175,6 +177,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			if link, err := normalize.URL(p); err == nil && webextract.SameOrigin(raw, link) && link != raw {
 				found = append(found, link)
+			}
+		}
+		for _, sec := range webextract.Secrets(s.body) {
+			if !secretSeen[sec.Value] && len(secrets) < 100 {
+				secretSeen[sec.Value] = true
+				row := map[string]any{"kind": sec.Kind, "severity": sec.Severity, "value": sec.Value, "script": s.url.String()}
+				if sec.Name != "" {
+					row["name"] = sec.Name
+				}
+				secrets = append(secrets, row)
 			}
 		}
 		for _, op := range webextract.GraphQLOps(s.body) {
@@ -224,6 +236,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 		return nil
+	}
+	if len(secrets) > 0 {
+		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "secrets": secrets})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "secrets",
+			Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
 	}
 	if len(ops) > 0 {
 		sort.Strings(ops)

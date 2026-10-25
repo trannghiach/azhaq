@@ -126,6 +126,7 @@ azhaq export -format openapi  > api.json      # API routes as OpenAPI 3, for Bur
 azhaq export -format burp     > scope.json    # a Burp project options file with the hosts in scope
 azhaq export -format html     > report.html   # one self-contained page
 azhaq export -format graphml  > graph.graphml # Gephi, yEd, Cytoscape
+azhaq export -format secrets                  # credentials found in scripts, worst first
 azhaq export -format urls | hosts             # plain lists
 ```
 
@@ -188,7 +189,7 @@ The API may still change before 1.0.
 | --- | --- | --- |
 | `azhaq-http` | URL, hostname | status, redirect chain, title, technologies (wappalyzer fingerprints), favicon hash (Shodan's `http.favicon.hash`), length, word and line counts, response time, address, headers, cookie names (not values); flags catch-all answers |
 | `azhaq-crawl` | URL | same-origin links, forms (including script-driven `data-action` forms), parameter names, links inside JSON responses |
-| `azhaq-js` | URL | routes from each page's inline and same-origin scripts, the chunks they import or name in a webpack chunk map, and the app's own files in exposed source maps; paths joined from constants (`"identity/" + API.LOGIN`); GraphQL operation names; tagged as API or page |
+| `azhaq-js` | URL | credentials in scripts (cloud and SaaS keys, tokens, webhooks, private keys, build variables, values assigned to secret-sounding names); routes from each page's inline and same-origin scripts, the chunks they import or name in a webpack chunk map, and the app's own files in exposed source maps; paths joined from constants (`"identity/" + API.LOGIN`); GraphQL operation names; tagged as API or page |
 | `azhaq-openapi` | URL | operations, methods and parameter names from OpenAPI 3 and Swagger 2 documents (JSON or YAML), including one embedded in a Swagger UI script; never calls them |
 | `azhaq-graphql` | URL | GraphQL endpoints, recognised from one GET; with `-graphql` (active), queries, mutations and types through introspection |
 | `azhaq-paths` | URL | common paths and API description locations, `robots.txt`, sitemaps; drops catch-all answers |

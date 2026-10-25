@@ -115,7 +115,8 @@ All HTTP collectors share one client (`internal/fetch`):
 
 - URL and path strings;
 - paths joined from constants where the request is made, such as `og+sg.LOGIN` with `og="identity/"` and `sg={LOGIN:"api/auth/login",…}`. A name counts only if the script binds it once, so a short minified name reused across modules is not guessed at. Placeholders such as `<videoId>` become `{videoId}`;
-- GraphQL operation names, from query documents or the parsed form bundlers emit.
+- GraphQL operation names, from query documents or the parsed form bundlers emit;
+- credentials: keys of AWS (with the secret key next to an access key id, which makes the pair high), Google, GitHub, GitLab, Slack, Discord and Slack webhooks, Stripe, SendGrid, Mailgun, Twilio, OpenAI and Anthropic; private keys; JWTs; variables bundlers inline (`REACT_APP_…`, `NEXT_PUBLIC_…`, `VITE_…`); and values of eight or more characters assigned to secret-sounding names, kept only when they look random (entropy) and not like a label or placeholder. Values are stored whole; the HTML report shortens them.
 
 Well-known library builds served from the app's own origin (`react-dom.development.js`, `jquery-3.6.0.min.js`, `swagger-ui-bundle.js`) are not fetched: they are large and hold no routes of the app, only stray strings.
 

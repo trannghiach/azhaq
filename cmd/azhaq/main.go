@@ -932,7 +932,7 @@ func newRunID() string {
 func cmdExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
-	format := fs.String("format", "jsonl", "jsonl, urls, hosts, targets (for nuclei -l), openapi, burp (scope), html, graphml")
+	format := fs.String("format", "jsonl", "jsonl, urls, hosts, targets (for nuclei -l), openapi, burp (scope), html, graphml, secrets")
 	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes)")
 	if err := fs.Parse(args); err != nil {
 		return err

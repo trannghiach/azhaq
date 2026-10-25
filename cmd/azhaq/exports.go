@@ -105,6 +105,10 @@ func exportAs(path, format, origin string, w io.Writer) error {
 		return htmlReport(g, w)
 	case "graphml":
 		return graphML(path, w)
+	case "secrets":
+		for _, s := range secretRows(g.obs) {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Severity, s.Kind, s.Value, s.Where)
+		}
 	default:
 		return fmt.Errorf("unknown -format %q (jsonl, urls, hosts, targets, openapi, burp, html, graphml)", format)
 	}
@@ -248,6 +252,10 @@ figure img{width:100%;border:1px solid var(--line)}figcaption{font-size:12px;col
 {{if .Shots}}<h2>Screenshots ({{len .Shots}} groups)</h2>
 {{range .Shots}}<div class="group">{{range .}}<figure><a href="{{.File}}"><img src="{{.File}}" alt="{{.URL}}" loading="lazy"></a><figcaption>{{.URL}}{{if .Title}} · {{.Title}}{{end}}</figcaption></figure>{{end}}</div>
 {{end}}{{end}}
+{{if .Secrets}}<h2>Secrets in scripts ({{len .Secrets}})</h2>
+<table><tr><th>Severity</th><th>Kind</th><th>Value</th><th>Where</th></tr>
+{{range .Secrets}}<tr><td>{{.Severity}}</td><td>{{.Kind}}</td><td><code>{{.Redacted}}</code></td><td class="wrap">{{.Where}}</td></tr>
+{{end}}</table><p class="muted">Values are shortened here; azhaq export -format secrets prints them whole.</p>{{end}}
 {{if .API}}<h2>API routes ({{len .API}})</h2>
 <table><tr><th>Route</th><th>Methods</th><th>Parameters</th><th>Seen</th></tr>
 {{range .API}}<tr><td class="wrap"><code>{{.Entity.Key}}</code></td><td>{{join .Methods}}</td><td class="wrap">{{join .Params}}</td><td>{{.Coverage}}</td></tr>
@@ -284,7 +292,7 @@ func htmlReport(g *graphView, w io.Writer) error {
 	}
 	return reportTmpl.Execute(w, map[string]any{
 		"Generated": time.Now().UTC().Format("2006-01-02 15:04 UTC"),
-		"Path":      g.path, "Stats": g.stats, "Probe": g.probe, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs),
+		"Path":      g.path, "Stats": g.stats, "Probe": g.probe, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs), "Secrets": secretRows(g.obs),
 		"Map": engine.GroupTemplates(g.rows),
 	})
 }
@@ -385,4 +393,33 @@ func shotGroups(obs []types.StoredObservation) [][]reportShot {
 	}
 	sort.SliceStable(groups, func(i, j int) bool { return len(groups[i]) > len(groups[j]) })
 	return groups
+}
+
+type secretRow struct{ Severity, Kind, Value, Redacted, Where string }
+
+// secretRows lists the credentials the scripts carried, worst first, each
+// value once.
+func secretRows(obs []types.StoredObservation) []secretRow {
+	var out []secretRow
+	seen := map[string]bool{}
+	for _, o := range obs {
+		if o.Kind != "secrets" {
+			continue
+		}
+		var p struct {
+			Secrets []struct{ Kind, Severity, Value, Script string }
+		}
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		for _, s := range p.Secrets {
+			if !seen[s.Value] {
+				seen[s.Value] = true
+				out = append(out, secretRow{s.Severity, s.Kind, s.Value, webextract.Redact(s.Value), s.Script})
+			}
+		}
+	}
+	order := map[string]int{"high": 0, "medium": 1, "info": 2}
+	sort.SliceStable(out, func(i, j int) bool { return order[out[i].Severity] < order[out[j].Severity] })
+	return out
 }
