@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"testing"
-
-	"github.com/spaolacci/murmur3"
 )
 
 // A 1×1 PNG.
@@ -31,7 +29,7 @@ func TestFaviconMatchesShodanEncoding(t *testing.T) {
 			}
 		}
 		b.WriteByte('\n')
-		return strconv.Itoa(int(int32(murmur3.Sum32(b.Bytes()))))
+		return strconv.Itoa(int(int32(murmur3hash(b.Bytes()))))
 	}
 	if got != shodan(png1x1) {
 		t.Errorf("favicon %s, want %s", got, shodan(png1x1))
@@ -43,6 +41,17 @@ func TestFaviconMatchesShodanEncoding(t *testing.T) {
 	}
 	if _, ok := Favicon([]byte("<html>not found</html>")); ok {
 		t.Error("an HTML error page was hashed as a favicon")
+	}
+}
+
+func TestMurmur3Vectors(t *testing.T) {
+	for in, want := range map[string]uint32{
+		"": 0, "hello": 0x248bfa47, "Hello, world!": 3224780355,
+		"The quick brown fox jumps over the lazy dog": 776992547,
+	} {
+		if got := murmur3hash([]byte(in)); got != want {
+			t.Errorf("%q: %d, want %d", in, got, want)
+		}
 	}
 }
 

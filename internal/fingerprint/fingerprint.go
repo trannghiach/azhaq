@@ -17,7 +17,6 @@ import (
 
 	"github.com/projectdiscovery/cdncheck"
 	wappalyzer "github.com/projectdiscovery/wappalyzergo"
-	"github.com/spaolacci/murmur3"
 )
 
 var (
@@ -110,7 +109,7 @@ func Favicon(data []byte) (string, bool) {
 	}
 	b.WriteString(enc)
 	b.WriteByte('\n')
-	return strconv.Itoa(int(int32(murmur3.Sum32(b.Bytes())))), true
+	return strconv.Itoa(int(int32(murmur3hash(b.Bytes())))), true
 }
 
 // Stats are httpx's word and line counts: spaces plus one, and newlines
