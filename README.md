@@ -14,11 +14,14 @@ A typical recon pipeline chains several tools (a subdomain finder, an HTTP probe
 
 ## Install
 
+Download a binary for Linux, macOS or Windows from the [releases](https://github.com/trannghiach/azhaq/releases) (checksums and SBOMs alongside), or:
+
 ```
-go install github.com/trannghiach/azhaq/cmd/azhaq@latest
+go install github.com/trannghiach/azhaq/cmd/azhaq@latest      # Go 1.26 or newer
+docker run --rm -v "$PWD:/work" -u "$(id -u)" ghcr.io/trannghiach/azhaq run -domain example.com -passive
 ```
 
-or from a clone: `go build -o azhaq ./cmd/azhaq`. Requires Go 1.26 or newer.
+or from a clone: `go build -o azhaq ./cmd/azhaq`.
 
 ## Usage
 
@@ -155,7 +158,19 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## Benchmark
 
-`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, alterx, httpx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups; the live names of the bug bounty domains get one probe from each tool. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-25, all 21 checks pass):
+
+| Job | Replaces | Azhaq | Reference |
+| --- | --- | --- | --- |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 516 in 77 s | 504 in 94 s |
+| DNS brute force, 5,000 words | dnsx / puredns | 3 of 3 in 39 s | 3 in 69 s |
+| Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
+| Probing 533 live hosts | httpx | 376 answered, status/title/tech agree on all 376, 114 s | 376 answered, 133 s |
+| Known routes: Juice Shop, VAmPI, ginandjuice, crAPI | katana + jsluice | 45/45, 12/12, 3/3, 32/40 | 0/45, 1/12, 2/3, 0/40 |
+| Historical URLs, 3 domains | gau | 7,319, including all 2,341 of gau's | 2,341 |
+| Memory, Juice Shop | katana | 223 MB (57 MB with `-no-tech`) | 61 MB |
+
+The memory row is a loss: technology fingerprints cost about 170 MB. [bench/README.md](bench/README.md) has what is measured, every table and the caveats (rate-limited archives, the sources that failed).
 
 ## Documentation
 
