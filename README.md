@@ -198,6 +198,7 @@ The API may still change before 1.0.
 | `azhaq-dirs` | URL | `-dirs`: paths from a wordlist (and word.ext) that answer differently from a path that cannot exist, directories swept to `-dirs-depth` |
 | `azhaq-params` | URL | `-params`: query parameters a page reads, found by sending names in groups with random values and halving the groups that change the answer (status, size, a value reflected back); GET only |
 | `azhaq-asn`, `azhaq-prefix`, `azhaq-ptr` | ASN, prefix, IP | an AS's announced prefixes (RIPEstat), the addresses in a prefix, their reverse DNS names; addresses found this way are probed over HTTP and TLS, and names on their certificates followed |
+| `azhaq-search` | domain | hosts and services Shodan, FOFA and Netlas have seen for the domain (keys `shodan`, `fofa` as `email:key`, `netlas` in the provider file); without keys each is listed as skipped |
 | `azhaq-ports` | hostname, IP | `-ports`: open TCP ports by full connect (no root), with the first line each service sends; a CDN or WAF address gets its web ports only; ports that may serve HTTP go to `azhaq-http` |
 | `azhaq-urls` | domain | historical URLs of the domain and its subdomains from the Wayback Machine (paged), Common Crawl, AlienVault OTX, urlscan.io (a key from the provider file raises its limits) and arquivo.pt; one row per URL template in the graph, every URL with `-urls FILE`; a source that refuses or rate limits marks the result `degraded` |
 | `azhaq-rdap` | domain, organization | registration data and nameservers |

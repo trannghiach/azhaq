@@ -19,6 +19,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
+	"github.com/trannghiach/azhaq/internal/collectors/searchcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
@@ -75,6 +76,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(dirscol.New(client, o.Dirs))
 	cat.MustRegister(paramcol.New(client, o.Params))
 	cat.MustRegister(asncol.NewASN(nil))
+	cat.MustRegister(searchcol.New(o.Subdomains.Keys))
 	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
