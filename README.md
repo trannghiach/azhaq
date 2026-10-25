@@ -254,19 +254,28 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-25, all 21 checks pass):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-25, all 43 checks pass; archives and ports from GitHub's network, where they pass too):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 516 in 77 s | 504 in 94 s |
-| DNS brute force, 5,000 words | dnsx / puredns | 3 of 3 in 39 s | 3 in 69 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 467, results in 61 s | 449 in 71 s |
+| DNS brute force, 5,000 words | dnsx / puredns | 3 in 36 s | 2 in 72 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 533 live hosts | httpx | 376 answered, status/title/tech agree on all 376, 114 s | 376 answered, 133 s |
+| Probing 483 live hosts | httpx | 337 answered, status/title/tech agree on all 337, 86 s | 339 answered, 133 s |
 | Known routes: Juice Shop, VAmPI, ginandjuice, crAPI | katana + jsluice | 45/45, 12/12, 3/3, 32/40 | 0/45, 1/12, 2/3, 0/40 |
-| Historical URLs, 3 domains | gau | 7,319, including all 2,341 of gau's | 2,341 |
-| Memory, Juice Shop | katana | 223 MB (57 MB with `-no-tech`) | 61 MB |
+| Known routes with Chrome: Juice Shop, crAPI | katana `-headless` | 45/45 in 14 s, 32/40 in 18 s | 2/45 in 19 s, 0/40 in 47 s |
+| Historical URLs, 3 domains (GitHub) | gau | 499,306, including all 17,251 of gau's | 17,251 |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives | 36 hits, 4 false positives |
+| Parameters, 5 pages | arjun | 5, including arjun's 2, in 155 s | 2 in 40 s |
+| Open ports, top 1,000 (GitHub) | naabu | 4 of 4 | 4 |
+| Screenshots, 4 front pages | gowitness | 4 | 3 |
+| Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
+| Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
+| Roles: anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows of the access table | |
+| A run capped at 100 requests, resumed; killed and resumed; with two workers | – | the same 147 URLs as one run each time | |
+| Memory, Juice Shop | katana | 89 MB | 66 MB |
 
-The memory row is a loss: technology fingerprints cost about 170 MB. [bench/README.md](bench/README.md) has what is measured, every table and the caveats (rate-limited archives, the sources that failed).
+The parameter row is slower than arjun, and memory is still above katana's. [bench/README.md](bench/README.md) has what is measured, every table and the caveats (archives this machine cannot reach, the sources that failed).
 
 ## Documentation
 

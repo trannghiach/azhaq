@@ -62,7 +62,7 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 - **katana ∪ jsluice**: known routes that either tool found, katana crawling and jsluice reading the scripts katana listed.
 - **probe agreement**: for hosts both Azhaq and httpx answered, the final status, the title (whitespace collapsed) and the technology list (names and versions) must all match.
 - **historical URLs**: distinct URLs on the domain or its subdomains, normalized the way Azhaq stores them, static assets left out; the share of gau's list that Azhaq's `-urls` file also holds.
-- **time** and **RSS**: wall time and peak resident memory of each run. Azhaq's app runs include its default domain fan-out (subdomain sources, archives, RDAP), which waits on third-party services, and technology fingerprints (about 170 MB; `-no-tech` leaves them out).
+- **time** and **RSS**: wall time and peak resident memory of each run. Azhaq's app runs include its default domain fan-out (subdomain sources, archives, RDAP), which waits on third-party services, and technology fingerprints (about 30 MB; `-no-tech` leaves them out).
 
 ## Checks
 
@@ -83,14 +83,16 @@ The command fails when one of these does not hold:
 
 ## Latest results
 
-2026-10-25, commit `0187bde`, Go 1.27.1, one machine; record `bench/history/2026-10-25T115806-0187bde.json`. All 21 checks pass.
+2026-10-25, commit `ab72fed`, Go 1.27.1, one machine, `go run ./bench -crapi -ports=false`; record `bench/history/2026-10-25T172610-ab72fed.json`. All 43 checks pass. The archive and port comparisons are from GitHub's network the same day (workflow `bench-archives`, tag `bench-archives-6`), where all their checks pass too.
+
+### Applications
 
 | App | Azhaq routes | known | shell | time | RSS | katana routes | known | shell | time | RSS |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Juice Shop | 121 | 45/45 | 0 | 7.0 s | 223 MB | 5 | 0/45 | 3 | 13.5 s | 61 MB |
-| VAmPI | 14 | 12/12 | 0 | 1.5 s | 160 MB | 1 | 1/12 | 0 | 11.3 s | 34 MB |
-| ginandjuice.shop | 15 | 3/3 | 0 | 31.4 s | 207 MB | 13 | 1/3 | 0 | 15.8 s | 64 MB |
-| crAPI | 69 | 32/40 | 0 | 7.0 s | 210 MB | 4 | 0/40 | 1 | 13.1 s | 57 MB |
+| Juice Shop | 120 | 45/45 | 0 | 6.7 s | 89 MB | 5 | 0/45 | 3 | 13.2 s | 66 MB |
+| VAmPI | 14 | 12/12 | 0 | 0.8 s | 65 MB | 1 | 1/12 | 0 | 11.0 s | 36 MB |
+| ginandjuice.shop | 14 | 3/3 | 0 | 24.0 s | 90 MB | 13 | 1/3 | 0 | 17.1 s | 65 MB |
+| crAPI | 69 | 32/40 | 0 | 6.2 s | 94 MB | 4 | 0/40 | 2 | 13.0 s | 60 MB |
 
 | Known routes | Azhaq | katana | jsluice | katana ∪ jsluice |
 | --- | --- | --- | --- | --- |
@@ -99,30 +101,75 @@ The command fails when one of these does not hold:
 | ginandjuice.shop | 3/3 | 1/3 | 1/3 | 2/3 |
 | crAPI | 32/40 | 0/40 | 0/40 | 0/40 |
 
-crAPI's frontend joins every API path from constants (`"identity/" + API.LOGIN`); Azhaq resolves 32 of the 40 its OpenAPI document lists, and the other 8 (admin and management endpoints) appear nowhere in the frontend. Azhaq's memory is mostly technology fingerprints (about 170 MB; `-no-tech` brings Juice Shop to about 57 MB). Its time on ginandjuice.shop includes the domain fan-out, which waits for the slowest subdomain source; it keeps at most 2 requests in flight per host, katana ran with `-c 10`.
+| With a browser | routes | known | shell | time |
+| --- | --- | --- | --- | --- |
+| Juice Shop, Azhaq `-browser` | 145 | 45/45 | 0 | 13.9 s |
+| Juice Shop, katana `-headless` | 30 | 2/45 | 4 | 19.0 s |
+| crAPI, Azhaq `-browser` | 70 | 32/40 | 0 | 17.5 s |
+| crAPI, katana `-headless` | 5 | 0/40 | 1 | 47.1 s |
 
-`azhaq roles` on Juice Shop, anonymous against a freshly registered user: 12 endpoints differ, among them `/api/Users` (every account) and `/rest/user/authentication-details`, 401 → 200.
+crAPI's frontend joins every API path from constants (`"identity/" + API.LOGIN`); Azhaq resolves 32 of the 40 its OpenAPI document lists, and the other 8 (admin and management endpoints) appear nowhere in the frontend. Memory is the process alone, without Chrome for the browser rows. ginandjuice.shop's time includes the domain fan-out, which waits for the slowest subdomain source.
 
-Path sweep on Juice Shop, 33 words: Azhaq 3 hits, ffuf `-ac` 3 hits, 3 shared, no catch-all page in either.
+### Sessions and roles
 
-| Domain | live | Azhaq live | names | time | subfinder live | names | time | Azhaq URLs | gau URLs | gau's in Azhaq |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hackerone.com | 12 | 12 | 573 | 31 s | 11 | 524 | 31 s | 3,096 | 1,625 | 1,625 |
-| tesla.com | 510 | 497 | 1,841 | 26 s | 487 | 1,819 | 31 s | 4,079 | 651 | 651 |
-| vulnweb.com | 7 | 7 | 532 | 20 s | 6 | 518 | 31 s | 144 | 65 | 65 |
+| | endpoints that differ | expected | time |
+| --- | --- | --- | --- |
+| Juice Shop, anonymous → user, with the user's token | 12 | `/api/Users`, `/rest/user/authentication-details` 401 → 200 | 16.0 s |
+| Juice Shop, anonymous → user, signed in with `-role-login` | 14 | both, 401 → 200 | 17.1 s |
+| multi-tenant app, anonymous → member → owner, `-role-login` | 7 | 6/6 rows of the access table; no signed-in role requested the sign-out link | 8.8 s |
 
-Both tools run subfinder's default keyless sources; 7 or 8 of 14 answered per domain, and Azhaq records each failure. For historical URLs both lost the Wayback Machine (it answers 429 to this address) and Common Crawl (its index refuses connections from here); gau's URLs came from OTX and urlscan, which Azhaq also asks, and Azhaq's extra URLs come mostly from arquivo.pt (capped at 10,000 rows a domain).
+Juice Shop's login form is an Angular form behind a welcome dialog; the multi-tenant app draws its form with a script and stores a token in `localStorage`. The seventh row is the sign-out link, which only the anonymous visitor requests.
 
-| Probing, 533 live hosts | answered | status, title and tech agree | favicon agrees | CDN agrees | time |
+### Discovery
+
+| | Azhaq | Reference | shared | Azhaq time | reference time |
 | --- | --- | --- | --- | --- | --- |
-| Azhaq | 376 | 376/376 | 40/48 | 49/52 | 114.4 s |
-| httpx | 376 | | | | 133.4 s |
+| paths, 4,750 words on 3 apps (ffuf `-ac`) | 35 hits | 36 | 35 | 62.6 s | 68.2 s |
+| false positives (hits that answer like a missing path) | 4 | 4 | | | |
+| parameters, 5 pages, 6,453 names (arjun) | 5 | 2 | 2 | 155.4 s | 40.1 s |
+| ports, top 1,000, connect scan (naabu; GitHub) | 4 | 4 | 4 | | |
+| screenshots, 4 front pages (gowitness) | 4 | 3 | | 36 s | 35 s |
+| secrets in the planted script (jsluice) | 12 | 4 | 4 | | |
 
-Both sent the same User-Agent with 16 requests in flight. With its default random browser User-Agent, httpx got Akamai's "Access Denied" page on about 85 tesla.com hosts in a separate run, where Azhaq got the real page.
+Azhaq's parameter search is slower than arjun's: it confirms each name it finds on its own, and it sends at most 20 requests a second per host.
+
+### Scope, watch and scale
+
+- Scope: no request reached the host outside the program's scope (links, scripts, a redirect, a form and `robots.txt` pointed at it, with path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped.
+- Watch: three runs of an unchanged app, no change reported.
+- Juice Shop behind a counting proxy, 147 URLs in one run of 7.5 s:
+
+| | URLs as one run | detail |
+| --- | --- | --- |
+| `-max-requests 100`, then `azhaq resume` until done | yes | 3 processes; Juice Shop received at most 100 requests from one |
+| killed with SIGKILL after 2.5 s, then `azhaq resume` | yes | |
+| `-serve` with two `azhaq worker` processes | yes | the workers ran 200 tasks; 10.3 s |
+
+### Domains
+
+| Domain | live | Azhaq live | names | subdomains at | whole run | subfinder live | names | time | Azhaq URLs | gau URLs | gau's in Azhaq |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| hackerone.com | 12 | 12 | 567 | 20 s | 40 s | 11 | 514 | 36 s | 3,095 | 1,623 | 1,623 |
+| tesla.com | 460 | 448 | 1,389 | 21 s | 71 s | 432 | 1,368 | 14 s | 4,079 | 651 | 651 |
+| vulnweb.com | 7 | 7 | 529 | 20 s | 20 s | 6 | 514 | 21 s | 144 | 65 | 65 |
+
+Both tools run subfinder's default keyless sources; 6 or 7 of 14 answered per domain, and Azhaq records each failure. Here both lost the Wayback Machine and Common Crawl, which refuse this address. From GitHub's network the same day: Azhaq held all 17,251 of gau's historical URLs (499,306 in all; 625,236 Wayback rows for hackerone.com in 6 pages and 152 s), 429 live names against subfinder's 411, its subdomain results in 121 s as subfinder's, and the whole passive run, archives included, in 233 s against 508 s for subfinder and gau. The Wayback Machine refused connections for tesla.com in that run, to gau as well.
+
+| Networks | Azhaq | Reference | shared |
+| --- | --- | --- | --- |
+| AS394161, announced prefixes (RIPEstat) against registered routes (RADb) | 102 | 39 | 31 |
+| 45.33.32.128/25, addresses with a reverse name (dnsx `-ptr`) | 36 | 36 | 36 |
+
+| Probing, 483 live hosts | answered | status, title and tech agree | favicon agrees | CDN agrees | time |
+| --- | --- | --- | --- | --- | --- |
+| Azhaq | 337 | 337/337 | 41/48 | 41/45 | 85.8 s |
+| httpx | 339 | | | | 132.8 s |
+
+Both sent the same User-Agent with 16 requests in flight. The two hosts only httpx answered (`www.hackerone.com`, `www.tesla.com`) sit behind bot managers that answer one client and not the other from run to run.
 
 | Active DNS on vulnweb.com | Azhaq | dnsx | shared | Azhaq time | dnsx time |
 | --- | --- | --- | --- | --- | --- |
-| brute force, 5,000 words | 3 | 3 | 3 | 39.2 s | 69.1 s |
+| brute force, 5,000 words | 3 | 2 | 2 | 35.8 s | 71.8 s |
 | permutations of live names | 0 | 0 (alterx) | 0 | | |
 | wildcard zone, 50 words, 3 real | 3 found, 0 fake | 50 (no filtering) | | | |
 
