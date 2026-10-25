@@ -80,7 +80,7 @@ Common options:
 | `-dns-brute FILE`, `-permute` | active: resolve a wordlist under the domain, or variations of names found; both need `-allow` |
 | `-graphql` | active: read the schema of GraphQL endpoints with an introspection query; needs `-allow` |
 | `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
-| `-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), pause before each request, collectors not to run |
+| `-parallel N`, `-host-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), requests in flight per host (default 4), pause before each request, collectors not to run |
 | `-db FILE` | graph file to write (default: a new timestamped file per run); reuse it to keep a workspace of runs |
 | `-json` / `-obs` | JSON summary, or the full observation log |
 

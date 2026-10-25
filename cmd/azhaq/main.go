@@ -149,6 +149,7 @@ func cmdRun(args []string) error {
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
+	hostParallel := fs.Int("host-parallel", 0, "requests in flight per host (default 4)")
 	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
@@ -171,6 +172,9 @@ func cmdRun(args []string) error {
 
 	fetch.Reset()
 	fetch.Delay = *delay
+	if *hostParallel > 0 {
+		fetch.HostParallel = *hostParallel
+	}
 	if err := applyExtra(cookies, headers); err != nil {
 		return err
 	}

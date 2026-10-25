@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
 
@@ -140,5 +141,26 @@ func TestLoadProviders(t *testing.T) {
 	}
 	if k, used, err := LoadProviders(filepath.Join(dir, "none.yaml")); err != nil || used != "" || len(k) != 0 {
 		t.Errorf("missing file: %v %q %v", k, used, err)
+	}
+}
+
+func TestDerivedDomainWaitsLess(t *testing.T) {
+	defer func(d time.Duration) { fanoutTimeout = d }(fanoutTimeout)
+	fanoutTimeout = 50 * time.Millisecond
+	slow := source{name: "slow", deflt: true, collect: func(ctx context.Context, _ string, _ []string, _ *subscraping.Session) ([]string, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	c := collector(Options{Timeout: time.Minute}, slow)
+	t0 := time.Now()
+	var payload map[string]any
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org", types.DerivedKey: "1"}}, func(o types.Observation) error {
+		return json.Unmarshal(o.Payload, &payload)
+	})
+	if err != nil || time.Since(t0) > 5*time.Second {
+		t.Fatalf("derived domain took %s (%v)", time.Since(t0), err)
+	}
+	if payload["degraded"] != true {
+		t.Errorf("a source cut short must be reported: %v", payload)
 	}
 }

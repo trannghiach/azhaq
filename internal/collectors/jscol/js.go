@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -276,10 +277,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	return meta, nil
 }
 
+// vendorScript matches well-known library builds served from the app's own
+// origin (react-dom.development.js, jquery-3.6.0.min.js): they are large
+// and hold no routes of the app.
+var vendorScript = regexp.MustCompile(`(?i)(^|/)(react(-dom)?|jquery(-ui|-migrate)?|bootstrap(\.bundle)?|angular|vue|lodash|moment|popper|d3|three|chart|highcharts|swagger-ui-(bundle|standalone-preset)|polyfills?-legacy)([.-][\w.-]*)?\.js$`)
+
 // load fetches a same-origin script the run has not parsed yet and queues it.
 // Names found inside scripts must end in .js; <script src> need not.
 func (c *Collector) load(ctx context.Context, page, src string, needExt bool, queue []script, fetched *[]string) []script {
 	if len(*fetched) >= maxScripts || !webextract.SameOrigin(page, src) || (needExt && !looksLikeJS(src)) {
+		return queue
+	}
+	if u, err := url.Parse(src); err == nil && vendorScript.MatchString(u.Path) {
 		return queue
 	}
 	if _, done := c.parsed.LoadOrStore(src, true); done {

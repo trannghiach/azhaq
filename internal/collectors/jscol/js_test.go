@@ -123,3 +123,20 @@ func TestSkipsShellAndJSON(t *testing.T) {
 		t.Error("parsed script not skipped at plan time")
 	}
 }
+
+func TestVendorScripts(t *testing.T) {
+	for p, want := range map[string]bool{
+		"/resources/js/react-dom.development.js": true,
+		"/static/jquery-3.6.0.min.js":            true,
+		"/js/bootstrap.bundle.min.js":            true,
+		"/api-docs/swagger-ui-bundle.js":         true,
+		"/api-docs/swagger-ui-init.js":           false,
+		"/static/js/main.8c78208c.js":            false,
+		"/resources/js/stockCheck.js":            false,
+		"/js/vuex-store.js":                      false,
+	} {
+		if got := vendorScript.MatchString(p); got != want {
+			t.Errorf("%s: %v", p, got)
+		}
+	}
+}

@@ -60,8 +60,8 @@ var (
 	hostSem  = map[string]chan struct{}{}
 )
 
-// HostParallel caps in-flight uncached GETs per host (crawl politeness).
-var HostParallel = 2
+// HostParallel caps in-flight uncached GETs per host (-host-parallel).
+var HostParallel = 4
 
 // Delay is a pause before each uncached GET.
 var Delay time.Duration
@@ -88,9 +88,11 @@ func Client(c *http.Client) *http.Client {
 		return c
 	}
 	// InsecureSkipVerify: we are observing whatever cert is presented (same as azhaq-tls).
-	// 10 s like httpx: CDN edges and bot managers often answer slowly.
+	// Headers within 10 s, like httpx: CDN edges and bot managers often
+	// answer slowly. The body gets longer: a 1 MB bundle on a slow link
+	// is not a dead host.
 	return &http.Client{
-		Timeout: 10 * time.Second,
+		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
@@ -391,7 +393,7 @@ func acquireHost(ctx context.Context, raw string) (func(), error) {
 	}
 	n := HostParallel
 	if n <= 0 {
-		n = 2
+		n = 4
 	}
 	host := strings.ToLower(u.Hostname())
 	cacheMu.Lock()

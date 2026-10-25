@@ -378,7 +378,7 @@ func derivedSeeds(seed types.Seed) []types.Seed {
 		host = seed.Key()
 	}
 	if d := normalize.RegistrableDomain(host); d != "" {
-		out = append(out, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": d}})
+		out = append(out, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": d, types.DerivedKey: "1"}})
 	}
 	return out
 }

@@ -24,10 +24,11 @@ type Span struct {
 }
 
 type Stat struct {
-	Name string
-	N    int
-	Max  time.Duration
-	Sum  time.Duration
+	Name     string
+	N        int
+	Max      time.Duration
+	MaxLabel string // what the slowest span was about (a URL, a domain)
+	Sum      time.Duration
 }
 
 type ctxKey struct{}
@@ -98,6 +99,7 @@ func (l *Log) Stats() []Stat {
 		st.Sum += s.Dur
 		if s.Dur > st.Max {
 			st.Max = s.Dur
+			st.MaxLabel = s.Label
 		}
 	}
 	out := make([]Stat, 0, len(order))
@@ -142,7 +144,11 @@ func (l *Log) Report(wall time.Duration) string {
 	}
 	b.WriteString("slow\n")
 	for _, s := range slow {
-		fmt.Fprintf(&b, "  %-*s  %d × max %s\n", width, s.Name, s.N, s.Max.Round(time.Millisecond))
+		fmt.Fprintf(&b, "  %-*s  %d × max %s", width, s.Name, s.N, s.Max.Round(time.Millisecond))
+		if s.N > 1 && s.MaxLabel != "" {
+			fmt.Fprintf(&b, "  (%s)", s.MaxLabel)
+		}
+		b.WriteByte('\n')
 	}
 	return b.String()
 }

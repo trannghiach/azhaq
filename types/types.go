@@ -28,6 +28,14 @@ type Seed struct {
 	Keys map[string]string `json:"keys"`
 }
 
+// DerivedKey marks a domain the engine derived from a URL or hostname, as
+// opposed to one the user asked about: collectors may spend less time on
+// it so the application's own map is not held up.
+const DerivedKey = "derived"
+
+// Derived reports whether the engine derived s from another seed.
+func (s Seed) Derived() bool { return s.Keys[DerivedKey] != "" }
+
 func Known(t SeedType) bool {
 	switch t {
 	case TypeURL, TypeHostname, TypeDomain, TypeIPAddress, TypePrefix, TypeCertificate, TypeOrganization, TypeEmail, TypeCloudAccount, TypeApplication:

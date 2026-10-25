@@ -26,6 +26,10 @@ import (
 
 const Name = "azhaq-subdomains"
 
+// fanoutTimeout bounds each source for a domain derived from a URL: the
+// run is about the application, and crt.sh alone can take 35 s.
+var fanoutTimeout = 15 * time.Second
+
 const (
 	maxNames      = 20000
 	sourceTimeout = 45 * time.Second
@@ -127,14 +131,22 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
+	timeout := c.opts.Timeout
+	if seed.Derived() && timeout > fanoutTimeout {
+		timeout = fanoutTimeout
+	}
 	results := make([]outcome, len(run))
 	var hintMu sync.Mutex
 	hinted := map[string]bool{}
 	early := true
 	// Each source's names go to DNS as soon as it answers.
+	finished := false // set once Run stops waiting; late sources are ignored
 	pass := func(names []string) {
 		hintMu.Lock()
 		defer hintMu.Unlock()
+		if finished {
+			return
+		}
 		var seeds []types.Seed
 		for _, raw := range names {
 			if n := clean(raw, domain); n != "" && !hinted[n] && len(hinted) < maxNames {
@@ -150,17 +162,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	var wg sync.WaitGroup
+	reported := make([]bool, len(run))
 	for i, s := range run {
 		wg.Add(1)
 		go func(i int, s source) {
 			defer wg.Done()
-			sctx, cancel := context.WithTimeout(ctx, c.opts.Timeout)
+			sctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			sess := &subscraping.Session{
 				Extractor:           ext,
 				Client:              c.opts.Client,
 				RequestLimiter:      c.limiter,
-				Timeout:             int(c.opts.Timeout / time.Second),
+				Timeout:             int(timeout / time.Second),
 				MaxResponseBodySize: maxBody,
 			}
 			done := timing.Start(ctx, "source."+s.name)
@@ -170,11 +183,33 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			if err == nil && sctx.Err() != nil && ctx.Err() == nil {
 				err = sctx.Err()
 			}
-			results[i] = outcome{names: names, err: err, took: time.Since(t0)}
+			hintMu.Lock()
+			if !finished {
+				results[i] = outcome{names: names, err: err, took: time.Since(t0)}
+				reported[i] = true
+			}
+			hintMu.Unlock()
 			pass(names)
 		}(i, s)
 	}
-	wg.Wait()
+	// Some sources ignore the context (subfinder's crt.sh tries a Postgres
+	// connection first); stop waiting a little after the deadline.
+	all := make(chan struct{})
+	go func() { wg.Wait(); close(all) }()
+	t0 := time.Now()
+	select {
+	case <-all:
+	case <-ctx.Done():
+	case <-time.After(timeout + 2*time.Second):
+	}
+	hintMu.Lock()
+	finished = true
+	for i := range run {
+		if !reported[i] {
+			results[i] = outcome{err: context.DeadlineExceeded, took: time.Since(t0)}
+		}
+	}
+	hintMu.Unlock()
 	if ctx.Err() != nil {
 		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
 	}

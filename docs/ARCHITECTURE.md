@@ -89,10 +89,10 @@ A seen-set prevents running the same seed twice, and `-allow` / `-deny` filter h
 All HTTP collectors share one client (`internal/fetch`):
 
 - Redirects are not followed automatically. Each hop is recorded, and the status stored is that of the URL that was requested, so `/admin → 303 → /login` records `/admin` as 303.
-- At most 2 requests are in flight per host. Concurrent requests for the same URL share one fetch.
+- At most 4 requests are in flight per host (`-host-parallel`). Concurrent requests for the same URL share one fetch.
 - Bodies are capped at 2 MiB, or 16 MiB for JavaScript, JSON and source maps, where bundles of several MB are normal. `-delay` adds a pause before each uncached request.
 - `-cookie` and `-header` are added to every request, which lets a run reuse a session you already have. Azhaq never logs in, and it stores cookie names but never their values.
-- Timeouts are 10 seconds per request, as in httpx; CDN edges and bot managers often answer slowly.
+- Headers must arrive within 10 seconds, as in httpx; CDN edges and bot managers often answer slowly. The whole request, body included, gets 30 seconds, so a large bundle on a slow link still arrives.
 
 ### Probing
 
@@ -114,6 +114,8 @@ All HTTP collectors share one client (`internal/fetch`):
 - URL and path strings;
 - paths joined from constants where the request is made, such as `og+sg.LOGIN` with `og="identity/"` and `sg={LOGIN:"api/auth/login",…}`. A name counts only if the script binds it once, so a short minified name reused across modules is not guessed at. Placeholders such as `<videoId>` become `{videoId}`;
 - GraphQL operation names, from query documents or the parsed form bundlers emit.
+
+Well-known library builds served from the app's own origin (`react-dom.development.js`, `jquery-3.6.0.min.js`, `swagger-ui-bundle.js`) are not fetched: they are large and hold no routes of the app, only stray strings.
 
 A script that names a same-origin source map has the map read: the map is recorded with the app's own source files (libraries left out), and those sources are scanned like scripts. An exposed source map is worth knowing about on its own.
 
@@ -142,6 +144,8 @@ A name is a wildcard answer when one of its parent zones answers for random labe
 `azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
 
 The default set is subfinder's default set: the fast sources. `-all-sources` adds slower ones such as Common Crawl and the Wayback Machine.
+
+A domain the engine derives from a URL or hostname (`-url https://app.example.com/` implies `example.com`) gets 15 seconds per source instead of 45, here and for historical URLs: the run is about the application, and one slow source would otherwise hold up its map. A domain given with `-domain` gets the full time. Sources that ignore their deadline (subfinder's crt.sh tries a Postgres connection first) are reported as timed out two seconds after it and no longer waited for.
 
 ## Historical URLs
 
