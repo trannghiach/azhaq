@@ -764,3 +764,78 @@ func cmdDirs(args []string) error {
 	}
 	return w.close()
 }
+
+// cmdParams is arjun (GET): query parameters the pages read. The pages
+// given are the scope.
+func cmdParams(args []string) error {
+	fs := flag.NewFlagSet("params", flag.ContinueOnError)
+	var c common
+	c.register(fs)
+	var urls stringsFlag
+	fs.Var(&urls, "u", "page URL (repeatable)")
+	list := fs.String("l", "", "file of page URLs (- for stdin)")
+	words := fs.String("w", "", "parameter names, one per line (required)")
+	vals := map[string]*string{"params-rate": fs.String("rate", "", "requests per second per host (default 20)")}
+	var headers, cookies stringsFlag
+	fs.Var(&headers, "H", "extra request header K: V (repeatable)")
+	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *words == "" {
+		return fmt.Errorf("give parameter names with -w")
+	}
+	targets, err := inputs(urls, *list)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("give -u URL, -l FILE or URLs on stdin")
+	}
+	path, rm, err := tempList(targets)
+	if err != nil {
+		return err
+	}
+	defer rm()
+	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-params"),
+		"-params", *words, "-params-per-host", fmt.Sprint(len(targets))}
+	for _, t := range targets {
+		if u, err := url.Parse(t); err == nil {
+			run = append(run, "-allow", u.Hostname())
+		}
+	}
+	run = append(run, forward(vals)...)
+	for _, h := range headers {
+		run = append(run, "-header", h)
+	}
+	for _, ck := range cookies {
+		run = append(run, "-cookie", ck)
+	}
+	st, done, err := runPreset(&c, run)
+	if err != nil {
+		return err
+	}
+	defer done()
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	for _, p := range payloads(st, "azhaq-params") {
+		u, _ := p["url"].(string)
+		var names []string
+		if xs, ok := p["params"].([]any); ok {
+			for _, x := range xs {
+				names = append(names, fmt.Sprint(x))
+			}
+		}
+		if len(names) == 0 {
+			continue
+		}
+		if w.json {
+			w.obj(map[string]any{"url": u, "method": "GET", "params": names, "why": p["why"]})
+		} else {
+			w.line(u + " " + strings.Join(names, ","))
+		}
+	}
+	return w.close()
+}

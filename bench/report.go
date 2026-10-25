@@ -60,6 +60,10 @@ func printReport() {
 		fmt.Fprintf(w, "\npaths (%d words, %d apps)\tazhaq\tffuf -ac\tshared\tfalse positives\ttime\n", d.Words, len(d.Apps))
 		fmt.Fprintf(w, "hits\t%d\t%d\t%d\t%d / %d\t%.1fs / %.1fs\n", d.AzhaqHits, d.FfufHits, d.Shared, d.AzhaqFalse, d.FfufFalse, d.AzhaqSecs, d.FfufSecs)
 	}
+	if p := rec.Params; p != nil {
+		fmt.Fprintf(w, "\nparameters (%d pages, %d names)\tazhaq\tarjun\tshared\ttime\n", len(p.Pages), p.Words)
+		fmt.Fprintf(w, "found\t%d\t%d\t%d\t%.1fs / %.1fs\n", len(p.Azhaq), len(p.Arjun), p.Shared, p.AzhaqSecs, p.ArjunSecs)
+	}
 	if p := rec.Ports; p != nil {
 		fmt.Fprintf(w, "\nports (top 1000, connect)\tazhaq\tnaabu\tshared\tazhaq time\tnaabu time\n")
 		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.1fs\t%.1fs\n", strings.Join(p.Hosts, ", "), p.AzhaqOpen, p.NaabuOpen, p.Shared, p.AzhaqSeconds, p.NaabuSeconds)

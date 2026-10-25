@@ -25,6 +25,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/connector"
@@ -89,6 +90,8 @@ func run(args []string) error {
 		return cmdPorts(args[1:])
 	case "dirs":
 		return cmdDirs(args[1:])
+	case "params":
+		return cmdParams(args[1:])
 	case "ingest":
 		return cmdIngest(args[1:])
 	case "export":
@@ -130,6 +133,7 @@ const helpText = `azhaq — generic recon engine
   azhaq urls   -d DOMAIN | -dL FILE | stdin  [-json]                              # like gau
   azhaq ports  -host HOST | -l FILE | stdin  [-p top-100|top-1000|full|LIST] [-rate N] [-json]  # like naabu
   azhaq dirs   -u URL | -l FILE | stdin  -w WORDLIST [-e EXT] [-depth N] [-mc LIST] [-json]   # like ffuf -ac
+  azhaq params -u URL | -l FILE | stdin  -w NAMES [-rate N] [-json]                # like arjun (GET)
                # results on stdout, one per line; progress on stderr (-silent drops it)
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
   azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
@@ -189,6 +193,9 @@ func cmdRun(args []string) error {
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
 	dirsThreads := fs.Int("dirs-threads", 20, "path guesses in flight per service")
 	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host")
+	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active: needs -allow)")
+	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
+	paramsRate := fs.Float64("params-rate", 20, "parameter requests per second per host")
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
@@ -312,8 +319,11 @@ func cmdRun(args []string) error {
 	if *dirsFile != "" {
 		budgets.Active["dirs"] = true
 	}
+	if *paramsFile != "" {
+		budgets.Active["params"] = true
+	}
 	if len(budgets.Active) > 0 && len(allow) == 0 {
-		return fmt.Errorf("-dns-brute, -permute, -graphql, -ports and -dirs are active: name the scope with -allow DOMAIN")
+		return fmt.Errorf("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN")
 	}
 	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
 		return err
@@ -324,6 +334,13 @@ func cmdRun(args []string) error {
 		if opts.Ports, err = portscan.Ports(*portsSpec); err != nil {
 			return fmt.Errorf("-ports: %w", err)
 		}
+	}
+	if *paramsFile != "" {
+		words, err := loadLines(*paramsFile)
+		if err != nil {
+			return err
+		}
+		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate}
 	}
 	if *dirsFile != "" {
 		words, err := loadLines(*dirsFile)

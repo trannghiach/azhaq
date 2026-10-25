@@ -80,6 +80,7 @@ Common options:
 | `-dns-brute FILE`, `-permute` | active: resolve a wordlist under the domain, or variations of names found; both need `-allow` |
 | `-graphql` | active: read the schema of GraphQL endpoints with an introspection query; needs `-allow` |
 | `-dirs FILE`, `-dirs-ext`, `-dirs-depth`, `-dirs-rate`, `-dirs-mc` | active: guess paths on each web service from a wordlist, calibrated against paths that cannot exist; needs `-allow` |
+| `-params FILE`, `-params-per-host N`, `-params-rate N` | active: find query parameters pages read but do not link (GET only); needs `-allow` |
 | `-ports top-100\|top-1000\|full\|LIST`, `-port-rate N` | active: TCP connect scan of hosts in scope, with banners; open ports that may serve HTTP are probed; needs `-allow` |
 | `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
 | `-parallel N`, `-host-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), requests in flight per host (default 4), pause before each request, collectors not to run |
@@ -108,6 +109,7 @@ azhaq crawl -u https://app.example.com/ -silent                               # 
 azhaq urls -d example.com -silent                                             # gau
 azhaq ports -host scanme.nmap.org -p top-1000 -silent                         # naabu (connect scan)
 azhaq dirs -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac, feroxbuster with -depth
+azhaq params -u https://app.example.com/search -w burp-parameter-names.txt    # arjun (GET)
 azhaq probe -l hosts.txt -json > probe.jsonl                                  # httpx -json fields
 ```
 
@@ -176,6 +178,7 @@ The API may still change before 1.0.
 | `azhaq-dns-brute` | domain | `-dns-brute`: names from a wordlist that resolve, wildcard answers removed |
 | `azhaq-permute` | hostname | `-permute`: numbered, prefixed and suffixed variations of live names that resolve |
 | `azhaq-dirs` | URL | `-dirs`: paths from a wordlist (and word.ext) that answer differently from a path that cannot exist, directories swept to `-dirs-depth` |
+| `azhaq-params` | URL | `-params`: query parameters a page reads, found by sending names in groups with random values and halving the groups that change the answer (status, size, a value reflected back); GET only |
 | `azhaq-ports` | hostname, IP | `-ports`: open TCP ports by full connect (no root), with the first line each service sends; a CDN or WAF address gets its web ports only; ports that may serve HTTP go to `azhaq-http` |
 | `azhaq-urls` | domain | historical URLs of the domain and its subdomains from the Wayback Machine (paged), Common Crawl, AlienVault OTX, urlscan.io (a key from the provider file raises its limits) and arquivo.pt; one row per URL template in the graph, every URL with `-urls FILE`; a source that refuses or rate limits marks the result `degraded` |
 | `azhaq-rdap` | domain, organization | registration data and nameservers |

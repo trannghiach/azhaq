@@ -14,6 +14,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/gqlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/jscol"
+	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
@@ -31,11 +32,12 @@ type Options struct {
 	Subdomains subcol.Options
 	BruteWords []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
 	URLs       urlcol.Options
-	WebPorts   []int           // ports azhaq-http tries on each hostname; nil for 443 then 80
-	NoTech     bool            // skip technology fingerprints
-	Ports      []int           // azhaq-ports: ports to scan (runs only with -ports)
-	PortRate   float64         // azhaq-ports: connection attempts per second
-	Dirs       dirscol.Options // azhaq-dirs: wordlist sweep (runs only with -dirs)
+	WebPorts   []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
+	NoTech     bool             // skip technology fingerprints
+	Ports      []int            // azhaq-ports: ports to scan (runs only with -ports)
+	PortRate   float64          // azhaq-ports: connection attempts per second
+	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
+	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -69,6 +71,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})
 	cat.MustRegister(portcol.New(pool, o.Ports, o.PortRate))
 	cat.MustRegister(dirscol.New(client, o.Dirs))
+	cat.MustRegister(paramcol.New(client, o.Params))
 	tlscol.Register(cat)
 	subcol.Register(cat, o.Subdomains)
 	cat.MustRegister(urlcol.New(o.URLs))

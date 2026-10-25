@@ -37,6 +37,7 @@ type record struct {
 	Dropin  *dropinRow   `json:"dropin,omitempty"`
 	Ports   *portsRow    `json:"ports,omitempty"`
 	Dirs    *dirsRow     `json:"dirs,omitempty"`
+	Params  *paramsRow   `json:"params,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -121,6 +122,10 @@ func main() {
 			local = append(local, crapiURL)
 		}
 		rec.Dirs = benchDirs(local)
+		rec.Params = benchParams([]string{
+			juiceURL + "rest/products/search", juiceURL + "rest/user/whoami", vampiURL + "users/v1",
+			ginURL + "catalog", ginURL + "blog/",
+		})
 	}
 	if *domains {
 		rec.Domains = benchDomains()

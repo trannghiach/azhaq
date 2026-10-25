@@ -153,6 +153,10 @@ A domain the engine derives from a URL or hostname (`-url https://app.example.co
 
 The sweep has its own client: no cache, no redirects followed, bodies read only to count them, 20 requests in flight and 100 per second per host (`-dirs-threads`, `-dirs-rate`). Hits become URLs for the other collectors. With a session, logout-like words are skipped.
 
+## Parameters
+
+`-params FILE` (active, needs `-allow`) looks for query parameters each page reads but does not link, the way arjun does. The page is asked twice with one random name: that answer is the reference, and the difference between the two is the page's own noise (a page that changes too much by itself is skipped). Names then go out 250 per request, each with a random value. A request whose answer differs from the reference by status, by size beyond the noise, or by carrying one of the values back marks its group, which is halved until single names remain; a name found by size or status is confirmed with one more request, a reflected value names its parameter directly. GET only: guessing names on a POST could submit something. At most 20 pages per host, 20 requests per second per host.
+
 ## Ports
 
 `-ports` (active, needs `-allow`) scans hosts in scope with full TCP connects, so it needs no root and leaves complete handshakes in the target's logs, like `naabu -scan-type c`. Lists are nmap's top 100 or top 1000 TCP ports (as naabu ships them), `full`, or ranges. Connection attempts share one rate across all hosts (`-port-rate`, default 300 per second), 100 at a time, 1.5 seconds each. A name resolves to at most two IPv4 addresses, and each address is scanned once however many names point to it. An address in a CDN or WAF range gets ports 80, 443, 8080 and 8443 only: the edge answers for thousands of customers.
