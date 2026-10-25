@@ -147,6 +147,12 @@ The default set is subfinder's default set: the fast sources. `-all-sources` add
 
 A domain the engine derives from a URL or hostname (`-url https://app.example.com/` implies `example.com`) gets 15 seconds per source instead of 45, here and for historical URLs: the run is about the application, and one slow source would otherwise hold up its map. A domain given with `-domain` gets the full time. Sources that ignore their deadline (subfinder's crt.sh tries a Postgres connection first) are reported as timed out two seconds after it and no longer waited for.
 
+## Path guessing
+
+`-dirs FILE` (active, needs `-allow`) guesses paths on each web service's front page, then in each directory it finds, down to `-dirs-depth` levels. Before a directory is swept, it is asked for names that cannot exist, in the shapes ffuf's auto-calibration uses (a random word, `admin…`, `.htaccess…`, a random directory, and one per extension). A guess is dropped when it answers like one of those: same status and the same size, or the same word and line counts, or a size that differs only by the length of the path the page echoes, or the same redirect. Statuses default to ffuf's (`200-299,301,302,307,401,403,405,500`). A directory is a path that redirects to itself with a trailing slash.
+
+The sweep has its own client: no cache, no redirects followed, bodies read only to count them, 20 requests in flight and 100 per second per host (`-dirs-threads`, `-dirs-rate`). Hits become URLs for the other collectors. With a session, logout-like words are skipped.
+
 ## Ports
 
 `-ports` (active, needs `-allow`) scans hosts in scope with full TCP connects, so it needs no root and leaves complete handshakes in the target's logs, like `naabu -scan-type c`. Lists are nmap's top 100 or top 1000 TCP ports (as naabu ships them), `full`, or ranges. Connection attempts share one rate across all hosts (`-port-rate`, default 300 per second), 100 at a time, 1.5 seconds each. A name resolves to at most two IPv4 addresses, and each address is scanned once however many names point to it. An address in a CDN or WAF range gets ports 80, 443, 8080 and 8443 only: the edge answers for thousands of customers.

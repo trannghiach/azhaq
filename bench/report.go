@@ -56,6 +56,10 @@ func printReport() {
 		fmt.Fprintf(w, "azhaq\t%d\t%d\t%d\t%d\t%d\t%d\t%d/%d\t%d/%d\t%.1fs\n", p.AzhaqAnswered, p.Shared, p.Status, p.Title, p.Tech, p.All, p.FaviconAgree, p.FaviconBoth, p.CDNAgree, p.CDNHttpx, p.AzhaqSeconds)
 		fmt.Fprintf(w, "httpx\t%d\t\t\t\t\t\t\t\t%.1fs\n", p.HttpxAnswered, p.HttpxSeconds)
 	}
+	if d := rec.Dirs; d != nil {
+		fmt.Fprintf(w, "\npaths (%d words, %d apps)\tazhaq\tffuf -ac\tshared\tfalse positives\ttime\n", d.Words, len(d.Apps))
+		fmt.Fprintf(w, "hits\t%d\t%d\t%d\t%d / %d\t%.1fs / %.1fs\n", d.AzhaqHits, d.FfufHits, d.Shared, d.AzhaqFalse, d.FfufFalse, d.AzhaqSecs, d.FfufSecs)
+	}
 	if p := rec.Ports; p != nil {
 		fmt.Fprintf(w, "\nports (top 1000, connect)\tazhaq\tnaabu\tshared\tazhaq time\tnaabu time\n")
 		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.1fs\t%.1fs\n", strings.Join(p.Hosts, ", "), p.AzhaqOpen, p.NaabuOpen, p.Shared, p.AzhaqSeconds, p.NaabuSeconds)

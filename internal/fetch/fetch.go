@@ -128,7 +128,7 @@ func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byt
 }
 
 func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
-	if endsSession(raw) {
+	if EndsSession(raw) {
 		return Result{}, false, neterr.ErrEndsSession
 	}
 	cacheMu.Lock()
@@ -251,7 +251,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		applyHeaders(req)
+		ApplyHeaders(req)
 		resp, err := c.Do(req)
 		if err != nil {
 			return Result{}, err
@@ -325,7 +325,8 @@ func viaProxy(c *http.Client, raw, ip string) string {
 	return ip
 }
 
-func applyHeaders(req *http.Request) {
+// ApplyHeaders adds -cookie/-header values and the default User-Agent.
+func ApplyHeaders(req *http.Request) {
 	for k, vs := range Extra {
 		for _, v := range vs {
 			req.Header.Add(k, v)
@@ -421,8 +422,8 @@ func mustURL(raw string) *url.URL {
 
 var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out", "sign_out", "logoff"}
 
-// endsSession: a run with a session never requests a logout URL.
-func endsSession(raw string) bool {
+// EndsSession: a run with a session never requests a logout URL.
+func EndsSession(raw string) bool {
 	if Extra.Get("Cookie") == "" && Extra.Get("Authorization") == "" {
 		return false
 	}

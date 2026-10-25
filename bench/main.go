@@ -36,6 +36,7 @@ type record struct {
 	Probe   *probeRow    `json:"probe,omitempty"`
 	Dropin  *dropinRow   `json:"dropin,omitempty"`
 	Ports   *portsRow    `json:"ports,omitempty"`
+	Dirs    *dirsRow     `json:"dirs,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -115,6 +116,11 @@ func main() {
 	if len(rec.Apps) > 0 {
 		appChecks(rec.Apps)
 		rec.Dropin = benchDropin(*crapi)
+		local := []string{juiceURL, vampiURL}
+		if *crapi {
+			local = append(local, crapiURL)
+		}
+		rec.Dirs = benchDirs(local)
 	}
 	if *domains {
 		rec.Domains = benchDomains()

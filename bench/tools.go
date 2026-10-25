@@ -76,6 +76,20 @@ var subdomainWords = wordlist{
 	"e331367c140298cb179114fdeefa78f58f696219f0dec017a28bb79487cfcf19",
 }
 
+// webWords is SecLists' common web paths (MIT), for the path sweep.
+var webWords = wordlist{
+	"common.txt",
+	"https://raw.githubusercontent.com/danielmiessler/SecLists/61060549893d61b428d2184bb719abf23b4b3f13/Discovery/Web-Content/common.txt",
+	"74400ab9b9948c411afdf68adf5e49079801450068350cd801d0aa8fe7588d5a",
+}
+
+// paramWords is SecLists' common parameter names (MIT).
+var paramWords = wordlist{
+	"burp-parameter-names.txt",
+	"https://raw.githubusercontent.com/danielmiessler/SecLists/61060549893d61b428d2184bb719abf23b4b3f13/Discovery/Web-Content/burp-parameter-names.txt",
+	"91f7e457415ffd0e4278d13887804036b62240a135a022a6fd6e831a7151899f",
+}
+
 // fetchWordlist returns the local path of w, downloading and checking it once.
 func fetchWordlist(w wordlist) (string, error) {
 	path := filepath.Join(work, w.name)

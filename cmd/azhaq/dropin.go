@@ -679,3 +679,88 @@ func cmdPorts(args []string) error {
 	}
 	return w.close()
 }
+
+// cmdDirs is ffuf with auto-calibration (feroxbuster with -depth): paths
+// from a wordlist that answer differently from a path that cannot exist.
+// The services given are the scope.
+func cmdDirs(args []string) error {
+	fs := flag.NewFlagSet("dirs", flag.ContinueOnError)
+	var c common
+	c.register(fs)
+	var urls stringsFlag
+	fs.Var(&urls, "u", "web service, such as https://app.example.com/ (repeatable)")
+	list := fs.String("l", "", "file of services (- for stdin)")
+	words := fs.String("w", "", "wordlist (required)")
+	vals := map[string]*string{
+		"dirs-ext": fs.String("e", "", "extensions, comma-separated (php,bak)"), "dirs-depth": fs.String("depth", "", "directory levels (default 1: no recursion)"),
+		"dirs-threads": fs.String("t", "", "requests in flight (default 20)"), "dirs-rate": fs.String("rate", "", "requests per second per host (default 100)"),
+		"dirs-mc": fs.String("mc", "", "statuses to report (default ffuf's)"),
+	}
+	var headers, cookies stringsFlag
+	fs.Var(&headers, "H", "extra request header K: V (repeatable)")
+	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *words == "" {
+		return fmt.Errorf("give a wordlist with -w")
+	}
+	targets, err := inputs(urls, *list)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("give -u URL, -l FILE or URLs on stdin")
+	}
+	for i, t := range targets {
+		if !strings.Contains(t, "://") {
+			targets[i] = "https://" + t + "/"
+		}
+	}
+	path, rm, err := tempList(targets)
+	if err != nil {
+		return err
+	}
+	defer rm()
+	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", *words}
+	for _, t := range targets {
+		if u, err := url.Parse(t); err == nil {
+			run = append(run, "-allow", u.Hostname())
+		}
+	}
+	run = append(run, forward(vals)...)
+	for _, h := range headers {
+		run = append(run, "-header", h)
+	}
+	for _, ck := range cookies {
+		run = append(run, "-cookie", ck)
+	}
+	st, done, err := runPreset(&c, run)
+	if err != nil {
+		return err
+	}
+	defer done()
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	for _, p := range payloads(st, "azhaq-dirs") {
+		u, _ := p["url"].(string)
+		if u == "" {
+			continue // the sweep summary
+		}
+		switch {
+		case w.json:
+			row := map[string]any{"url": u, "status": p["status"], "length": p["length"], "words": p["words"], "lines": p["lines"]}
+			if loc, ok := p["location"]; ok {
+				row["redirectlocation"] = loc
+			}
+			w.obj(row)
+		case c.silent:
+			w.line(u)
+		default:
+			w.line(fmt.Sprintf("%s [Status: %v, Size: %v, Words: %v, Lines: %v]", u, p["status"], p["length"], p["words"], p["lines"]))
+		}
+	}
+	return w.close()
+}
