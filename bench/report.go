@@ -55,6 +55,14 @@ func printReport() {
 		fmt.Fprintf(w, "azhaq\t%d\t%d\t%d\t%d\t%d\t%d\t%d/%d\t%d/%d\t%.1fs\n", p.AzhaqAnswered, p.Shared, p.Status, p.Title, p.Tech, p.All, p.FaviconAgree, p.FaviconBoth, p.CDNAgree, p.CDNHttpx, p.AzhaqSeconds)
 		fmt.Fprintf(w, "httpx\t%d\t\t\t\t\t\t\t\t%.1fs\n", p.HttpxAnswered, p.HttpxSeconds)
 	}
+	if d := rec.Dropin; d != nil {
+		fmt.Fprintf(w, "\ndrop-in and exports\tresult\n")
+		fmt.Fprintf(w, "azhaq crawl, Juice Shop known routes\t%d/45\n", d.CrawlKnown)
+		fmt.Fprintf(w, "azhaq probe -json on stdin\t%d of 2, httpx fields %v\n", d.ProbeRows, d.ProbeFields)
+		fmt.Fprintf(w, "azhaq subs -live vs subfinder | dnsx (vulnweb.com)\t%d vs %d, shared %d\n", d.SubsLive, d.SubfinderLive, d.SubsShared)
+		fmt.Fprintf(w, "OpenAPI export, VAmPI / crAPI paths\t%d/12, %d/40\n", d.OpenAPIVampi, d.OpenAPICrapi)
+		fmt.Fprintf(w, "targets, HTML report, urls\t%d, %d bytes, %d\n", d.Targets, d.HTMLBytes, d.URLs)
+	}
 	w.Flush()
 	if p := rec.Probe; p != nil && len(p.Disagree) > 0 {
 		fmt.Println("\nprobe differences (azhaq/httpx)")

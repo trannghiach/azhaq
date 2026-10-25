@@ -73,6 +73,16 @@ func run(args []string) error {
 		return cmdPlan(args[1:])
 	case "roles":
 		return cmdRoles(args[1:])
+	case "subs":
+		return cmdSubs(args[1:])
+	case "probe":
+		return cmdProbe(args[1:])
+	case "crawl":
+		return cmdCrawl(args[1:])
+	case "urls":
+		return cmdURLs(args[1:])
+	case "dns":
+		return cmdDNS(args[1:])
 	case "ingest":
 		return cmdIngest(args[1:])
 	case "export":
@@ -107,6 +117,12 @@ const helpText = `azhaq — generic recon engine
                # -probe: resolve and fetch each target once, one line per web service
                # print is a ranked map (visited/hint); -obs dumps the observation log
                # parallel runs: give each its own -db FILE or AZHAQ_DB
+  azhaq subs   -d DOMAIN | -dL FILE | stdin  [-live] [-json] [-silent] [-o FILE]   # like subfinder
+  azhaq dns    -d NAME | -l FILE | stdin  [-resp] [-json]                        # like dnsx
+  azhaq probe  -u TARGET | -l FILE | stdin  [-web-ports P] [-json] [-silent]     # like httpx
+  azhaq crawl  -u URL | -l FILE | stdin  [-depth N] [-assets] [-json]            # like katana
+  azhaq urls   -d DOMAIN | -dL FILE | stdin  [-json]                              # like gau
+               # results on stdout, one per line; progress on stderr (-silent drops it)
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
   azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
                # one run per session; prints the endpoints whose status differs
@@ -785,8 +801,20 @@ func newRunID() string {
 func cmdExport(args []string) error {
 	fs := flag.NewFlagSet("export", flag.ContinueOnError)
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
+	format := fs.String("format", "jsonl", "jsonl, urls, hosts, targets (for nuclei -l), openapi, burp (scope), html")
+	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes)")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *format != "jsonl" {
+		path := *dbPath
+		if path == "" {
+			path = readLastDB()
+		}
+		if path == "" {
+			return fmt.Errorf("need -db (no %s from a previous run)", lastDBFile)
+		}
+		return exportAs(path, *format, *origin, os.Stdout)
 	}
 	path := *dbPath
 	if path == "" {

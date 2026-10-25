@@ -96,6 +96,27 @@ azhaq ingest -in facts.jsonl       # load facts from another tool
 azhaq bench                        # timing and memory on the fixture
 ```
 
+### In a pipeline
+
+Each step of the usual chain has a command that reads targets from flags, a file or stdin and writes one result per line (`-json` for JSONL with the field names of the tool it stands in for, `-silent` to drop progress, `-o FILE` to keep a copy):
+
+```
+azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -silent    # subfinder | dnsx | httpx
+azhaq crawl -u https://app.example.com/ -silent                               # katana
+azhaq urls -d example.com -silent                                             # gau
+azhaq probe -l hosts.txt -json > probe.jsonl                                  # httpx -json fields
+```
+
+What a run found exports for the tools that come after it:
+
+```
+azhaq export -format targets  > targets.txt   # web services, for nuclei -l
+azhaq export -format openapi  > api.json      # API routes as OpenAPI 3, for Burp's API scan, Postman or ZAP
+azhaq export -format burp     > scope.json    # a Burp project options file with the hosts in scope
+azhaq export -format html     > report.html   # one self-contained page
+azhaq export -format urls | hosts             # plain lists
+```
+
 ### Watching a target over time
 
 Give every run of a target the same `-db` file and it becomes a workspace: each run redoes the work, entities keep the time they were first and last seen, and after each run Azhaq prints what changed since the previous one. `azhaq diff -db FILE` repeats that comparison, and `azhaq export -db FILE` lists everything with its first and last sighting.
