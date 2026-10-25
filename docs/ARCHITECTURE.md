@@ -87,6 +87,10 @@ The scheduler records its frontier in the store (table `tasks`): every task it p
 
 `azhaq resume -db FILE` takes the latest run with tasks left (interrupted by Ctrl-C or a kill, or stopped by `-max-requests`, `-daily-requests` or `-max-items`), runs it again with its stored options plus any given, and rebuilds the queues from the tasks: done tasks count against the item budget, the others are queued again, behind the task they wait for when that is not done either. Their done-marks are cleared, so a task that ran but whose end was not recorded runs again whole; observations are stored once per run, so it reports nothing twice. Tasks the budget stopped before run last, one at a time and cheapest first (by the requests they had sent), so a path sweep that needs more than the budget does not starve cheaper work; once the budget is spent, tasks that would contact targets are kept back. A resume in which no task finished says the budget is smaller than any task left needs.
 
+### Workers (`-serve`, `azhaq worker`)
+
+A run started with `-serve ADDR` lends its work to `azhaq worker` processes, on the same machine or others, over HTTP with a bearer token. The run's process keeps the database, the scheduler, the budgets and its own `-parallel` slots; a worker claims one task at a time per slot (`POST /v1/claim`, a long poll), runs the collector in-process without a store (`engine.Execute`) and sends back what it reported, its hints and the requests it sent (`POST /v1/done`), which the run stores as if it had run the task itself (`Engine.Record`). Workers take only tasks that contact targets: third-party sources (and their keys), batch DNS and `Local` collectors (screenshots, `-browser`) stay with the run. A worker gets the run's options without seeds, outputs or sessions, the files they name (wordlists), the scope as `-allow`/`-deny` rules and the session as headers (`GET /v1/run`). A task a worker holds longer than its lease (15 minutes) is queued again; tasks lent when the run stops are left for `azhaq resume`. The request budget counts every process's requests; `-rate` and `-host-parallel` apply per process.
+
 Items on the seed's own host or IP run before fan-out items, but part of the item budget is reserved for fan-out: one eighth, at least 24 items once the budget is 48 or more, and never more than half. Without it, a large application would spend the entire budget before any domain-level collector ran.
 
 The run's policy is applied when items are planned: `-passive` keeps only `Passive` collectors; an `Active` collector needs its flag, an `-allow` scope and a seed inside it; `-skip` removes collectors by name.
@@ -241,7 +245,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
 - Routes built at run time from anything but constants (user input, server responses, functions of several variables) are seen only with `-browser`, and only those a page requests while it loads: Azhaq does not click.
 - Routes only the server knows (admin APIs no page mentions) are found only by the path sweep or an API description.
-- One SQLite file per run suits a CLI. Many concurrent writers would need another store.
+- One SQLite file holds a run, written by the run's own process; workers send their results to it rather than writing a shared store.
 
 ## Layout
 

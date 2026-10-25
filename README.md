@@ -101,6 +101,7 @@ azhaq roles  -role anon -role 'user=Authorization: Bearer …' -- -url URL
 azhaq roles  -login URL -role anon -role-login 'member=USER:PASS' -role-login 'owner=USER:PASS' -- -url URL
                                    # one run per session; endpoints whose status differs
 azhaq resume -db FILE              # continue a run that was interrupted or stopped by a budget
+azhaq worker -server URL -token T  # take work from a run started with -serve ADDR
 azhaq plan   -url URL              # show which collectors would run
 azhaq export [-db FILE]            # dump the graph as JSONL
 azhaq diff   -a OLD.db -b NEW.db   # compare two runs of the same seeds
@@ -171,6 +172,18 @@ $ azhaq resume -db app.db -cookie sid=…    # sessions are not stored: give the
 ```
 
 A run stopped and resumed finds what an uninterrupted one does: on Juice Shop, 40 requests per process and 46 resumes give the same 147 URLs as one run, and so does a run killed with `kill -9` and resumed.
+
+### Workers
+
+One run can use several machines (more addresses, more bandwidth): start it with `-serve`, and point `azhaq worker` processes at it. The run keeps the database, the scope and the budgets, and lends workers the tasks that contact targets; each worker sends back what it found.
+
+```
+$ azhaq run -scope h1.csv -dirs common.txt -allow example.com -db x.db -parallel 4 -serve 10.0.0.5:7777
+azhaq: workers can join with: AZHAQ_WORKER_TOKEN=… azhaq worker -server http://10.0.0.5:7777
+$ AZHAQ_WORKER_TOKEN=… azhaq worker -server http://10.0.0.5:7777 -slots 8     # on each worker
+```
+
+The token and the run's session headers travel over that connection: keep it on a private network or an SSH tunnel. On Juice Shop, a run with two workers maps the same 147 URLs as one process.
 
 ### Comparing sessions
 

@@ -36,7 +36,7 @@ func (c *Collector) Name() string { return Name }
 // Info: loads pages with their scripts, as a browser does; waits for the
 // HTTP answer so dead URLs are not rendered.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"}
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }

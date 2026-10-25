@@ -81,6 +81,8 @@ func run(args []string) error {
 		return cmdRoles(args[1:])
 	case "resume":
 		return cmdResume(args[1:])
+	case "worker":
+		return cmdWorker(args[1:])
 	case "scope":
 		return cmdScope(args[1:])
 	case "watch":
@@ -214,6 +216,9 @@ func cmdRun(args []string) error {
 	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
 	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
 	resumeRun := fs.String("resume-run", "", "continue this run of -db (azhaq resume sets it)")
+	serve := fs.String("serve", "", "let azhaq worker processes take this run's work, at this address (127.0.0.1:7777)")
+	workerToken := fs.String("worker-token", os.Getenv("AZHAQ_WORKER_TOKEN"), "the token workers give (default $AZHAQ_WORKER_TOKEN, else a new one)")
+	workerOf := fs.String("worker-of", "", "run as a worker of the run at this address (azhaq worker sets it)")
 	daily := fs.Int64("daily-requests", 0, "requests a day to the program's targets (-program, else this run's targets), counted over the runs in -db")
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
@@ -255,7 +260,7 @@ func cmdRun(args []string) error {
 	if *hostParallel > 0 {
 		fetch.HostParallel = *hostParallel
 	}
-	if err := applyExtra(cookies, headers); err != nil {
+	if err := applyExtra(cookies, append(headers, workerHeaders...)); err != nil {
 		return err
 	}
 
@@ -320,7 +325,7 @@ func cmdRun(args []string) error {
 			}
 			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
 		}
-		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" {
+		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" {
 			return fmt.Errorf("need -url, -domain, -list, -scope, -asn, -cidr, -org, -cloud, -in, -facts, -exec, or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
@@ -520,7 +525,26 @@ func cmdRun(args []string) error {
 			}
 		}
 	}
+	if *workerOf != "" {
+		return runWorker(cat, *workerOf, *workerToken, budgets.Parallel)
+	}
 	eng := &engine.Engine{Cat: cat, Store: st}
+	if *serve != "" {
+		if *workerToken == "" {
+			*workerToken = newToken()
+		}
+		cfg, err := forWorkers(fs, args, allow, deny)
+		if err != nil {
+			return err
+		}
+		eng.Workers = engine.NewWorkers()
+		stopServe, err := serveWorkers(*serve, *workerToken, eng.Workers, cfg)
+		if err != nil {
+			return fmt.Errorf("-serve: %w", err)
+		}
+		defer stopServe()
+		fmt.Fprintf(os.Stderr, "azhaq: workers can join with: AZHAQ_WORKER_TOKEN=%s azhaq worker -server http://%s\n", *workerToken, *serve)
+	}
 
 	log := timing.New()
 

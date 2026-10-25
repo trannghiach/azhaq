@@ -122,6 +122,16 @@ type scheduler struct {
 	stopped []store.Stopped
 	held    []task // work that contacts targets, kept back once the budget is spent
 	retry   []task // work the budget stopped before, cheapest first: one at a time
+
+	// Tasks lent to remote workers (Engine.Workers).
+	leases  map[string]lease
+	remote  int // of inflight, the leased ones
+	leaseNo int
+}
+
+type lease struct {
+	t     task
+	until time.Time
 }
 
 // record notes a planned task for the store.
@@ -327,20 +337,127 @@ func (s *scheduler) skip(t task) bool {
 }
 
 func (s *scheduler) loop(ctx context.Context) {
+	w := s.e.Workers
+	var claims chan claim
+	var dones chan remoteDone
+	var tick <-chan time.Time
+	if w != nil {
+		defer w.finish()
+		claims, dones = w.claims, w.done
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		tick = t.C
+		s.leases = map[string]lease{}
+	}
 	for {
 		if ctx.Err() == nil {
 			s.dispatch(ctx)
+		} else {
+			s.release()
 		}
 		s.flush()
 		if s.inflight == 0 {
 			return
 		}
-		s.handle(<-s.results)
+		select {
+		case f := <-s.results:
+			s.handle(f)
+		case c := <-claims:
+			s.lend(ctx, c)
+		case d := <-dones:
+			s.giveBack(ctx, d)
+		case <-tick:
+			s.expire()
+		}
+	}
+}
+
+// lend hands a worker the next task it may run: one that contacts
+// targets, is not Local, and is not a batch.
+func (s *scheduler) lend(ctx context.Context, c claim) {
+	if ctx.Err() != nil {
+		c.reply <- nil
+		return
+	}
+	for p := 0; p < 2; p++ {
+		for i := 0; i < len(s.queue[p]); i++ {
+			t := s.queue[p][i]
+			col, ok := s.e.Cat.Get(t.col)
+			if !ok || !s.contacts(t) || catalog.InfoOf(col).Local {
+				continue
+			}
+			if s.ran >= s.b.MaxItems || fetch.Spent() || (p == 0 && s.originRan >= s.b.MaxItems-s.reserve) {
+				break
+			}
+			s.queue[p] = append(s.queue[p][:i:i], s.queue[p][i+1:]...)
+			if s.skip(t) {
+				s.finish(t)
+				s.unpark(t)
+				i--
+				continue
+			}
+			s.ran++
+			if p == 0 {
+				s.originRan++
+			}
+			s.inflight++
+			s.remote++
+			s.leaseNo++
+			id := fmt.Sprintf("%s-%d", workID(t.col, t.seed), s.leaseNo)
+			hold := s.e.Workers.Lease
+			if hold <= 0 {
+				hold = 15 * time.Minute
+			}
+			s.leases[id] = lease{t: t, until: time.Now().Add(hold)}
+			c.reply <- &Task{ID: id, Item: types.WorkItem{ID: workID(t.col, t.seed), Collector: t.col, Seed: t.seed}}
+			return
+		}
+	}
+	c.reply <- nil
+}
+
+// giveBack records what a worker sent for a lent task.
+func (s *scheduler) giveBack(ctx context.Context, d remoteDone) {
+	l, ok := s.leases[d.id]
+	if !ok {
+		d.ok <- false
+		return
+	}
+	delete(s.leases, d.id)
+	s.remote--
+	d.ok <- true
+	item := types.WorkItem{ID: workID(l.t.col, l.t.seed), Collector: l.t.col, Seed: l.t.seed}
+	meta, err := s.e.Record(item, d.out)
+	printItem(ctx, item, 0, meta, err)
+	s.handle(finished{tasks: []task{l.t}, metas: []types.RunMeta{meta}, errs: []error{err}})
+}
+
+// expire queues again the tasks whose worker went silent.
+func (s *scheduler) expire() {
+	now := time.Now()
+	for id, l := range s.leases {
+		if now.After(l.until) {
+			delete(s.leases, id)
+			s.remote--
+			s.inflight--
+			s.ran--
+			s.enqueue(l.t)
+		}
+	}
+}
+
+// release gives up on lent tasks once the run is stopping: they are not
+// done, and azhaq resume runs them.
+func (s *scheduler) release() {
+	for id := range s.leases {
+		delete(s.leases, id)
+		s.remote--
+		s.inflight--
 	}
 }
 
 func (s *scheduler) dispatch(ctx context.Context) {
-	for s.inflight < s.b.Parallel {
+	for s.inflight-s.remote < s.b.Parallel {
 		if s.startBatch(ctx) {
 			continue
 		}
@@ -356,7 +473,7 @@ func (s *scheduler) dispatch(ctx context.Context) {
 // startRetry runs the cheapest task the budget stopped before, when
 // nothing else runs.
 func (s *scheduler) startRetry(ctx context.Context) {
-	for s.inflight == 0 && len(s.retry) > 0 && !fetch.Spent() && s.ran < s.b.MaxItems {
+	for s.inflight-s.remote == 0 && len(s.retry) > 0 && !fetch.Spent() && s.ran < s.b.MaxItems {
 		t := s.retry[0]
 		s.retry = s.retry[1:]
 		if s.skip(t) {

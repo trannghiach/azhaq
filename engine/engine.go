@@ -27,6 +27,8 @@ import (
 type Engine struct {
 	Cat   *catalog.Catalog
 	Store *store.Store
+	// Workers, when set, hands tasks to other processes (azhaq worker).
+	Workers *Workers
 }
 
 func (e *Engine) Plan(seeds []types.Seed) []types.WorkItem {

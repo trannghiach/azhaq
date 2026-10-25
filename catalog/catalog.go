@@ -46,6 +46,10 @@ type Info struct {
 	// When it returns RunMeta.Drop, this collector skips the seed. If that
 	// collector is not planned for the seed, this one runs at once.
 	After string
+	// Local keeps the collector in the process that holds the database
+	// (it writes files there, or drives its browser): remote workers never
+	// run it.
+	Local bool
 }
 
 // Informer is optional; a collector without it is Touch.

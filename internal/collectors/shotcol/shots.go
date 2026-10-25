@@ -39,7 +39,7 @@ func (c *Collector) Name() string { return Name }
 
 // Info: loads the page with its scripts and images, as a browser does.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"}
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType {
