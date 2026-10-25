@@ -107,6 +107,22 @@ All HTTP collectors share one client (`internal/fetch`):
 
 `-probe` keeps a run to this: only `azhaq-dns` and `azhaq-http` run, on the listed targets and nothing they lead to, and the output is one line per web service instead of the map.
 
+### Scripts
+
+`azhaq-js` reads each page's inline scripts and same-origin script files, then the chunks those import by name or through a webpack chunk map: it evaluates the bundle's chunk-name function (`n.u=e=>"static/js/"+e+"."+{…}[e]+".chunk.js"`) for each chunk ID the bundle knows. In every script it looks for:
+
+- URL and path strings;
+- paths joined from constants where the request is made, such as `og+sg.LOGIN` with `og="identity/"` and `sg={LOGIN:"api/auth/login",…}`. A name counts only if the script binds it once, so a short minified name reused across modules is not guessed at. Placeholders such as `<videoId>` become `{videoId}`;
+- GraphQL operation names, from query documents or the parsed form bundlers emit.
+
+A script that names a same-origin source map has the map read: the map is recorded with the app's own source files (libraries left out), and those sources are scanned like scripts. An exposed source map is worth knowing about on its own.
+
+`azhaq-openapi` also reads a description written into a script, as Swagger UI's `swagger-ui-init.js` carries it.
+
+### Sessions and roles
+
+`-cookie` and `-header` apply to every request of a run. While one is set, URLs that look like a logout are not requested. `azhaq roles` runs the same seeds once per role, in turn, each with its own database, and compares the first status each URL answered with: endpoints whose status differs between roles are printed, and URLs a role never reached show `-`.
+
 ### Catch-all responses
 
 Many applications answer every path: a single-page app serves its index for any route, some servers return a "not found" page with status 200, others redirect every unknown path to a login page. Without a check, each of those paths would look like a real page.
@@ -126,6 +142,20 @@ A name is a wildcard answer when one of its parent zones answers for random labe
 `azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
 
 The default set is subfinder's default set: the fast sources. `-all-sources` adds slower ones such as Common Crawl and the Wayback Machine.
+
+## Historical URLs
+
+`azhaq-urls` asks every archive at once for the URLs of a domain and its subdomains, and records each one's count, pages, time and error:
+
+- the Wayback Machine's CDX API, page by page (`showNumPages`, then each page), one request per second;
+- Common Crawl's newest index, paged the same way;
+- AlienVault OTX's URL list, 500 per page;
+- urlscan.io's search, 100 per page (a key from the provider file raises the limits);
+- arquivo.pt, one request; it often serves what the Wayback Machine refuses.
+
+A 429 or 503 is retried after 2, 5 and 10 seconds, or the server's `Retry-After` up to 20 seconds; after that the source stops, keeps the pages it read and is reported as rate limited. Each source has 3 minutes and 50 pages. Any failed source marks the result `degraded`, so a refused archive never reads as "no URLs".
+
+URLs are normalized, kept when they belong to the domain, and deduplicated. `-urls FILE` receives all of them. The graph receives the summary and one URL per template (`/product?id={v}` stands for every product page), parameters, API routes and server-side pages first, at most 200 per domain; the first 40 are fetched when the run is not passive. Static assets are counted and left out of the graph.
 
 ## Storage
 
@@ -157,15 +187,15 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 - **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
 - **No browser.** JavaScript routes are extracted from script text. That covers bundled single-page apps without shipping Chromium.
-- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state.
+- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state. GraphQL introspection, a POST, runs only with `-graphql`.
 
 ## Limitations
 
 - No collector for IP ranges or service scanning yet.
 - Requests to a target are limited by concurrency per host (2) and an optional delay, not by a rate. Third-party sources and DNS resolvers have rate limits.
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
-- JavaScript that builds routes at runtime is not visible without a browser. Chunk names computed at runtime (webpack chunk maps) are not followed; chunks imported by name are.
-- API descriptions embedded in a Swagger UI script rather than served as a document are not read.
+- Routes built at run time from anything but constants (user input, server responses, functions of several variables) are not visible without a browser.
+- Routes only the server knows (admin APIs no page mentions) are found only by the path sweep or an API description.
 - One SQLite file per run suits a CLI. Many concurrent writers would need another store.
 
 ## Layout

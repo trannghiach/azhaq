@@ -28,6 +28,7 @@ Only scan systems you are authorized to test.
 azhaq run -url https://app.example.com/      # map an application and its domain
 azhaq run -domain example.com -passive       # subdomains, without touching the hosts
 azhaq run -list hosts.txt -probe             # one line per web service, like httpx
+azhaq run -domain example.com -passive -urls urls.txt   # also every archived URL, like gau
 ```
 
 `-probe` resolves and fetches each target once and prints status, title, technologies, CDN, address and favicon hash:
@@ -65,6 +66,7 @@ Common options:
 | `-probe` | only resolve and fetch the targets themselves: no crawl, no enumeration, no redirect or CNAME targets |
 | `-web-ports 80,443,8080` | ports to probe on each hostname (default: 443, falling back to 80) |
 | `-no-tech` | skip technology fingerprints; their compiled patterns take about 190 MB of memory |
+| `-urls FILE` | write every historical URL found for the run's domains, one per line (what gau prints) |
 | `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have |
@@ -73,6 +75,7 @@ Common options:
 | `-providers FILE` | API keys per source, in subfinder's `provider-config.yaml` format (default `~/.config/azhaq/providers.yaml`, else subfinder's file) |
 | `-resolvers FILE`, `-dns-rate N` | DNS resolvers and queries per second per resolver (default: six public resolvers, 100/s) |
 | `-dns-brute FILE`, `-permute` | active: resolve a wordlist under the domain, or variations of names found; both need `-allow` |
+| `-graphql` | active: read the schema of GraphQL endpoints with an introspection query; needs `-allow` |
 | `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
 | `-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), pause before each request, collectors not to run |
 | `-db FILE` | graph file to write (default: a new timestamped file per run) |
@@ -81,6 +84,8 @@ Common options:
 Other commands:
 
 ```
+azhaq roles  -role anon -role 'user=Authorization: Bearer …' -- -url URL
+                                   # one run per session; endpoints whose status differs
 azhaq plan   -url URL              # show which collectors would run
 azhaq export [-db FILE]            # dump the graph as JSONL
 azhaq diff   -a OLD.db -b NEW.db   # compare two runs of the same seeds
@@ -88,21 +93,36 @@ azhaq ingest -in facts.jsonl       # load facts from another tool
 azhaq bench                        # timing and memory on the fixture
 ```
 
+### Comparing sessions
+
+`azhaq roles` runs the same target once per session and lists the endpoints whose answer depends on who asks. Azhaq never logs in: you give each role the cookie or header it should send, and a role with none is anonymous.
+
+```
+$ azhaq roles -role anon -role "user=Authorization: Bearer $TOKEN" -- -url http://localhost:3000/
+roles  anon  user  (12 endpoints differ; databases in azhaq-roles-20261025-181500)
+  401 → 200  http://localhost:3000/api/Users
+  401 → 200  http://localhost:3000/rest/user/authentication-details
+  ...
+```
+
+While a run carries a session, it does not request URLs that look like a logout (`/logout`, `/signout`, …), so the session lasts the whole run.
+
 ## Collectors
 
 | Collector | Input | Collects |
 | --- | --- | --- |
 | `azhaq-http` | URL, hostname | status, redirect chain, title, technologies (wappalyzer fingerprints), favicon hash (Shodan's `http.favicon.hash`), length, word and line counts, response time, address, headers, cookie names (not values); flags catch-all answers |
 | `azhaq-crawl` | URL | same-origin links, forms (including script-driven `data-action` forms), parameter names, links inside JSON responses |
-| `azhaq-js` | URL | routes from each page's inline and same-origin scripts and the chunks they import, tagged as API or page |
-| `azhaq-openapi` | URL | operations, methods and parameter names from OpenAPI 3 and Swagger 2 documents (JSON or YAML); never calls them |
+| `azhaq-js` | URL | routes from each page's inline and same-origin scripts, the chunks they import or name in a webpack chunk map, and the app's own files in exposed source maps; paths joined from constants (`"identity/" + API.LOGIN`); GraphQL operation names; tagged as API or page |
+| `azhaq-openapi` | URL | operations, methods and parameter names from OpenAPI 3 and Swagger 2 documents (JSON or YAML), including one embedded in a Swagger UI script; never calls them |
+| `azhaq-graphql` | URL | GraphQL endpoints, recognised from one GET; with `-graphql` (active), queries, mutations and types through introspection |
 | `azhaq-paths` | URL | common paths and API description locations, `robots.txt`, sitemaps; drops catch-all answers |
 | `azhaq-dns` | hostname | A/AAAA and CNAME chain through a pool of resolvers, in batches; the CDN, WAF or cloud in front (by address and CNAME); MX, TXT and NS for registrable domains; names that do not resolve or only answer through a wildcard record are marked and never probed |
 | `azhaq-tls` | hostname | certificate details and SANs within the same domain |
 | `azhaq-subdomains` | domain | hostnames from 50+ passive sources (certificate transparency, search engines, archives, DNS datasets), with each source's count or error recorded |
 | `azhaq-dns-brute` | domain | `-dns-brute`: names from a wordlist that resolve, wildcard answers removed |
 | `azhaq-permute` | hostname | `-permute`: numbered, prefixed and suffixed variations of live names that resolve |
-| `azhaq-cdx` | domain | historical URLs (Wayback Machine with backoff, arquivo.pt as fallback); a refused archive marks the result `degraded` |
+| `azhaq-urls` | domain | historical URLs of the domain and its subdomains from the Wayback Machine (paged), Common Crawl, AlienVault OTX, urlscan.io (a key from the provider file raises its limits) and arquivo.pt; one row per URL template in the graph, every URL with `-urls FILE`; a source that refuses or rate limits marks the result `degraded` |
 | `azhaq-rdap` | domain, organization | registration data and nameservers |
 | `azhaq-cloud` | cloud inventory file | domains, hosts and URLs from a local JSON inventory |
 
