@@ -184,6 +184,7 @@ func cmdRun(args []string) error {
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
+	urlsTimeout := fs.Duration("urls-timeout", 3*time.Minute, "time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes)")
 	login := fs.String("login", "", "sign in on this page with Chrome before the run; its cookies and token go with every request (needs -login-user and -login-pass)")
 	loginUser := fs.String("login-user", "", "user name or email for -login")
 	loginPass := fs.String("login-pass", "", "password for -login (default $AZHAQ_LOGIN_PASS)")
@@ -470,7 +471,7 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("provider keys: %w", err)
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
-	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut}
+	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, Timeout: *urlsTimeout}
 	if *urlsOut != "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends
 			return err

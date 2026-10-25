@@ -74,6 +74,7 @@ Common options:
 | `-web-ports 80,443,8080` | ports to probe on each hostname (default: 443, falling back to 80) |
 | `-no-tech` | skip technology fingerprints (about 30 MB of memory) |
 | `-urls FILE` | write every historical URL found for the run's domains, one per line (what gau prints) |
+| `-urls-timeout D` | time each archive source gets per domain (default 3m); the Wayback Machine's answer for a large domain takes several minutes, and what arrived by then is kept |
 | `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have |

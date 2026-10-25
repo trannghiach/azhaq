@@ -68,6 +68,17 @@ var backoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second
 const maxRetryAfter = 20 * time.Second
 
 func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
+	body, err := g.open(ctx, raw)
+	if err != nil {
+		return nil, err
+	}
+	defer body.Close()
+	return io.ReadAll(io.LimitReader(body, 64<<20))
+}
+
+// open sends the request, waiting and retrying as get does, and returns
+// the body of a 200 answer for the caller to read and close.
+func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 	for attempt := 0; ; attempt++ {
 		if wait := g.pause - time.Since(g.last); wait > 0 {
 			if err := sleep(ctx, wait); err != nil {
@@ -88,13 +99,12 @@ func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
+		if resp.StatusCode == http.StatusOK {
+			return resp.Body, nil
+		}
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()
 		switch {
-		case err != nil:
-			return nil, err
-		case resp.StatusCode == http.StatusOK:
-			return body, nil
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
 			if attempt >= g.retries || attempt >= len(backoff) {
 				return nil, errLimited{status: resp.StatusCode}
@@ -142,14 +152,15 @@ func limited(err error, pages int) error {
 // Wayback Machine CDX API, page by page as gau reads it: showNumPages
 // answers [["original"],[null]] when output=json, so the pages are read
 // until one comes back empty or the server says 400 (past the last page).
-// A page of a large domain is tens of MB and takes minutes.
+// A page of a large domain is tens of MB and takes minutes, so it is read
+// row by row (one row a line): what arrived before the time ran out counts.
 var waybackBase = "https://web.archive.org/cdx/search/cdx"
 
 func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
 	q := url.Values{"url": {"*." + domain + "/*"}, "output": {"json"}, "collapse": {"urlkey"}, "fl": {"original"}, "pageSize": {"100"}}
 	for page := 0; page < g.maxPages; page++ {
 		q.Set("page", strconv.Itoa(page))
-		body, err := g.get(ctx, waybackBase+"?"+q.Encode())
+		body, err := g.open(ctx, waybackBase+"?"+q.Encode())
 		if err != nil {
 			var st errStatus
 			if page > 0 && errors.As(err, &st) && st.code == http.StatusBadRequest {
@@ -157,27 +168,52 @@ func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string
 			}
 			return page, limited(err, page)
 		}
-		var rows [][]string
-		if len(strings.TrimSpace(string(body))) > 0 {
-			if err := json.Unmarshal(body, &rows); err != nil {
-				return page, fmt.Errorf("page %d: %w", page, err)
-			}
+		n, err := cdxRows(body, add)
+		body.Close()
+		if err != nil {
+			return page, fmt.Errorf("page %d: %w", page, err)
 		}
-		var urls []string
-		for i, r := range rows {
-			if i == 0 && len(r) > 0 && r[0] == "original" {
-				continue
-			}
-			if len(r) > 0 && r[0] != "" {
-				urls = append(urls, r[0])
-			}
-		}
-		if len(urls) == 0 {
+		if n == 0 {
 			return page, nil
 		}
-		add(urls)
 	}
 	return g.maxPages, nil
+}
+
+// cdxRows reads a CDX JSON answer ([["original"], ["http://…"], …]) as it
+// arrives and adds the URLs in batches; it returns how many it read.
+func cdxRows(body io.Reader, add func([]string)) (int, error) {
+	dec := json.NewDecoder(body)
+	if tok, err := dec.Token(); err == io.EOF {
+		return 0, nil
+	} else if err != nil {
+		return 0, err
+	} else if d, ok := tok.(json.Delim); !ok || d != '[' {
+		return 0, fmt.Errorf("not a JSON array")
+	}
+	n := 0
+	var batch []string
+	defer func() {
+		if len(batch) > 0 {
+			add(batch)
+		}
+	}()
+	for dec.More() {
+		var row []string
+		if err := dec.Decode(&row); err != nil {
+			return n, err
+		}
+		if len(row) == 0 || row[0] == "" || row[0] == "original" {
+			continue
+		}
+		batch = append(batch, row[0])
+		n++
+		if len(batch) == 1000 {
+			add(batch)
+			batch = nil
+		}
+	}
+	return n, nil
 }
 
 // Common Crawl: the newest index from collinfo.json, paged.

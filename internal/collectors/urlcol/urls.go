@@ -90,8 +90,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 
 	// A domain derived from a URL gets 15 s per source: the run is about
-	// the application. The Wayback Machine gets longer on a domain asked
-	// for: its pages take minutes.
+	// the application.
 	timeout := c.opts.Timeout
 	if seed.Derived() && timeout > 15*time.Second {
 		timeout = 15 * time.Second
@@ -106,11 +105,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		wg.Add(1)
 		go func(i int, s source) {
 			defer wg.Done()
-			st := timeout
-			if s.name == "wayback" && !seed.Derived() {
-				st = max(timeout, 10*time.Minute)
-			}
-			sctx, cancel := context.WithTimeout(ctx, st)
+			sctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3}
 			key := ""
