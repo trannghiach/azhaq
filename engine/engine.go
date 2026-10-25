@@ -93,6 +93,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		meta.Error = ctx.Err().Error()
 		return meta, ctx.Err()
 	}
+	meta.Drop = got.Drop
 	if err != nil {
 		meta.Status = types.StatusError
 		meta.Error = err.Error()

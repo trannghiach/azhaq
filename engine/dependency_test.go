@@ -98,3 +98,78 @@ func TestHTTPWaitsForDNS(t *testing.T) {
 		t.Fatalf("dropped work is not a cap: %s", sum)
 	}
 }
+
+// gate drops every seed; follower runs after it.
+type gate struct{}
+
+func (gate) Name() string             { return "test-gate" }
+func (gate) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive} }
+func (gate) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (gate) Outputs() []string        { return nil }
+func (gate) Run(context.Context, types.Seed, func(types.Observation) error) (types.RunMeta, error) {
+	return types.RunMeta{Status: types.StatusOK, Drop: true}, nil
+}
+
+type follower struct{ ran *int }
+
+func (follower) Name() string             { return "test-follower" }
+func (follower) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive, After: "test-gate"} }
+func (follower) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (follower) Outputs() []string        { return nil }
+func (f follower) Run(context.Context, types.Seed, func(types.Observation) error) (types.RunMeta, error) {
+	*f.ran++
+	return types.RunMeta{Status: types.StatusOK}, nil
+}
+
+func TestDropStopsWaitingCollectors(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ran := 0
+	cat := catalog.New()
+	cat.MustRegister(gate{})
+	cat.MustRegister(follower{&ran})
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seeds := []types.Seed{{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}}
+	if err := eng.RunLocal(context.Background(), seeds, engine.DefaultBudgets()); err != nil {
+		t.Fatal(err)
+	}
+	if ran != 0 {
+		t.Errorf("a dropped seed's follower ran %d times", ran)
+	}
+}
+
+type second struct{ ran *int }
+
+func (second) Name() string             { return "test-second" }
+func (second) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive, After: "test-follower"} }
+func (second) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (second) Outputs() []string        { return nil }
+func (s second) Run(context.Context, types.Seed, func(types.Observation) error) (types.RunMeta, error) {
+	*s.ran++
+	return types.RunMeta{Status: types.StatusOK}, nil
+}
+
+func TestDropReachesTheWholeChain(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ran := 0
+	cat := catalog.New()
+	cat.MustRegister(gate{})
+	cat.MustRegister(follower{&ran})
+	cat.MustRegister(second{&ran})
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seeds := []types.Seed{{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}}
+	if err := eng.RunLocal(context.Background(), seeds, engine.DefaultBudgets()); err != nil {
+		t.Fatal(err)
+	}
+	stats, _ := st.Stats()
+	if ran != 0 || stats.Capped {
+		t.Errorf("ran %d, capped %v: a task two links behind a drop must be dropped too", ran, stats.Capped)
+	}
+}

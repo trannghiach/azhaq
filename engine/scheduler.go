@@ -157,6 +157,17 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	}
 }
 
+// drop discards the tasks that waited for col on a seed, and the tasks
+// that waited for those, down the chain.
+func (s *scheduler) drop(seedK, col string) {
+	pk := seedK + "\x00" + col
+	waiting := s.parked[pk]
+	delete(s.parked, pk)
+	for _, w := range waiting {
+		s.drop(seedK, w.col)
+	}
+}
+
 // unpark queues the tasks that waited for t.
 func (s *scheduler) unpark(t task) {
 	pk := seedKey(t.seed) + "\x00" + t.col
@@ -339,7 +350,7 @@ func (s *scheduler) handle(f finished) {
 	for i, t := range f.tasks {
 		meta, err := f.metas[i], f.errs[i]
 		if meta.Drop {
-			delete(s.parked, seedKey(t.seed)+"\x00"+t.col)
+			s.drop(seedKey(t.seed), t.col)
 		} else {
 			s.unpark(t)
 		}

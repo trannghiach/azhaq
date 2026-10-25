@@ -74,6 +74,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	meta := types.RunMeta{Status: types.StatusOK}
 	var lastErr error
 	answered := false
+	answeredURL := ""
 	// Each group is one service (a port); its URLs are tried in order and
 	// the first that answers stands for it.
 	for _, group := range groups {
@@ -87,6 +88,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				continue
 			}
 			answered = true
+			answeredURL = raw
 			if cached && seed.Type == types.TypeHostname {
 				break
 			}
@@ -102,6 +104,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			break
 		}
+	}
+	if seed.Type == types.TypeURL && seed.Keys[FallbackKey] != "" && len(groups) == 1 {
+		// Input like host:port: the scheme that answered goes on as its own
+		// URL, and the guess is dropped so the other collectors read the
+		// page that exists.
+		if u, err := normalize.URL(seed.Keys["url"]); err == nil && answeredURL != "" && answeredURL != u {
+			meta.Drop = true
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": answeredURL}})
+		}
+	}
+	if seed.Type == types.TypeURL && !answered {
+		meta.Drop = true // nothing to crawl or read
 	}
 	if meta.EmitCount == 0 && !answered && lastErr != nil {
 		if neterr.Quiet(lastErr) {
