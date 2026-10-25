@@ -98,7 +98,7 @@ azhaq bench                        # timing and memory on the fixture
 
 ### In a pipeline
 
-Each step of the usual chain has a command that reads targets from flags, a file or stdin and writes one result per line (`-json` for JSONL with the field names of the tool it stands in for, `-silent` to drop progress, `-o FILE` to keep a copy):
+Each step of the usual chain has a command that reads targets from flags, a file or stdin and writes one result per line (`-json` for JSONL, with the field names of subfinder, dnsx and httpx where those apply; `-silent` to drop progress; `-o FILE` to keep a copy):
 
 ```
 azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -silent    # subfinder | dnsx | httpx
