@@ -29,10 +29,16 @@ func printReport() {
 				d.AzhaqLive, d.AzhaqNames, d.AzhaqSeconds, d.SubfinderLive, d.SubfinderNames, d.SubSeconds,
 				d.SharedLive, d.AzhaqURLs, d.GauURLs)
 		}
-		fmt.Fprintln(w, "\nsources\tCT\tarchives")
+		fmt.Fprintln(w, "\nsources\tsubdomain sources\tarchives")
 		for _, d := range rec.Domains {
 			fmt.Fprintf(w, "%s\t%s\t%s\n", d.Domain, d.CT, d.CDX)
 		}
+	}
+	if b := rec.Brute; b != nil {
+		fmt.Fprintf(w, "\nactive DNS (%s)\tazhaq\tdnsx\tshared\tazhaq time\tdnsx time\n", b.Domain)
+		fmt.Fprintf(w, "brute force, %d words\t%d\t%d\t%d\t%.1fs\t%.1fs\n", b.Words, b.AzhaqFound, b.DnsxFound, b.Shared, b.AzhaqSeconds, b.DnsxSeconds)
+		fmt.Fprintf(w, "permutations\t%d\t%d (alterx)\t%d\t\t\n", b.PermuteAzhaq, b.PermuteAlterx, b.PermuteShared)
+		fmt.Fprintf(w, "wildcard zone, %d words, %d real\t%d found, %d fake\t%d unfiltered\t\t\t\n", b.WildcardWords, b.WildcardReal, b.WildcardAzhaq, b.WildcardFake, b.WildcardNoWild)
 	}
 	w.Flush()
 	fmt.Println("\nchecks")

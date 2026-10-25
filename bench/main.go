@@ -31,6 +31,7 @@ type record struct {
 	Tools   []tool       `json:"tools"`
 	Apps    []appResult  `json:"apps,omitempty"`
 	Domains []domainRow  `json:"domains,omitempty"`
+	Brute   *bruteRow    `json:"brute,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -62,6 +63,7 @@ var (
 func main() {
 	apps := flag.Bool("apps", true, "run the app benchmark (docker apps and ginandjuice.shop)")
 	domains := flag.Bool("domains", true, "run the passive domain benchmark")
+	brute := flag.Bool("brute", true, "run the DNS brute-force, wildcard and permutation benchmark (vulnweb.com only)")
 	crapi := flag.Bool("crapi", false, "also run OWASP crAPI (seven containers, about 2 GB of images)")
 	keep := flag.Bool("keep", false, "leave the docker apps running")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
@@ -105,6 +107,9 @@ func main() {
 	}
 	if *domains {
 		rec.Domains = benchDomains()
+	}
+	if *brute {
+		rec.Brute = benchBrute()
 	}
 
 	printReport()

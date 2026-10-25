@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -37,10 +38,8 @@ func benchDomains() []domainRow {
 	for _, d := range lines(raw) {
 		logf("domain %s", d)
 		row := domainRow{Domain: d}
-		seeds := filepath.Join(dir, d+".jsonl")
-		must(os.WriteFile(seeds, []byte(fmt.Sprintf(`{"type":"Domain","keys":{"domain":%q}}`+"\n", d)), 0o644))
 		db := filepath.Join(dir, d+"-"+stamp+".db")
-		_, m := run(d, 15*time.Minute, dir, azhaq, "run", "-in", seeds, "-passive", "-db", db, "-json")
+		_, m := run(d, 15*time.Minute, dir, azhaq, "run", "-domain", d, "-passive", "-db", db, "-json")
 		row.AzhaqSeconds = m.Seconds
 		exp, _ := runOut(azhaq, "export", "-db", db)
 		g := readExport(exp)
@@ -51,14 +50,14 @@ func benchDomains() []domainRow {
 				az[r.Entity.Key] = true
 			}
 		}
-		for _, p := range g.payloads("azhaq-ct") {
+		for _, p := range g.payloads("azhaq-subdomains") {
 			names, _ := p["names"].([]any)
 			for _, n := range names {
 				if s, _ := n.(string); inDomain(s, d) {
 					az[s] = true
 				}
 			}
-			row.CT = sourceSummary(p)
+			row.CT = subdomainSummary(p)
 			if !explained(p) {
 				silent = false
 			}
@@ -117,7 +116,19 @@ func benchDomains() []domainRow {
 		row.GauURLs = len(lines(gauOut))
 		out = append(out, row)
 	}
-	addCheck("CT and CDX: no silent zeros", silent, "every empty CT/archive result is a failure flagged as error or degraded, or a zero every source answered")
+	addCheck("subdomain sources and archives: no silent zeros", silent, "every empty result is a failure flagged as error or degraded, or a zero every source answered")
+	var azLive, subLive int
+	var azTime, subTime float64
+	for _, r := range out {
+		azLive += r.AzhaqLive
+		subLive += r.SubfinderLive
+		azTime += r.AzhaqSeconds
+		subTime += r.SubSeconds
+	}
+	addCheck("subdomains: live names ≥ 95% of subfinder's", subLive > 0 && float64(azLive) >= 0.95*float64(subLive),
+		"azhaq %d, subfinder %d (all domains, no API keys)", azLive, subLive)
+	addCheck("subdomains: within 2× subfinder's time", subTime > 0 && azTime <= 2*subTime,
+		"azhaq %.0fs, subfinder %.0fs", azTime, subTime)
 	return out
 }
 
@@ -139,16 +150,49 @@ func explained(p map[string]any) bool {
 		}
 	}
 	srcs, _ := p["sources"].(map[string]any)
-	if len(srcs) == 0 {
-		return false
-	}
+	answered := 0
 	for _, v := range srcs {
 		r, _ := v.(map[string]any)
+		if _, skipped := r["skipped"]; skipped {
+			continue
+		}
 		if _, failed := r["error"]; failed || r["count"] == nil {
 			return false
 		}
+		answered++
 	}
-	return true
+	return answered > 0
+}
+
+// subdomainSummary names the sources that found most and counts failures.
+func subdomainSummary(p map[string]any) string {
+	srcs, _ := p["sources"].(map[string]any)
+	type kv struct {
+		name string
+		n    int
+	}
+	var ok []kv
+	failed := 0
+	for name, v := range srcs {
+		r, _ := v.(map[string]any)
+		switch {
+		case r["skipped"] != nil:
+		case r["error"] != nil && r["count"] == float64(0):
+			failed++
+		default:
+			c, _ := r["count"].(float64)
+			ok = append(ok, kv{name, int(c)})
+		}
+	}
+	sort.Slice(ok, func(i, j int) bool { return ok[i].n > ok[j].n })
+	var parts []string
+	for i, x := range ok {
+		if i == 3 {
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", x.name, x.n))
+	}
+	return fmt.Sprintf("%d answered (%s), %d failed", len(ok), strings.Join(parts, ", "), failed)
 }
 
 func sourceSummary(p map[string]any) string {

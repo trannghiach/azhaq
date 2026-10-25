@@ -35,6 +35,42 @@ var tools = []tool{
 	{"naabu", "2.6.1", "projectdiscovery/naabu", "naabu_2.6.1_linux_amd64.zip", "018c4c9884dea971eda860435ede3021d1150732f34cfd245498c6726d8cab90"},
 	{"gau", "2.2.4", "lc/gau", "gau_2.2.4_linux_amd64.tar.gz", "10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9"},
 	{"ffuf", "2.3.0", "ffuf/ffuf", "ffuf_2.3.0_linux_amd64.tar.gz", "b2a3c725fcb9da175159682f54d6e9149f2905b00d84d155e7efc5d599975ceb"},
+	{"alterx", "0.1.0", "projectdiscovery/alterx", "alterx_0.1.0_linux_amd64.zip", "ffae5b25138cb27b58900b9b5849e02d0390385fce404252d32e469f2a0e97ac"},
+}
+
+// wordlist is a pinned data file the bench downloads once.
+type wordlist struct {
+	name, url, sha256 string
+}
+
+// subdomainWords is SecLists' top 5,000 subdomain labels (MIT).
+var subdomainWords = wordlist{
+	"subdomains-top1million-5000.txt",
+	"https://raw.githubusercontent.com/danielmiessler/SecLists/61060549893d61b428d2184bb719abf23b4b3f13/Discovery/DNS/subdomains-top1million-5000.txt",
+	"e331367c140298cb179114fdeefa78f58f696219f0dec017a28bb79487cfcf19",
+}
+
+// fetchWordlist returns the local path of w, downloading and checking it once.
+func fetchWordlist(w wordlist) (string, error) {
+	path := filepath.Join(work, w.name)
+	if raw, err := os.ReadFile(path); err == nil {
+		if sum := sha256.Sum256(raw); hex.EncodeToString(sum[:]) == w.sha256 {
+			return path, nil
+		}
+	}
+	resp, err := (&http.Client{Timeout: 2 * time.Minute}).Get(w.url)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if sum := sha256.Sum256(data); hex.EncodeToString(sum[:]) != w.sha256 {
+		return "", fmt.Errorf("%s: checksum mismatch", w.name)
+	}
+	return path, os.WriteFile(path, data, 0o644)
 }
 
 func (t tool) url() string {
