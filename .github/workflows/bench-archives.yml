@@ -1,0 +1,39 @@
+name: bench-archives
+
+# The domain benchmark (subdomains and historical URLs, passive lookups
+# only) from GitHub's network: the Wayback Machine and Common Crawl refuse
+# some addresses, and this checks Azhaq against gau where they answer.
+# Push a tag bench-* or run it by hand.
+on:
+  push:
+    tags: ["bench-*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  domains:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: bench
+        run: go run ./bench -apps=false -brute=false -probe=false | tee bench.txt || true
+      - name: results
+        # Annotations can be read without signing in.
+        run: |
+          f=$(ls -t bench/history/*.json | head -1)
+          jq -r '.domains[] | "::notice title=\(.domain)::archives: \(.archives) | azhaq URLs \(.azhaq_urls), gau \(.gau_urls), gau in azhaq \(.gau_shared) | live \(.azhaq_live) vs subfinder \(.subfinder_live)"' "$f"
+          jq -r '.checks[] | "::notice title=\(if .pass then "PASS" else "FAIL" end)::\(.name): \(.detail)"' "$f"
+          jq -e 'all(.checks[]; .pass)' "$f" > /dev/null
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-record
+          path: |
+            bench/history/*.json
+            bench.txt
