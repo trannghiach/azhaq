@@ -10,6 +10,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
+	"github.com/trannghiach/azhaq/internal/collectors/gqlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/jscol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
@@ -43,6 +44,8 @@ func Register(cat *catalog.Catalog, o Options) {
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)
 	apicol.Register(cat, client)
+	cat.MustRegister(gqlcol.New(client))
+	cat.MustRegister(gqlcol.NewSchema(client))
 	if len(o.Paths) > 0 {
 		list := append(append([]string{}, pathscol.DefaultWordlist...), o.Paths...)
 		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: list})

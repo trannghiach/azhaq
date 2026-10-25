@@ -152,6 +152,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 
 	var found []string
 	var maps []sourceMap
+	var ops []string
+	opSeen := map[string]bool{}
 	for i := 0; i < len(queue); i++ {
 		if ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
@@ -170,6 +172,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			if link, err := normalize.URL(p); err == nil && webextract.SameOrigin(raw, link) && link != raw {
 				found = append(found, link)
+			}
+		}
+		for _, op := range webextract.GraphQLOps(s.body) {
+			if !opSeen[op] {
+				opSeen[op] = true
+				ops = append(ops, op)
 			}
 		}
 		for _, ref := range webextract.ScriptRefs(s.body, s.url) {
@@ -213,6 +221,17 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 		return nil
+	}
+	if len(ops) > 0 {
+		sort.Strings(ops)
+		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "graphql_operations": ops})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "graphql",
+			Payload: payload, Confidence: 0.7, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
 	}
 	for _, m := range maps {
 		row := map[string]any{"url": m.url, "via": "js", "role": "sourcemap", "sources": m.count}

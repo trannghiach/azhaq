@@ -157,6 +157,15 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	}
 }
 
+// unpark queues the tasks that waited for t.
+func (s *scheduler) unpark(t task) {
+	pk := seedKey(t.seed) + "\x00" + t.col
+	for _, w := range s.parked[pk] {
+		s.enqueue(w)
+	}
+	delete(s.parked, pk)
+}
+
 func (s *scheduler) enqueue(t task) {
 	col, _ := s.e.Cat.Get(t.col)
 	if _, ok := col.(catalog.Batcher); ok {
@@ -226,6 +235,7 @@ func (s *scheduler) next() (task, bool) {
 			t := s.queue[p][0]
 			if s.skip(t) {
 				s.queue[p] = s.queue[p][1:]
+				s.unpark(t) // nothing to wait for
 				continue
 			}
 			if s.ran >= s.b.MaxItems {
@@ -328,14 +338,10 @@ func (s *scheduler) handle(f finished) {
 	}
 	for i, t := range f.tasks {
 		meta, err := f.metas[i], f.errs[i]
-		pk := seedKey(t.seed) + "\x00" + t.col
-		if waiting := s.parked[pk]; len(waiting) > 0 {
-			delete(s.parked, pk)
-			if !meta.Drop {
-				for _, w := range waiting {
-					s.enqueue(w)
-				}
-			}
+		if meta.Drop {
+			delete(s.parked, seedKey(t.seed)+"\x00"+t.col)
+		} else {
+			s.unpark(t)
 		}
 		if err != nil && meta.Status != types.StatusCancelled {
 			continue

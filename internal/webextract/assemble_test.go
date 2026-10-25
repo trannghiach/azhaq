@@ -36,3 +36,13 @@ func TestAssembledNeedsOneBinding(t *testing.T) {
 		t.Errorf("ambiguous join resolved: %q", got)
 	}
 }
+
+func TestGraphQLOps(t *testing.T) {
+	script := `const Q=gql` + "`" + `query GetUser($id: ID!) { user(id: $id) { email } }` + "`" + `;
+	var d={kind:"Document",definitions:[{kind:"OperationDefinition",operation:"mutation",name:{kind:"Name",value:"Login"},variableDefinitions:[]}]};
+	function query(a){return a}; query (x); var subscription = 1;`
+	got := GraphQLOps(script)
+	if !reflect.DeepEqual(got, []string{"query GetUser", "mutation Login"}) {
+		t.Errorf("ops %q", got)
+	}
+}

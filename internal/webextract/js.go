@@ -146,3 +146,26 @@ func SourceMapURL(script string, scriptURL *url.URL) string {
 	}
 	return u.String()
 }
+
+var (
+	gqlDocument = regexp.MustCompile(`\b(query|mutation|subscription)\s+([A-Za-z_]\w*)\s*[({]`)
+	gqlAST      = regexp.MustCompile(`"?operation"?\s*:\s*"(query|mutation|subscription)"\s*,\s*"?name"?\s*:\s*\{\s*"?kind"?\s*:\s*"Name"\s*,\s*"?value"?\s*:\s*"(\w+)"`)
+)
+
+// GraphQLOps lists the GraphQL operations a script carries, as
+// "query GetUser", from query documents or from the parsed form bundlers
+// emit for gql tags.
+func GraphQLOps(script string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, re := range []*regexp.Regexp{gqlDocument, gqlAST} {
+		for _, m := range re.FindAllStringSubmatch(script, -1) {
+			op := m[1] + " " + m[2]
+			if !seen[op] && len(out) < 500 {
+				seen[op] = true
+				out = append(out, op)
+			}
+		}
+	}
+	return out
+}

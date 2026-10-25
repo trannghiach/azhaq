@@ -86,10 +86,10 @@ const helpText = `azhaq — generic recon engine
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
                [-allow D] [-deny D] [-passive]
                [-sources A,B] [-exclude-sources A,B] [-all-sources] [-providers FILE]
-               [-resolvers FILE] [-dns-rate N] [-dns-brute FILE] [-permute] [-skip A,B]
+               [-resolvers FILE] [-dns-rate N] [-dns-brute FILE] [-permute] [-graphql] [-skip A,B]
                # -depth 0 = seed wave only (not unlimited); default 4
                # -passive keeps third-party sources and DNS; nothing is sent to the target
-               # -dns-brute and -permute are active and need -allow
+               # -dns-brute, -permute and -graphql are active and need -allow
                # -probe: resolve and fetch each target once, one line per web service
                # print is a ranked map (visited/hint); -obs dumps the observation log
                # parallel runs: give each its own -db FILE or AZHAQ_DB
@@ -142,6 +142,7 @@ func cmdRun(args []string) error {
 	dnsRate := fs.Float64("dns-rate", 100, "DNS queries per second per resolver")
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active: needs -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active: needs -allow)")
+	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	var cookies, headers, allow, deny, domains stringsFlag
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
@@ -251,8 +252,11 @@ func cmdRun(args []string) error {
 	if *permute {
 		budgets.Active["permute"] = true
 	}
+	if *graphql {
+		budgets.Active["graphql"] = true
+	}
 	if len(budgets.Active) > 0 && len(allow) == 0 {
-		return fmt.Errorf("-dns-brute and -permute send guesses to DNS: name the scope with -allow DOMAIN")
+		return fmt.Errorf("-dns-brute, -permute and -graphql are active: name the scope with -allow DOMAIN")
 	}
 	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
 		return err
