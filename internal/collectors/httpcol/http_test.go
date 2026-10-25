@@ -103,3 +103,29 @@ func TestFallbackToHTTP(t *testing.T) {
 		t.Errorf("payload %v", p)
 	}
 }
+
+func TestRedirectToAnotherSiteIsNotFollowed(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/redirect":
+			http.Redirect(w, r, r.URL.Query().Get("to"), http.StatusFound)
+		default:
+			w.Write([]byte("<title>t</title>"))
+		}
+	}))
+	defer srv.Close()
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("<title>other</title>")) }))
+	defer other.Close()
+	elsewhere := strings.Replace(other.URL, "127.0.0.1", "localhost", 1) + "/elsewhere" // another site, still local
+	c := New(srv.Client())
+	c.NoFavicon = true
+	for to, follow := range map[string]bool{"/inside": true, elsewhere: false} {
+		var hints []types.Seed
+		meta, _ := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/redirect?to=" + to}}, func(types.Observation) error { return nil })
+		hints = meta.NextHints
+		if (len(hints) > 0) != follow {
+			t.Errorf("redirect to %s: hints %v", to, hints)
+		}
+	}
+}

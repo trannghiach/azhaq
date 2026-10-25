@@ -227,7 +227,9 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 		ObservedAt: time.Now().UTC(),
 	}
 	var hint types.Seed
-	if final != "" && final != reqURL && !catchAll {
+	if final != "" && final != reqURL && !catchAll && sameSite(reqURL, final) {
+		// A redirect to another site (an open redirect, a login provider)
+		// is recorded in the hops, not followed.
 		hint = types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": final}}
 	}
 	return obs, hint, cached, nil
@@ -417,4 +419,10 @@ func decodeDataURL(raw string) []byte {
 		return nil
 	}
 	return out
+}
+
+// sameSite: the same host, or two hosts of one registrable domain.
+func sameSite(a, b string) bool {
+	ha, hb := normalize.HostFromURL(a), normalize.HostFromURL(b)
+	return ha != "" && (ha == hb || normalize.SameSite(ha, hb))
 }
