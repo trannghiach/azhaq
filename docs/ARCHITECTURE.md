@@ -161,6 +161,8 @@ URLs are normalized, kept when they belong to the domain, and deduplicated. `-ur
 
 The graph lives in SQLite through `modernc.org/sqlite`, a pure-Go driver, so the binary builds without CGO. Each run gets its own file unless `-db` or `AZHAQ_DB` names one. Every run has its own ID, and the store records which entities and edges each run saw. `azhaq diff` compares two runs from that record.
 
+A database can hold many runs: `-db FILE` on every run of a target makes it a workspace. Work is deduplicated within a run, not across runs, so each run collects afresh; reads during a run see only that run's entities, observations and edges, while `export` sees all of them with their first and last sighting. After a run into a workspace, and with `azhaq diff -db FILE`, the last two runs are compared.
+
 Diffs compare facts, not bytes: body hashes and sizes, response times, the address that answered, the session a run was given, each subdomain source's timing, and response header values (rate-limit counters, request IDs) are left out, while header names, statuses, titles and everything else count. Each database records the seeds it was run with. After a run, the CLI diffs against the previous run of the same seeds in the current directory (tracked in `.azhaq-index`), and `azhaq diff` on two runs with different seeds says so before the result.
 
 ## The map

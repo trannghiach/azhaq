@@ -99,7 +99,7 @@ const helpText = `azhaq — generic recon engine
                # one run per session; prints the endpoints whose status differs
   azhaq ingest -in facts.jsonl  [-db FILE]
   azhaq export [-db FILE]
-  azhaq diff   -a OLD.db -b NEW.db  [-jsonl] [-quiet]
+  azhaq diff   -a OLD.db -b NEW.db | -db WORKSPACE.db  [-jsonl] [-quiet]
   azhaq bench
   azhaq version
 `
@@ -416,6 +416,12 @@ func cmdRun(args []string) error {
 			fmt.Fprintf(os.Stderr, "azhaq: diff vs %s: %v\n", prevDB, err)
 		}
 	}
+	if !*quiet && !*jsonOut && !*demo && !remember {
+		// -db names a workspace: compare with its previous run, if any.
+		if err := printRunDiff(path, diffOpts{}); err != nil {
+			fmt.Fprintf(os.Stderr, "azhaq: diff vs the previous run in %s: %v\n", path, err)
+		}
+	}
 	return nil
 }
 
@@ -615,13 +621,17 @@ func cmdDiff(args []string) error {
 	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
 	a := fs.String("a", "", "old sqlite")
 	b := fs.String("b", "", "new sqlite (default: last run)")
+	ws := fs.String("db", "", "workspace: compare the last two runs recorded in this database")
 	jsonl := fs.Bool("jsonl", false, "emit JSONL instead of a text report")
 	quiet := fs.Bool("quiet", false, "entities and counts only (skip observation lines)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if *ws != "" {
+		return printRunDiff(*ws, diffOpts{JSONL: *jsonl, Quiet: *quiet})
+	}
 	if *a == "" {
-		return fmt.Errorf("need -a OLD.db")
+		return fmt.Errorf("need -a OLD.db, or -db WORKSPACE.db")
 	}
 	newPath := *b
 	if newPath == "" {
@@ -657,6 +667,33 @@ func printDiff(oldPath, newPath string, opts diffOpts) error {
 		return err
 	}
 	defer neu.Close()
+	return printDiffStores(old, neu, oldPath, opts)
+}
+
+// printRunDiff compares the last two runs recorded in one database (a
+// workspace). It prints nothing when there is only one run.
+func printRunDiff(path string, opts diffOpts) error {
+	old, err := store.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer old.Close()
+	runs, err := old.Runs()
+	if err != nil || len(runs) < 2 {
+		return err
+	}
+	neu, err := store.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer neu.Close()
+	prev, last := runs[len(runs)-2], runs[len(runs)-1]
+	old.UseRun(prev.ID)
+	neu.UseRun(last.ID)
+	return printDiffStores(old, neu, fmt.Sprintf("the run of %s in %s", prev.Started.Format("2006-01-02 15:04"), path), opts)
+}
+
+func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) error {
 	d, err := store.Compare(old, neu)
 	if err != nil {
 		return err
@@ -693,7 +730,7 @@ func printDiff(oldPath, newPath string, opts diffOpts) error {
 		}
 		return enc.Encode(sum)
 	}
-	fmt.Printf("diff vs %s\n", oldPath)
+	fmt.Printf("diff vs %s\n", oldLabel)
 	if differ {
 		fmt.Printf("  ! the runs had different seeds; this compares two targets, not two scans of one\n")
 		fmt.Printf("    old: %s\n    new: %s\n", strings.ReplaceAll(oldIn, "\n", ", "), strings.ReplaceAll(newIn, "\n", ", "))

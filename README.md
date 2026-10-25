@@ -78,7 +78,7 @@ Common options:
 | `-graphql` | active: read the schema of GraphQL endpoints with an introspection query; needs `-allow` |
 | `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
 | `-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), pause before each request, collectors not to run |
-| `-db FILE` | graph file to write (default: a new timestamped file per run) |
+| `-db FILE` | graph file to write (default: a new timestamped file per run); reuse it to keep a workspace of runs |
 | `-json` / `-obs` | JSON summary, or the full observation log |
 
 Other commands:
@@ -91,6 +91,15 @@ azhaq export [-db FILE]            # dump the graph as JSONL
 azhaq diff   -a OLD.db -b NEW.db   # compare two runs of the same seeds
 azhaq ingest -in facts.jsonl       # load facts from another tool
 azhaq bench                        # timing and memory on the fixture
+```
+
+### Watching a target over time
+
+Give every run of a target the same `-db` file and it becomes a workspace: each run redoes the work, entities keep the time they were first and last seen, and after each run Azhaq prints what changed since the previous one. `azhaq diff -db FILE` repeats that comparison, and `azhaq export -db FILE` lists everything with its first and last sighting.
+
+```
+azhaq run -domain example.com -passive -db example.db    # every day, from cron
+azhaq diff -db example.db                                 # what appeared or vanished since the last run
 ```
 
 ### Comparing sessions

@@ -152,6 +152,41 @@ func (s *Store) BeginRun(id string, depth, maxItems int) error {
 	return err
 }
 
+// Run is one run recorded in a database.
+type Run struct {
+	ID      string
+	Started time.Time
+}
+
+// Runs lists the runs in the database, oldest first.
+func (s *Store) Runs() ([]Run, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows, err := s.db.Query(`SELECT id, started FROM runs ORDER BY started`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Run
+	for rows.Next() {
+		var r Run
+		var ts int64
+		if err := rows.Scan(&r.ID, &ts); err != nil {
+			return nil, err
+		}
+		r.Started = time.Unix(0, ts)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// UseRun selects a recorded run for reading, without starting a new one.
+func (s *Store) UseRun(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.runID = id
+}
+
 func (s *Store) RunID() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -230,11 +265,13 @@ func (s *Store) recordEntityLocked(entityID string) {
 	_, _ = s.db.Exec(`INSERT OR IGNORE INTO run_entities (run_id, entity_id) VALUES (?, ?)`, s.runID, entityID)
 }
 
+// Seen reports whether this run already did a piece of work. A database
+// used for many runs (a workspace) redoes the work on every run.
 func (s *Store) Seen(key string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n int
-	err := s.db.QueryRow(`SELECT 1 FROM idempotency WHERE key = ?`, key).Scan(&n)
+	err := s.db.QueryRow(`SELECT 1 FROM idempotency WHERE key = ?`, s.runID+key).Scan(&n)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -244,14 +281,22 @@ func (s *Store) Seen(key string) (bool, error) {
 func (s *Store) MarkSeen(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO idempotency (key) VALUES (?)`, key)
+	_, err := s.db.Exec(`INSERT OR IGNORE INTO idempotency (key) VALUES (?)`, s.runID+key)
 	return err
 }
 
+// Entities, Observations and Edges list what the current run saw, or
+// everything in the database when no run is selected (export, ingest).
 func (s *Store) Entities() ([]types.Entity, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id, type, key, first_seen, last_seen FROM entities ORDER BY type, key`)
+	q, args := `SELECT id, type, key, first_seen, last_seen FROM entities ORDER BY type, key`, []any{}
+	if s.runID != "" {
+		q = `SELECT e.id, e.type, e.key, e.first_seen, e.last_seen FROM entities e
+JOIN run_entities r ON r.entity_id = e.id AND r.run_id = ? ORDER BY e.type, e.key`
+		args = append(args, s.runID)
+	}
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +320,12 @@ func (s *Store) Entities() ([]types.Entity, error) {
 func (s *Store) Observations() ([]types.StoredObservation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id, entity_id, collector, source, kind, payload, confidence, observed_at FROM observations ORDER BY observed_at`)
+	q, args := `SELECT id, entity_id, collector, source, kind, payload, confidence, observed_at FROM observations ORDER BY observed_at`, []any{}
+	if s.runID != "" {
+		q = `SELECT id, entity_id, collector, source, kind, payload, confidence, observed_at FROM observations WHERE run_id = ? ORDER BY observed_at`
+		args = append(args, s.runID)
+	}
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +348,13 @@ func (s *Store) Observations() ([]types.StoredObservation, error) {
 func (s *Store) Edges() ([]types.Edge, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT from_id, to_id, type, observed_at FROM edges`)
+	q, args := `SELECT from_id, to_id, type, observed_at FROM edges`, []any{}
+	if s.runID != "" {
+		q = `SELECT e.from_id, e.to_id, e.type, e.observed_at FROM edges e
+JOIN run_edges r ON r.from_id = e.from_id AND r.to_id = e.to_id AND r.type = e.type AND r.run_id = ?`
+		args = append(args, s.runID)
+	}
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
