@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"net"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,7 +29,12 @@ var (
 
 func tech() *wappalyzer.Wappalyze {
 	techOnce.Do(func() {
+		// Compiling the fingerprints allocates about 400 MB of short-lived
+		// regexp state for 70 MB that stays; collecting often while it
+		// runs keeps the process's peak memory near the latter.
+		old := debug.SetGCPercent(10)
 		techDB, _ = wappalyzer.New()
+		debug.SetGCPercent(old)
 	})
 	return techDB
 }

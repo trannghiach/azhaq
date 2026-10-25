@@ -136,12 +136,40 @@ func (p *Pool) Resolve(ctx context.Context, name string) Answer {
 }
 
 // ResolveMany resolves names with up to workers queries in flight and
-// returns answers in the same order.
+// returns answers in the same order. Names whose every attempt failed
+// (timeouts, SERVFAIL under load) get a second pass at a quarter of the
+// concurrency, so a burst of dropped queries does not lose names.
 func (p *Pool) ResolveMany(ctx context.Context, names []string, workers int) []Answer {
-	out := make([]Answer, len(names))
 	if workers <= 0 {
 		workers = 64
 	}
+	out := p.resolveMany(ctx, names, workers)
+	var again []string
+	var at []int
+	for i, a := range out {
+		if a.Status == StatusFailed && ctx.Err() == nil {
+			p.forget(a.Name)
+			again = append(again, names[i])
+			at = append(at, i)
+		}
+	}
+	if len(again) > 0 {
+		for j, a := range p.resolveMany(ctx, again, max(workers/4, 4)) {
+			out[at[j]] = a
+		}
+	}
+	return out
+}
+
+// forget drops a cached answer so the next Resolve asks again.
+func (p *Pool) forget(name string) {
+	p.mu.Lock()
+	delete(p.cache, normalize.Hostname(name))
+	p.mu.Unlock()
+}
+
+func (p *Pool) resolveMany(ctx context.Context, names []string, workers int) []Answer {
+	out := make([]Answer, len(names))
 	sem := make(chan struct{}, workers)
 	var wg sync.WaitGroup
 	for i, n := range names {

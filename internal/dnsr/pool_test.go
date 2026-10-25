@@ -129,3 +129,23 @@ func TestWildcard(t *testing.T) {
 		t.Error("zone detection")
 	}
 }
+
+func TestManyRetriesFailedNames(t *testing.T) {
+	// The first three queries for www get SERVFAIL (every attempt of the
+	// first pass); the second pass gets an answer.
+	var www atomic.Int32
+	addr := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {
+		if strings.HasPrefix(r.Question[0].Name, "www.") && www.Add(1) <= 3 {
+			m := new(dns.Msg)
+			m.SetRcode(r, dns.RcodeServerFailure)
+			_ = w.WriteMsg(m)
+			return
+		}
+		testZone(w, r)
+	})
+	p := New(Options{Resolvers: []string{addr}, PerSecond: -1, Timeout: time.Second})
+	got := p.ResolveMany(context.Background(), []string{"www.example.org", "dead.example.org"}, 8)
+	if got[0].Status != StatusOK || got[1].Status != StatusNXDomain {
+		t.Fatalf("answers %+v", got)
+	}
+}

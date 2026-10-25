@@ -1,6 +1,6 @@
 # Azhaq
 
-Azhaq is a reconnaissance engine written in Go. Give it a URL, a domain, an organization name or a cloud asset inventory, and it maps what is reachable from there: hosts, URLs, forms, API routes and operations, DNS records, certificates, historical URLs and registration data. Everything goes into one SQLite graph, deduplicated across sources. Running it again shows what changed.
+Azhaq is a reconnaissance engine written in Go. Give it a URL, a domain, a list of hosts, an organization name or a cloud asset inventory, and it maps what is reachable from there: hosts, web services and the technologies behind them, URLs, forms, API routes and operations, DNS records, certificates, historical URLs and registration data. Everything goes into one SQLite graph, deduplicated across sources. Running it again shows what changed.
 
 It maps and does not attack: no payloads, no fuzzing, no vulnerability checks.
 
@@ -27,6 +27,15 @@ Only scan systems you are authorized to test.
 ```
 azhaq run -url https://app.example.com/      # map an application and its domain
 azhaq run -domain example.com -passive       # subdomains, without touching the hosts
+azhaq run -list hosts.txt -probe             # one line per web service, like httpx
+```
+
+`-probe` resolves and fetches each target once and prints status, title, technologies, CDN, address and favicon hash:
+
+```
+probe
+  https://ginandjuice.shop/ [200] [Home - Gin & Juice Shop] [Amazon ALB,Amazon Web Services] [cloud:aws] [34.249.203.140] [favicon:1165564288]
+  http://rest.vulnweb.com/ [200] [Invicti Vulnerable REST API] [Apache HTTP Server:2.4.25,Debian,PHP:7.1.26] [cloud:aws] [18.215.71.186]
 ```
 
 Try it offline against a built-in fixture:
@@ -52,6 +61,10 @@ Common options:
 | Option | Effect |
 | --- | --- |
 | `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
+| `-list FILE` | targets one per line (`-` for stdin): a URL is fetched as given, a host over HTTPS then HTTP, `host:port` or an IP address over HTTPS falling back to HTTP |
+| `-probe` | only resolve and fetch the targets themselves: no crawl, no enumeration, no redirect or CNAME targets |
+| `-web-ports 80,443,8080` | ports to probe on each hostname (default: 443, falling back to 80) |
+| `-no-tech` | skip technology fingerprints; their compiled patterns take about 190 MB of memory |
 | `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have |
@@ -79,12 +92,12 @@ azhaq bench                        # timing and memory on the fixture
 
 | Collector | Input | Collects |
 | --- | --- | --- |
-| `azhaq-http` | URL, hostname | status, redirect chain, title, headers, cookie names (not values); flags catch-all answers |
+| `azhaq-http` | URL, hostname | status, redirect chain, title, technologies (wappalyzer fingerprints), favicon hash (Shodan's `http.favicon.hash`), length, word and line counts, response time, address, headers, cookie names (not values); flags catch-all answers |
 | `azhaq-crawl` | URL | same-origin links, forms (including script-driven `data-action` forms), parameter names, links inside JSON responses |
 | `azhaq-js` | URL | routes from each page's inline and same-origin scripts and the chunks they import, tagged as API or page |
 | `azhaq-openapi` | URL | operations, methods and parameter names from OpenAPI 3 and Swagger 2 documents (JSON or YAML); never calls them |
 | `azhaq-paths` | URL | common paths and API description locations, `robots.txt`, sitemaps; drops catch-all answers |
-| `azhaq-dns` | hostname | A/AAAA and CNAME chain through a pool of resolvers, in batches; MX, TXT and NS for registrable domains; names that do not resolve or only answer through a wildcard record are marked and never probed |
+| `azhaq-dns` | hostname | A/AAAA and CNAME chain through a pool of resolvers, in batches; the CDN, WAF or cloud in front (by address and CNAME); MX, TXT and NS for registrable domains; names that do not resolve or only answer through a wildcard record are marked and never probed |
 | `azhaq-tls` | hostname | certificate details and SANs within the same domain |
 | `azhaq-subdomains` | domain | hostnames from 50+ passive sources (certificate transparency, search engines, archives, DNS datasets), with each source's count or error recorded |
 | `azhaq-dns-brute` | domain | `-dns-brute`: names from a wordlist that resolve, wildcard answers removed |
@@ -97,7 +110,7 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## Benchmark
 
-`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, alterx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups only. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
+`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, alterx, httpx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups; the live names of the bug bounty domains get one probe from each tool. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
 
 ## Documentation
 
@@ -106,4 +119,4 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## License
 
-[MIT](LICENSE). Dependencies are MIT, BSD, Apache or Unlicense licensed, and CI checks it. Most subdomain sources are [subfinder](https://github.com/projectdiscovery/subfinder)'s (MIT, ProjectDiscovery), run in-process.
+[MIT](LICENSE). Dependencies are MIT, BSD, Apache or Unlicense licensed, and CI checks it. Most subdomain sources are [subfinder](https://github.com/projectdiscovery/subfinder)'s (MIT, ProjectDiscovery), run in-process; technology fingerprints come from [wappalyzergo](https://github.com/projectdiscovery/wappalyzergo) and CDN ranges from [cdncheck](https://github.com/projectdiscovery/cdncheck) (both MIT, ProjectDiscovery).

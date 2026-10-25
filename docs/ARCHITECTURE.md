@@ -92,6 +92,20 @@ All HTTP collectors share one client (`internal/fetch`):
 - At most 2 requests are in flight per host. Concurrent requests for the same URL share one fetch.
 - Bodies are capped at 2 MiB, or 16 MiB for JavaScript, JSON and source maps, where bundles of several MB are normal. `-delay` adds a pause before each uncached request.
 - `-cookie` and `-header` are added to every request, which lets a run reuse a session you already have. Azhaq never logs in, and it stores cookie names but never their values.
+- Timeouts are 10 seconds per request, as in httpx; CDN edges and bot managers often answer slowly.
+
+### Probing
+
+`azhaq-http` probes a hostname over HTTPS and falls back to HTTP; with `-web-ports` it tries each port, HTTPS first except on port 80. A `host:port` or IP address from `-list` becomes a URL with the same fallback. For each answer it stores, besides status, title and headers:
+
+- `tech`: wappalyzer fingerprints (`internal/fingerprint`, wappalyzergo) of the final response's headers and body, as `Name` or `Name:version`;
+- `favicon`: on a site's front page, the MurmurHash3 of the icon's base64 encoding, the value Shodan indexes as `http.favicon.hash`. The icon is the page's `<link rel=icon>` (`.ico` first) or `/favicon.ico`, at most two requests, and only on the same site;
+- `length`, `words`, `lines` of the final body (counted like httpx), `ms` for the whole redirect chain, and `ip`, the address the request connected to (left out behind a proxy);
+- `final_status` when the request was redirected.
+
+`azhaq-dns` adds `cdn` and `cdn_type` (`cdn`, `waf` or `cloud`) from cdncheck's embedded ranges: by address, then by CNAME target. Nothing here makes an extra lookup.
+
+`-probe` keeps a run to this: only `azhaq-dns` and `azhaq-http` run, on the listed targets and nothing they lead to, and the output is one line per web service instead of the map.
 
 ### Catch-all responses
 
@@ -117,7 +131,7 @@ The default set is subfinder's default set: the fast sources. `-all-sources` add
 
 The graph lives in SQLite through `modernc.org/sqlite`, a pure-Go driver, so the binary builds without CGO. Each run gets its own file unless `-db` or `AZHAQ_DB` names one. Every run has its own ID, and the store records which entities and edges each run saw. `azhaq diff` compares two runs from that record.
 
-Diffs compare facts, not bytes: body hashes, the session a run was given, and response header values (rate-limit counters, request IDs) are left out, while header names, statuses, titles and everything else count. Each database records the seeds it was run with. After a run, the CLI diffs against the previous run of the same seeds in the current directory (tracked in `.azhaq-index`), and `azhaq diff` on two runs with different seeds says so before the result.
+Diffs compare facts, not bytes: body hashes and sizes, response times, the address that answered, the session a run was given, each subdomain source's timing, and response header values (rate-limit counters, request IDs) are left out, while header names, statuses, titles and everything else count. Each database records the seeds it was run with. After a run, the CLI diffs against the previous run of the same seeds in the current directory (tracked in `.azhaq-index`), and `azhaq diff` on two runs with different seeds says so before the result.
 
 ## The map
 
@@ -140,7 +154,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 ## Design choices
 
-- **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
+- **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
 - **No browser.** JavaScript routes are extracted from script text. That covers bundled single-page apps without shipping Chromium.
 - **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state.
@@ -167,6 +181,7 @@ internal/
   dnsr/                   resolver pool and wildcard detection
   engine/                 Plan, Run, Ingest, scheduler, identity, map view
   fetch/                  shared HTTP client
+  fingerprint/            technologies, CDN ranges, favicon hash
   limit/                  rate limits per host, source or resolver
   normalize/              seed and hostname normalization
   scope/                  -allow / -deny rules

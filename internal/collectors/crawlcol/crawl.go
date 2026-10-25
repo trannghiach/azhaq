@@ -57,7 +57,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	res, _, err := fetch.Do(ctx, c.Client, raw)
 	if err != nil {
-		if neterr.UnknownHost(err) {
+		if neterr.Quiet(err) {
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err

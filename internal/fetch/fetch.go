@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/timing"
 )
 
@@ -123,6 +124,9 @@ func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byt
 }
 
 func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
+	if endsSession(raw) {
+		return Result{}, false, neterr.ErrEndsSession
+	}
 	cacheMu.Lock()
 	if e, ok := cache[raw]; ok {
 		cacheMu.Unlock()
@@ -409,4 +413,24 @@ func mustURL(raw string) *url.URL {
 		return &url.URL{}
 	}
 	return u
+}
+
+var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out", "sign_out", "logoff"}
+
+// endsSession: a run with a session never requests a logout URL.
+func endsSession(raw string) bool {
+	if Extra.Get("Cookie") == "" && Extra.Get("Authorization") == "" {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	p := strings.ToLower(u.Path)
+	for _, w := range logoutWords {
+		if strings.Contains(p, w) {
+			return true
+		}
+	}
+	return false
 }

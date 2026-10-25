@@ -29,10 +29,7 @@ import (
 
 const Name = "azhaq-http"
 
-var (
-	titleRE     = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
-	emittedURLs sync.Map
-)
+var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
 type Collector struct {
 	Client *http.Client
@@ -41,6 +38,11 @@ type Collector struct {
 	Ports []int
 	// NoFavicon skips the favicon request on root pages.
 	NoFavicon bool
+	// NoTech skips technology fingerprints, whose compiled patterns take
+	// about 190 MB of memory.
+	NoTech bool
+
+	emitted sync.Map // URLs already reported in this run
 }
 
 func New(client *http.Client) *Collector {
@@ -89,7 +91,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			if cached && seed.Type == types.TypeHostname {
 				break
 			}
-			if _, dup := emittedURLs.LoadOrStore(obs.Source, true); dup {
+			if _, dup := c.emitted.LoadOrStore(obs.Source, true); dup {
 				break
 			}
 			if err := emit(obs); err != nil {
@@ -103,7 +105,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	if meta.EmitCount == 0 && !answered && lastErr != nil {
-		if neterr.UnknownHost(lastErr) {
+		if neterr.Quiet(lastErr) {
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		meta.Status = types.StatusError
@@ -181,7 +183,7 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 	if n, err := normalize.URL(res.URL); err == nil {
 		final = n
 	}
-	row := describe(reqURL, final, res, title)
+	row := describe(reqURL, final, res, title, c.NoTech)
 	catchAll := fetch.CatchAll(ctx, c.Client, res)
 	if catchAll {
 		// Same answer as a path that does not exist: not a page of its own.
@@ -209,7 +211,7 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 	return obs, hint, cached, nil
 }
 
-func describe(reqURL, final string, res fetch.Result, title string) map[string]any {
+func describe(reqURL, final string, res fetch.Result, title string, noTech bool) map[string]any {
 	sum := sha256.Sum256(res.Body)
 	out := map[string]any{
 		"url":          reqURL,
@@ -231,8 +233,14 @@ func describe(reqURL, final string, res fetch.Result, title string) map[string]a
 	if last == nil {
 		last = res.Header
 	}
-	if tech := fingerprint.Tech(last, res.Body); len(tech) > 0 {
-		out["tech"] = tech
+	if !noTech && page(last) {
+		body := res.Body
+		if len(body) > maxTechBody {
+			body = body[:maxTechBody]
+		}
+		if tech := fingerprint.Tech(last, body); len(tech) > 0 {
+			out["tech"] = tech
+		}
 	}
 	length := len(res.Body)
 	if n, err := strconv.Atoi(headerGet(last, "Content-Length")); err == nil && res.Truncated && n > length {
@@ -317,6 +325,17 @@ func cookieNames(h http.Header) []map[string]any {
 		out = append(out, m)
 	}
 	return out
+}
+
+// maxTechBody caps the body handed to the fingerprints: their patterns
+// sit in the head of a page, and a multi-MB bundle costs seconds.
+const maxTechBody = 1 << 20
+
+// page: fingerprints describe documents. Scripts, JSON and images are
+// parts of a site already fingerprinted through its pages.
+func page(h http.Header) bool {
+	ct := strings.ToLower(headerGet(h, "Content-Type"))
+	return ct == "" || strings.Contains(ct, "html") || strings.HasPrefix(ct, "text/plain")
 }
 
 // isRoot: the favicon belongs to a site, so only its front page asks.

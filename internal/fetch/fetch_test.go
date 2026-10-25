@@ -3,12 +3,15 @@ package fetch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
 func TestDoSingleflight(t *testing.T) {
@@ -193,5 +196,23 @@ func TestHostParallel(t *testing.T) {
 	wg.Wait()
 	if max.Load() > 1 {
 		t.Fatalf("max concurrent %d, want 1", max.Load())
+	}
+}
+
+func TestNoLogoutWithSession(t *testing.T) {
+	Reset()
+	defer Reset()
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
+	defer srv.Close()
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/rest/user/logout"); err != nil {
+		t.Fatalf("anonymous run may visit logout: %v", err)
+	}
+	Extra = http.Header{"Authorization": {"Bearer x"}}
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/account/Sign-Out?next=/"); !errors.Is(err, neterr.ErrEndsSession) {
+		t.Fatalf("logout with a session: %v", err)
+	}
+	if hits != 1 {
+		t.Errorf("requests %d, want 1", hits)
 	}
 }
