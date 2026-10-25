@@ -21,6 +21,18 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
+      - name: wayback probe
+        run: |
+          for q in \
+            "url=*.vulnweb.com/*&output=json&collapse=urlkey&fl=original&showNumPages=true" \
+            "url=*.vulnweb.com/*&output=json&collapse=urlkey&fl=original&page=0" \
+            "url=*.vulnweb.com/*&output=json&collapse=urlkey&fl=original&pageSize=100&page=0" \
+            "url=*.tesla.com/*&output=json&collapse=urlkey&fl=original&showNumPages=true" \
+            "url=*.tesla.com/*&output=json&collapse=urlkey&fl=original&pageSize=100&page=0" \
+            "url=*.tesla.com/*&output=json&collapse=urlkey&fl=original&pageSize=100&page=1" ; do
+            code=$(curl -s -o body.txt -w '%{http_code} %{size_download}B %{time_total}s' -A "azhaq/0.4.0" "https://web.archive.org/cdx/search/cdx?$q")
+            echo "::notice title=wayback $code::$q => $(head -c 300 body.txt | tr '\n' ' ')"
+          done
       - name: bench
         run: go run ./bench -apps=false -brute=false -probe=false | tee bench.txt || true
       - name: results
