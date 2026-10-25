@@ -7,13 +7,18 @@ import (
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
 
-// ClassifyURL is page, api, or asset for ranking and JS collapse.
+// ClassifyURL is page, api, script, or asset for ranking and JS collapse.
 func ClassifyURL(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return "page"
 	}
 	path := strings.ToLower(u.Path)
+	for _, ext := range []string{".js", ".mjs", ".cjs"} {
+		if strings.HasSuffix(path, ext) {
+			return "script"
+		}
+	}
 	for ext := range skipExt {
 		if strings.HasSuffix(path, ext) {
 			return "asset"

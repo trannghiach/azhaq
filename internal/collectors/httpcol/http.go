@@ -135,7 +135,13 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 	if n, err := normalize.URL(res.URL); err == nil {
 		final = n
 	}
-	payload, _ := json.Marshal(describe(reqURL, final, res, title))
+	row := describe(reqURL, final, res, title)
+	catchAll := fetch.CatchAll(ctx, c.Client, res)
+	if catchAll {
+		// Same answer as a path that does not exist: not a page of its own.
+		row["catchall"] = true
+	}
+	payload, _ := json.Marshal(row)
 	obs := types.Observation{
 		Collector:  Name,
 		Source:     reqURL,
@@ -145,7 +151,7 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 		ObservedAt: time.Now().UTC(),
 	}
 	var hint types.Seed
-	if final != "" && final != reqURL {
+	if final != "" && final != reqURL && !catchAll {
 		hint = types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": final}}
 	}
 	return obs, hint, cached, nil

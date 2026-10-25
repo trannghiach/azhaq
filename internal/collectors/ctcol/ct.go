@@ -3,11 +3,14 @@ package ctcol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/catalog"
@@ -19,19 +22,26 @@ import (
 
 const Name = "azhaq-ct"
 
-const (
-	maxNames   = 150
-	tryTimeout = 4 * time.Second
+const maxNames = 1000
+
+// crt.sh often needs tens of seconds for a wildcard query and fails with
+// 502 under load; one retry fixes most of those. A query that timed out is
+// not retried: that would double the wait of every run.
+var (
+	crtTimeout     = 25 * time.Second
+	spotterTimeout = 10 * time.Second
+	retryWait      = 2 * time.Second
 )
 
 type Collector struct {
 	Client  *http.Client
-	BaseURL string // if set, only this host is queried (tests)
+	BaseURL string // if set, only this crt.sh-compatible host is queried (tests)
+	srcs    []source
 }
 
 func New(client *http.Client) *Collector {
 	c := fetch.Client(client)
-	c.Timeout = tryTimeout
+	c.Timeout = crtTimeout
 	return &Collector{Client: c, BaseURL: "https://crt.sh"}
 }
 
@@ -57,6 +67,26 @@ type spotterRow struct {
 	DNSNames []string `json:"dns_names"`
 }
 
+// source is one CT log search. Every source is asked; the names are the
+// union, and each source's outcome is recorded so a failure is visible.
+type source struct {
+	name string
+	pull func(context.Context, string) ([]string, error)
+}
+
+func (c *Collector) sources() []source {
+	if c.srcs != nil {
+		return c.srcs
+	}
+	if c.BaseURL != "" && !liveCT(c.BaseURL) {
+		return []source{{"crt.sh", c.fromCrt}}
+	}
+	return []source{
+		{"crt.sh", c.fromCrt},
+		{"certspotter", c.fromCertspotter},
+	}
+}
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	domain := normalize.Hostname(seed.Keys["domain"])
 	if domain == "" {
@@ -71,38 +101,44 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, nil
 	}
 
-	var (
-		names  []string
-		source string
-		err    error
-	)
-	if c.BaseURL != "" && !strings.Contains(c.BaseURL, "crt.sh") {
-		names, source, err = c.pullCrt(ctx, c.BaseURL+"/?q="+url.QueryEscape(domain)+"&output=json", domain)
-	} else {
-		names, source, err = c.pullAny(ctx, domain)
-	}
-	if err != nil {
-		payload := map[string]any{"domain": domain, "count": 0, "error": err.Error()}
-		st := statusFromErr(err)
-		if st > 0 {
-			payload["status"] = st
+	srcs := c.sources()
+	results := pullAll(ctx, domain, srcs)
+	var all []string
+	status := map[string]any{}
+	var failed []string
+	httpStatus := 0
+	for i, r := range results {
+		name := srcs[i].name
+		if r.err != nil {
+			status[name] = map[string]any{"error": r.err.Error()}
+			failed = append(failed, name+": "+r.err.Error())
+			if st := statusFromErr(r.err); st > 0 && httpStatus == 0 {
+				httpStatus = st
+			}
+			continue
 		}
-		raw, _ := json.Marshal(payload)
-		_ = emit(types.Observation{
-			Collector: Name, Source: "ct", Kind: "ct",
-			Payload: raw, Confidence: 0, ObservedAt: time.Now().UTC(),
-		})
-		meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
-		if st == http.StatusTooManyRequests || st == http.StatusServiceUnavailable || st == http.StatusForbidden {
-			meta.Status = types.StatusDegraded
-		}
-		return meta, nil
+		status[name] = map[string]any{"count": len(r.names)}
+		all = append(all, r.names...)
 	}
-
-	payload, _ := json.Marshal(map[string]any{"domain": domain, "names": names, "count": len(names)})
+	names := filterNames(all, domain)
+	row := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status}
+	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
+	if len(failed) > 0 {
+		// A source that failed may hold names the others lack.
+		row["degraded"] = true
+		row["warning"] = strings.Join(failed, "; ")
+		meta.Status = types.StatusDegraded
+	}
+	if len(failed) == len(srcs) {
+		row["error"] = strings.Join(failed, "; ")
+		if httpStatus > 0 {
+			row["status"] = httpStatus
+		}
+	}
+	payload, _ := json.Marshal(row)
 	if err := emit(types.Observation{
 		Collector:  Name,
-		Source:     source,
+		Source:     "ct",
 		Kind:       "ct",
 		Payload:    payload,
 		Confidence: 0.8,
@@ -110,104 +146,73 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}); err != nil {
 		return types.RunMeta{}, err
 	}
-	var hints []types.Seed
 	for _, n := range names {
 		if n == domain {
 			continue
 		}
-		hints = append(hints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}})
+		meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}})
 	}
-	return types.RunMeta{Status: types.StatusOK, EmitCount: 1, NextHints: hints}, nil
+	return meta, nil
 }
 
-func (c *Collector) pullAny(ctx context.Context, domain string) ([]string, string, error) {
-	// crt.sh is often multi-second even when it works. Race it with Cert Spotter
-	// and take the first non-empty set. Wildcard crt.sh only if both miss.
-	names, src, err := firstNonEmpty(ctx, domain, c.fromCrtPlain, c.fromCertspotter)
-	if err == nil && len(names) > 0 {
-		return names, src, nil
-	}
-	if err != nil {
-		return nil, "", err
-	}
-	if wn, ws, werr := c.fromCrtWildcard(ctx, domain); werr == nil {
-		return wn, ws, nil
-	}
-	return names, src, nil
+type pullResult struct {
+	names []string
+	err   error
 }
 
-type pullFn func(context.Context, string) ([]string, string, error)
-
-func firstNonEmpty(ctx context.Context, domain string, fns ...pullFn) ([]string, string, error) {
-	if len(fns) == 0 {
-		return nil, "", fmt.Errorf("no CT source")
+func pullAll(ctx context.Context, domain string, srcs []source) []pullResult {
+	out := make([]pullResult, len(srcs))
+	var wg sync.WaitGroup
+	for i, src := range srcs {
+		wg.Add(1)
+		go func(i int, src source) {
+			defer wg.Done()
+			names, err := src.pull(ctx, domain)
+			out[i] = pullResult{names: names, err: err}
+		}(i, src)
 	}
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	type res struct {
-		names []string
-		src   string
-		err   error
-	}
-	ch := make(chan res, len(fns))
-	for _, fn := range fns {
-		fn := fn
-		go func() {
-			names, src, err := fn(ctx, domain)
-			ch <- res{names: names, src: src, err: err}
-		}()
-	}
-	var last error
-	emptySrc := ""
-	for i := 0; i < len(fns); i++ {
-		select {
-		case <-ctx.Done():
-			if last != nil {
-				return nil, "", last
-			}
-			return nil, "", ctx.Err()
-		case r := <-ch:
-			if r.err != nil {
-				last = r.err
-				continue
-			}
-			if len(r.names) > 0 {
-				cancel()
-				return r.names, r.src, nil
-			}
-			emptySrc = r.src
-		}
-	}
-	if emptySrc != "" {
-		return nil, emptySrc, nil
-	}
-	if last == nil {
-		last = fmt.Errorf("no CT source")
-	}
-	return nil, "", last
+	wg.Wait()
+	return out
 }
 
-func (c *Collector) fromCrtPlain(ctx context.Context, domain string) ([]string, string, error) {
-	u := "https://crt.sh/?q=" + url.QueryEscape(domain) + "&output=json"
+func (c *Collector) fromCrt(ctx context.Context, domain string) ([]string, error) {
+	base := "https://crt.sh"
+	if c.BaseURL != "" && !liveCT(c.BaseURL) {
+		base = c.BaseURL
+	}
+	u := base + "/?q=" + url.QueryEscape("%."+domain) + "&output=json"
+	names, err := c.pullCrt(ctx, u, domain)
+	if err == nil || ctx.Err() != nil || !retryable(err) {
+		return names, err
+	}
+	select {
+	case <-ctx.Done():
+		return nil, err
+	case <-time.After(retryWait):
+	}
 	return c.pullCrt(ctx, u, domain)
 }
 
-func (c *Collector) fromCrtWildcard(ctx context.Context, domain string) ([]string, string, error) {
-	u := "https://crt.sh/?q=" + url.QueryEscape("%."+domain) + "&output=json"
-	return c.pullCrt(ctx, u, domain)
+func retryable(err error) bool {
+	var ne net.Error
+	if errors.As(err, &ne) && ne.Timeout() {
+		return false
+	}
+	st := statusFromErr(err)
+	return st == 0 || st >= 500 || st == http.StatusTooManyRequests
 }
 
-func (c *Collector) fromCertspotter(ctx context.Context, domain string) ([]string, string, error) {
+func (c *Collector) fromCertspotter(ctx context.Context, domain string) ([]string, error) {
 	u := "https://api.certspotter.com/v1/issuances?domain=" + url.QueryEscape(domain) + "&include_subdomains=true&expand=dns_names"
-	body, err := c.get(ctx, u)
+	body, err := c.get(ctx, u, spotterTimeout)
 	if err != nil {
-		return nil, u, err
+		return nil, err
 	}
 	var rows []spotterRow
 	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, u, err
+		return nil, err
 	}
-	return filterNames(rowsToNames(rows), domain), u, nil
+	return filterNames(rowsToNames(rows), domain), nil
 }
 
 func rowsToNames(rows []spotterRow) []string {
@@ -218,30 +223,30 @@ func rowsToNames(rows []spotterRow) []string {
 	return out
 }
 
-func (c *Collector) pullCrt(ctx context.Context, rawURL, domain string) ([]string, string, error) {
-	body, err := c.get(ctx, rawURL)
+func (c *Collector) pullCrt(ctx context.Context, rawURL, domain string) ([]string, error) {
+	body, err := c.get(ctx, rawURL, crtTimeout)
 	if err != nil {
-		return nil, rawURL, err
+		return nil, err
 	}
 	var rows []crtRow
 	if err := json.Unmarshal(body, &rows); err != nil {
-		return nil, rawURL, err
+		return nil, err
 	}
 	var raw []string
 	for _, row := range rows {
 		raw = append(raw, strings.Split(row.NameValue, "\n")...)
 	}
-	return filterNames(raw, domain), rawURL, nil
+	return filterNames(raw, domain), nil
 }
 
-func (c *Collector) get(ctx context.Context, raw string) ([]byte, error) {
+func (c *Collector) get(ctx context.Context, raw string, timeout time.Duration) ([]byte, error) {
 	host := "ct"
 	if u, err := url.Parse(raw); err == nil && u.Host != "" {
 		host = u.Host
 	}
 	done := timing.Start(ctx, "ct."+host)
 	defer done()
-	ctx, cancel := context.WithTimeout(ctx, tryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
@@ -252,14 +257,15 @@ func (c *Collector) get(ctx context.Context, raw string) ([]byte, error) {
 	cli := c.Client
 	if cli == nil {
 		cli = fetch.Client(nil)
-		cli.Timeout = tryTimeout
 	}
-	resp, err := cli.Do(req)
+	cp := *cli
+	cp.Timeout = timeout
+	resp, err := cp.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
 		return nil, err
 	}

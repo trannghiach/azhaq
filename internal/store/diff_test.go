@@ -197,3 +197,41 @@ func TestSummaryCapped(t *testing.T) {
 		t.Fatalf("summary %q", sum)
 	}
 }
+
+func TestCompareIgnoresVolatileFields(t *testing.T) {
+	dir := t.TempDir()
+	a, err := Open(filepath.Join(dir, "a.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = a.Close() })
+	b, err := Open(filepath.Join(dir, "b.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+	now := time.Now().UTC()
+	add := func(st *Store, payload string) {
+		t.Helper()
+		e, err := st.UpsertEntity(types.TypeURL, "http://127.0.0.1:3001/rest/captcha", now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.AddObservation(e.ID, types.Observation{Collector: "azhaq-http", Kind: "application", Payload: json.RawMessage(payload), ObservedAt: now}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	add(a, `{"status":200,"body_hash":"aaaa","auth":"cookie","headers":{"x-ratelimit-remaining":"99"}}`)
+	add(b, `{"status":200,"body_hash":"bbbb","headers":{"x-ratelimit-remaining":"98"}}`)
+	d, err := Compare(a, b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.NewObs) != 0 {
+		t.Fatalf("volatile fields reported as changes: %+v", d.NewObs)
+	}
+	add(b, `{"status":401,"body_hash":"bbbb","headers":{"x-ratelimit-remaining":"97"}}`)
+	if d, _ = Compare(a, b); len(d.NewObs) != 1 {
+		t.Fatalf("status change missed: %+v", d.NewObs)
+	}
+}

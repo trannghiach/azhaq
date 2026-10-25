@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ const Name = "azhaq-cdx"
 const (
 	maxEmit    = 80
 	maxHints   = 40
-	tryTimeout = 6 * time.Second
+	tryTimeout = 12 * time.Second
 )
 
 type Collector struct {
@@ -69,27 +70,51 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if base == "" {
 		base = "https://web.archive.org"
 	}
-	rawURL := cdxURL(base, domain)
-
-	rows, src, status, err := c.pull(ctx, rawURL, false)
-	if err != nil || status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable || len(rows) == 0 {
+	sources := map[string]any{}
+	var failed []string
+	try := func(b string) ([]cdxRow, string, int, bool) {
+		name := hostOf(b)
+		rows, src, status, err := c.pull(ctx, cdxURL(b, domain), true)
+		switch {
+		case err != nil:
+			sources[name] = map[string]any{"error": err.Error()}
+			failed = append(failed, name+": "+err.Error())
+			return nil, src, status, false
+		case status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable:
+			sources[name] = map[string]any{"status": status}
+			failed = append(failed, fmt.Sprintf("%s: %d after retries", name, status))
+			return nil, src, status, false
+		}
+		sources[name] = map[string]any{"status": status, "count": len(rows)}
+		return rows, src, status, true
+	}
+	rows, src, status, ok := try(base)
+	if !ok || len(rows) == 0 {
 		if fb := c.fallbackBase(); fb != "" && fb != base {
-			frows, fsrc, fstatus, ferr := c.pull(ctx, cdxURL(fb, domain), false)
-			if ferr == nil && (len(frows) > 0 || fstatus == http.StatusOK) {
-				rows, src, status, err = frows, fsrc, fstatus, nil
+			if frows, fsrc, fstatus, fok := try(fb); fok && (len(frows) > 0 || !ok) {
+				rows, src, status, ok = frows, fsrc, fstatus, true
 			}
 		}
 	}
-	if err != nil {
-		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
-	}
 
-	summary, _ := json.Marshal(map[string]any{
-		"domain": domain,
-		"count":  len(rows),
-		"source": src,
-		"status": status,
-	})
+	row := map[string]any{
+		"domain":  domain,
+		"count":   len(rows),
+		"source":  src,
+		"status":  status,
+		"sources": sources,
+	}
+	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
+	if len(failed) > 0 {
+		// An archive that refused may hold URLs the other lacks.
+		row["degraded"] = true
+		row["warning"] = strings.Join(failed, "; ")
+		meta.Status = types.StatusDegraded
+	}
+	if !ok {
+		row["error"] = strings.Join(failed, "; ")
+	}
+	summary, _ := json.Marshal(row)
 	if err := emit(types.Observation{
 		Collector:  Name,
 		Source:     src,
@@ -99,10 +124,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		ObservedAt: time.Now().UTC(),
 	}); err != nil {
 		return types.RunMeta{}, err
-	}
-	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
-	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
-		meta.Status = types.StatusDegraded
 	}
 	seen := map[string]bool{}
 	for _, row := range rows {
@@ -161,6 +182,8 @@ func cdxURL(base, domain string) string {
 	}
 	base = strings.TrimRight(base, "/")
 	if strings.Contains(base, "arquivo.pt") {
+		// pywb: one JSON object per line, and fl= is not supported.
+		q.Del("fl")
 		return base + "/cdx?" + q.Encode()
 	}
 	return base + "/cdx/search/cdx?" + q.Encode()
@@ -176,40 +199,55 @@ func (c *Collector) fallbackBase() string {
 	return ""
 }
 
+// retryWait is the first backoff after a 429 or 503 when the archive sends
+// no Retry-After; later tries wait longer.
+var retryWait = time.Second
+
+// maxRetryAfter caps a server's Retry-After: a run does not wait minutes
+// for one archive.
+const maxRetryAfter = 5 * time.Second
+
 func (c *Collector) pull(ctx context.Context, rawURL string, retry bool) ([]cdxRow, string, int, error) {
 	tries := 1
 	if retry {
 		tries = 3
 	}
-	var lastRows []cdxRow
-	var lastSrc string
-	var lastStatus int
-	var lastErr error
+	var (
+		rows   []cdxRow
+		status int
+		wait   time.Duration
+		err    error
+	)
 	for i := 0; i < tries; i++ {
 		if i > 0 {
+			if wait <= 0 {
+				wait = retryWait * time.Duration(i)
+			}
 			select {
 			case <-ctx.Done():
-				return lastRows, lastSrc, lastStatus, ctx.Err()
-			case <-time.After(time.Duration(i) * 400 * time.Millisecond):
+				return rows, rawURL, status, ctx.Err()
+			case <-time.After(wait):
 			}
 		}
-		rows, src, status, err := c.pullOnce(ctx, rawURL)
-		lastRows, lastSrc, lastStatus, lastErr = rows, src, status, err
-		if err == nil && status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
-			return rows, src, status, nil
+		rows, status, wait, err = c.pullOnce(ctx, rawURL)
+		if err != nil {
+			return rows, rawURL, status, err // a timeout already took long enough
+		}
+		if status != http.StatusTooManyRequests && status != http.StatusServiceUnavailable {
+			return rows, rawURL, status, nil
 		}
 	}
-	return lastRows, lastSrc, lastStatus, lastErr
+	return rows, rawURL, status, err
 }
 
-func (c *Collector) pullOnce(ctx context.Context, rawURL string) ([]cdxRow, string, int, error) {
-	done := timing.Start(ctx, "cdx.wayback")
+func (c *Collector) pullOnce(ctx context.Context, rawURL string) ([]cdxRow, int, time.Duration, error) {
+	done := timing.Start(ctx, "cdx."+hostOf(rawURL))
 	defer done()
 	ctx, cancel := context.WithTimeout(ctx, tryTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
-		return nil, rawURL, 0, err
+		return nil, 0, 0, err
 	}
 	req.Header.Set("User-Agent", fetch.UserAgent)
 	req.Header.Set("Accept", "application/json")
@@ -220,28 +258,49 @@ func (c *Collector) pullOnce(ctx context.Context, rawURL string) ([]cdxRow, stri
 	}
 	resp, err := cli.Do(req)
 	if err != nil {
-		return nil, rawURL, 0, err
+		return nil, 0, 0, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, rawURL, resp.StatusCode, err
+		return nil, resp.StatusCode, 0, err
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
 		rows, err := parseCDX(body)
-		return rows, rawURL, resp.StatusCode, err
-	case http.StatusNotFound, http.StatusTooManyRequests, http.StatusServiceUnavailable:
-		return nil, rawURL, resp.StatusCode, nil
+		return rows, resp.StatusCode, 0, err
+	case http.StatusNotFound:
+		return nil, resp.StatusCode, 0, nil
+	case http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return nil, resp.StatusCode, retryAfter(resp.Header.Get("Retry-After")), nil
 	default:
-		return nil, rawURL, resp.StatusCode, fmt.Errorf("%s %d", resp.Request.URL.Host, resp.StatusCode)
+		return nil, resp.StatusCode, 0, fmt.Errorf("%s %d", resp.Request.URL.Host, resp.StatusCode)
 	}
+}
+
+func retryAfter(v string) time.Duration {
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n <= 0 {
+		return 0
+	}
+	return min(time.Duration(n)*time.Second, maxRetryAfter)
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	return u.Host
 }
 
 func parseCDX(body []byte) ([]cdxRow, error) {
 	body = []byte(strings.TrimSpace(string(body)))
 	if len(body) == 0 || string(body) == "[]" {
 		return nil, nil
+	}
+	if body[0] == '{' {
+		return parseCDXLines(body)
 	}
 	var table [][]string
 	if err := json.Unmarshal(body, &table); err != nil {
@@ -257,6 +316,33 @@ func parseCDX(body []byte) ([]cdxRow, error) {
 			continue
 		}
 		out = append(out, r)
+	}
+	return out, nil
+}
+
+// parseCDXLines reads pywb output (arquivo.pt): one JSON object per line.
+func parseCDXLines(body []byte) ([]cdxRow, error) {
+	var out []cdxRow
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var o struct {
+			URL       string `json:"url"`
+			Original  string `json:"original"`
+			Status    string `json:"status"`
+			Timestamp string `json:"timestamp"`
+		}
+		if err := json.Unmarshal([]byte(line), &o); err != nil {
+			return out, err
+		}
+		if o.URL == "" {
+			o.URL = o.Original
+		}
+		if o.URL != "" {
+			out = append(out, cdxRow{URL: o.URL, Status: o.Status, Timestamp: o.Timestamp})
+		}
 	}
 	return out, nil
 }

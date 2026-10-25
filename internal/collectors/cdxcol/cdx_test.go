@@ -6,11 +6,45 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/types"
 )
+
+func TestMain(m *testing.M) {
+	retryWait = 5 * time.Millisecond
+	os.Exit(m.Run())
+}
+
+func TestBackoffThenSuccess(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if n.Add(1) == 1 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			return
+		}
+		_, _ = w.Write([]byte(`[["https://app.example.test/a","200","text/html","2020"]]`))
+	}))
+	t.Cleanup(srv.Close)
+	col := &Collector{Client: srv.Client(), BaseURL: srv.URL}
+	var p map[string]any
+	meta, err := col.Run(context.Background(), types.Seed{
+		Type: types.TypeDomain, Keys: map[string]string{"domain": "example.test"},
+	}, func(o types.Observation) error {
+		if o.Kind == "cdx" {
+			_ = json.Unmarshal(o.Payload, &p)
+		}
+		return nil
+	})
+	if err != nil || meta.Status != types.StatusOK || p["count"] != 1.0 || p["degraded"] != nil {
+		t.Fatalf("meta %+v payload %v err %v tries %d", meta, p, err, n.Load())
+	}
+}
 
 func TestParseAndFilter(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,5 +182,14 @@ func TestSkipReservedLive(t *testing.T) {
 	})
 	if err != nil || skipped != "reserved" {
 		t.Fatalf("skipped=%q err=%v", skipped, err)
+	}
+}
+
+func TestParseCDXLines(t *testing.T) {
+	rows, err := parseCDX([]byte(`{"urlkey": "com,vulnweb)/", "timestamp": "20190621044323", "url": "http://vulnweb.com/", "status": "200"}
+{"urlkey": "com,vulnweb)/x", "timestamp": "20200107063436", "url": "http://www.vulnweb.com/x", "status": "404"}
+`))
+	if err != nil || len(rows) != 2 || rows[1].URL != "http://www.vulnweb.com/x" || rows[1].Status != "404" {
+		t.Fatalf("rows %+v err %v", rows, err)
 	}
 }

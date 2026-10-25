@@ -42,7 +42,15 @@ var DefaultWordlist = []string{
 	"graphiql",
 	"swagger",
 	"swagger.json",
+	"swagger.yaml",
 	"openapi.json",
+	"openapi.yaml",
+	"api-docs",
+	"v2/api-docs",
+	"v3/api-docs",
+	"swagger/v1/swagger.json",
+	"api/swagger.json",
+	"api/openapi.json",
 	"health",
 	"internal",
 	"backup",
@@ -69,6 +77,20 @@ func (c *Collector) Name() string { return Name }
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
+
+// Skip declines every URL on an origin that was already swept.
+func (c *Collector) Skip(seed types.Seed) bool {
+	raw, err := normalize.URL(seed.Keys["url"])
+	if err != nil {
+		return false
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	_, done := c.probed.Load(u.Scheme + "://" + u.Host)
+	return done
+}
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	raw, err := normalize.URL(seed.Keys["url"])
@@ -118,7 +140,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			defer func() { <-sem }()
 			res, _, err := fetch.Do(ctx, c.Client, target)
-			if err != nil || !interesting(res.Status) {
+			if err != nil || !interesting(res.Status) || fetch.CatchAll(ctx, c.Client, res) {
 				return
 			}
 			reqURL := target

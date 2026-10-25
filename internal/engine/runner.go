@@ -9,10 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/scope"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 type Budgets struct {
@@ -105,6 +107,7 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 		b.Parallel = 8
 	}
 	seen := map[string]bool{}
+	tmpl := map[string]int{}
 	expanded := expandDerived(seeds, seen)
 	e.persistSeeds(expanded)
 	origin := seedOrigin(seeds)
@@ -122,7 +125,7 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	if reserve := fanReserve(b); reserve > 0 && !b.Passive {
 		appBudget.MaxItems = max(1, b.MaxItems-reserve)
 	}
-	leftover, ran, capped := e.drive(ctx, app, appBudget, origin, seen, 0, true)
+	leftover, ran, capped := e.drive(ctx, app, appBudget, origin, seen, tmpl, 0, true)
 	var originLeft, fan []types.Seed
 	for _, s := range leftover {
 		if origin.owns(s) {
@@ -131,7 +134,7 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 		}
 		fan = append(fan, s)
 	}
-	fanLeft, ran, capped2 := e.drive(ctx, append(fan, held...), b, origin, seen, ran, false)
+	fanLeft, ran, capped2 := e.drive(ctx, append(fan, held...), b, origin, seen, tmpl, ran, false)
 	leftover = append(originLeft, fanLeft...)
 	if (capped || capped2 || len(originLeft) > 0 || len(fanLeft) > 0) && ran > 0 {
 		e.markCapped()
@@ -142,7 +145,11 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	return ctx.Err()
 }
 
-func (e *Engine) drive(ctx context.Context, frontier []types.Seed, b Budgets, origin originSet, seen map[string]bool, ran int, seedOnly bool) ([]types.Seed, int, bool) {
+// perTemplate is how many URLs of one template (/product?id={n}) are
+// fetched; the rest stay in the graph as found, not visited.
+const perTemplate = 3
+
+func (e *Engine) drive(ctx context.Context, frontier []types.Seed, b Budgets, origin originSet, seen map[string]bool, tmpl map[string]int, ran int, seedOnly bool) ([]types.Seed, int, bool) {
 	capped := false
 	var deferred []types.Seed
 	for depth := 0; depth < b.MaxDepth && len(frontier) > 0; depth++ {
@@ -207,6 +214,13 @@ func (e *Engine) drive(ctx context.Context, frontier []types.Seed, b Budgets, or
 					continue
 				}
 				seen[k] = true
+				if h.Type == types.TypeURL && webextract.Templated(h.Key()) {
+					t := webextract.Template(h.Key())
+					if tmpl[t] >= perTemplate {
+						continue
+					}
+					tmpl[t]++
+				}
 				if seedOnly && !origin.owns(h) {
 					deferred = append(deferred, h)
 					continue
@@ -260,13 +274,15 @@ func (e *Engine) persistSeeds(seeds []types.Seed) {
 
 func (e *Engine) plan(seeds []types.Seed, b Budgets) []types.WorkItem {
 	items := e.Plan(seeds)
-	if !b.Passive {
-		return items
-	}
 	var out []types.WorkItem
 	for _, it := range items {
-		if activeCollector(it.Collector) {
+		if b.Passive && activeCollector(it.Collector) {
 			continue
+		}
+		if col, ok := e.Cat.Get(it.Collector); ok {
+			if sk, ok := col.(catalog.Skipper); ok && sk.Skip(it.Seed) {
+				continue
+			}
 		}
 		out = append(out, it)
 	}
@@ -275,7 +291,7 @@ func (e *Engine) plan(seeds []types.Seed, b Budgets) []types.WorkItem {
 
 func activeCollector(name string) bool {
 	switch name {
-	case "azhaq-http", "azhaq-crawl", "azhaq-js", "azhaq-paths", "azhaq-tls":
+	case "azhaq-http", "azhaq-crawl", "azhaq-js", "azhaq-openapi", "azhaq-paths", "azhaq-tls":
 		return true
 	default:
 		return false

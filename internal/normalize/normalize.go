@@ -54,7 +54,9 @@ func URL(raw string) (string, error) {
 	if u.Path == "" {
 		u.Path = "/"
 	}
-	return u.String(), nil
+	// Keep {param} placeholders readable in API templates.
+	out := strings.NewReplacer("%7B", "{", "%7D", "}").Replace(u.String())
+	return out, nil
 }
 
 func Hostname(h string) string {

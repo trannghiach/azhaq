@@ -30,6 +30,9 @@ type Form struct {
 	Fields []string
 }
 
+// Forms returns <form> elements and script-driven forms: any element with a
+// data-action attribute (data-method gives the method) whose inputs are
+// posted by JavaScript.
 func Forms(body []byte, base *url.URL) []Form {
 	if base == nil {
 		return nil
@@ -37,42 +40,58 @@ func Forms(body []byte, base *url.URL) []Form {
 	var out []Form
 	z := html.NewTokenizer(bytes.NewReader(body))
 	var cur *Form
+	curTag, depth := "", 0
+	open := func(tok html.Token, method, action string) {
+		if cur != nil {
+			out = append(out, *cur)
+		}
+		method = strings.ToUpper(method)
+		if method == "" {
+			method = "GET"
+		}
+		if action == "" {
+			action = base.Path
+		}
+		act := ""
+		if u, ok := resolve(base, action); ok {
+			act = u
+		}
+		cur = &Form{
+			Method: method,
+			Action: act,
+			ID:     attr(tok.Attr, "id"),
+			Name:   attr(tok.Attr, "name"),
+		}
+		curTag, depth = strings.ToLower(tok.Data), 1
+	}
 	for {
 		tt := z.Next()
 		if tt == html.ErrorToken {
 			break
 		}
 		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
-			if tt == html.EndTagToken && strings.EqualFold(z.Token().Data, "form") && cur != nil {
-				out = append(out, *cur)
-				cur = nil
+			if tt == html.EndTagToken && cur != nil && strings.EqualFold(z.Token().Data, curTag) {
+				if depth--; depth == 0 {
+					out = append(out, *cur)
+					cur = nil
+				}
 			}
 			continue
 		}
 		tok := z.Token()
-		switch strings.ToLower(tok.Data) {
-		case "form":
-			if cur != nil {
-				out = append(out, *cur)
-			}
-			method := strings.ToUpper(attr(tok.Attr, "method"))
-			if method == "" {
-				method = "GET"
-			}
-			action := attr(tok.Attr, "action")
-			if action == "" {
-				action = base.Path
-			}
-			act := ""
-			if u, ok := resolve(base, action); ok {
-				act = u
-			}
-			cur = &Form{
-				Method: method,
-				Action: act,
-				ID:     attr(tok.Attr, "id"),
-				Name:   attr(tok.Attr, "name"),
-			}
+		tag := strings.ToLower(tok.Data)
+		if cur != nil && tag == curTag && tt == html.StartTagToken && tag != "form" {
+			depth++
+		}
+		if tag == "form" {
+			open(tok, attr(tok.Attr, "method"), attr(tok.Attr, "action"))
+			continue
+		}
+		if act := attr(tok.Attr, "data-action"); act != "" && tt == html.StartTagToken {
+			open(tok, attr(tok.Attr, "data-method"), act)
+			continue
+		}
+		switch tag {
 		case "input", "select", "textarea", "button":
 			if cur == nil {
 				continue

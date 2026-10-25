@@ -21,6 +21,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/connector"
 	"github.com/trannghiach/azhaq/internal/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/scope"
 	"github.com/trannghiach/azhaq/internal/store"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -150,10 +151,11 @@ func cmdRun(args []string) error {
 		}
 	}
 
+	input := store.SeedsKey(normalizeSeeds(seeds))
 	path, remember := resolveDB(*dbPath)
 	prevDB := ""
 	if remember {
-		prevDB = readLastDB()
+		prevDB = previousRun(input)
 		if err := os.WriteFile(lastDBFile, []byte(path+"\n"), 0o644); err != nil {
 			return err
 		}
@@ -164,6 +166,11 @@ func cmdRun(args []string) error {
 		return err
 	}
 	defer st.Close()
+	if input != "" && !*demo {
+		if err := st.SaveInput(input); err != nil {
+			return err
+		}
+	}
 	budgets := engine.DefaultBudgets()
 	budgets.FailOnErrors = *failErrs
 	budgets.FailOnCapped = *failCapped
@@ -261,9 +268,7 @@ func cmdRun(args []string) error {
 	}
 	if !*quiet && !*jsonOut {
 		fmt.Println("map")
-		for _, row := range rows {
-			fmt.Printf("  %s\n", row.Line())
-		}
+		printMap(rows)
 		if *showObs {
 			fmt.Println("observations")
 			for _, o := range obs {
@@ -289,12 +294,68 @@ func cmdRun(args []string) error {
 	if *failCapped && stats.Capped {
 		return fmt.Errorf("run %s: capped (depth=%d max-items=%d)", stats.RunID, stats.Depth, stats.MaxItems)
 	}
+	if remember && !*demo && input != "" {
+		_ = recordRun(input, path)
+	}
 	if !*quiet && !*jsonOut && !*demo && prevDB != "" && prevDB != path {
 		if err := printDiff(prevDB, path, diffOpts{}); err != nil {
 			fmt.Fprintf(os.Stderr, "azhaq: diff vs %s: %v\n", prevDB, err)
 		}
 	}
 	return nil
+}
+
+const runIndexFile = ".azhaq-index"
+
+// previousRun is the last database written in this directory for the same
+// seeds. Diffing against a run of another target would be noise.
+func previousRun(input string) string {
+	idx := readRunIndex()
+	path := idx[input]
+	if path == "" {
+		return ""
+	}
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+func readRunIndex() map[string]string {
+	idx := map[string]string{}
+	raw, err := os.ReadFile(runIndexFile)
+	if err != nil {
+		return idx
+	}
+	_ = json.Unmarshal(raw, &idx)
+	return idx
+}
+
+func recordRun(input, path string) error {
+	idx := readRunIndex()
+	idx[input] = path
+	raw, err := json.MarshalIndent(idx, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(runIndexFile, append(raw, '\n'), 0o644)
+}
+
+func normalizeSeeds(seeds []types.Seed) []types.Seed {
+	out := make([]types.Seed, 0, len(seeds))
+	for _, s := range seeds {
+		out = append(out, normalize.Seed(s))
+	}
+	return out
+}
+
+func printMap(rows []engine.MapEntry) {
+	for _, row := range engine.GroupTemplates(rows) {
+		fmt.Printf("  %s\n", row.Line())
+		for _, d := range row.Details() {
+			fmt.Printf("      %s\n", d)
+		}
+	}
 }
 
 func cmdIngest(args []string) error {
@@ -335,9 +396,7 @@ func cmdIngest(args []string) error {
 	ents, _ := st.Entities()
 	obs, _ := st.Observations()
 	fmt.Println("map")
-	for _, row := range engine.BuildMap(ents, hints, obs, nil, false) {
-		fmt.Printf("  %s\n", row.Line())
-	}
+	printMap(engine.BuildMap(ents, hints, obs, nil, false))
 	fmt.Printf("db %s\n", path)
 	sum, err := st.Summary()
 	if err != nil {
@@ -480,6 +539,8 @@ func printDiff(oldPath, newPath string, opts diffOpts) error {
 	if err != nil {
 		return err
 	}
+	oldIn, newIn := old.Input(), neu.Input()
+	differ := oldIn != "" && newIn != "" && oldIn != newIn
 	if opts.JSONL {
 		enc := json.NewEncoder(os.Stdout)
 		for _, e := range d.Added {
@@ -499,14 +560,22 @@ func printDiff(oldPath, newPath string, opts diffOpts) error {
 				}
 			}
 		}
-		return enc.Encode(map[string]any{
+		sum := map[string]any{
 			"kind":         "summary",
 			"added":        len(d.Added),
 			"removed":      len(d.Removed),
 			"observations": len(d.NewObs),
-		})
+		}
+		if differ {
+			sum["seeds_differ"] = true
+		}
+		return enc.Encode(sum)
 	}
 	fmt.Printf("diff vs %s\n", oldPath)
+	if differ {
+		fmt.Printf("  ! the runs had different seeds; this compares two targets, not two scans of one\n")
+		fmt.Printf("    old: %s\n    new: %s\n", strings.ReplaceAll(oldIn, "\n", ", "), strings.ReplaceAll(newIn, "\n", ", "))
+	}
 	if len(d.Added) == 0 && len(d.Removed) == 0 && len(d.NewObs) == 0 {
 		fmt.Println("  (no new entities or observations)")
 		fmt.Println("added=0 removed=0 observations=0")
@@ -583,6 +652,18 @@ func cmdExport(args []string) error {
 		}
 		if row.Proof != "" {
 			out["proof"] = row.Proof
+		}
+		if row.Template != "" {
+			out["template"] = row.Template
+		}
+		if len(row.Methods) > 0 {
+			out["methods"] = row.Methods
+		}
+		if len(row.Params) > 0 {
+			out["params"] = row.Params
+		}
+		if len(row.Forms) > 0 {
+			out["forms"] = row.Forms
 		}
 		if err := enc.Encode(out); err != nil {
 			return err
@@ -713,6 +794,9 @@ func uniqueDB() string {
 
 func parseCLIURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
+	if i := strings.IndexFunc(raw, func(r rune) bool { return r <= ' ' || r == 0x7f }); i >= 0 {
+		return "", fmt.Errorf("URL contains whitespace or a control character: %q", raw)
+	}
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme == "" || u.Host == "" {
 		return "", fmt.Errorf("need an http(s) URL, got %q", raw)
@@ -745,6 +829,13 @@ func parseSeedLine(raw []byte) (types.Seed, error) {
 	}
 	if !types.Known(s.Type) {
 		return types.Seed{}, fmt.Errorf("unknown seed type %q", s.Type)
+	}
+	if s.Type == types.TypeURL {
+		u, err := parseCLIURL(s.Keys["url"])
+		if err != nil {
+			return types.Seed{}, err
+		}
+		s.Keys["url"] = u
 	}
 	return s, nil
 }
@@ -837,7 +928,7 @@ func compact(raw json.RawMessage) string {
 		return string(raw)
 	}
 	parts := make([]string, 0, 4)
-	for _, k := range []string{"status", "title", "url", "via", "path", "fqdn", "ips", "params", "role", "count", "not_after", "error", "skipped", "registrar", "registrant", "name", "id", "method", "action", "fields", "auth", "final_url", "extracted", "warning", "note"} {
+	for _, k := range []string{"status", "catchall", "title", "url", "via", "methods", "path", "fqdn", "ips", "params", "role", "count", "not_after", "error", "skipped", "registrar", "registrant", "name", "id", "method", "action", "fields", "auth", "final_url", "extracted", "warning", "note"} {
 		if v, ok := m[k]; ok && v != nil && fmt.Sprint(v) != "" {
 			parts = append(parts, fmt.Sprintf("%s=%v", k, v))
 		}

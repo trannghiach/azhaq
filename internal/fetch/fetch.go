@@ -22,7 +22,11 @@ type Hop struct {
 
 const (
 	UserAgent = "azhaq/0.3.1"
-	MaxBody   = 512 << 10
+	// MaxBody caps HTML and other documents.
+	MaxBody = 2 << 20
+	// MaxScriptBody caps JavaScript, JSON and source maps: bundles of
+	// several MB are normal and their routes sit anywhere in the file.
+	MaxScriptBody = 16 << 20
 )
 
 type Result struct {
@@ -61,6 +65,7 @@ func Reset() {
 	Extra = nil
 	Delay = 0
 	cacheMu.Unlock()
+	resetProbes()
 }
 
 type cacheEnt struct {
@@ -220,7 +225,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		body, truncated, err := readBody(resp.Body)
+		body, truncated, err := readBody(resp.Body, bodyLimit(resp))
 		resp.Body.Close()
 		if err != nil {
 			return Result{}, err
@@ -277,15 +282,31 @@ func applyHeaders(req *http.Request) {
 	}
 }
 
-func readBody(r io.Reader) ([]byte, bool, error) {
-	body, err := io.ReadAll(io.LimitReader(r, MaxBody+1))
+func readBody(r io.Reader, limit int) ([]byte, bool, error) {
+	body, err := io.ReadAll(io.LimitReader(r, int64(limit)+1))
 	if err != nil {
 		return nil, false, err
 	}
-	if len(body) > MaxBody {
-		return body[:MaxBody], true, nil
+	if len(body) > limit {
+		return body[:limit], true, nil
 	}
 	return body, false, nil
+}
+
+func bodyLimit(resp *http.Response) int {
+	ct := strings.ToLower(resp.Header.Get("Content-Type"))
+	if strings.Contains(ct, "javascript") || strings.Contains(ct, "ecmascript") || strings.Contains(ct, "json") {
+		return MaxScriptBody
+	}
+	if resp.Request != nil && resp.Request.URL != nil {
+		p := strings.ToLower(resp.Request.URL.Path)
+		for _, ext := range []string{".js", ".mjs", ".cjs", ".json", ".map"} {
+			if strings.HasSuffix(p, ext) {
+				return MaxScriptBody
+			}
+		}
+	}
+	return MaxBody
 }
 
 func noFollow(c *http.Client) *http.Client {

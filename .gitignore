@@ -5,6 +5,7 @@
 
 # run graphs and CLI pointer
 .azhaq-last
+.azhaq-index
 *.db
 *.db-wal
 *.db-shm

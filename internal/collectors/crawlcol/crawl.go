@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -37,20 +38,52 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
+// Skip declines scripts and static assets: there is nothing to crawl.
+func (c *Collector) Skip(seed types.Seed) bool {
+	switch webextract.ClassifyURL(seed.Keys["url"]) {
+	case "script", "asset":
+		return true
+	}
+	return false
+}
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	raw, err := normalize.URL(seed.Keys["url"])
 	if err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	resp, body, err := fetch.GET(ctx, c.Client, raw)
+	res, _, err := fetch.Do(ctx, c.Client, raw)
 	if err != nil {
 		if neterr.UnknownHost(err) {
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	base := resp.Request.URL
+	final := res.URL
+	if final == "" {
+		final = res.RequestURL
+	}
+	base, err := url.Parse(final)
+	if err != nil {
+		return types.RunMeta{Status: types.StatusOK}, nil
+	}
 	meta := types.RunMeta{Status: types.StatusOK}
+	if n, err := normalize.URL(final); err == nil && n != raw {
+		// Redirected: the page it landed on is visited and crawled itself.
+		return meta, nil
+	}
+	ct := strings.ToLower(res.Header.Get("Content-Type"))
+	switch {
+	case strings.Contains(ct, "json"):
+		return c.jsonLinks(raw, res.Body, base, emit)
+	case ct != "" && !strings.Contains(ct, "html") && !strings.Contains(ct, "xml"):
+		return meta, nil
+	}
+	if fetch.FinalCatchAll(ctx, c.Client, res) {
+		// The generic page: its links were read from the real one.
+		return meta, nil
+	}
+	body := res.Body
 	if gen := webextract.Generator(body); gen != "" {
 		payload, _ := json.Marshal(map[string]string{"generator": gen, "url": raw})
 		if err := emit(types.Observation{
@@ -125,6 +158,34 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			meta.NextHints = append(meta.NextHints, types.Seed{
 				Type: types.TypeURL,
 				Keys: map[string]string{"url": link},
+			})
+		}
+	}
+	return meta, nil
+}
+
+// jsonLinks reads links out of a JSON response: HTML inside string values
+// and values that are themselves a same-origin URL or path.
+func (c *Collector) jsonLinks(raw string, body []byte, base *url.URL, emit func(types.Observation) error) (types.RunMeta, error) {
+	meta := types.RunMeta{Status: types.StatusOK}
+	for _, link := range webextract.JSONLinks(body, base) {
+		if meta.EmitCount >= maxPerPage {
+			break
+		}
+		if !webextract.SameOrigin(raw, link) || link == raw {
+			continue
+		}
+		payload, _ := json.Marshal(map[string]string{"url": link, "via": "json"})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "url",
+			Payload: payload, Confidence: 0.7, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+		if webextract.Hintable(link) {
+			meta.NextHints = append(meta.NextHints, types.Seed{
+				Type: types.TypeURL, Keys: map[string]string{"url": link},
 			})
 		}
 	}

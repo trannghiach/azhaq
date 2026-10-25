@@ -99,6 +99,14 @@ func TestParseCLIURL(t *testing.T) {
 	if _, err := parseCLIURL("https://example.com/a"); err != nil {
 		t.Fatal(err)
 	}
+	for _, bad := range []string{"http://127.0.0.1:3001/ ginandjuice.shop", "https://a.test/\tb", "https://a.test/\x7f"} {
+		if _, err := parseCLIURL(bad); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	if _, err := parseSeedLine([]byte(`{"type":"URL","keys":{"url":"https://a.test/x y"}}`)); err == nil {
+		t.Error("seed file URL with a space accepted")
+	}
 }
 
 func TestParseSeedLineUnknownType(t *testing.T) {
@@ -330,5 +338,51 @@ func TestPrintDiffJSONLAndCounts(t *testing.T) {
 	}
 	if !strings.Contains(text, "added=1 removed=1 observations=0") {
 		t.Fatalf("counts %q", text)
+	}
+}
+
+func TestPrintDiffLabelsOtherSeeds(t *testing.T) {
+	dir := t.TempDir()
+	paths := []string{filepath.Join(dir, "juice.db"), filepath.Join(dir, "vampi.db")}
+	for i, in := range []string{"URL http://127.0.0.1:3001/", "URL http://127.0.0.1:5002/"} {
+		st, err := store.Open(paths[i])
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := st.SaveInput(in); err != nil {
+			t.Fatal(err)
+		}
+		_ = st.Close()
+	}
+	out, err := captureStdout(t, func() error { return printDiff(paths[0], paths[1], diffOpts{}) })
+	if err != nil || !strings.Contains(out, "different seeds") {
+		t.Fatalf("not labelled: %q %v", out, err)
+	}
+	out, err = captureStdout(t, func() error { return printDiff(paths[0], paths[1], diffOpts{JSONL: true}) })
+	if err != nil || !strings.Contains(out, `"seeds_differ":true`) {
+		t.Fatalf("jsonl not labelled: %q %v", out, err)
+	}
+}
+
+func TestPreviousRunSameSeedsOnly(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	juice, vampi := "URL http://127.0.0.1:3001/", "URL http://127.0.0.1:5002/"
+	for _, f := range []string{"a.db", "b.db"} {
+		if err := os.WriteFile(f, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := recordRun(juice, "a.db"); err != nil {
+		t.Fatal(err)
+	}
+	if err := recordRun(vampi, "b.db"); err != nil {
+		t.Fatal(err)
+	}
+	if got := previousRun(juice); got != "a.db" {
+		t.Fatalf("juice previous %q", got)
+	}
+	if got := previousRun("URL https://other.test/"); got != "" {
+		t.Fatalf("unrelated seeds diffed against %q", got)
 	}
 }

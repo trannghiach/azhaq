@@ -17,6 +17,13 @@ type Collector interface {
 	Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error)
 }
 
+// Skipper is optional. A collector that would return at once for a seed
+// (already done this run, wrong kind of URL) says so at plan time, so the
+// seed does not spend the run's item budget.
+type Skipper interface {
+	Skip(seed types.Seed) bool
+}
+
 type Catalog struct {
 	mu sync.RWMutex
 	by map[string]Collector

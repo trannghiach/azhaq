@@ -7,10 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
-	"time"
-
 	"sync"
+	"time"
 
 	_ "modernc.org/sqlite"
 
@@ -464,6 +464,10 @@ func classifyIssue(o types.Observation) (errors, degraded int) {
 		if s, _ := p["skipped"].(string); s == "reserved" {
 			return 0, 0
 		}
+		// A third-party source failed or was rate limited.
+		if d, _ := p["degraded"].(bool); d {
+			return 0, 1
+		}
 	}
 	if p != nil {
 		st := asInt(p["status"])
@@ -562,8 +566,56 @@ func Compare(old, neu *Store) (Diff, error) {
 }
 
 func obsKey(o types.StoredObservation) string {
-	return o.Collector + "\x00" + o.Kind + "\x00" + string(o.Payload)
+	return o.Collector + "\x00" + o.Kind + "\x00" + stablePayload(o.Payload)
 }
+
+// volatile payload fields change between identical runs: a body hash on a
+// page with a CSRF token or captcha, the session a run was given.
+var volatile = []string{"body_hash", "auth"}
+
+// stablePayload is the payload as diff compares it: volatile fields
+// dropped and response headers reduced to their names (rate-limit
+// counters and request IDs change on every request).
+func stablePayload(raw json.RawMessage) string {
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil {
+		return string(raw)
+	}
+	for _, k := range volatile {
+		delete(m, k)
+	}
+	if h, ok := m["headers"].(map[string]any); ok {
+		names := make([]string, 0, len(h))
+		for k := range h {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		m["headers"] = names
+	}
+	out, err := json.Marshal(m)
+	if err != nil {
+		return string(raw)
+	}
+	return string(out)
+}
+
+// SeedsKey identifies what a run was pointed at, so diffs compare runs of
+// the same target.
+func SeedsKey(seeds []types.Seed) string {
+	lines := make([]string, 0, len(seeds))
+	for _, s := range seeds {
+		lines = append(lines, string(s.Type)+" "+s.Key())
+	}
+	sort.Strings(lines)
+	return strings.Join(lines, "\n")
+}
+
+// SaveInput records the seeds the run was given (see SeedsKey).
+func (s *Store) SaveInput(key string) error { return s.SetMeta("input", key) }
+
+// Input is the SeedsKey of the run, or "" for databases written by ingest
+// or by older versions.
+func (s *Store) Input() string { return s.GetMeta("input") }
 
 func (s *Store) SaveSeeds(seeds []types.Seed) error {
 	raw, err := json.Marshal(seeds)

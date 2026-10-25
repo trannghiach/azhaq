@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/cdxcol"
 	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
@@ -24,6 +25,7 @@ func RegisterAllWith(cat *catalog.Catalog, client *http.Client, paths []string) 
 	httpcol.Register(cat, client)
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)
+	apicol.Register(cat, client)
 	if len(paths) > 0 {
 		list := append(append([]string{}, pathscol.DefaultWordlist...), paths...)
 		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: list})
