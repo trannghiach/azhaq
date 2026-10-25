@@ -119,3 +119,37 @@ func TestNotASpec(t *testing.T) {
 		t.Error("API route should be skipped at plan time")
 	}
 }
+
+// Swagger UI's init script carries the whole document (Juice Shop's B2B API).
+const swaggerUIInit = `
+window.onload = function() {
+  var url = window.location.search.match(/url=([^&]+)/);
+  var options = {
+  "swaggerDoc": {
+    "openapi": "3.0.0",
+    "servers": [{"url": "/b2b/v2"}],
+    "info": {"version": "2.0.0", "title": "NextGen B2B API", "description": "New & secure {JSON} \"API\""},
+    "paths": {
+      "/orders": {"post": {"operationId": "createCustomerOrder"}}
+    }
+  },
+  "customOptions": {}
+};
+  url = options.swaggerUrl || url
+  var urls = options.swaggerUrls
+  window.ui = SwaggerUIBundle({spec: options.swaggerDoc})
+}`
+
+func TestSpecInSwaggerUIScript(t *testing.T) {
+	ops, _, _ := runSpec(t, "/api-docs/swagger-ui-init.js", "application/javascript", swaggerUIInit)
+	o, ok := ops["/b2b/v2/orders"]
+	if !ok || strings.Join(o.Methods, ",") != "POST" {
+		t.Fatalf("embedded spec: %v", ops)
+	}
+	if embedded(`var spec = {"openapi": "3.0.0", "paths": {"/a": {"get": {}}}}`) != "" {
+		t.Error("a bare assignment is not a spec key")
+	}
+	if got := embedded(`SwaggerUIBundle({spec: {"swagger": "2.0", "paths": {}}, dom_id: "#x"})`); got != `{"swagger": "2.0", "paths": {}}` {
+		t.Errorf("spec option: %q", got)
+	}
+}

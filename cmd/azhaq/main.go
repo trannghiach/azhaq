@@ -57,6 +57,8 @@ func run(args []string) error {
 		return cmdRun(args[1:])
 	case "plan":
 		return cmdPlan(args[1:])
+	case "roles":
+		return cmdRoles(args[1:])
 	case "ingest":
 		return cmdIngest(args[1:])
 	case "export":
@@ -77,7 +79,8 @@ func run(args []string) error {
 
 const helpText = `azhaq — generic recon engine
 
-  azhaq run    -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
+  azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
+               [-probe] [-web-ports 80,443,8080] [-no-tech]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
@@ -87,9 +90,12 @@ const helpText = `azhaq — generic recon engine
                # -depth 0 = seed wave only (not unlimited); default 4
                # -passive keeps third-party sources and DNS; nothing is sent to the target
                # -dns-brute and -permute are active and need -allow
+               # -probe: resolve and fetch each target once, one line per web service
                # print is a ranked map (visited/hint); -obs dumps the observation log
                # parallel runs: give each its own -db FILE or AZHAQ_DB
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
+  azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
+               # one run per session; prints the endpoints whose status differs
   azhaq ingest -in facts.jsonl  [-db FILE]
   azhaq export [-db FILE]
   azhaq diff   -a OLD.db -b NEW.db  [-jsonl] [-quiet]
@@ -110,6 +116,7 @@ func cmdRun(args []string) error {
 	in := fs.String("in", "", "JSONL seeds")
 	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
 	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
+	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 190 MB of memory)")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
@@ -251,7 +258,7 @@ func cmdRun(args []string) error {
 		return err
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports}
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
 			return err

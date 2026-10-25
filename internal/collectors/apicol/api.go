@@ -93,7 +93,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	res, _, err := fetch.Do(ctx, c.Client, raw)
 	if err != nil {
-		if neterr.UnknownHost(err) {
+		if neterr.Quiet(err) {
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
@@ -178,6 +178,10 @@ func parse(body []byte) (doc, bool) {
 	trimmed := strings.TrimSpace(string(body))
 	if strings.HasPrefix(trimmed, "{") {
 		if json.Unmarshal(body, &d) != nil {
+			return d, false
+		}
+	} else if obj := embedded(trimmed); obj != "" {
+		if json.Unmarshal([]byte(obj), &d) != nil {
 			return d, false
 		}
 	} else if strings.HasPrefix(trimmed, "<") || yaml.Unmarshal(body, &d) != nil {
@@ -269,4 +273,57 @@ func addName(xs []string, n string) []string {
 		}
 	}
 	return append(xs, n)
+}
+
+// embedded finds a description written into a script, as Swagger UI's
+// swagger-ui-init.js does with "swaggerDoc": {...}, or into an HTML page.
+// It returns the JSON object or "".
+func embedded(src string) string {
+	for _, key := range []string{`"swaggerDoc"`, `swaggerDoc`, `"spec"`, `spec`} {
+		for from := 0; ; {
+			i := strings.Index(src[from:], key)
+			if i < 0 {
+				break
+			}
+			i += from + len(key)
+			from = i
+			rest := strings.TrimLeft(src[i:], " \t\r\n")
+			if !strings.HasPrefix(rest, ":") {
+				continue
+			}
+			rest = strings.TrimLeft(rest[1:], " \t\r\n")
+			if obj := jsonObject(rest); obj != "" && (strings.Contains(obj, `"openapi"`) || strings.Contains(obj, `"swagger"`)) {
+				return obj
+			}
+		}
+	}
+	return ""
+}
+
+// jsonObject returns the balanced {...} that s starts with, or "".
+func jsonObject(s string) string {
+	if !strings.HasPrefix(s, "{") {
+		return ""
+	}
+	depth, inStr, esc := 0, false, false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case esc:
+			esc = false
+		case inStr && ch == '\\':
+			esc = true
+		case ch == '"':
+			inStr = !inStr
+		case inStr:
+		case ch == '{':
+			depth++
+		case ch == '}':
+			depth--
+			if depth == 0 {
+				return s[:i+1]
+			}
+		}
+	}
+	return ""
 }

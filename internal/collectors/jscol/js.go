@@ -2,6 +2,7 @@ package jscol
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -25,6 +26,10 @@ const (
 	maxEmit = 512
 	// maxScripts caps scripts fetched for one page, chunks included.
 	maxScripts = 64
+	// maxMaps caps source maps read for one page.
+	maxMaps = 8
+	// maxMapFiles caps the source file names kept per map.
+	maxMapFiles = 200
 )
 
 // Collector reads the scripts of every page it is given: inline scripts,
@@ -80,8 +85,16 @@ func (c *Collector) Skip(seed types.Seed) bool {
 }
 
 type script struct {
-	url  *url.URL
-	body string
+	url     *url.URL
+	body    string
+	fromMap bool // original source from a source map
+}
+
+// sourceMap is what a map says about the code behind a bundle.
+type sourceMap struct {
+	url   string
+	files []string // the app's own source files, libraries left out
+	count int      // all sources, libraries included
 }
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
@@ -96,7 +109,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	res, _, err := fetch.Do(ctx, c.Client, raw)
 	if err != nil {
-		if neterr.UnknownHost(err) {
+		if neterr.Quiet(err) {
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
@@ -138,6 +151,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 
 	var found []string
+	var maps []sourceMap
 	for i := 0; i < len(queue); i++ {
 		if ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
@@ -148,8 +162,30 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				found = append(found, link)
 			}
 		}
+		// Paths joined from constants are relative to the app's root,
+		// where single-page apps send their requests from.
+		for _, p := range webextract.Assembled(s.body) {
+			if !strings.HasPrefix(p, "http") {
+				p = base.Scheme + "://" + base.Host + "/" + strings.TrimPrefix(p, "/")
+			}
+			if link, err := normalize.URL(p); err == nil && webextract.SameOrigin(raw, link) && link != raw {
+				found = append(found, link)
+			}
+		}
 		for _, ref := range webextract.ScriptRefs(s.body, s.url) {
 			queue = c.load(ctx, raw, ref, true, queue, &fetched)
+		}
+		// Chunks the loader names at run time (webpack chunk maps).
+		for _, ch := range webextract.ChunkURLs(s.body) {
+			if ref, err := s.url.Parse(ch); err == nil {
+				queue = c.load(ctx, raw, ref.String(), true, queue, &fetched)
+			}
+		}
+		if !s.fromMap && len(maps) < maxMaps {
+			if m, sources := c.readMap(ctx, raw, webextract.SourceMapURL(s.body, s.url), s.url); m.url != "" {
+				maps = append(maps, m)
+				queue = append(queue, sources...)
+			}
 		}
 	}
 
@@ -178,6 +214,20 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		meta.EmitCount++
 		return nil
 	}
+	for _, m := range maps {
+		row := map[string]any{"url": m.url, "via": "js", "role": "sourcemap", "sources": m.count}
+		if len(m.files) > 0 {
+			row["files"] = m.files
+		}
+		payload, _ := json.Marshal(row)
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "url",
+			Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
 	for _, src := range fetched {
 		if err := put(src, "script"); err != nil {
 			return meta, err
@@ -197,7 +247,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if err := put(link, role); err != nil {
 			return meta, err
 		}
-		if webextract.Hintable(link) {
+		if webextract.Hintable(link) && !strings.Contains(link, "{") { // a template is mapped, not requested
 			meta.NextHints = append(meta.NextHints, types.Seed{
 				Type: types.TypeURL,
 				Keys: map[string]string{"url": webextract.RouteKey(link)},
@@ -243,4 +293,63 @@ func queryNames(raw string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// readMap fetches a same-origin source map and returns its app sources as
+// scripts to read; library sources (node_modules, webpack runtime) are
+// counted but not read.
+func (c *Collector) readMap(ctx context.Context, page, mapURL string, scriptURL *url.URL) (sourceMap, []script) {
+	if mapURL == "" {
+		return sourceMap{}, nil
+	}
+	var body []byte
+	if strings.HasPrefix(mapURL, "data:") {
+		meta, data, ok := strings.Cut(strings.TrimPrefix(mapURL, "data:"), ",")
+		if !ok || !strings.HasSuffix(meta, ";base64") {
+			return sourceMap{}, nil
+		}
+		raw, err := base64.StdEncoding.DecodeString(data)
+		if err != nil {
+			return sourceMap{}, nil
+		}
+		body, mapURL = raw, scriptURL.String()+" (inline map)"
+	} else {
+		if !webextract.SameOrigin(page, mapURL) {
+			return sourceMap{}, nil
+		}
+		if _, done := c.parsed.LoadOrStore(mapURL, true); done {
+			return sourceMap{}, nil
+		}
+		res, _, err := fetch.Do(ctx, c.Client, mapURL)
+		if err != nil || res.Status != http.StatusOK {
+			return sourceMap{}, nil
+		}
+		body = res.Body
+	}
+	var sm struct {
+		Sources        []string  `json:"sources"`
+		SourcesContent []*string `json:"sourcesContent"`
+	}
+	if json.Unmarshal(body, &sm) != nil || len(sm.Sources) == 0 {
+		return sourceMap{}, nil
+	}
+	m := sourceMap{url: mapURL, count: len(sm.Sources)}
+	var out []script
+	for i, name := range sm.Sources {
+		if library(name) {
+			continue
+		}
+		if len(m.files) < maxMapFiles {
+			m.files = append(m.files, name)
+		}
+		if i < len(sm.SourcesContent) && sm.SourcesContent[i] != nil {
+			out = append(out, script{url: scriptURL, body: *sm.SourcesContent[i], fromMap: true})
+		}
+	}
+	return m, out
+}
+
+func library(source string) bool {
+	return strings.Contains(source, "node_modules/") || strings.Contains(source, "webpack/") ||
+		strings.Contains(source, "(webpack)") || strings.HasPrefix(source, "external ")
 }

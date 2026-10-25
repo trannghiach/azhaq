@@ -123,3 +123,26 @@ func JSONLinks(body []byte, base *url.URL) []string {
 func trimURLJunk(s string) string {
 	return strings.TrimRight(s, ".,);'\"")
 }
+
+var sourceMapRE = regexp.MustCompile(`//[#@]\s*sourceMappingURL=(\S+)\s*$`)
+
+// SourceMapURL is the map a script names in its last line, resolved
+// against the script, or "" (inline data: maps included as given).
+func SourceMapURL(script string, scriptURL *url.URL) string {
+	tail := script
+	if len(tail) > 2048 {
+		tail = tail[len(tail)-2048:]
+	}
+	m := sourceMapRE.FindStringSubmatch(strings.TrimRight(tail, " \t\r\n;"))
+	if m == nil || scriptURL == nil {
+		return ""
+	}
+	if strings.HasPrefix(m[1], "data:") {
+		return m[1]
+	}
+	u, err := scriptURL.Parse(m[1])
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return ""
+	}
+	return u.String()
+}
