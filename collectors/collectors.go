@@ -20,6 +20,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
+	"github.com/trannghiach/azhaq/internal/collectors/rendercol"
 	"github.com/trannghiach/azhaq/internal/collectors/searchcol"
 	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
@@ -45,6 +46,7 @@ type Options struct {
 	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
 	Shots      string           // azhaq-shots: screenshot directory (runs only when set)
 	Browser    *browser.Browser // the run's Chrome, started on first use
+	Render     bool             // azhaq-render: load pages in Chrome (-browser)
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -82,6 +84,11 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(asncol.NewASN(nil))
 	cat.MustRegister(searchcol.New(o.Subdomains.Keys))
 	cat.MustRegister(&shotcol.Collector{Dir: o.Shots, Browser: o.Browser})
+	render := &rendercol.Collector{}
+	if o.Render {
+		render.Browser = o.Browser
+	}
+	cat.MustRegister(render)
 	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)

@@ -127,7 +127,7 @@ const helpText = `azhaq — generic recon engine
 
   azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
                [-scope FILE|PLATFORM -program NAME] [-asn AS64500] [-cidr 192.0.2.0/24] [-max-ips N]
-               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE] [-screenshots DIR] [-tabs N]
+               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE] [-screenshots DIR] [-browser] [-tabs N]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
@@ -180,6 +180,7 @@ func cmdRun(args []string) error {
 	var asns, cidrs stringsFlag
 	fs.Var(&asns, "asn", "seed an autonomous system: its announced prefixes (repeatable)")
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
+	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
 	maxIPs := fs.Int("max-ips", 4096, "addresses expanded from -asn and -cidr prefixes, for the whole run")
@@ -391,10 +392,10 @@ func cmdRun(args []string) error {
 		return err
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots}
-	if *shots != "" {
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	if *shots != "" || *render {
 		if _, err := browser.Find(); err != nil {
-			return fmt.Errorf("-screenshots: %w", err)
+			return fmt.Errorf("-screenshots and -browser: %w", err)
 		}
 		hdr := map[string]any{}
 		for k, vs := range fetch.Extra {

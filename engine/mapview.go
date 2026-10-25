@@ -128,7 +128,7 @@ func ownObs(e types.Entity, obs []types.StoredObservation) []types.StoredObserva
 	}
 	var out []types.StoredObservation
 	for _, o := range obs {
-		if o.Collector == "azhaq-js" || o.Collector == "azhaq-crawl" {
+		if o.Collector == "azhaq-js" || o.Collector == "azhaq-crawl" || o.Collector == "azhaq-render" {
 			continue
 		}
 		if u := payloadURL(o); u != "" && !sameRoute(u, e.Key) {
@@ -546,7 +546,7 @@ func pageForms(obs []types.StoredObservation, params []string) ([]MapForm, []str
 	var forms []MapForm
 	inForm := map[string]bool{}
 	for _, o := range obs {
-		if o.Collector != "azhaq-crawl" || o.Kind != "form" {
+		if (o.Collector != "azhaq-crawl" && o.Collector != "azhaq-render") || o.Kind != "form" {
 			continue
 		}
 		var f MapForm

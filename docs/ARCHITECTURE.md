@@ -164,6 +164,10 @@ The sweep has its own client: no cache, no redirects followed, bodies read only 
 
 `-asn` seeds an autonomous system: `azhaq-asn` lists the prefixes it announces (RIPEstat, no key) and the holder's name. `-cidr` seeds a range directly. `azhaq-prefix` expands IPv4 prefixes into addresses, at most `-max-ips` (4,096) for the whole run, and says so when a range is cut short. Each address gets a reverse DNS lookup (`azhaq-ptr`), an HTTP probe and a TLS handshake without SNI; names in reverse DNS and on certificates become hostnames to resolve and probe. Reverse names a provider derives from the address (`ec2-192-0-2-7…`, `7.2.0.192.static…`) and shared platforms are recorded but not followed, and names found this way are not enumerated as domains: on shared hosting they may belong to neighbours. Ask for a domain with `-domain`.
 
+## Rendering pages
+
+Static extraction reads what scripts contain; `-browser` also runs them. `azhaq-render` loads pages (not scripts, assets or API routes) in the run's Chrome, up to 30 per host, and records every same-origin request the page sends while it loads, which for a single-page app are its API calls with their real paths and query strings, and the links and forms of the document once rendered. Those become URLs for the other collectors. It shares the browser, tab limit and session headers with screenshots.
+
 ## Screenshots
 
 `-screenshots DIR` starts one headless Chrome found on the machine (`AZHAQ_CHROME`, or `google-chrome`, `chromium` on the path) and drives it over the DevTools protocol (chromedp). Each web service's front page opens in its own tab, four at a time (`-tabs`), with the run's `-cookie` and `-header` values. The load event gets 15 seconds; a page that never finishes loading is captured as far as it got, 1.5 seconds after navigation, within 30 seconds. The PNG goes to `DIR/scheme_host_port.png`, and a 64-bit difference hash goes with it: the HTML export groups pages whose hashes are at most 8 bits apart, so thirty copies of one login portal are one row. A name and its URL are one page and are taken once.
