@@ -10,7 +10,7 @@ A typical recon pipeline chains several tools (a subdomain finder, an HTTP probe
 
 - a hostname seen by CT logs, DNS, a crawl and a TLS certificate is one node, with all four observations attached;
 - a second run against the same target prints a diff instead of a new dump;
-- it is a single static binary with no external tools, no browser and no CGO.
+- it is a single static binary with no external tools and no CGO; screenshots, and pages that only render in a browser, use a Chrome already on the machine, and only when asked.
 
 ## Install
 
@@ -64,6 +64,7 @@ Common options:
 
 | Option | Effect |
 | --- | --- |
+| `-screenshots DIR`, `-tabs N` | a screenshot of each web service's front page, with Chrome or Chromium installed on the machine (`AZHAQ_CHROME` to point at one); the HTML report groups look-alike pages |
 | `-asn AS64500`, `-cidr 192.0.2.0/24`, `-max-ips N` | start from networks: an AS's announced prefixes, address ranges (up to 4,096 addresses per run by default), their reverse DNS names, certificates and web services |
 | `-scope FILE\|PLATFORM`, `-program NAME` | start from a bug bounty program's scope and stay inside it (see above) |
 | `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
@@ -113,6 +114,7 @@ azhaq ports -host scanme.nmap.org -p top-1000 -silent                         # 
 azhaq dirs -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac, feroxbuster with -depth
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt    # arjun (GET)
 azhaq asn -a AS64500 -silent                                                  # asnmap (RIPEstat, no key)
+azhaq shots -l hosts.txt -dir screenshots                                     # gowitness
 azhaq probe -l hosts.txt -json > probe.jsonl                                  # httpx -json fields
 ```
 
@@ -198,6 +200,7 @@ The API may still change before 1.0.
 | `azhaq-dirs` | URL | `-dirs`: paths from a wordlist (and word.ext) that answer differently from a path that cannot exist, directories swept to `-dirs-depth` |
 | `azhaq-params` | URL | `-params`: query parameters a page reads, found by sending names in groups with random values and halving the groups that change the answer (status, size, a value reflected back); GET only |
 | `azhaq-asn`, `azhaq-prefix`, `azhaq-ptr` | ASN, prefix, IP | an AS's announced prefixes (RIPEstat), the addresses in a prefix, their reverse DNS names; addresses found this way are probed over HTTP and TLS, and names on their certificates followed |
+| `azhaq-shots` | URL, hostname | `-screenshots`: a PNG of the front page as Chrome renders it, with a perceptual hash to group look-alikes |
 | `azhaq-search` | domain | hosts and services Shodan, FOFA and Netlas have seen for the domain (keys `shodan`, `fofa` as `email:key`, `netlas` in the provider file); without keys each is listed as skipped |
 | `azhaq-ports` | hostname, IP | `-ports`: open TCP ports by full connect (no root), with the first line each service sends; a CDN or WAF address gets its web ports only; ports that may serve HTTP go to `azhaq-http` |
 | `azhaq-urls` | domain | historical URLs of the domain and its subdomains from the Wayback Machine (paged), Common Crawl, AlienVault OTX, urlscan.io (a key from the provider file raises its limits) and arquivo.pt; one row per URL template in the graph, every URL with `-urls FILE`; a source that refuses or rate limits marks the result `degraded` |

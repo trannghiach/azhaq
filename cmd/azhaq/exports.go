@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -231,6 +232,8 @@ body{background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif;ma
 h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:32px 0 8px}.muted{color:var(--muted)}
 table{border-collapse:collapse;width:100%;display:block;overflow-x:auto}th,td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top;white-space:nowrap}
 td.wrap{white-space:normal;word-break:break-all}a{color:var(--accent)}code{font-size:13px}
+.group{display:flex;flex-wrap:wrap;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}figure{margin:0;width:280px}
+figure img{width:100%;border:1px solid var(--line)}figcaption{font-size:12px;color:var(--muted);word-break:break-all}
 </style></head><body>
 <h1>Azhaq report</h1>
 <p class="muted">{{.Generated}} · {{.Path}} · {{.Stats.Entities}} entities, {{.Stats.Observations}} observations{{if .Stats.Capped}} · capped{{end}}</p>
@@ -242,6 +245,9 @@ td.wrap{white-space:normal;word-break:break-all}a{color:var(--accent)}code{font-
 <table><tr><th>Name</th><th>Addresses</th><th>CDN</th></tr>
 {{range .Hosts}}<tr><td>{{.Name}}</td><td class="wrap">{{join .IPs}}</td><td>{{.CDN}}</td></tr>
 {{end}}</table>{{end}}
+{{if .Shots}}<h2>Screenshots ({{len .Shots}} groups)</h2>
+{{range .Shots}}<div class="group">{{range .}}<figure><a href="{{.File}}"><img src="{{.File}}" alt="{{.URL}}" loading="lazy"></a><figcaption>{{.URL}}{{if .Title}} · {{.Title}}{{end}}</figcaption></figure>{{end}}</div>
+{{end}}{{end}}
 {{if .API}}<h2>API routes ({{len .API}})</h2>
 <table><tr><th>Route</th><th>Methods</th><th>Parameters</th><th>Seen</th></tr>
 {{range .API}}<tr><td class="wrap"><code>{{.Entity.Key}}</code></td><td>{{join .Methods}}</td><td class="wrap">{{join .Params}}</td><td>{{.Coverage}}</td></tr>
@@ -278,7 +284,7 @@ func htmlReport(g *graphView, w io.Writer) error {
 	}
 	return reportTmpl.Execute(w, map[string]any{
 		"Generated": time.Now().UTC().Format("2006-01-02 15:04 UTC"),
-		"Path":      g.path, "Stats": g.stats, "Probe": g.probe, "Hosts": hosts, "API": api,
+		"Path":      g.path, "Stats": g.stats, "Probe": g.probe, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs),
 		"Map": engine.GroupTemplates(g.rows),
 	})
 }
@@ -345,4 +351,38 @@ func graphML(path string, w io.Writer) error {
 // (the map shows those as auth or forbidden).
 func isAPI(r engine.MapEntry) bool {
 	return r.Role == "api" || len(r.Methods) > 0 || webextract.ClassifyURL(r.Entity.Key) == "api"
+}
+
+type reportShot struct{ URL, File, Title, Hash string }
+
+// shotGroups puts screenshots that look alike (perceptual hashes at most 8
+// bits apart) together, largest group first: a login portal deployed on
+// thirty hosts is one row.
+func shotGroups(obs []types.StoredObservation) [][]reportShot {
+	var shots []reportShot
+	for _, o := range obs {
+		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
+			continue
+		}
+		var p struct{ URL, File, Title, Phash string }
+		if json.Unmarshal(o.Payload, &p) == nil && p.File != "" {
+			shots = append(shots, reportShot{p.URL, p.File, p.Title, p.Phash})
+		}
+	}
+	var groups [][]reportShot
+	for _, s := range shots {
+		placed := false
+		for i, g := range groups {
+			if s.Hash != "" && shotcol.Distance(s.Hash, g[0].Hash) <= 8 {
+				groups[i] = append(groups[i], s)
+				placed = true
+				break
+			}
+		}
+		if !placed {
+			groups = append(groups, []reportShot{s})
+		}
+	}
+	sort.SliceStable(groups, func(i, j int) bool { return len(groups[i]) > len(groups[j]) })
+	return groups
 }

@@ -117,7 +117,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		// page that exists.
 		if u, err := normalize.URL(seed.Keys["url"]); err == nil && answeredURL != "" && answeredURL != u {
 			meta.Drop = true
-			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": answeredURL}})
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": answeredURL, types.SameTargetKey: "1"}})
 		}
 	}
 	if seed.Type == types.TypeURL && !answered {

@@ -37,6 +37,9 @@ var tools = []tool{
 	{"gau", "2.2.4", "lc/gau", "gau_2.2.4_linux_amd64.tar.gz", "10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9"},
 	{"ffuf", "2.3.0", "ffuf/ffuf", "ffuf_2.3.0_linux_amd64.tar.gz", "b2a3c725fcb9da175159682f54d6e9149f2905b00d84d155e7efc5d599975ceb"},
 	{"alterx", "0.1.0", "projectdiscovery/alterx", "alterx_0.1.0_linux_amd64.zip", "ffae5b25138cb27b58900b9b5849e02d0390385fce404252d32e469f2a0e97ac"},
+	// GPL-3.0, run as a separate program; its tags have no "v" and the
+	// asset is the binary itself.
+	{"gowitness", "3.2.2", "sensepost/gowitness", "gowitness-3.2.2-linux-amd64", "063ac21063ec96992a9bd7216bf05b3e96afa01a05e1a908490a2b42f573a12a"},
 }
 
 // builtTools have no release binaries and are built from a pinned
@@ -114,7 +117,11 @@ func fetchWordlist(w wordlist) (string, error) {
 }
 
 func (t tool) url() string {
-	return "https://github.com/" + t.repo + "/releases/download/v" + t.Version + "/" + t.asset
+	tag := "v" + t.Version
+	if t.Name == "gowitness" {
+		tag = t.Version
+	}
+	return "https://github.com/" + t.repo + "/releases/download/" + tag + "/" + t.asset
 }
 
 // installTools puts each pinned tool in dir, downloading only what is
@@ -161,10 +168,13 @@ func install(t tool, dir string) error {
 		return fmt.Errorf("checksum mismatch for %s: got %s", t.asset, got)
 	}
 	var bin []byte
-	if strings.HasSuffix(t.asset, ".zip") {
+	switch {
+	case strings.HasSuffix(t.asset, ".zip"):
 		bin, err = fromZip(data, t.Name)
-	} else {
+	case strings.HasSuffix(t.asset, ".tar.gz"):
 		bin, err = fromTarGz(data, t.Name)
+	default:
+		bin = data // the release asset is the binary
 	}
 	if err != nil {
 		return err

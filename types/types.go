@@ -34,6 +34,11 @@ type Seed struct {
 // it so the application's own map is not held up.
 const DerivedKey = "derived"
 
+// SameTargetKey marks a hint that is the seed it came from in another form
+// (the scheme that answered for host:port): it does not count as a step of
+// -depth.
+const SameTargetKey = "same"
+
 // Derived reports whether the engine derived s from another seed.
 func (s Seed) Derived() bool { return s.Keys[DerivedKey] != "" }
 

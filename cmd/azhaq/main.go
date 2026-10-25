@@ -24,6 +24,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
@@ -102,6 +103,8 @@ func run(args []string) error {
 		return cmdParams(args[1:])
 	case "asn":
 		return cmdASN(args[1:])
+	case "shots":
+		return cmdShots(args[1:])
 	case "ingest":
 		return cmdIngest(args[1:])
 	case "export":
@@ -124,7 +127,7 @@ const helpText = `azhaq — generic recon engine
 
   azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
                [-scope FILE|PLATFORM -program NAME] [-asn AS64500] [-cidr 192.0.2.0/24] [-max-ips N]
-               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE]
+               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE] [-screenshots DIR] [-tabs N]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
@@ -146,6 +149,7 @@ const helpText = `azhaq — generic recon engine
   azhaq dirs   -u URL | -l FILE | stdin  -w WORDLIST [-e EXT] [-depth N] [-mc LIST] [-json]   # like ffuf -ac
   azhaq params -u URL | -l FILE | stdin  -w NAMES [-rate N] [-json]                # like arjun (GET)
   azhaq asn    -a AS64500 | -l FILE | stdin  [-json]                               # like asnmap
+  azhaq shots  -u TARGET | -l FILE | stdin  [-dir DIR] [-tabs N] [-json]           # like gowitness
                # results on stdout, one per line; progress on stderr (-silent drops it)
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
   azhaq scope  -scope FILE|hackerone|bugcrowd|intigriti|yeswehack [-program NAME]  # show what a run would take
@@ -176,6 +180,8 @@ func cmdRun(args []string) error {
 	var asns, cidrs stringsFlag
 	fs.Var(&asns, "asn", "seed an autonomous system: its announced prefixes (repeatable)")
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
+	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
+	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
 	maxIPs := fs.Int("max-ips", 4096, "addresses expanded from -asn and -cidr prefixes, for the whole run")
 	scopeSpec := fs.String("scope", "", "a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack")
 	program := fs.String("program", "", "the program to take from a -scope list (handle, name or URL)")
@@ -385,7 +391,20 @@ func cmdRun(args []string) error {
 		return err
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs}
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots}
+	if *shots != "" {
+		if _, err := browser.Find(); err != nil {
+			return fmt.Errorf("-screenshots: %w", err)
+		}
+		hdr := map[string]any{}
+		for k, vs := range fetch.Extra {
+			if len(vs) > 0 && !strings.EqualFold(k, "User-Agent") {
+				hdr[k] = strings.Join(vs, ", ")
+			}
+		}
+		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: fetch.Extra.Get("User-Agent"), Header: hdr}
+		defer opts.Browser.Close()
+	}
 	if *portsSpec != "" {
 		if opts.Ports, err = portscan.Ports(*portsSpec); err != nil {
 			return fmt.Errorf("-ports: %w", err)

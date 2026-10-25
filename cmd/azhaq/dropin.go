@@ -215,7 +215,7 @@ func payloads(st *store.Store, collector string) []map[string]any {
 	obs, _ := st.Observations()
 	var out []map[string]any
 	for _, o := range obs {
-		if o.Collector != collector {
+		if o.Collector != collector || o.Kind == "error" {
 			continue
 		}
 		var p map[string]any
@@ -879,6 +879,52 @@ func cmdASN(args []string) error {
 			} else {
 				w.line(fmt.Sprint(x))
 			}
+		}
+	}
+	return w.close()
+}
+
+// cmdShots is gowitness: a screenshot of each web service, with a
+// perceptual hash to group look-alikes.
+func cmdShots(args []string) error {
+	fs := flag.NewFlagSet("shots", flag.ContinueOnError)
+	var c common
+	c.register(fs)
+	var urls stringsFlag
+	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
+	list := fs.String("l", "", "file of targets (- for stdin)")
+	dir := fs.String("dir", "screenshots", "directory for the PNG files")
+	vals := map[string]*string{"tabs": fs.String("tabs", "", "Chrome tabs at once (default 4)")}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	targets, err := inputs(urls, *list)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		return fmt.Errorf("give -u TARGET, -l FILE or targets on stdin")
+	}
+	path, rm, err := tempList(targets)
+	if err != nil {
+		return err
+	}
+	defer rm()
+	run := append([]string{"-list", path, "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-shots"), "-screenshots", *dir}, forward(vals)...)
+	st, done, err := runPreset(&c, run)
+	if err != nil {
+		return err
+	}
+	defer done()
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	for _, p := range payloads(st, "azhaq-shots") {
+		if w.json {
+			w.obj(p)
+		} else {
+			w.line(fmt.Sprintf("%v %v", p["url"], p["file"]))
 		}
 	}
 	return w.close()

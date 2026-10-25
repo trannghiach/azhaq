@@ -338,7 +338,7 @@ func (s *scheduler) handle(f finished) {
 	if f.partial {
 		for i, t := range f.tasks {
 			for _, h := range f.metas[i].NextHints {
-				s.add(h, t.depth+1, true)
+				s.add(h, t.depth+hintStep(h), true)
 			}
 		}
 		return
@@ -358,7 +358,7 @@ func (s *scheduler) handle(f finished) {
 			continue
 		}
 		for _, h := range meta.NextHints {
-			s.add(h, t.depth+1, true)
+			s.add(h, t.depth+hintStep(h), true)
 		}
 	}
 }
@@ -412,4 +412,13 @@ func printBatch(ctx context.Context, name string, n int, d time.Duration, err er
 		return
 	}
 	fmt.Fprintf(os.Stderr, "  . %s %d seeds  %s\n", name, n, d.Round(time.Millisecond))
+}
+
+// hintStep is how much deeper a hint goes: none for the same target under
+// another scheme (types.SameTargetKey), one otherwise.
+func hintStep(h types.Seed) int {
+	if h.Keys[types.SameTargetKey] != "" {
+		return 0
+	}
+	return 1
 }

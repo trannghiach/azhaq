@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
@@ -20,6 +21,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
 	"github.com/trannghiach/azhaq/internal/collectors/searchcol"
+	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
@@ -41,6 +43,8 @@ type Options struct {
 	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
 	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
 	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
+	Shots      string           // azhaq-shots: screenshot directory (runs only when set)
+	Browser    *browser.Browser // the run's Chrome, started on first use
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -77,6 +81,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(paramcol.New(client, o.Params))
 	cat.MustRegister(asncol.NewASN(nil))
 	cat.MustRegister(searchcol.New(o.Subdomains.Keys))
+	cat.MustRegister(&shotcol.Collector{Dir: o.Shots, Browser: o.Browser})
 	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
