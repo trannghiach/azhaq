@@ -3,6 +3,7 @@ package engine_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -171,5 +173,83 @@ func TestDropReachesTheWholeChain(t *testing.T) {
 	stats, _ := st.Stats()
 	if ran != 0 || stats.Capped {
 		t.Errorf("ran %d, capped %v: a task two links behind a drop must be dropped too", ran, stats.Capped)
+	}
+}
+
+// spender stands for a collector whose request the budget refused.
+type spender struct{ ran *int }
+
+func (spender) Name() string             { return "test-gate" }
+func (spender) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive} }
+func (spender) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (spender) Outputs() []string        { return nil }
+func (s spender) Run(context.Context, types.Seed, func(types.Observation) error) (types.RunMeta, error) {
+	*s.ran++
+	return types.RunMeta{Status: types.StatusError, Drop: true}, neterr.ErrBudget
+}
+
+func TestSpentBudgetLeavesWorkUndone(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.BeginRun("r1", 4, 0); err != nil {
+		t.Fatal(err)
+	}
+	ran, followed := 0, 0
+	cat := catalog.New()
+	cat.MustRegister(spender{&ran})
+	cat.MustRegister(follower{&followed})
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seed := types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}
+	meta, err := eng.Run(context.Background(), types.WorkItem{Collector: "test-gate", Seed: seed})
+	if !errors.Is(err, neterr.ErrBudget) || meta.Status != types.StatusCapped || meta.Drop {
+		t.Fatalf("status %q drop %v err %v", meta.Status, meta.Drop, err)
+	}
+	if _, _ = eng.Run(context.Background(), types.WorkItem{Collector: "test-gate", Seed: seed}); ran != 2 {
+		t.Error("work the budget stopped is marked done: it did not run again")
+	}
+	stats, _ := st.Stats()
+	if !stats.Capped || stats.Errors != 0 {
+		t.Errorf("capped %v errors %d: a spent budget caps the run and is not an error", stats.Capped, stats.Errors)
+	}
+}
+
+// swallower asks for a request and takes the refusal for a missing page.
+type swallower struct{ ran *int }
+
+func (swallower) Name() string             { return "test-gate" }
+func (swallower) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive} }
+func (swallower) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (swallower) Outputs() []string        { return nil }
+func (s swallower) Run(ctx context.Context, _ types.Seed, _ func(types.Observation) error) (types.RunMeta, error) {
+	*s.ran++
+	_ = fetch.Spend(ctx)
+	return types.RunMeta{Status: types.StatusOK}, nil
+}
+
+func TestRefusedRequestLeavesWorkUndone(t *testing.T) {
+	fetch.Reset()
+	defer fetch.Reset()
+	fetch.MaxRequests = 1
+	fetch.Count(1)
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ran := 0
+	cat := catalog.New()
+	cat.MustRegister(swallower{&ran})
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seed := types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}
+	for i := 0; i < 2; i++ {
+		if meta, _ := eng.Run(context.Background(), types.WorkItem{Collector: "test-gate", Seed: seed}); meta.Status != types.StatusCapped {
+			t.Fatalf("status %q", meta.Status)
+		}
+	}
+	if ran != 2 {
+		t.Errorf("ran %d times: work whose request was refused must stay undone", ran)
 	}
 }

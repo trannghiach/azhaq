@@ -79,7 +79,15 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	c.count[u.Host]++
 	c.mu.Unlock()
 
+	if err := fetch.Spend(ctx); err != nil {
+		c.mu.Lock()
+		delete(c.done, key)
+		c.count[u.Host]--
+		c.mu.Unlock()
+		return types.RunMeta{Status: types.StatusCapped}, err
+	}
 	p, err := c.Browser.Load(ctx, raw, false)
+	fetch.Count(max(0, len(p.Requests)-1)) // what the page fetched besides itself
 	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}

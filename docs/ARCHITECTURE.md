@@ -77,6 +77,9 @@ Limits:
 - `-depth` (default 4) bounds how many hints away from the seeds a seed may be.
 - `-max-items` (default 2048) caps ordinary work items.
 - `-max-names` (default 20,000) caps the names handed to batch collectors (DNS), so a domain with thousands of subdomains does not spend the item budget on resolution.
+- `-max-requests` caps the requests sent to targets, and `-rate` paces them over all hosts. Every request to a target asks `fetch.Spend` first: GETs and each redirect hop, path and parameter guesses, the GraphQL query, and a page loaded in Chrome (whose subresources are counted after the load). `-daily-requests` gives a program (`-program`, else the run's targets) a number of requests per UTC day, counted over the runs in the database (table `spend`); a run starts with what is left.
+
+A request the budget refuses fails with `neterr.ErrBudget`. The engine marks every task's context, so a refusal counts even when a collector takes the failed request for a missing page: the task ends `capped`, is not marked done, drops nothing that waits on it, and the run is marked `capped`.
 
 Items on the seed's own host or IP run before fan-out items, but part of the item budget is reserved for fan-out: one eighth, at least 24 items once the budget is 48 or more, and never more than half. Without it, a large application would spend the entire budget before any domain-level collector ran.
 
@@ -93,7 +96,7 @@ All HTTP collectors share one client (`internal/fetch`):
 - Redirects are not followed automatically. Each hop is recorded, and the status stored is that of the URL that was requested, so `/admin → 303 → /login` records `/admin` as 303.
 - At most 4 requests are in flight per host (`-host-parallel`). Concurrent requests for the same URL share one fetch.
 - Bodies are capped at 2 MiB, or 16 MiB for JavaScript, JSON and source maps, where bundles of several MB are normal. `-delay` adds a pause before each uncached request.
-- `-cookie` and `-header` are added to every request, which lets a run reuse a session you already have. Azhaq never logs in, and it stores cookie names but never their values.
+- `-cookie` and `-header` are added to every request, which lets a run reuse a session you already have; `-login` gets one with Chrome. Azhaq stores cookie names but never their values.
 - Headers must arrive within 10 seconds, as in httpx; CDN edges and bot managers often answer slowly. The whole request, body included, gets 30 seconds, so a large bundle on a slow link still arrives.
 
 ### Probing

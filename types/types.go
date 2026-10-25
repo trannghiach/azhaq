@@ -138,4 +138,7 @@ const (
 	StatusError     = "error"
 	StatusCancelled = "cancelled"
 	StatusDegraded  = "degraded"
+	// StatusCapped is work that stopped because the run's request budget
+	// was spent; it is left for azhaq resume.
+	StatusCapped = "capped"
 )

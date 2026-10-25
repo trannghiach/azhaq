@@ -98,6 +98,12 @@ CREATE TABLE IF NOT EXISTS run_entities (
   entity_id TEXT NOT NULL,
   PRIMARY KEY (run_id, entity_id)
 );
+CREATE TABLE IF NOT EXISTS spend (
+  program TEXT NOT NULL,
+  day TEXT NOT NULL,
+  requests INTEGER NOT NULL,
+  PRIMARY KEY (program, day)
+);
 CREATE TABLE IF NOT EXISTS run_edges (
   run_id TEXT NOT NULL,
   from_id TEXT NOT NULL,
@@ -386,10 +392,15 @@ type Stats struct {
 	Capped       bool   `json:"capped"`
 	Depth        int    `json:"depth"`
 	MaxItems     int    `json:"max_items,omitempty"`
+	Requests     int64  `json:"requests"` // sent to targets by this process
+	MaxRequests  int64  `json:"max_requests,omitempty"`
 }
 
 func (st Stats) Line() string {
 	sum := fmt.Sprintf("entities=%d observations=%d edges=%d errors=%d degraded=%d", st.Entities, st.Observations, st.Edges, st.Errors, st.Degraded)
+	if st.Requests > 0 {
+		sum += fmt.Sprintf(" requests=%d", st.Requests)
+	}
 	if st.Capped {
 		sum += " capped=1"
 	}
@@ -675,6 +686,28 @@ func SeedsKey(seeds []types.Seed) string {
 	}
 	sort.Strings(lines)
 	return strings.Join(lines, "\n")
+}
+
+// Spent is how many requests runs on this database sent to a program's
+// targets on a day (YYYY-MM-DD, UTC).
+func (s *Store) Spent(program, day string) int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var n int64
+	_ = s.db.QueryRow(`SELECT requests FROM spend WHERE program = ? AND day = ?`, program, day).Scan(&n)
+	return n
+}
+
+// AddSpent adds a run's requests to a program's day.
+func (s *Store) AddSpent(program, day string, n int64) error {
+	if n <= 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`INSERT INTO spend (program, day, requests) VALUES (?, ?, ?)
+ON CONFLICT(program, day) DO UPDATE SET requests = requests + excluded.requests`, program, day, n)
+	return err
 }
 
 // SaveInput records the seeds the run was given (see SeedsKey).

@@ -81,6 +81,7 @@ func Reset() {
 	Delay = 0
 	cacheMu.Unlock()
 	resetProbes()
+	resetBudget()
 }
 
 type cacheEnt struct {
@@ -260,6 +261,12 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 			return Result{}, err
 		}
 		ApplyHeaders(req)
+		if err := Spend(ctx); err != nil {
+			if i > 0 {
+				break // the redirect is recorded; its target is not requested
+			}
+			return Result{}, err
+		}
 		resp, err := c.Do(req)
 		if err != nil {
 			return Result{}, err

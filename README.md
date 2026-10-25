@@ -90,6 +90,7 @@ Common options:
 | `-ports top-100\|top-1000\|full\|LIST`, `-port-rate N` | active: TCP connect scan of hosts in scope, with banners; open ports that may serve HTTP are probed; needs `-allow` |
 | `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
 | `-parallel N`, `-host-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), requests in flight per host (default 4), pause before each request, collectors not to run |
+| `-max-requests N`, `-rate N`, `-daily-requests N` | requests to targets this run may send, requests per second over all hosts, and requests a day for the program (`-program`, else the run's targets), counted over the runs in `-db`; work the budget stops is left for `azhaq resume` |
 | `-db FILE` | graph file to write (default: a new timestamped file per run); reuse it to keep a workspace of runs |
 | `-json` / `-obs` | JSON summary, or the full observation log |
 

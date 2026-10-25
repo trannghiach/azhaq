@@ -136,6 +136,9 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", fetch.UserAgent)
 	}
+	if err := fetch.Spend(ctx); err != nil {
+		return types.RunMeta{Status: types.StatusCapped}, err
+	}
 	resp, err := s.Client.Do(req)
 	if err != nil {
 		if neterr.Quiet(err) {

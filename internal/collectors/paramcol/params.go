@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/limit"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
@@ -110,6 +112,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	s := &search{c: c, ctx: ctx, base: u, known: known}
 	if !s.calibrate() {
+		if s.err != nil {
+			return s.spent(page)
+		}
 		return types.RunMeta{Status: types.StatusOK}, nil // the page changes by itself or does not answer
 	}
 	var words []string
@@ -122,11 +127,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	found := map[string]string{}
-	for i := 0; i < len(words) && ctx.Err() == nil; i += c.Opts.Chunk {
+	for i := 0; i < len(words) && ctx.Err() == nil && s.err == nil; i += c.Opts.Chunk {
 		s.narrow(words[i:min(i+c.Opts.Chunk, len(words))], found)
 	}
 	if ctx.Err() != nil {
 		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+	}
+	if s.err != nil {
+		return s.spent(page)
 	}
 	names := make([]string, 0, len(found))
 	for n := range found {
@@ -158,6 +166,16 @@ type search struct {
 	ref      answer
 	slack    int // size difference the page shows between identical requests
 	requests int
+	err      error // the request budget ran out
+}
+
+// spent gives the page back for azhaq resume, which searches it again.
+func (s *search) spent(page string) (types.RunMeta, error) {
+	s.c.mu.Lock()
+	delete(s.c.done, page)
+	s.c.perHost[s.base.Host]--
+	s.c.mu.Unlock()
+	return types.RunMeta{Status: types.StatusCapped}, s.err
 }
 
 func (s *search) get(params map[string]string) (answer, bool) {
@@ -178,6 +196,12 @@ func (s *search) get(params map[string]string) (answer, bool) {
 		return answer{}, false
 	}
 	fetch.ApplyHeaders(req)
+	if err := fetch.Spend(s.ctx); err != nil {
+		if errors.Is(err, neterr.ErrBudget) {
+			s.err = err
+		}
+		return answer{}, false
+	}
 	s.requests++
 	resp, err := s.c.Client.Do(req)
 	if err != nil {

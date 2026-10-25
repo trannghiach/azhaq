@@ -21,6 +21,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -86,7 +87,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return types.RunMeta{Status: types.StatusOK}, nil // taken, or being taken, through another seed
 		}
 		raw = t
-		if p, err = c.Browser.Load(ctx, t, true); err == nil && len(p.PNG) > 0 {
+		if err := fetch.Spend(ctx); err != nil {
+			c.shot.Delete(t)
+			return types.RunMeta{Status: types.StatusCapped}, err
+		}
+		p, err = c.Browser.Load(ctx, t, true)
+		fetch.Count(max(0, len(p.Requests)-1))
+		if err == nil && len(p.PNG) > 0 {
 			break
 		}
 		c.shot.Delete(t) // another seed for the same page may try again

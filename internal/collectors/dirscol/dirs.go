@@ -10,12 +10,14 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
@@ -115,7 +117,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if _, done := c.swept.LoadOrStore(d.url, true); done {
 			continue
 		}
-		hits, n, f := c.sweep(ctx, d.url)
+		hits, n, f, spent := c.sweep(ctx, d.url)
+		if spent {
+			// The sweep is redone whole by azhaq resume.
+			c.swept.Delete(d.url)
+			return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
+		}
 		requests += n
 		filtered += f
 		all = append(all, hits...)
@@ -173,8 +180,9 @@ func schemeHost(raw string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// sweep guesses every word (and word.ext) under dir.
-func (c *Collector) sweep(ctx context.Context, dir string) ([]hit, int, int) {
+// sweep guesses every word (and word.ext) under dir; spent says the
+// request budget ran out before it was through.
+func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ int, spent bool) {
 	cal := c.calibrate(ctx, dir)
 	var targets []string
 	for _, w := range c.Opts.Words {
@@ -193,8 +201,9 @@ func (c *Collector) sweep(ctx context.Context, dir string) ([]hit, int, int) {
 	sem := make(chan struct{}, c.Opts.Threads)
 	var wg sync.WaitGroup
 	host := schemeHost(dir)
+	var out atomic.Bool
 	for _, t := range targets {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || out.Load() {
 			break
 		}
 		if err := c.limiter.Wait(ctx, host); err != nil {
@@ -207,6 +216,9 @@ func (c *Collector) sweep(ctx context.Context, dir string) ([]hit, int, int) {
 			defer func() { <-sem }()
 			target := dir + escapeWord(word)
 			r, err := c.get(ctx, target)
+			if errors.Is(err, neterr.ErrBudget) {
+				out.Store(true)
+			}
 			if err != nil || !c.matches(r.Status) {
 				return
 			}
@@ -220,7 +232,7 @@ func (c *Collector) sweep(ctx context.Context, dir string) ([]hit, int, int) {
 		}(t)
 	}
 	wg.Wait()
-	return hits, len(targets), filtered
+	return hits, len(targets), filtered, out.Load()
 }
 
 func escapeWord(w string) string {
@@ -255,6 +267,9 @@ func (c *Collector) get(ctx context.Context, target string) (response, error) {
 		return response{}, err
 	}
 	fetch.ApplyHeaders(req)
+	if err := fetch.Spend(ctx); err != nil {
+		return response{}, err
+	}
 	resp, err := c.Client.Do(req)
 	if err != nil {
 		return response{}, err

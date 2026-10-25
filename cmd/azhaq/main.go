@@ -131,6 +131,7 @@ const helpText = `azhaq — generic recon engine
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-login URL -login-user U -login-pass P]
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
+               [-max-requests N] [-rate N] [-daily-requests N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
                [-allow D] [-deny D] [-passive]
                [-sources A,B] [-exclude-sources A,B] [-all-sources] [-providers FILE]
@@ -208,6 +209,9 @@ func cmdRun(args []string) error {
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
 	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
+	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
+	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
+	daily := fs.Int64("daily-requests", 0, "requests a day to the program's targets (-program, else this run's targets), counted over the runs in -db")
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
@@ -396,6 +400,23 @@ func cmdRun(args []string) error {
 	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
 		return err
 	}
+	fetch.SetRate(*rateFlag)
+	fetch.MaxRequests = *maxRequests
+	if *daily > 0 {
+		key := *program
+		if key == "" {
+			key = input
+		}
+		day := time.Now().UTC().Format(time.DateOnly)
+		left := *daily - st.Spent(key, day)
+		if left <= 0 {
+			return fmt.Errorf("-daily-requests: the %d requests of %s are spent (resets at 00:00 UTC)", *daily, day)
+		}
+		if fetch.MaxRequests == 0 || left < fetch.MaxRequests {
+			fetch.MaxRequests = left
+		}
+		defer func() { _ = st.AddSpent(key, day, fetch.Sent()) }()
+	}
 	cat := catalog.New()
 	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
 	if *shots != "" || *render {
@@ -571,6 +592,7 @@ func cmdRun(args []string) error {
 		}
 	}
 	stats.DB = path
+	stats.Requests, stats.MaxRequests = fetch.Sent(), fetch.MaxRequests
 	if *jsonOut {
 		if err := json.NewEncoder(os.Stdout).Encode(stats); err != nil {
 			return err

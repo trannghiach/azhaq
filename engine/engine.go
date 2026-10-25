@@ -5,6 +5,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/store"
@@ -86,6 +89,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	}
 
 	done := timing.Start(ctx, col.Name(), seed.Key())
+	ctx, refused := fetch.WatchBudget(ctx)
 	got, err := col.Run(ctx, seed, emit)
 	done()
 	if ctx.Err() != nil {
@@ -94,6 +98,13 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		return meta, ctx.Err()
 	}
 	meta.Drop = got.Drop
+	if errors.Is(err, neterr.ErrBudget) || refused() {
+		// Not done, whatever the collector made of the refusal: nothing
+		// waiting on it is dropped, and azhaq resume runs it again.
+		meta.Status, meta.Error, meta.Drop = types.StatusCapped, neterr.ErrBudget.Error(), false
+		e.markCapped()
+		return meta, neterr.ErrBudget
+	}
 	if err != nil {
 		meta.Status = types.StatusError
 		meta.Error = err.Error()

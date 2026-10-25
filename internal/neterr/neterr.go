@@ -15,6 +15,11 @@ var ErrEndsSession = errors.New("not requested: it would end the session")
 // (-allow, -deny, -scope) excludes.
 var ErrOutOfScope = errors.New("not requested: outside the scope")
 
+// ErrBudget is returned instead of sending a request once the run's
+// request budget (-max-requests, a program's daily budget) is spent. The
+// work is left for azhaq resume.
+var ErrBudget = errors.New("not requested: the request budget is spent")
+
 // Quiet errors are not failures of the run: a name that does not exist,
 // or a request Azhaq chose not to send.
 func Quiet(err error) bool {

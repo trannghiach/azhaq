@@ -147,6 +147,9 @@ func printItem(ctx context.Context, item types.WorkItem, d time.Duration, meta t
 	if isQuiet(ctx) {
 		return
 	}
+	if meta.Status == types.StatusCapped {
+		return // counted in the summary
+	}
 	if timing.From(ctx) == nil {
 		if err != nil && meta.Status != types.StatusCancelled {
 			fmt.Fprintf(os.Stderr, "  ! %s %s: %s\n", item.Collector, item.Seed.Key(), err)
