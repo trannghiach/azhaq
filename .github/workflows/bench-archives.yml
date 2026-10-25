@@ -29,6 +29,10 @@ jobs:
           f=$(ls -t bench/history/*.json | head -1)
           jq -r '.domains[] | "::notice title=\(.domain)::archives: \(.archives) | azhaq URLs \(.azhaq_urls), gau \(.gau_urls), gau in azhaq \(.gau_shared) | live \(.azhaq_live) vs subfinder \(.subfinder_live)"' "$f"
           jq -r '.checks[] | "::notice title=\(if .pass then "PASS" else "FAIL" end)::\(.name): \(.detail)"' "$f"
+          # Each archive source's outcome, errors included.
+          for db in bench/.work/domains/*.db; do
+            bench/.work/bin/azhaq export -db "$db" | jq -rc 'select(.kind == "observation" and .observation.collector == "azhaq-urls" and .observation.kind == "urls") | .observation.payload | "::notice title=\(.domain) sources::\(.sources | tostring)"'
+          done
           jq -e 'all(.checks[]; .pass)' "$f" > /dev/null
       - uses: actions/upload-artifact@v7
         if: always()
