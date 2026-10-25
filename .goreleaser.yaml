@@ -1,0 +1,74 @@
+version: 2
+project_name: azhaq
+
+before:
+  hooks:
+    # The license text of every dependency compiled into the binary.
+    - rm -rf third_party
+    - go run github.com/google/go-licenses/v2@v2.0.1 save ./cmd/azhaq --save_path=third_party
+
+builds:
+  - id: azhaq
+    main: ./cmd/azhaq
+    binary: azhaq
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - id: azhaq
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - src: third_party/**/*
+        dst: third_party
+
+checksum:
+  name_template: checksums.txt
+
+sboms:
+  - artifacts: archive
+
+dockers_v2:
+  - id: azhaq
+    ids: [azhaq]
+    images:
+      - ghcr.io/trannghiach/azhaq
+    tags:
+      - "{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    extra_files:
+      - LICENSE
+      - third_party
+    labels:
+      org.opencontainers.image.title: azhaq
+      org.opencontainers.image.description: Reconnaissance engine that maps hosts, web services, routes and historical URLs into one graph
+      org.opencontainers.image.source: https://github.com/trannghiach/azhaq
+      org.opencontainers.image.licenses: MIT
+      org.opencontainers.image.version: "{{ .Version }}"
+      org.opencontainers.image.revision: "{{ .FullCommit }}"
+
+changelog:
+  use: github
+  sort: asc
+  filters:
+    exclude:
+      - "^Merge"
+
+release:
+  github:
+    owner: trannghiach
+    name: azhaq
