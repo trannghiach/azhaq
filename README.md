@@ -65,7 +65,7 @@ Common options:
 | Option | Effect |
 | --- | --- |
 | `-browser` | also load pages in Chrome: the requests their scripts send (a single-page app's API calls) and the links and forms of the rendered page, up to 30 pages a host |
-| `-screenshots DIR`, `-tabs N` | a screenshot of each web service's front page, with Chrome or Chromium installed on the machine (`AZHAQ_CHROME` to point at one); the HTML report groups look-alike pages |
+| `-screenshots DIR`, `-tabs N` | a screenshot of each web service's front page, with Chrome or Chromium installed on the machine (`AZHAQ_CHROME` to point at one; Chrome keeps its sandbox, and `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one where the system refuses it); the HTML report groups look-alike pages |
 | `-asn AS64500`, `-cidr 192.0.2.0/24`, `-max-ips N` | start from networks: an AS's announced prefixes, address ranges (up to 4,096 addresses per run by default), their reverse DNS names, certificates and web services |
 | `-scope FILE\|PLATFORM`, `-program NAME` | start from a bug bounty program's scope and stay inside it (see above) |
 | `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
