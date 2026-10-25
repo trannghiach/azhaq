@@ -42,7 +42,9 @@ func Register(cat *catalog.Catalog, client *http.Client) {
 func (c *Collector) Name() string { return Name }
 
 // Info: this collector sends requests to the target.
-func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"} }
+func (c *Collector) Info() catalog.Info {
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"}
+}
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }
 

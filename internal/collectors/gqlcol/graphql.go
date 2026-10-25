@@ -44,7 +44,9 @@ func New(client *http.Client) *Collector { return &Collector{Client: fetch.Clien
 func (c *Collector) Name() string { return Name }
 
 // Info: one GET to the target.
-func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"} }
+func (c *Collector) Info() catalog.Info {
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http"}
+}
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }
 
