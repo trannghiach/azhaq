@@ -53,8 +53,9 @@ func cmdResume(args []string) error {
 }
 
 // keptArgs are the run options stored for azhaq resume: everything but the
-// database and the values that carry a session (cookies, a password,
-// headers whose name sounds like a credential).
+// database and the values that carry a session or a secret (cookies, a
+// password, the worker token, headers whose name sounds like a
+// credential).
 func keptArgs(args []string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
@@ -66,7 +67,7 @@ func keptArgs(args []string) []string {
 		}
 		takesValue := !inline && i+1 < len(args)
 		switch name {
-		case "db", "resume-run", "cookie", "login-pass":
+		case "db", "resume-run", "cookie", "login-pass", "worker-token":
 			if takesValue {
 				i++
 			}

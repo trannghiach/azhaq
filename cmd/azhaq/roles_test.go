@@ -47,7 +47,7 @@ func TestRoleDiff(t *testing.T) {
 
 func TestKeptArgsDropSessions(t *testing.T) {
 	got := keptArgs([]string{"-url", "https://app/", "-cookie", "sid=1", "-db", "x.db", "-header", "Authorization: Bearer t",
-		"-header=X-Bug-Bounty: me", "-login", "https://app/login", "-login-user", "u", "-login-pass", "p", "-passive", "-max-requests=50"})
+		"-header=X-Bug-Bounty: me", "-login", "https://app/login", "-login-user", "u", "-login-pass", "p", "-passive", "-max-requests=50", "-worker-token", "secret"})
 	want := []string{"-url", "https://app/", "-header=X-Bug-Bounty: me", "-login", "https://app/login", "-login-user", "u", "-passive", "-max-requests=50"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("kept %q", got)
