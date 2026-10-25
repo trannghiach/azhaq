@@ -1,0 +1,49 @@
+# Server routes the OWASP Juice Shop v20.3.0 frontend calls, from string literals
+# in its main.js: every /api/* and /rest/* path, plus the server-rendered pages
+# the SPA links to (/profile, /dataerasure, /file-upload) and /assets/i18n.
+# Trailing slashes removed. Independent of Azhaq: collected with grep.
+/api/Addresss
+/api/BasketItems
+/api/Cards
+/api/Challenges
+/api/Complaints
+/api/Deliverys
+/api/Feedbacks
+/api/Hints
+/api/Products
+/api/Quantitys
+/api/Recycles
+/api/SecurityAnswers
+/api/SecurityQuestions
+/api/Users
+/assets/i18n
+/dataerasure
+/file-upload
+/profile
+/rest/admin
+/rest/captcha
+/rest/chat
+/rest/continue-code
+/rest/continue-code/apply
+/rest/continue-code-findIt
+/rest/continue-code-findIt/apply
+/rest/continue-code-fixIt
+/rest/continue-code-fixIt/apply
+/rest/country-mapping
+/rest/deluxe-membership
+/rest/image-captcha
+/rest/memories
+/rest/order-history
+/rest/products
+/rest/repeat-notification
+/rest/saveLoginIp
+/rest/track-order
+/rest/user
+/rest/user/authentication-details
+/rest/user/change-password
+/rest/user/login
+/rest/user/reset-password
+/rest/user/security-question
+/rest/user/whoami
+/rest/wallet/balance
+/rest/web3

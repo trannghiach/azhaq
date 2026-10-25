@@ -136,6 +136,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 ## Layout
 
 ```
+bench/                    comparison with reference tools (go run ./bench)
 cmd/azhaq/                CLI
 cmd/azhaq-index-fixture/  example connector used by tests
 internal/

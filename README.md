@@ -88,6 +88,10 @@ azhaq bench                        # timing and memory on the fixture
 
 Sources Azhaq does not query itself, such as paid search engines like Shodan, can be plugged in as external programs. See [docs/CONNECTOR.md](docs/CONNECTOR.md).
 
+## Benchmark
+
+`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups only. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
+
 ## Documentation
 
 - [Architecture](docs/ARCHITECTURE.md): data model, scheduling, identity rules, limitations

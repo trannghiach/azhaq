@@ -1,0 +1,5 @@
+# Passive lookups only: Azhaq -passive, subfinder, gau, and DNS resolution with
+# dnsx. No HTTP or port traffic goes to these hosts.
+hackerone.com
+tesla.com
+vulnweb.com
