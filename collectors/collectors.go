@@ -6,6 +6,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
+	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
 	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
@@ -38,6 +39,7 @@ type Options struct {
 	PortRate   float64          // azhaq-ports: connection attempts per second
 	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
 	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
+	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -72,6 +74,9 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(portcol.New(pool, o.Ports, o.PortRate))
 	cat.MustRegister(dirscol.New(client, o.Dirs))
 	cat.MustRegister(paramcol.New(client, o.Params))
+	cat.MustRegister(asncol.NewASN(nil))
+	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
+	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
 	subcol.Register(cat, o.Subdomains)
 	cat.MustRegister(urlcol.New(o.URLs))

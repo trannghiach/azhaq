@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
@@ -37,17 +38,29 @@ func (c *Collector) Info() catalog.Info {
 	return catalog.Info{Kind: catalog.Touch, After: "azhaq-dns"}
 }
 
-func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeHostname} }
+func (c *Collector) Inputs() []types.SeedType {
+	return []types.SeedType{types.TypeHostname, types.TypeIPAddress}
+}
+
+// Skip: an address is read when it came from a network (-asn, -cidr).
+func (c *Collector) Skip(seed types.Seed) bool {
+	return seed.Type == types.TypeIPAddress && seed.Keys["from"] != "prefix"
+}
 
 func (c *Collector) Outputs() []string { return []string{"certificate"} }
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
-	host := normalize.Hostname(seed.Keys["fqdn"])
+	host := normalize.Hostname(seed.Key())
 	if host == "" {
 		return types.RunMeta{Status: types.StatusError, Error: "empty host"}, nil
 	}
-	if net.ParseIP(host) != nil {
+	isIP := net.ParseIP(host) != nil
+	if isIP && seed.Type != types.TypeIPAddress {
 		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	serverName := host
+	if isIP {
+		serverName = "" // no SNI: the certificate the address serves by default
 	}
 	port := c.Port
 	if port == "" {
@@ -66,7 +79,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	} else {
 		dialer := &tls.Dialer{
 			Config: &tls.Config{
-				ServerName:         host,
+				ServerName:         serverName,
 				InsecureSkipVerify: true, // observe the presented cert
 				MinVersion:         tls.VersionTLS12,
 			},
@@ -74,8 +87,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		conn, err = dialer.DialContext(dctx, "tcp", addr)
 	}
 	if err != nil {
-		if neterr.UnknownHost(err) {
-			return types.RunMeta{Status: types.StatusOK}, nil
+		if neterr.UnknownHost(err) || isIP {
+			return types.RunMeta{Status: types.StatusOK}, nil // most addresses of a network serve no TLS
 		}
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
@@ -120,6 +133,16 @@ func (c *Collector) emitState(host string, st tls.ConnectionState, emit func(typ
 		ObservedAt: time.Now().UTC(),
 	})
 	var hints []types.Seed
+	if net.ParseIP(host) != nil {
+		// An address found by network: its certificate names the service.
+		for _, n := range sans {
+			n = strings.TrimPrefix(n, "*.")
+			if n != "" && normalize.SharedSuffix(n) == "" && len(hints) < 20 {
+				hints = append(hints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n, "from": "prefix"}})
+			}
+		}
+		return types.RunMeta{Status: types.StatusOK, EmitCount: 1, NextHints: hints}, err
+	}
 	for _, n := range sans {
 		if n == "" || n == host || n[0] == '*' {
 			continue

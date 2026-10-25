@@ -64,6 +64,7 @@ Common options:
 
 | Option | Effect |
 | --- | --- |
+| `-asn AS64500`, `-cidr 192.0.2.0/24`, `-max-ips N` | start from networks: an AS's announced prefixes, address ranges (up to 4,096 addresses per run by default), their reverse DNS names, certificates and web services |
 | `-scope FILE\|PLATFORM`, `-program NAME` | start from a bug bounty program's scope and stay inside it (see above) |
 | `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
 | `-list FILE` | targets one per line (`-` for stdin): a URL is fetched as given, a host over HTTPS then HTTP, `host:port` or an IP address over HTTPS falling back to HTTP |
@@ -111,6 +112,7 @@ azhaq urls -d example.com -silent                                             # 
 azhaq ports -host scanme.nmap.org -p top-1000 -silent                         # naabu (connect scan)
 azhaq dirs -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac, feroxbuster with -depth
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt    # arjun (GET)
+azhaq asn -a AS64500 -silent                                                  # asnmap (RIPEstat, no key)
 azhaq probe -l hosts.txt -json > probe.jsonl                                  # httpx -json fields
 ```
 
@@ -121,6 +123,7 @@ azhaq export -format targets  > targets.txt   # web services, for nuclei -l
 azhaq export -format openapi  > api.json      # API routes as OpenAPI 3, for Burp's API scan, Postman or ZAP
 azhaq export -format burp     > scope.json    # a Burp project options file with the hosts in scope
 azhaq export -format html     > report.html   # one self-contained page
+azhaq export -format graphml  > graph.graphml # Gephi, yEd, Cytoscape
 azhaq export -format urls | hosts             # plain lists
 ```
 
@@ -194,6 +197,7 @@ The API may still change before 1.0.
 | `azhaq-permute` | hostname | `-permute`: numbered, prefixed and suffixed variations of live names that resolve |
 | `azhaq-dirs` | URL | `-dirs`: paths from a wordlist (and word.ext) that answer differently from a path that cannot exist, directories swept to `-dirs-depth` |
 | `azhaq-params` | URL | `-params`: query parameters a page reads, found by sending names in groups with random values and halving the groups that change the answer (status, size, a value reflected back); GET only |
+| `azhaq-asn`, `azhaq-prefix`, `azhaq-ptr` | ASN, prefix, IP | an AS's announced prefixes (RIPEstat), the addresses in a prefix, their reverse DNS names; addresses found this way are probed over HTTP and TLS, and names on their certificates followed |
 | `azhaq-ports` | hostname, IP | `-ports`: open TCP ports by full connect (no root), with the first line each service sends; a CDN or WAF address gets its web ports only; ports that may serve HTTP go to `azhaq-http` |
 | `azhaq-urls` | domain | historical URLs of the domain and its subdomains from the Wayback Machine (paged), Common Crawl, AlienVault OTX, urlscan.io (a key from the provider file raises its limits) and arquivo.pt; one row per URL template in the graph, every URL with `-urls FILE`; a source that refuses or rate limits marks the result `degraded` |
 | `azhaq-rdap` | domain, organization | registration data and nameservers |

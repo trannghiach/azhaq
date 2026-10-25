@@ -15,7 +15,8 @@ const (
 	TypeHostname     SeedType = "Hostname"
 	TypeDomain       SeedType = "Domain"
 	TypeIPAddress    SeedType = "IPAddress"
-	TypePrefix       SeedType = "Prefix"
+	TypePrefix       SeedType = "Prefix" // Keys["prefix"]: 192.0.2.0/24
+	TypeASN          SeedType = "ASN"    // Keys["asn"]: AS64500
 	TypeCertificate  SeedType = "Certificate"
 	TypeOrganization SeedType = "Organization"
 	TypeEmail        SeedType = "Email"
@@ -38,7 +39,7 @@ func (s Seed) Derived() bool { return s.Keys[DerivedKey] != "" }
 
 func Known(t SeedType) bool {
 	switch t {
-	case TypeURL, TypeHostname, TypeDomain, TypeIPAddress, TypePrefix, TypeCertificate, TypeOrganization, TypeEmail, TypeCloudAccount, TypeApplication:
+	case TypeURL, TypeHostname, TypeDomain, TypeIPAddress, TypePrefix, TypeASN, TypeCertificate, TypeOrganization, TypeEmail, TypeCloudAccount, TypeApplication:
 		return true
 	default:
 		return false
@@ -55,6 +56,10 @@ func (s Seed) Key() string {
 		return s.Keys["domain"]
 	case TypeIPAddress:
 		return s.Keys["ip"]
+	case TypePrefix:
+		return s.Keys["prefix"]
+	case TypeASN:
+		return s.Keys["asn"]
 	case TypeOrganization:
 		if s.Keys["handle"] != "" {
 			return s.Keys["handle"]

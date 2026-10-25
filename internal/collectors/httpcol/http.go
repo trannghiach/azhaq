@@ -61,7 +61,13 @@ func (c *Collector) Info() catalog.Info {
 }
 
 func (c *Collector) Inputs() []types.SeedType {
-	return []types.SeedType{types.TypeURL, types.TypeHostname}
+	return []types.SeedType{types.TypeURL, types.TypeHostname, types.TypeIPAddress}
+}
+
+// Skip: an address is probed when it came from a network (-asn, -cidr);
+// the address behind a URL is probed through the URL.
+func (c *Collector) Skip(seed types.Seed) bool {
+	return seed.Type == types.TypeIPAddress && seed.Keys["from"] != "prefix"
 }
 
 func (c *Collector) Outputs() []string { return []string{"application"} }
@@ -151,10 +157,13 @@ func (c *Collector) targets(seed types.Seed) [][]string {
 			}
 		}
 		return [][]string{{u}}
-	case types.TypeHostname:
-		h := normalize.Hostname(seed.Keys["fqdn"])
-		if h == "" || net.ParseIP(h) != nil {
+	case types.TypeHostname, types.TypeIPAddress:
+		h := normalize.Hostname(seed.Key())
+		if h == "" || (seed.Type == types.TypeHostname && net.ParseIP(h) != nil) {
 			return nil
+		}
+		if ip := net.ParseIP(h); ip != nil && ip.To4() == nil {
+			h = "[" + h + "]"
 		}
 		if len(c.Ports) == 0 {
 			return [][]string{{"https://" + h + "/", "http://" + h + "/"}}

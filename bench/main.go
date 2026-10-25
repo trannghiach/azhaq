@@ -39,6 +39,7 @@ type record struct {
 	Dirs    *dirsRow     `json:"dirs,omitempty"`
 	Params  *paramsRow   `json:"params,omitempty"`
 	Scope   *scopeRow    `json:"scope,omitempty"`
+	Network *networkRow  `json:"network,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -137,6 +138,9 @@ func main() {
 	}
 	if *ports {
 		rec.Ports = benchPorts()
+	}
+	if *domains {
+		rec.Network = benchNetwork()
 	}
 	if *probe {
 		var local []string

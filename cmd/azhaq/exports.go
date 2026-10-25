@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"html/template"
 	"io"
@@ -100,8 +101,10 @@ func exportAs(path, format, origin string, w io.Writer) error {
 		return enc.Encode(burpScope(g))
 	case "html":
 		return htmlReport(g, w)
+	case "graphml":
+		return graphML(path, w)
 	default:
-		return fmt.Errorf("unknown -format %q (jsonl, urls, hosts, targets, openapi, burp, html)", format)
+		return fmt.Errorf("unknown -format %q (jsonl, urls, hosts, targets, openapi, burp, html, graphml)", format)
 	}
 	return nil
 }
@@ -286,4 +289,52 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// graphML writes the graph for Gephi, yEd or Cytoscape: entities are
+// nodes with their type and first sighting, relations are edges.
+func graphML(path string, w io.Writer) error {
+	st, err := store.OpenExisting(path)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	if runs, err := st.Runs(); err == nil && len(runs) > 0 {
+		st.UseRun(runs[len(runs)-1].ID)
+	}
+	ents, err := st.Entities()
+	if err != nil {
+		return err
+	}
+	edges, err := st.Edges()
+	if err != nil {
+		return err
+	}
+	esc := func(s string) string {
+		var b strings.Builder
+		_ = xml.EscapeText(&b, []byte(s))
+		return b.String()
+	}
+	fmt.Fprint(w, `<?xml version="1.0" encoding="UTF-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns">
+  <key id="type" for="node" attr.name="type" attr.type="string"/>
+  <key id="label" for="node" attr.name="label" attr.type="string"/>
+  <key id="first_seen" for="node" attr.name="first_seen" attr.type="string"/>
+  <key id="rel" for="edge" attr.name="type" attr.type="string"/>
+  <graph id="azhaq" edgedefault="directed">
+`)
+	known := map[string]bool{}
+	for _, e := range ents {
+		known[e.ID] = true
+		fmt.Fprintf(w, "    <node id=\"%s\"><data key=\"type\">%s</data><data key=\"label\">%s</data><data key=\"first_seen\">%s</data></node>\n",
+			esc(e.ID), esc(string(e.Type)), esc(e.Key), e.FirstSeen.UTC().Format(time.RFC3339))
+	}
+	for i, e := range edges {
+		if !known[e.From] || !known[e.To] {
+			continue
+		}
+		fmt.Fprintf(w, "    <edge id=\"e%d\" source=\"%s\" target=\"%s\"><data key=\"rel\">%s</data></edge>\n", i, esc(e.From), esc(e.To), esc(e.Type))
+	}
+	_, err = fmt.Fprint(w, "  </graph>\n</graphml>\n")
+	return err
 }

@@ -376,6 +376,12 @@ func derivedSeeds(seed types.Seed) []types.Seed {
 			out = append(out, types.Seed{Type: types.TypeIPAddress, Keys: map[string]string{"ip": ip.String()}})
 		}
 	case types.TypeHostname:
+		if seed.Keys["from"] == "prefix" {
+			// Found by network (reverse DNS, an address's certificate): a
+			// neighbour on shared hosting, perhaps. Its domain is not
+			// enumerated unless asked with -domain.
+			return out
+		}
 		host = seed.Key()
 	}
 	if d := normalize.RegistrableDomain(host); d != "" {

@@ -839,3 +839,47 @@ func cmdParams(args []string) error {
 	}
 	return w.close()
 }
+
+// cmdASN is asnmap: the prefixes autonomous systems announce.
+func cmdASN(args []string) error {
+	fs := flag.NewFlagSet("asn", flag.ContinueOnError)
+	var c common
+	c.register(fs)
+	var asns stringsFlag
+	fs.Var(&asns, "a", "AS number such as AS64500 (repeatable)")
+	list := fs.String("l", "", "file of AS numbers (- for stdin)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	as, err := inputs(asns, *list)
+	if err != nil {
+		return err
+	}
+	if len(as) == 0 {
+		return fmt.Errorf("give -a AS64500, -l FILE or AS numbers on stdin")
+	}
+	run := []string{"-passive", "-depth", "0", "-skip", skipAllBut("azhaq-asn")}
+	for _, a := range as {
+		run = append(run, "-asn", a)
+	}
+	st, done, err := runPreset(&c, run)
+	if err != nil {
+		return err
+	}
+	defer done()
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	for _, p := range payloads(st, "azhaq-asn") {
+		prefixes, _ := p["prefixes"].([]any)
+		for _, x := range prefixes {
+			if w.json {
+				w.obj(map[string]any{"as_number": p["asn"], "as_name": p["holder"], "prefix": x})
+			} else {
+				w.line(fmt.Sprint(x))
+			}
+		}
+	}
+	return w.close()
+}
