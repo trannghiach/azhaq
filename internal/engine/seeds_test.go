@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/collectors/cloudcol"
-	"azhaq/internal/collectors/fake"
-	"azhaq/internal/collectors/rdapcol"
-	"azhaq/internal/engine"
-	"azhaq/internal/store"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
+	"github.com/trannghiach/azhaq/internal/collectors/fake"
+	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
+	"github.com/trannghiach/azhaq/internal/engine"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestCloudBecomesDomain(t *testing.T) {

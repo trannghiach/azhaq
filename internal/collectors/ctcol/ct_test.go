@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestFirstNonEmptyTakesFastSource(t *testing.T) {

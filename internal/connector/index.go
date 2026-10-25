@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"os"
 
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 // HostIndex is a local stand-in for a paid hostname index.

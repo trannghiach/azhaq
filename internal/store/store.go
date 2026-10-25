@@ -14,7 +14,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 type Store struct {

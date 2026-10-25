@@ -7,7 +7,7 @@ import (
 
 	"golang.org/x/net/publicsuffix"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func Seed(s types.Seed) types.Seed {

@@ -3,17 +3,17 @@ package collectors
 import (
 	"net/http"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/collectors/cdxcol"
-	"azhaq/internal/collectors/cloudcol"
-	"azhaq/internal/collectors/crawlcol"
-	"azhaq/internal/collectors/ctcol"
-	"azhaq/internal/collectors/dnscol"
-	"azhaq/internal/collectors/httpcol"
-	"azhaq/internal/collectors/jscol"
-	"azhaq/internal/collectors/pathscol"
-	"azhaq/internal/collectors/rdapcol"
-	"azhaq/internal/collectors/tlscol"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/cdxcol"
+	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
+	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
+	"github.com/trannghiach/azhaq/internal/collectors/ctcol"
+	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/collectors/jscol"
+	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
+	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
+	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 )
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {

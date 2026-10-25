@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestPOSTFormIsNotHinted(t *testing.T) {

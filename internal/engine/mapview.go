@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
-	"azhaq/internal/webextract"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // MapEntry is one line of the ranked recon map (confirmed vs hint).

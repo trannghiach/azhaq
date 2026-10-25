@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestParseAndFilter(t *testing.T) {

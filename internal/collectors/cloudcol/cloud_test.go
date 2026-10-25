@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestInventoryHints(t *testing.T) {

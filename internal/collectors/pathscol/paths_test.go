@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestFindsInterestingPaths(t *testing.T) {

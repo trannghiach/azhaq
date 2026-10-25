@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestHostIndexFactsFor(t *testing.T) {

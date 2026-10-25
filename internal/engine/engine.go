@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/normalize"
-	"azhaq/internal/store"
-	"azhaq/internal/timing"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/timing"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 type Engine struct {

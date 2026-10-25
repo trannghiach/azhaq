@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/fetch"
-	"azhaq/internal/neterr"
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
-	"azhaq/internal/webextract"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 const Name = "azhaq-crawl"

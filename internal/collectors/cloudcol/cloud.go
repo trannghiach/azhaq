@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 const Name = "azhaq-cloud"

@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"azhaq/internal/connector"
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 // Ingest writes connector facts onto the graph and returns seeds to Plan/Run.

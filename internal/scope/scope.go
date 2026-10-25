@@ -3,8 +3,8 @@ package scope
 import (
 	"strings"
 
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 // Rules is an optional allow/deny list for active fan-out (hosts and URLs).

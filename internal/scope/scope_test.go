@@ -3,7 +3,7 @@ package scope
 import (
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestAllowsSuffixAndDeny(t *testing.T) {

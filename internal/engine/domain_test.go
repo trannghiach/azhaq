@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/collectors/ctcol"
-	"azhaq/internal/collectors/dnscol"
-	"azhaq/internal/collectors/tlscol"
-	"azhaq/internal/engine"
-	"azhaq/internal/store"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/ctcol"
+	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
+	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
+	"github.com/trannghiach/azhaq/internal/engine"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestCTHintsBecomeHosts(t *testing.T) {

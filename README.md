@@ -15,12 +15,10 @@ A typical recon pipeline chains several tools (a subdomain finder, an HTTP probe
 ## Install
 
 ```
-git clone https://github.com/trannghiach/azhaq
-cd azhaq
-go build -o azhaq ./cmd/azhaq
+go install github.com/trannghiach/azhaq/cmd/azhaq@latest
 ```
 
-Requires Go 1.25 or newer.
+or from a clone: `go build -o azhaq ./cmd/azhaq`. Requires Go 1.26 or newer.
 
 ## Usage
 

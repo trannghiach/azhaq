@@ -4,8 +4,8 @@ import (
 	"net"
 	"sort"
 
-	"azhaq/internal/normalize"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 // RankEntities puts seed hosts/URLs first, then same-site, then fan-out.

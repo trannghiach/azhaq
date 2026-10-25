@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/collectors/fake"
-	"azhaq/internal/connector"
-	"azhaq/internal/engine"
-	"azhaq/internal/store"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/fake"
+	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/engine"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestIngestFile(t *testing.T) {

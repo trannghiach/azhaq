@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestSANHintsStayOnSite(t *testing.T) {

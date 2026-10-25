@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestDomainHintsOrg(t *testing.T) {

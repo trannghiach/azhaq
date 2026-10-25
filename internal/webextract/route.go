@@ -4,7 +4,7 @@ import (
 	"net/url"
 	"strings"
 
-	"azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/normalize"
 )
 
 // ClassifyURL is page, api, or asset for ranking and JS collapse.

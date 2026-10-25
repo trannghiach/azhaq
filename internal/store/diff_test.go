@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestOpenExistingMissing(t *testing.T) {

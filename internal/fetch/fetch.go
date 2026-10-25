@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"azhaq/internal/timing"
+	"github.com/trannghiach/azhaq/internal/timing"
 )
 
 type Hop struct {

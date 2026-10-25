@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestOncePerOrigin(t *testing.T) {

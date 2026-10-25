@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"azhaq/internal/catalog"
-	"azhaq/internal/collectors/httpcol"
-	"azhaq/internal/collectors/pathscol"
-	"azhaq/internal/engine"
-	"azhaq/internal/fetch"
-	"azhaq/internal/store"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
+	"github.com/trannghiach/azhaq/internal/engine"
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestRedirectTruthAndCookieNames(t *testing.T) {

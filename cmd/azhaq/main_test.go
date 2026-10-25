@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"azhaq/internal/fetch"
-	"azhaq/internal/store"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func captureStdout(t *testing.T, fn func() error) (string, error) {

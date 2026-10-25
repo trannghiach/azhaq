@@ -3,8 +3,8 @@ package engine_test
 import (
 	"testing"
 
-	"azhaq/internal/engine"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/engine"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func TestSeedHostPrintsFirst(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"azhaq/internal/normalize"
-	"azhaq/internal/scope"
-	"azhaq/internal/timing"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/scope"
+	"github.com/trannghiach/azhaq/internal/timing"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 type Budgets struct {

@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"azhaq/internal/connector"
-	"azhaq/internal/types"
+	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/types"
 )
 
 func main() {
