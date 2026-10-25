@@ -3,6 +3,7 @@ package urlcol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,6 +44,14 @@ type getter struct {
 	last     time.Time
 	header   http.Header
 }
+
+// errStatus is an answer other than 200, 429 or 503.
+type errStatus struct {
+	host string
+	code int
+}
+
+func (e errStatus) Error() string { return fmt.Sprintf("%s answered %d", e.host, e.code) }
 
 // errLimited is a source that kept answering 429 or 503.
 type errLimited struct {
@@ -98,7 +107,7 @@ func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
 				return nil, err
 			}
 		default:
-			return nil, fmt.Errorf("%s answered %d", hostOf(raw), resp.StatusCode)
+			return nil, errStatus{host: hostOf(raw), code: resp.StatusCode}
 		}
 	}
 }
@@ -130,23 +139,22 @@ func limited(err error, pages int) error {
 	return err
 }
 
-// Wayback Machine CDX API, paged: showNumPages first, then each page.
+// Wayback Machine CDX API, page by page as gau reads it: showNumPages
+// answers [["original"],[null]] when output=json, so the pages are read
+// until one comes back empty or the server says 400 (past the last page).
+// A page of a large domain is tens of MB and takes minutes.
 var waybackBase = "https://web.archive.org/cdx/search/cdx"
 
 func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
-	q := url.Values{"url": {"*." + domain + "/*"}, "output": {"json"}, "collapse": {"urlkey"}, "fl": {"original"}}
-	n := 1
-	if body, err := g.get(ctx, waybackBase+"?"+q.Encode()+"&showNumPages=true"); err == nil {
-		if v, err := strconv.Atoi(strings.TrimSpace(string(body))); err == nil && v > 0 {
-			n = v
-		}
-	} else {
-		return 0, limited(err, 0)
-	}
-	for page := 0; page < n && page < g.maxPages; page++ {
+	q := url.Values{"url": {"*." + domain + "/*"}, "output": {"json"}, "collapse": {"urlkey"}, "fl": {"original"}, "pageSize": {"100"}}
+	for page := 0; page < g.maxPages; page++ {
 		q.Set("page", strconv.Itoa(page))
 		body, err := g.get(ctx, waybackBase+"?"+q.Encode())
 		if err != nil {
+			var st errStatus
+			if page > 0 && errors.As(err, &st) && st.code == http.StatusBadRequest {
+				return page, nil
+			}
 			return page, limited(err, page)
 		}
 		var rows [][]string
@@ -160,13 +168,16 @@ func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string
 			if i == 0 && len(r) > 0 && r[0] == "original" {
 				continue
 			}
-			if len(r) > 0 {
+			if len(r) > 0 && r[0] != "" {
 				urls = append(urls, r[0])
 			}
 		}
+		if len(urls) == 0 {
+			return page, nil
+		}
 		add(urls)
 	}
-	return min(n, g.maxPages), nil
+	return g.maxPages, nil
 }
 
 // Common Crawl: the newest index from collinfo.json, paged.

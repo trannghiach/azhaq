@@ -24,8 +24,8 @@ func archives(t *testing.T) *httptest.Server {
 		q := r.URL.Query()
 		switch r.URL.Path {
 		case "/wayback":
-			if q.Get("showNumPages") == "true" {
-				fmt.Fprint(w, "2")
+			if q.Get("pageSize") != "100" {
+				fmt.Fprint(w, `[["original"],["https://example.org/only-one-row-without-pageSize"]]`)
 				return
 			}
 			if q.Get("page") == "1" && limited.Add(1) == 1 {
@@ -36,7 +36,11 @@ func archives(t *testing.T) *httptest.Server {
 				"0": `[["original"],["https://example.org/product?id=1"],["https://example.org/product?id=2"],["https://www.example.org/logo.png"]]`,
 				"1": `[["original"],["https://api.example.org/v1/users/42"],["https://evil.test/x"]]`,
 			}
-			fmt.Fprint(w, rows[q.Get("page")])
+			if body, ok := rows[q.Get("page")]; ok {
+				fmt.Fprint(w, body)
+				return
+			}
+			w.WriteHeader(http.StatusBadRequest) // past the last page, as the CDX server answers
 		case "/otx/domain/example.org/url_list":
 			if q.Get("page") == "1" {
 				fmt.Fprint(w, `{"has_next":true,"url_list":[{"url":"http://example.org/login.php?next=/"}]}`)

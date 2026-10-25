@@ -48,7 +48,8 @@ type Collector struct {
 
 func New(o Options) *Collector {
 	if o.Client == nil {
-		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: http.DefaultTransport.(*http.Transport).Clone()}
+		// A Wayback page of a large domain is tens of MB and takes minutes.
+		o.Client = &http.Client{Timeout: 5 * time.Minute, Transport: http.DefaultTransport.(*http.Transport).Clone()}
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 3 * time.Minute
@@ -89,11 +90,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 
 	// A domain derived from a URL gets 15 s per source: the run is about
-	// the application.
+	// the application. The Wayback Machine gets longer on a domain asked
+	// for: its pages take minutes.
 	timeout := c.opts.Timeout
 	if seed.Derived() && timeout > 15*time.Second {
 		timeout = 15 * time.Second
 	}
+
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	var all []string
@@ -103,7 +106,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		wg.Add(1)
 		go func(i int, s source) {
 			defer wg.Done()
-			sctx, cancel := context.WithTimeout(ctx, timeout)
+			st := timeout
+			if s.name == "wayback" && !seed.Derived() {
+				st = max(timeout, 10*time.Minute)
+			}
+			sctx, cancel := context.WithTimeout(ctx, st)
 			defer cancel()
 			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3}
 			key := ""
