@@ -34,6 +34,9 @@ func Register(cat *catalog.Catalog) {
 
 func (c *Collector) Name() string { return Name }
 
+// Info: this collector only asks third parties or DNS resolvers.
+func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
+
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeCloudAccount} }
 
 func (c *Collector) Outputs() []string { return []string{"domain", "hostname", "url"} }

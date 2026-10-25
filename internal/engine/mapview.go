@@ -22,6 +22,7 @@ type MapEntry struct {
 	Proof    string
 	Template string   // URL template; set on every templated URL row
 	Count    int      // URLs folded into this row by GroupTemplates
+	Folded   int      // hostnames folded into a summary row (dead, wildcard)
 	Methods  []string // from API descriptions
 	Params   []string // query, form and API parameter names
 	Forms    []MapForm
@@ -150,6 +151,29 @@ func sameRoute(a, b string) bool {
 	return webextract.RouteKey(a) == webextract.RouteKey(b)
 }
 
+// dnsResult is "dead" for a name with no address and "wildcard" for one
+// answered only by a wildcard record, from azhaq-dns.
+func dnsResult(obs []types.StoredObservation) string {
+	for _, o := range obs {
+		if o.Collector != "azhaq-dns" {
+			continue
+		}
+		var p struct {
+			Result   string `json:"result"`
+			Error    string `json:"error"`
+			Wildcard bool   `json:"wildcard"`
+		}
+		_ = json.Unmarshal(o.Payload, &p)
+		switch {
+		case p.Wildcard:
+			return "wildcard"
+		case p.Result == "nxdomain" || p.Result == "nodata" || p.Result == "cname" || p.Error == "nxdomain":
+			return "dead"
+		}
+	}
+	return ""
+}
+
 // isCatchAll is a fetch that returned the origin's answer for any path.
 func isCatchAll(o types.StoredObservation) bool {
 	var p struct {
@@ -177,6 +201,9 @@ func fetched(obs []types.StoredObservation) bool {
 func roleOf(e types.Entity, obs []types.StoredObservation, hosts map[string]bool) string {
 	switch e.Type {
 	case types.TypeHostname:
+		if r := dnsResult(obs); r != "" {
+			return r
+		}
 		if hosts[e.Key] {
 			return "live"
 		}
@@ -240,7 +267,7 @@ func gate(obs []types.StoredObservation) int {
 // proofOf summarizes a row's facts: the first value of each key, so a page
 // fetched by two collectors shows status=403 once.
 func proofOf(e types.Entity, obs []types.StoredObservation) string {
-	keys := []string{"status", "title", "role", "ips", "count", "error", "warning", "note", "auth", "via"}
+	keys := []string{"status", "title", "role", "ips", "cname", "count", "error", "warning", "note", "auth", "via"}
 	vals := map[string]string{}
 	for _, o := range obs {
 		var m map[string]any
@@ -291,6 +318,9 @@ func mapRank(m MapEntry, hosts, domains, ips map[string]bool) int {
 	e := m.Entity
 	switch e.Type {
 	case types.TypeHostname:
+		if m.Role == "dead" || m.Role == "wildcard" {
+			return 9
+		}
 		if hosts[e.Key] {
 			return 0
 		}
@@ -299,10 +329,7 @@ func mapRank(m MapEntry, hosts, domains, ips map[string]bool) int {
 		}
 		return 8
 	case types.TypeIPAddress:
-		if ips[e.Key] {
-			return 1
-		}
-		return 8
+		return 8 // addresses follow the names that resolve to them
 	case types.TypeDomain:
 		if domains[e.Key] {
 			return 1
@@ -343,6 +370,15 @@ func (m MapEntry) Line() string {
 	var b strings.Builder
 	b.WriteString(string(m.Entity.Type))
 	b.WriteByte(' ')
+	if m.Folded > 0 {
+		switch m.Role {
+		case "wildcard":
+			fmt.Fprintf(&b, "(%d names answered only by a wildcard record)", m.Folded)
+		default:
+			fmt.Fprintf(&b, "(%d names with no address)", m.Folded)
+		}
+		return b.String()
+	}
 	if m.Count > 1 {
 		b.WriteString(m.Template)
 	} else {
@@ -410,7 +446,18 @@ func GroupTemplates(rows []MapEntry) []MapEntry {
 func groupTemplates(rows []MapEntry) []MapEntry {
 	idx := map[string]int{}
 	out := make([]MapEntry, 0, len(rows))
+	folded := map[string]int{}
 	for _, r := range rows {
+		if r.Entity.Type == types.TypeHostname && (r.Role == "dead" || r.Role == "wildcard") {
+			if i, ok := folded[r.Role]; ok {
+				out[i].Folded++
+				continue
+			}
+			r.Folded = 1
+			folded[r.Role] = len(out)
+			out = append(out, r)
+			continue
+		}
 		if r.Template == "" {
 			out = append(out, r)
 			continue

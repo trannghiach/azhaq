@@ -91,7 +91,7 @@ func TestDNSResolvesTo(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	cat := catalog.New()
-	cat.MustRegister(dnscol.New())
+	cat.MustRegister(dnscol.New(nil))
 	eng := &engine.Engine{Cat: cat, Store: st}
 	seed := types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": "localhost"}}
 	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 1, MaxItems: 4}); err != nil {

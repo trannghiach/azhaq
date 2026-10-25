@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/catalog"
-	"github.com/trannghiach/azhaq/internal/collectors/ctcol"
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 	"github.com/trannghiach/azhaq/internal/engine"
@@ -18,12 +17,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/types"
 )
 
-func TestCTHintsBecomeHosts(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[{"name_value":"api.example.test"}]`))
-	}))
-	t.Cleanup(srv.Close)
-
+func TestSourceHintsBecomeHosts(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +25,8 @@ func TestCTHintsBecomeHosts(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	cat := catalog.New()
-	cat.MustRegister(&ctcol.Collector{Client: srv.Client(), BaseURL: srv.URL})
-	cat.MustRegister(dnscol.New())
+	cat.MustRegister(namesCollector{names: []string{"api.example.test"}})
+	cat.MustRegister(dnscol.New(nil))
 	eng := &engine.Engine{Cat: cat, Store: st}
 	seed := types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.test"}}
 	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 2, MaxItems: 16}); err != nil {
@@ -43,9 +37,6 @@ func TestCTHintsBecomeHosts(t *testing.T) {
 	for _, e := range ents {
 		if e.Type == types.TypeHostname && e.Key == "api.example.test" {
 			found = true
-		}
-		if e.Key == "other.test" {
-			t.Fatal("out of suffix")
 		}
 	}
 	if !found {
@@ -96,7 +87,7 @@ func TestDNSLocalhost(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	cat := catalog.New()
-	cat.MustRegister(dnscol.New())
+	cat.MustRegister(dnscol.New(nil))
 	eng := &engine.Engine{Cat: cat, Store: st}
 	seed := types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": "localhost"}}
 	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 1, MaxItems: 4}); err != nil {

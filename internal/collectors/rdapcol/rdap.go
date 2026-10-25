@@ -38,6 +38,9 @@ func Register(cat *catalog.Catalog, client *http.Client) {
 
 func (c *Collector) Name() string { return Name }
 
+// Info: this collector only asks third parties or DNS resolvers.
+func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
+
 func (c *Collector) Inputs() []types.SeedType {
 	return []types.SeedType{types.TypeDomain, types.TypeOrganization}
 }

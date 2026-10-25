@@ -107,6 +107,100 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	return meta, nil
 }
 
+// BatchResult is the outcome of one seed inside a batch.
+type BatchResult struct {
+	Seed types.Seed
+	Meta types.RunMeta
+}
+
+// RunBatch runs seeds through a Batcher in one call. Each seed keeps its own
+// idempotency key, entity, observations and hints, exactly as Run would give
+// it; seeds that already ran are left out of the call.
+func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) ([]BatchResult, error) {
+	col, ok := e.Cat.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("unknown collector %q", name)
+	}
+	b, ok := col.(catalog.Batcher)
+	if !ok {
+		return nil, fmt.Errorf("collector %q does not run batches", name)
+	}
+	now := time.Now().UTC()
+	ents := map[string]types.Entity{}
+	var todo []types.Seed
+	for _, raw := range seeds {
+		seed := normalize.Seed(raw)
+		k := seedKey(seed)
+		if _, dup := ents[k]; dup || seed.Key() == "" {
+			continue
+		}
+		seen, err := e.Store.Seen(workID(name, seed))
+		if err != nil {
+			return nil, err
+		}
+		if seen {
+			continue
+		}
+		ent, err := e.Store.UpsertEntity(seed.Type, seed.Key(), now)
+		if err != nil {
+			return nil, err
+		}
+		e.linkSeed(seed, ent, now)
+		e.linkInDomain(seed, ent, now)
+		ents[k] = ent
+		todo = append(todo, seed)
+	}
+	if len(todo) == 0 {
+		return nil, nil
+	}
+	emit := func(seed types.Seed, o types.Observation) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		ent, ok := ents[seedKey(normalize.Seed(seed))]
+		if !ok {
+			return fmt.Errorf("%s: observation for a seed outside the batch: %s", name, seed.Key())
+		}
+		if o.ObservedAt.IsZero() {
+			o.ObservedAt = time.Now().UTC()
+		}
+		if o.Collector == "" {
+			o.Collector = name
+		}
+		if _, err := e.Store.AddObservation(ent.ID, o); err != nil {
+			return err
+		}
+		e.linkFacts(ent, o, time.Now().UTC())
+		return nil
+	}
+	done := timing.Start(ctx, name, fmt.Sprintf("%d seeds", len(todo)))
+	metas, err := b.RunBatch(ctx, todo, emit)
+	done()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	out := make([]BatchResult, 0, len(todo))
+	for i, seed := range todo {
+		var m types.RunMeta
+		if i < len(metas) {
+			m = metas[i]
+		}
+		if m.Status == "" {
+			m.Status = types.StatusOK
+		}
+		if err != nil {
+			m.Status = types.StatusError
+			m.Error = err.Error()
+			e.noteError(ents[seedKey(seed)].ID, name, err)
+		} else {
+			m.NextHints = append(m.NextHints, derivedSeeds(seed)...)
+		}
+		_ = e.Store.MarkSeen(workID(name, seed))
+		out = append(out, BatchResult{Seed: seed, Meta: m})
+	}
+	return out, err
+}
+
 func (e *Engine) linkFacts(from types.Entity, o types.Observation, now time.Time) {
 	e.linkFoundURL(from, o, now)
 	e.linkDNS(from, o, now)

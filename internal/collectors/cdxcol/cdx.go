@@ -49,6 +49,9 @@ func liveCDX(base string) bool {
 
 func (c *Collector) Name() string { return Name }
 
+// Info: this collector only asks third parties or DNS resolvers.
+func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
+
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
 
 func (c *Collector) Outputs() []string { return []string{"url"} }

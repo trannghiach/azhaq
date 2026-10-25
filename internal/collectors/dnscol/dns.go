@@ -4,150 +4,185 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"github.com/trannghiach/azhaq/internal/catalog"
-	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/types"
 )
 
 const Name = "azhaq-dns"
 
+// Collector resolves hostnames in batches through a resolver pool and
+// drops names that do not resolve or only answer through a wildcard, so
+// nothing probes them over HTTP.
 type Collector struct {
-	Resolver *net.Resolver
+	Pool    *dnsr.Pool
+	Wild    *dnsr.Wildcards
+	Workers int
 }
 
-func New() *Collector {
-	return &Collector{Resolver: net.DefaultResolver}
+// New returns a collector on pool, or on the default resolvers when nil.
+func New(pool *dnsr.Pool) *Collector {
+	if pool == nil {
+		pool = dnsr.New(dnsr.Options{})
+	}
+	return &Collector{Pool: pool, Wild: dnsr.NewWildcards(pool), Workers: 128}
 }
 
 func Register(cat *catalog.Catalog) {
-	cat.MustRegister(New())
+	cat.MustRegister(New(nil))
 }
 
 func (c *Collector) Name() string { return Name }
+
+// Info: this collector only asks third parties or DNS resolvers.
+func (c *Collector) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeHostname} }
 
 func (c *Collector) Outputs() []string { return []string{"dns"} }
 
+func (c *Collector) BatchSize() int { return 256 }
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
-	host := normalize.Hostname(seed.Keys["fqdn"])
-	if host == "" {
-		return types.RunMeta{Status: types.StatusError, Error: "empty host"}, nil
+	metas, err := c.RunBatch(ctx, []types.Seed{seed}, func(_ types.Seed, o types.Observation) error { return emit(o) })
+	if len(metas) == 0 {
+		return types.RunMeta{Status: types.StatusOK}, err
 	}
-	r := c.Resolver
-	if r == nil {
-		r = net.DefaultResolver
-	}
-
-	payload := map[string]any{"fqdn": host}
-	var hints []types.Seed
-
-	if ip := net.ParseIP(host); ip != nil {
-		payload["ips"] = []string{ip.String()}
-	} else {
-		// ip4 first: LookupIP("ip") waits for AAAA too, which often stalls.
-		aDone := timing.Start(ctx, "dns.a", host)
-		ips, err := r.LookupIP(ctx, "ip4", host)
-		if err != nil {
-			ips, err = r.LookupIP(ctx, "ip6", host)
-			if err != nil {
-				aDone()
-				if neterr.UnknownHost(err) {
-					payload["error"] = "nxdomain"
-					raw, _ := json.Marshal(payload)
-					_ = emit(types.Observation{
-						Collector: Name, Source: "dns", Kind: "dns",
-						Payload: raw, Confidence: 0.9, ObservedAt: time.Now().UTC(),
-					})
-					return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, nil
-				}
-				return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
-			}
-		}
-		aDone()
-		var s []string
-		for _, ip := range ips {
-			s = append(s, ip.String())
-		}
-		payload["ips"] = s
-		extraDone := timing.Start(ctx, "dns.extra", host)
-		fillExtra(ctx, r, host, payload)
-		extraDone()
-		if cname, _ := payload["cname"].(string); cname != "" && cname != host && normalize.SameSite(host, cname) {
-			hints = append(hints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": cname}})
-		}
-	}
-
-	raw, _ := json.Marshal(payload)
-	err := emit(types.Observation{
-		Collector:  Name,
-		Source:     "dns",
-		Kind:       "dns",
-		Payload:    raw,
-		Confidence: 0.95,
-		ObservedAt: time.Now().UTC(),
-	})
-	return types.RunMeta{Status: types.StatusOK, EmitCount: 1, NextHints: hints}, err
+	return metas[0], err
 }
 
-func fillExtra(ctx context.Context, r *net.Resolver, host string, payload map[string]any) {
-	ctx, cancel := context.WithTimeout(ctx, 1200*time.Millisecond)
+func (c *Collector) RunBatch(ctx context.Context, seeds []types.Seed, emit func(types.Seed, types.Observation) error) ([]types.RunMeta, error) {
+	hosts := make([]string, len(seeds))
+	var names []string
+	for i, s := range seeds {
+		hosts[i] = hostOnly(s.Keys["fqdn"])
+		if hosts[i] != "" && net.ParseIP(hosts[i]) == nil {
+			names = append(names, hosts[i])
+		}
+	}
+	answers := map[string]dnsr.Answer{}
+	for _, a := range c.Pool.ResolveMany(ctx, names, c.Workers) {
+		answers[a.Name] = a
+	}
+	metas := make([]types.RunMeta, len(seeds))
+	for i, seed := range seeds {
+		host := hosts[i]
+		meta := types.RunMeta{Status: types.StatusOK}
+		payload := map[string]any{"fqdn": host}
+		switch {
+		case host == "":
+			meta.Status, meta.Error = types.StatusError, "empty host"
+			metas[i] = meta
+			continue
+		case net.ParseIP(host) != nil:
+			payload["ips"] = []string{host}
+		default:
+			c.describe(ctx, host, answers[host], payload, &meta)
+		}
+		raw, _ := json.Marshal(payload)
+		if err := emit(seed, types.Observation{
+			Collector: Name, Source: "dns", Kind: "dns",
+			Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return metas, err
+		}
+		meta.EmitCount = 1
+		metas[i] = meta
+	}
+	return metas, ctx.Err()
+}
+
+// describe fills payload and meta from one answer.
+func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, payload map[string]any, meta *types.RunMeta) {
+	payload["result"] = a.Status
+	if len(a.CNAME) > 0 {
+		payload["cname"] = a.CNAME[0]
+		payload["cnames"] = a.CNAME
+		if cn := a.CNAME[0]; cn != host && normalize.SameSite(host, cn) {
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": cn}})
+		}
+	}
+	switch a.Status {
+	case dnsr.StatusReserved:
+		payload["skipped"] = "reserved" // may still be in /etc/hosts: let HTTP try
+	case dnsr.StatusFailed:
+		payload["error"] = a.Err
+		payload["degraded"] = true // a resolver problem, not an answer
+	case dnsr.StatusNXDomain:
+		payload["error"] = "nxdomain"
+		meta.Drop = true
+	case dnsr.StatusNoData, dnsr.StatusCNAME:
+		meta.Drop = true
+	case dnsr.StatusOK:
+		payload["ips"] = a.IPs()
+		apex := normalize.RegistrableDomain(host)
+		if apex != "" && host != apex && c.Wild.Match(ctx, host, apex, a) {
+			payload["wildcard"] = true
+			meta.Drop = true
+			meta.NextHints = nil
+			return
+		}
+		if host == apex {
+			c.extras(ctx, host, payload)
+		}
+	}
+}
+
+// extras adds MX, TXT and NS records; asked for registrable domains only.
+func (c *Collector) extras(ctx context.Context, host string, payload map[string]any) {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	goLookup := func(fn func()) {
+	for _, qt := range []uint16{dns.TypeMX, dns.TypeTXT, dns.TypeNS} {
 		wg.Add(1)
-		go func() {
+		go func(qt uint16) {
 			defer wg.Done()
-			fn()
-		}()
+			m, err := c.Pool.Query(ctx, host, qt)
+			if err != nil || m.Rcode != dns.RcodeSuccess {
+				return
+			}
+			var hosts, txt []string
+			for _, rr := range m.Answer {
+				switch r := rr.(type) {
+				case *dns.MX:
+					hosts = append(hosts, r.Mx)
+				case *dns.NS:
+					hosts = append(hosts, r.Ns)
+				case *dns.TXT:
+					txt = append(txt, strings.Join(r.Txt, ""))
+				}
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			switch qt {
+			case dns.TypeMX:
+				payload["mx"] = recordHosts(hosts)
+			case dns.TypeNS:
+				payload["ns"] = recordHosts(hosts)
+			case dns.TypeTXT:
+				if len(txt) > 0 {
+					payload["txt"] = txt
+				}
+			}
+		}(qt)
 	}
-	goLookup(func() {
-		if cname, err := r.LookupCNAME(ctx, host); err == nil && cname != "" {
-			mu.Lock()
-			payload["cname"] = normalize.Hostname(cname)
-			mu.Unlock()
-		}
-	})
-	goLookup(func() {
-		if mx, err := r.LookupMX(ctx, host); err == nil {
-			var raw []string
-			for _, m := range mx {
-				if m != nil {
-					raw = append(raw, m.Host)
-				}
-			}
-			mu.Lock()
-			payload["mx"] = recordHosts(raw)
-			mu.Unlock()
-		}
-	})
-	goLookup(func() {
-		if txt, err := r.LookupTXT(ctx, host); err == nil && len(txt) > 0 {
-			mu.Lock()
-			payload["txt"] = txt
-			mu.Unlock()
-		}
-	})
-	goLookup(func() {
-		if ns, err := r.LookupNS(ctx, host); err == nil {
-			var raw []string
-			for _, n := range ns {
-				if n != nil {
-					raw = append(raw, n.Host)
-				}
-			}
-			mu.Lock()
-			payload["ns"] = recordHosts(raw)
-			mu.Unlock()
-		}
-	})
 	wg.Wait()
+}
+
+func hostOnly(raw string) string {
+	h := normalize.Hostname(raw)
+	if host, _, err := net.SplitHostPort(h); err == nil {
+		return host
+	}
+	return h
 }
 
 // recordHosts drops empty and "."-only names so JSON is [] rather than [""].

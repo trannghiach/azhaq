@@ -5,36 +5,55 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
+	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
 	"github.com/trannghiach/azhaq/internal/collectors/cdxcol"
 	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
-	"github.com/trannghiach/azhaq/internal/collectors/ctcol"
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/jscol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
+	"github.com/trannghiach/azhaq/internal/dnsr"
 )
 
-func RegisterAll(cat *catalog.Catalog, client *http.Client) {
-	RegisterAllWith(cat, client, nil)
+// Options configure the built-in collectors for one run.
+type Options struct {
+	Client     *http.Client // target requests; nil for the shared default
+	Paths      []string     // extra wordlist entries for azhaq-paths
+	DNS        *dnsr.Pool   // resolver pool; nil for the default resolvers
+	Subdomains subcol.Options
+	BruteWords []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
 }
 
-func RegisterAllWith(cat *catalog.Catalog, client *http.Client, paths []string) {
+func RegisterAll(cat *catalog.Catalog, client *http.Client) {
+	Register(cat, Options{Client: client})
+}
+
+func Register(cat *catalog.Catalog, o Options) {
+	client := o.Client
 	httpcol.Register(cat, client)
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)
 	apicol.Register(cat, client)
-	if len(paths) > 0 {
-		list := append(append([]string{}, pathscol.DefaultWordlist...), paths...)
+	if len(o.Paths) > 0 {
+		list := append(append([]string{}, pathscol.DefaultWordlist...), o.Paths...)
 		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: list})
 	} else {
 		pathscol.Register(cat, client)
 	}
-	dnscol.Register(cat)
+	pool := o.DNS
+	if pool == nil {
+		pool = dnsr.New(dnsr.Options{})
+	}
+	dnsc := dnscol.New(pool)
+	cat.MustRegister(dnsc)
+	cat.MustRegister(&brutecol.Brute{Pool: pool, Wild: dnsc.Wild, Words: o.BruteWords})
+	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})
 	tlscol.Register(cat)
-	ctcol.Register(cat, client)
+	subcol.Register(cat, o.Subdomains)
 	cdxcol.Register(cat, client)
 	rdapcol.Register(cat, client)
 	cloudcol.Register(cat)

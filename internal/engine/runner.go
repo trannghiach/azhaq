@@ -5,16 +5,12 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
-	"sync"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/scope"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/types"
-	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 type Budgets struct {
@@ -25,6 +21,12 @@ type Budgets struct {
 	FailOnCapped bool
 	Passive      bool
 	Scope        scope.Rules
+	// Active lists the flags of enabled active techniques ("dns-brute").
+	Active map[string]bool
+	// MaxNames caps the seeds handed to batch collectors (DNS) per run.
+	MaxNames int
+	// Skip names collectors that must not run.
+	Skip map[string]bool
 }
 
 type quietKey struct{}
@@ -39,7 +41,7 @@ func isQuiet(ctx context.Context) bool {
 }
 
 func DefaultBudgets() Budgets {
-	return Budgets{MaxDepth: 4, MaxItems: 512, Parallel: 8}
+	return Budgets{MaxDepth: 4, MaxItems: 2048, Parallel: 16, MaxNames: 20000}
 }
 
 // ExpandSeeds returns seeds plus URL→host→eTLD+1 so connectors see wave-0 types.
@@ -95,144 +97,6 @@ func (o originSet) owns(s types.Seed) bool {
 	}
 }
 
-// RunLocal is the optional in-process scheduler: seed-origin HTTP first, then fan-out.
-func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) error {
-	if b.MaxDepth <= 0 {
-		b.MaxDepth = 1
-	}
-	if b.MaxItems <= 0 {
-		b.MaxItems = 512
-	}
-	if b.Parallel <= 0 {
-		b.Parallel = 8
-	}
-	seen := map[string]bool{}
-	tmpl := map[string]int{}
-	expanded := expandDerived(seeds, seen)
-	e.persistSeeds(expanded)
-	origin := seedOrigin(seeds)
-
-	var app, held []types.Seed
-	for _, s := range expanded {
-		if s.Type == types.TypeDomain {
-			held = append(held, s)
-			continue
-		}
-		app = append(app, s)
-	}
-
-	appBudget := b
-	if reserve := fanReserve(b); reserve > 0 && !b.Passive {
-		appBudget.MaxItems = max(1, b.MaxItems-reserve)
-	}
-	leftover, ran, capped := e.drive(ctx, app, appBudget, origin, seen, tmpl, 0, true)
-	var originLeft, fan []types.Seed
-	for _, s := range leftover {
-		if origin.owns(s) {
-			originLeft = append(originLeft, s)
-			continue
-		}
-		fan = append(fan, s)
-	}
-	fanLeft, ran, capped2 := e.drive(ctx, append(fan, held...), b, origin, seen, tmpl, ran, false)
-	leftover = append(originLeft, fanLeft...)
-	if (capped || capped2 || len(originLeft) > 0 || len(fanLeft) > 0) && ran > 0 {
-		e.markCapped()
-	}
-	if e.Store != nil {
-		_ = e.Store.SaveLeftover(leftover)
-	}
-	return ctx.Err()
-}
-
-// perTemplate is how many URLs of one template (/product?id={n}) are
-// fetched; the rest stay in the graph as found, not visited.
-const perTemplate = 3
-
-func (e *Engine) drive(ctx context.Context, frontier []types.Seed, b Budgets, origin originSet, seen map[string]bool, tmpl map[string]int, ran int, seedOnly bool) ([]types.Seed, int, bool) {
-	capped := false
-	var deferred []types.Seed
-	for depth := 0; depth < b.MaxDepth && len(frontier) > 0; depth++ {
-		if ctx.Err() != nil {
-			return append(frontier, deferred...), ran, capped
-		}
-		waveDone := timing.Start(ctx, "wave", strconv.Itoa(depth))
-		items := e.plan(frontier, b)
-		if ran+len(items) > b.MaxItems {
-			cut := max(0, b.MaxItems-ran)
-			if cut < len(items) {
-				e.markCapped()
-				capped = true
-			}
-			items = items[:cut]
-		}
-		if len(items) == 0 {
-			waveDone()
-			break
-		}
-		ran += len(items)
-
-		type outcome struct {
-			item types.WorkItem
-			meta types.RunMeta
-			err  error
-		}
-		outc := make(chan outcome, len(items))
-		sem := make(chan struct{}, b.Parallel)
-		var wg sync.WaitGroup
-		for _, item := range items {
-			wg.Add(1)
-			go func(item types.WorkItem) {
-				defer wg.Done()
-				select {
-				case <-ctx.Done():
-					outc <- outcome{item: item, err: ctx.Err()}
-					return
-				case sem <- struct{}{}:
-				}
-				defer func() { <-sem }()
-				t0 := time.Now()
-				meta, err := e.Run(ctx, item)
-				printItem(ctx, item, time.Since(t0), meta, err)
-				outc <- outcome{item: item, meta: meta, err: err}
-			}(item)
-		}
-		go func() {
-			wg.Wait()
-			close(outc)
-		}()
-
-		frontier = nil
-		for o := range outc {
-			if o.err != nil && o.meta.Status != types.StatusCancelled {
-				continue
-			}
-			for _, h := range o.meta.NextHints {
-				h = normalize.Seed(h)
-				k := seedKey(h)
-				if h.Key() == "" || seen[k] || !b.Scope.AllowsSeed(h) {
-					continue
-				}
-				seen[k] = true
-				if h.Type == types.TypeURL && webextract.Templated(h.Key()) {
-					t := webextract.Template(h.Key())
-					if tmpl[t] >= perTemplate {
-						continue
-					}
-					tmpl[t]++
-				}
-				if seedOnly && !origin.owns(h) {
-					deferred = append(deferred, h)
-					continue
-				}
-				frontier = append(frontier, h)
-			}
-		}
-		waveDone()
-	}
-	return append(frontier, deferred...), ran, capped
-}
-
 // fanReserve keeps CT/CDX/RDAP (and sibling DNS) from being cut to zero
 // when the seed app is chatty. Small test budgets keep a 1/8 slice only;
 // runs of 48+ items hold at least 24 for the domain half.
@@ -269,32 +133,6 @@ func (e *Engine) persistSeeds(seeds []types.Seed) {
 		}
 		e.linkSeed(s, ent, now)
 		e.linkInDomain(s, ent, now)
-	}
-}
-
-func (e *Engine) plan(seeds []types.Seed, b Budgets) []types.WorkItem {
-	items := e.Plan(seeds)
-	var out []types.WorkItem
-	for _, it := range items {
-		if b.Passive && activeCollector(it.Collector) {
-			continue
-		}
-		if col, ok := e.Cat.Get(it.Collector); ok {
-			if sk, ok := col.(catalog.Skipper); ok && sk.Skip(it.Seed) {
-				continue
-			}
-		}
-		out = append(out, it)
-	}
-	return out
-}
-
-func activeCollector(name string) bool {
-	switch name {
-	case "azhaq-http", "azhaq-crawl", "azhaq-js", "azhaq-openapi", "azhaq-paths", "azhaq-tls":
-		return true
-	default:
-		return false
 	}
 }
 

@@ -43,6 +43,12 @@ func Register(cat *catalog.Catalog, client *http.Client) {
 
 func (c *Collector) Name() string { return Name }
 
+// Info: this collector sends requests to the target, and for a hostname
+// waits for DNS so names that do not resolve are never probed.
+func (c *Collector) Info() catalog.Info {
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-dns"}
+}
+
 func (c *Collector) Inputs() []types.SeedType {
 	return []types.SeedType{types.TypeURL, types.TypeHostname}
 }

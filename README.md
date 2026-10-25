@@ -25,7 +25,8 @@ or from a clone: `go build -o azhaq ./cmd/azhaq`. Requires Go 1.26 or newer.
 Only scan systems you are authorized to test.
 
 ```
-azhaq run -url https://app.example.com/
+azhaq run -url https://app.example.com/      # map an application and its domain
+azhaq run -domain example.com -passive       # subdomains, without touching the hosts
 ```
 
 Try it offline against a built-in fixture:
@@ -50,13 +51,17 @@ Common options:
 
 | Option | Effect |
 | --- | --- |
-| `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from an organization, a cloud inventory or a list of seeds |
-| `-passive` | only third-party sources (CT, DNS, RDAP, Wayback); nothing is sent to the target |
+| `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
+| `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have |
 | `-paths FILE` | extra paths to probe, merged with the built-in list |
-| `-depth N`, `-max-items N` | expansion limits (default 4 and 512) |
-| `-delay D` | pause before each request |
+| `-sources A,B`, `-exclude-sources A,B`, `-all-sources` | choose subdomain sources (default: the fast set that needs no key, plus keyed sources you have keys for) |
+| `-providers FILE` | API keys per source, in subfinder's `provider-config.yaml` format (default `~/.config/azhaq/providers.yaml`, else subfinder's file) |
+| `-resolvers FILE`, `-dns-rate N` | DNS resolvers and queries per second per resolver (default: six public resolvers, 100/s) |
+| `-dns-brute FILE`, `-permute` | active: resolve a wordlist under the domain, or variations of names found; both need `-allow` |
+| `-depth N`, `-max-items N`, `-max-names N` | expansion limits (default 4, 2048 work items, 20,000 names resolved) |
+| `-parallel N`, `-delay D`, `-skip A,B` | work in flight (default 16), pause before each request, collectors not to run |
 | `-db FILE` | graph file to write (default: a new timestamped file per run) |
 | `-json` / `-obs` | JSON summary, or the full observation log |
 
@@ -79,9 +84,11 @@ azhaq bench                        # timing and memory on the fixture
 | `azhaq-js` | URL | routes from each page's inline and same-origin scripts and the chunks they import, tagged as API or page |
 | `azhaq-openapi` | URL | operations, methods and parameter names from OpenAPI 3 and Swagger 2 documents (JSON or YAML); never calls them |
 | `azhaq-paths` | URL | common paths and API description locations, `robots.txt`, sitemaps; drops catch-all answers |
-| `azhaq-dns` | hostname | A/AAAA, CNAME, MX, TXT and NS records |
+| `azhaq-dns` | hostname | A/AAAA and CNAME chain through a pool of resolvers, in batches; MX, TXT and NS for registrable domains; names that do not resolve or only answer through a wildcard record are marked and never probed |
 | `azhaq-tls` | hostname | certificate details and SANs within the same domain |
-| `azhaq-ct` | domain | hostnames from Certificate Transparency (crt.sh and Cert Spotter, merged); a failed source marks the result `degraded` |
+| `azhaq-subdomains` | domain | hostnames from 50+ passive sources (certificate transparency, search engines, archives, DNS datasets), with each source's count or error recorded |
+| `azhaq-dns-brute` | domain | `-dns-brute`: names from a wordlist that resolve, wildcard answers removed |
+| `azhaq-permute` | hostname | `-permute`: numbered, prefixed and suffixed variations of live names that resolve |
 | `azhaq-cdx` | domain | historical URLs (Wayback Machine with backoff, arquivo.pt as fallback); a refused archive marks the result `degraded` |
 | `azhaq-rdap` | domain, organization | registration data and nameservers |
 | `azhaq-cloud` | cloud inventory file | domains, hosts and URLs from a local JSON inventory |
@@ -90,7 +97,7 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## Benchmark
 
-`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups only. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
+`go run ./bench` starts Juice Shop and VAmPI in Docker, downloads pinned releases of katana, subfinder, dnsx, alterx, gau and ffuf, runs them and Azhaq on the same targets, and prints a comparison table. Public domains get passive lookups only. See [bench/README.md](bench/README.md) for what is measured and the latest numbers.
 
 ## Documentation
 
@@ -99,4 +106,4 @@ Sources Azhaq does not query itself, such as paid search engines like Shodan, ca
 
 ## License
 
-[MIT](LICENSE). Dependencies are MIT, BSD or Apache licensed, and CI checks it.
+[MIT](LICENSE). Dependencies are MIT, BSD, Apache or Unlicense licensed, and CI checks it. Most subdomain sources are [subfinder](https://github.com/projectdiscovery/subfinder)'s (MIT, ProjectDiscovery), run in-process.

@@ -18,7 +18,9 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors"
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -71,15 +73,19 @@ func run(args []string) error {
 
 const helpText = `azhaq — generic recon engine
 
-  azhaq run    -url URL | -org NAME | -cloud FILE | -in seeds.jsonl | -demo  [-db FILE]
-               [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V'] [-paths FILE]
-               [-depth N] [-max-items N] [-delay D] [-quiet] [-json] [-obs]
-               [-fail-on-errors] [-fail-on-capped] [-allow D] [-deny D] [-passive]
+  azhaq run    -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
+               [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
+               [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
+               [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
+               [-allow D] [-deny D] [-passive]
+               [-sources A,B] [-exclude-sources A,B] [-all-sources] [-providers FILE]
+               [-resolvers FILE] [-dns-rate N] [-dns-brute FILE] [-permute] [-skip A,B]
                # -depth 0 = seed wave only (not unlimited); default 4
-               # -passive skips HTTP/crawl/JS/paths/TLS (no handshake to the target)
+               # -passive keeps third-party sources and DNS; nothing is sent to the target
+               # -dns-brute and -permute are active and need -allow
                # print is a ranked map (visited/hint); -obs dumps the observation log
                # parallel runs: give each its own -db FILE or AZHAQ_DB
-  azhaq plan   -url URL | -org NAME | -cloud FILE | -in seeds.jsonl
+  azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
   azhaq ingest -in facts.jsonl  [-db FILE]
   azhaq export [-db FILE]
   azhaq diff   -a OLD.db -b NEW.db  [-jsonl] [-quiet]
@@ -110,9 +116,21 @@ func cmdRun(args []string) error {
 	failCapped := fs.Bool("fail-on-capped", false, "exit 1 if the run hit -max-items or -depth with work left")
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
-	maxItems := fs.Int("max-items", 0, "max collector invocations (default 512)")
+	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
+	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
+	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
-	var cookies, headers, allow, deny stringsFlag
+	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
+	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
+	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
+	providersFile := fs.String("providers", "", "API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml)")
+	resolversFile := fs.String("resolvers", "", "DNS resolvers, one per line (default: public resolvers)")
+	dnsRate := fs.Float64("dns-rate", 100, "DNS queries per second per resolver")
+	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active: needs -allow)")
+	permute := fs.Bool("permute", false, "resolve variations of found names (active: needs -allow)")
+	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
+	var cookies, headers, allow, deny, domains stringsFlag
+	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
 	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable; sent as one Cookie header)")
 	fs.Var(&headers, "header", "extra request header K: V (repeatable)")
 	fs.Var(&allow, "allow", "allowed domain or host for fan-out (repeatable)")
@@ -143,8 +161,15 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
+		for _, d := range domains {
+			h := normalize.Hostname(d)
+			if h == "" || strings.ContainsAny(h, "/: ") {
+				return fmt.Errorf("-domain wants a bare domain such as example.com, got %q", d)
+			}
+			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
+		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" {
-			return fmt.Errorf("need -url, -org, -cloud, -in, -facts, -exec, or -demo")
+			return fmt.Errorf("need -url, -domain, -org, -cloud, -in, -facts, -exec, or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
 			return fmt.Errorf("-exec needs a seed (-url, -org, -cloud, or -in)")
@@ -184,19 +209,58 @@ func cmdRun(args []string) error {
 	if *maxItems > 0 {
 		budgets.MaxItems = *maxItems
 	}
+	if *maxNames > 0 {
+		budgets.MaxNames = *maxNames
+	}
+	if *parallel > 0 {
+		budgets.Parallel = *parallel
+	}
+	budgets.Skip = map[string]bool{}
+	for _, name := range splitList(*skip) {
+		budgets.Skip[name] = true
+	}
+	budgets.Active = map[string]bool{}
+	if *bruteFile != "" {
+		budgets.Active["dns-brute"] = true
+	}
+	if *permute {
+		budgets.Active["permute"] = true
+	}
+	if len(budgets.Active) > 0 && len(allow) == 0 {
+		return fmt.Errorf("-dns-brute and -permute send guesses to DNS: name the scope with -allow DOMAIN")
+	}
 	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
 		return err
 	}
 	cat := catalog.New()
-	var extraPaths []string
+	opts := collectors.Options{Client: client}
 	if *pathsFile != "" {
-		var err error
-		extraPaths, err = loadPathList(*pathsFile)
-		if err != nil {
+		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
 			return err
 		}
 	}
-	collectors.RegisterAllWith(cat, client, extraPaths)
+	var resolvers []string
+	if *resolversFile != "" {
+		if resolvers, err = loadLines(*resolversFile); err != nil {
+			return err
+		}
+	}
+	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
+	if *bruteFile != "" {
+		if opts.BruteWords, err = loadLines(*bruteFile); err != nil {
+			return err
+		}
+	}
+	providerPaths := subcol.ProviderPaths()
+	if *providersFile != "" {
+		providerPaths = []string{*providersFile}
+	}
+	keys, _, err := subcol.LoadProviders(providerPaths...)
+	if err != nil {
+		return fmt.Errorf("provider keys: %w", err)
+	}
+	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
+	collectors.Register(cat, opts)
 	eng := &engine.Engine{Cat: cat, Store: st}
 
 	log := timing.New()
@@ -467,6 +531,8 @@ func cmdPlan(args []string) error {
 	org := fs.String("org", "", "seed Organization name")
 	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
 	in := fs.String("in", "", "JSONL seeds")
+	var domains stringsFlag
+	fs.Var(&domains, "domain", "seed Domain (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -474,14 +540,20 @@ func cmdPlan(args []string) error {
 	if err != nil {
 		return err
 	}
+	for _, d := range domains {
+		seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": normalize.Hostname(d)}})
+	}
 	if len(seeds) == 0 {
-		return fmt.Errorf("need -url, -org, -cloud, or -in")
+		return fmt.Errorf("need -url, -domain, -org, -cloud, or -in")
 	}
 	cat := catalog.New()
 	collectors.RegisterAll(cat, nil)
 	eng := &engine.Engine{Cat: cat}
 	enc := json.NewEncoder(os.Stdout)
 	for _, item := range eng.Plan(engine.ExpandSeeds(seeds)) {
+		if col, ok := cat.Get(item.Collector); ok && catalog.InfoOf(col).Kind == catalog.Active {
+			continue // runs only with its own flag
+		}
 		if err := enc.Encode(item); err != nil {
 			return err
 		}
@@ -838,6 +910,31 @@ func parseSeedLine(raw []byte) (types.Seed, error) {
 		s.Keys["url"] = u
 	}
 	return s, nil
+}
+
+// loadLines reads one entry per line, skipping blanks and # comments.
+func loadLines(path string) ([]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if line = strings.TrimSpace(line); line != "" && !strings.HasPrefix(line, "#") {
+			out = append(out, line)
+		}
+	}
+	return out, nil
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, x := range strings.Split(s, ",") {
+		if x = strings.TrimSpace(x); x != "" {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 func loadPathList(path string) ([]string, error) {

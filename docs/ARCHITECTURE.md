@@ -49,7 +49,13 @@ type Collector interface {
 
 All collectors register in one in-process catalog (`internal/catalog`, filled by `collectors.RegisterAll`). Planning is a lookup, `catalog.Where(seed.Type)`, so the engine and CLI never name a collector. Adding a capability means writing a collector and registering it.
 
-A collector may also implement `catalog.Skipper` (`Skip(seed) bool`) to decline a seed at plan time when it would return at once: a script it has already parsed, an origin whose paths it has already swept, a URL that cannot be an API description. Skipped seeds do not spend the item budget.
+A collector may also implement:
+
+- `catalog.Informer` (`Info()`), which says what it contacts. `Passive` collectors only ask third parties and DNS resolvers; `Touch` collectors (the default) send requests to the target; `Active` collectors send guesses (brute force, permutations) and name the flag that enables them. `After` names a collector that must finish with the same seed first: HTTP and TLS wait for `azhaq-dns`, and when DNS returns `RunMeta.Drop` (no address, or a wildcard answer) they skip the name.
+- `catalog.Batcher` (`BatchSize`, `RunBatch`), for work that is much cheaper in bulk. DNS resolves up to 256 names per call; each name still gets its own entity, idempotency key and hints.
+- `catalog.Skipper` (`Skip(seed) bool`), to decline a seed when it would return at once: a script it has already parsed, an origin whose paths it has already swept, a URL that cannot be an API description. Skipped seeds do not spend the item budget.
+
+A collector can also hand over seeds before it returns with `catalog.Hint(ctx, seeds...)`. The subdomain collector does this as each source answers, so DNS starts on the fast sources' names while a slow source is still running.
 
 ## Engine
 
@@ -64,16 +70,19 @@ A collector may also implement `catalog.Skipper` (`Skip(seed) bool`) to decline 
 
 ### Scheduling (`RunLocal`)
 
-The scheduler runs in waves, one per depth level, with up to 8 work items in parallel. It is bounded by `-depth` (default 4) and `-max-items` (default 512).
+Work flows instead of moving in waves. A seed's work items are queued as soon as the seed appears, a free worker takes the next one, and the hints it returns are queued at once. A slow item, such as a CT log taking 25 seconds, holds back nothing else. Up to `-parallel` items (default 16) run at a time; each batch collector may run 4 batches at once on top.
 
-It runs in two passes:
+Limits:
 
-1. **Seed origin.** Items on the seed's own host or IP run first. Hints pointing elsewhere are held back.
-2. **Fan-out.** Held hints and the seed's domain (CT, CDX, RDAP, sibling DNS) run next.
+- `-depth` (default 4) bounds how many hints away from the seeds a seed may be.
+- `-max-items` (default 2048) caps ordinary work items.
+- `-max-names` (default 20,000) caps the names handed to batch collectors (DNS), so a domain with thousands of subdomains does not spend the item budget on resolution.
 
-Part of the item budget is reserved for the fan-out pass: one eighth, at least 24 items once the budget is 48 or more, and never more than half. Without it, a large application would spend the entire budget before any domain-level collector ran.
+Items on the seed's own host or IP run before fan-out items, but part of the item budget is reserved for fan-out: one eighth, at least 24 items once the budget is 48 or more, and never more than half. Without it, a large application would spend the entire budget before any domain-level collector ran.
 
-A seen-set prevents running the same seed twice, and `-allow` / `-deny` filter hints before they are queued. URLs that differ only by an ID or a query value share a template (`/catalog/product?productId={n}`); at most 3 URLs per template are fetched, and the rest stay in the graph as found. `-passive` drops every collector that contacts the target (`http`, `crawl`, `js`, `openapi`, `paths`, `tls`). Hints left unprocessed when the budget runs out are stored and the run is marked `capped`.
+The run's policy is applied when items are planned: `-passive` keeps only `Passive` collectors; an `Active` collector needs its flag, an `-allow` scope and a seed inside it; `-skip` removes collectors by name.
+
+A seen-set prevents running the same seed twice, and `-allow` / `-deny` filter hints before they are queued. URLs that differ only by an ID or a query value share a template (`/catalog/product?productId={n}`); at most 3 URLs per template are fetched, and the rest stay in the graph as found. Work left over when a limit is reached is stored and the run is marked `capped`.
 
 ## HTTP
 
@@ -92,6 +101,18 @@ Before a non-root URL counts as visited, `fetch.CatchAll` compares its response 
 
 A matching response is stored with `"catchall": true` and shown as `catchall` in the map. The crawler and the JavaScript reader skip such pages, and the path sweep drops them.
 
+## DNS
+
+`internal/dnsr` resolves through a pool of recursive resolvers (six public ones by default, or `-resolvers FILE`). Queries go round robin with a rate limit per resolver (`-dns-rate`, default 100 per second); a timeout, SERVFAIL or REFUSED moves the query to another resolver, and a truncated answer is retried over TCP. Each name is resolved once per run. Special-use names (`localhost`, `*.test`, `*.local`) and single labels go to the system resolver instead, so `/etc/hosts` and local DNS still work.
+
+A name is a wildcard answer when one of its parent zones answers for random labels and the name's addresses, or its CNAME target, are what the random labels got. Each zone is probed once per run. Real hosts in a wildcard zone are kept when their addresses differ; a real host that shares the wildcard's address is dropped, the same trade-off other resolvers make.
+
+## Subdomain sources
+
+`azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
+
+The default set is subfinder's default set: the fast sources. `-all-sources` adds slower ones such as Common Crawl and the Wayback Machine.
+
 ## Storage
 
 The graph lives in SQLite through `modernc.org/sqlite`, a pure-Go driver, so the binary builds without CGO. Each run gets its own file unless `-db` or `AZHAQ_DB` names one. Every run has its own ID, and the store records which entities and edges each run saw. `azhaq diff` compares two runs from that record.
@@ -109,7 +130,7 @@ Diffs compare facts, not bytes: body hashes, the session a run was given, and re
 | `hint` | found (in a link, script, archive or API description) but not fetched |
 | `capped` | left over when the run hit its item or depth limit |
 
-Roles: `app` (the site root), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`. API description rows also list their methods.
+Roles: `app` (the site root), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`. API description rows also list their methods. Hostnames are `live` (a seed host), `sibling`, `dead` (no address) or `wildcard`; dead and wildcard names are folded into one summary line each.
 
 Rows that share a URL template are folded into one line with a count. Forms appear indented under the first row that has them, with their method, action and field names, followed by the page's other parameter names. `azhaq export` keeps every entity unfolded and adds `template`, `methods`, `params` and `forms` fields.
 
@@ -119,7 +140,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 ## Design choices
 
-- **Native collectors, no wrapped tools.** Every collector implements its protocol or public API directly (HTTP, DNS, CT logs, Wayback CDX, RDAP). Azhaq does not shell out to subfinder, httpx or similar tools. That keeps one graph model and a dependency tree that is only MIT/BSD/Apache-licensed; CI fails on any other license.
+- **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
 - **No browser.** JavaScript routes are extracted from script text. That covers bundled single-page apps without shipping Chromium.
 - **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state.
@@ -127,7 +148,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 ## Limitations
 
 - No collector for IP ranges or service scanning yet.
-- Politeness is per-host concurrency plus an optional delay. There is no per-source rate limiter.
+- Requests to a target are limited by concurrency per host (2) and an optional delay, not by a rate. Third-party sources and DNS resolvers have rate limits.
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
 - JavaScript that builds routes at runtime is not visible without a browser. Chunk names computed at runtime (webpack chunk maps) are not followed; chunks imported by name are.
 - API descriptions embedded in a Swagger UI script rather than served as a document are not read.
@@ -143,8 +164,10 @@ internal/
   catalog/                collector registry
   collectors/             one package per collector
   connector/              JSONL protocol for external collectors
+  dnsr/                   resolver pool and wildcard detection
   engine/                 Plan, Run, Ingest, scheduler, identity, map view
   fetch/                  shared HTTP client
+  limit/                  rate limits per host, source or resolver
   normalize/              seed and hostname normalization
   scope/                  -allow / -deny rules
   store/                  SQLite graph and run diff

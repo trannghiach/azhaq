@@ -86,6 +86,9 @@ type RunMeta struct {
 	EmitCount int    `json:"emit_count"`
 	Error     string `json:"error,omitempty"`
 	NextHints []Seed `json:"next_hints,omitempty"`
+	// Drop tells collectors that wait on this one (catalog.Info.After) to
+	// leave the seed alone: a name that does not resolve, a wildcard answer.
+	Drop bool `json:"drop,omitempty"`
 }
 
 type Entity struct {
