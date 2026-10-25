@@ -239,8 +239,24 @@ func (r *PTR) RunBatch(ctx context.Context, seeds []types.Seed, emit func(types.
 			if err != nil {
 				return
 			}
-			m, err := r.Pool.Query(ctx, rev, dns.TypePTR)
-			if err != nil || m.Rcode != dns.RcodeSuccess {
+			// A reverse zone's servers often throttle a whole range asked at
+			// once: a failure or SERVFAIL is asked again, through another
+			// resolver of the pool.
+			var m *dns.Msg
+			for try := 0; try < 3; try++ {
+				if try > 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(time.Duration(try) * 700 * time.Millisecond):
+					}
+				}
+				m, err = r.Pool.Query(ctx, rev, dns.TypePTR)
+				if err == nil && m.Rcode != dns.RcodeServerFailure {
+					break
+				}
+			}
+			if err != nil || m == nil || m.Rcode != dns.RcodeSuccess {
 				return
 			}
 			var names []string

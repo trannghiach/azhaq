@@ -51,7 +51,7 @@ var builtTools = []tool{
 func installBuilt(dir string) error {
 	for _, t := range builtTools {
 		marker := filepath.Join(dir, "."+t.Name+"-"+t.Version)
-		if _, err := os.Stat(marker); err == nil {
+		if installed(dir, t.Name, marker) {
 			continue
 		}
 		logf("building %s %s", t.Name, t.Version)
@@ -135,7 +135,7 @@ func installTools(dir string) error {
 	}
 	for _, t := range tools {
 		marker := filepath.Join(dir, "."+t.Name+"-"+t.Version)
-		if _, err := os.Stat(marker); err == nil {
+		if installed(dir, t.Name, marker) {
 			continue
 		}
 		logf("installing %s %s", t.Name, t.Version)
@@ -219,4 +219,11 @@ func fromTarGz(data []byte, name string) ([]byte, error) {
 			return io.ReadAll(tr)
 		}
 	}
+}
+
+// installed: the version marker and the binary are both there.
+func installed(dir, name, marker string) bool {
+	_, err1 := os.Stat(marker)
+	_, err2 := os.Stat(filepath.Join(dir, name))
+	return err1 == nil && err2 == nil
 }
