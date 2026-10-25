@@ -23,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
+	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/connector"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/engine"
@@ -80,7 +81,7 @@ func run(args []string) error {
 const helpText = `azhaq — generic recon engine
 
   azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
-               [-probe] [-web-ports 80,443,8080] [-no-tech]
+               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
@@ -117,6 +118,7 @@ func cmdRun(args []string) error {
 	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
 	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
 	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 190 MB of memory)")
+	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
@@ -289,6 +291,12 @@ func cmdRun(args []string) error {
 		return fmt.Errorf("provider keys: %w", err)
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
+	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut}
+	if *urlsOut != "" {
+		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends
+			return err
+		}
+	}
 	collectors.Register(cat, opts)
 	if *probe {
 		budgets.MaxDepth = 1 // the listed targets only: no CNAME or redirect targets

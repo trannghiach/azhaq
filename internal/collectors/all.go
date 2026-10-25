@@ -6,7 +6,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
-	"github.com/trannghiach/azhaq/internal/collectors/cdxcol"
 	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
@@ -17,6 +16,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
+	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 )
 
@@ -27,8 +27,9 @@ type Options struct {
 	DNS        *dnsr.Pool   // resolver pool; nil for the default resolvers
 	Subdomains subcol.Options
 	BruteWords []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
-	WebPorts   []int    // ports azhaq-http tries on each hostname; nil for 443 then 80
-	NoTech     bool     // skip technology fingerprints
+	URLs       urlcol.Options
+	WebPorts   []int // ports azhaq-http tries on each hostname; nil for 443 then 80
+	NoTech     bool  // skip technology fingerprints
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -62,7 +63,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})
 	tlscol.Register(cat)
 	subcol.Register(cat, o.Subdomains)
-	cdxcol.Register(cat, client)
+	cat.MustRegister(urlcol.New(o.URLs))
 	rdapcol.Register(cat, client)
 	cloudcol.Register(cat)
 }

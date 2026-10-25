@@ -33,11 +33,11 @@ func printReport() {
 		}
 	}
 	if len(rec.Domains) > 0 {
-		fmt.Fprintln(w, "\ndomains (passive)\tlive\tazhaq live\tnames\ttime\tsubfinder live\tnames\ttime\tshared\tazhaq URLs\tgau URLs")
+		fmt.Fprintln(w, "\ndomains (passive)\tlive\tazhaq live\tnames\ttime\tsubfinder live\tnames\ttime\tshared\tazhaq URLs\tgau URLs\tof gau's in azhaq")
 		for _, d := range rec.Domains {
-			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.0fs\t%d\t%d\t%.0fs\t%d\t%d\t%d\n", d.Domain, d.Live,
+			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.0fs\t%d\t%d\t%.0fs\t%d\t%d\t%d\t%d\n", d.Domain, d.Live,
 				d.AzhaqLive, d.AzhaqNames, d.AzhaqSeconds, d.SubfinderLive, d.SubfinderNames, d.SubSeconds,
-				d.SharedLive, d.AzhaqURLs, d.GauURLs)
+				d.SharedLive, d.AzhaqURLs, d.GauURLs, d.GauShared)
 		}
 		fmt.Fprintln(w, "\nsources\tsubdomain sources\tarchives")
 		for _, d := range rec.Domains {

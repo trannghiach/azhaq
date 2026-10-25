@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/catalog"
-	"github.com/trannghiach/azhaq/internal/collectors/cdxcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/engine"
@@ -16,15 +15,21 @@ import (
 	"github.com/trannghiach/azhaq/internal/types"
 )
 
-func TestCDXAndPaths(t *testing.T) {
-	cdx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`[
-			["original","statuscode","mimetype","timestamp"],
-			["https://app.example.test/old","200","text/html","20200101120000"]
-		]`))
-	}))
-	t.Cleanup(cdx.Close)
+// archive stands in for azhaq-urls: a domain collector that reports a
+// URL it did not fetch.
+type archive struct{}
 
+func (archive) Name() string             { return "azhaq-archive-test" }
+func (archive) Inputs() []types.SeedType { return []types.SeedType{types.TypeDomain} }
+func (archive) Outputs() []string        { return []string{"url"} }
+func (archive) Info() catalog.Info       { return catalog.Info{Kind: catalog.Passive} }
+func (archive) Run(_ context.Context, _ types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
+	return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, emit(types.Observation{
+		Kind: "url", Source: "archive", Payload: []byte(`{"url":"https://app.example.test/old","via":"archive"}`),
+	})
+}
+
+func TestArchiveAndPaths(t *testing.T) {
 	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/", "/login":
@@ -42,7 +47,7 @@ func TestCDXAndPaths(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() })
 
 	cat := catalog.New()
-	cat.MustRegister(&cdxcol.Collector{Client: cdx.Client(), BaseURL: cdx.URL})
+	cat.MustRegister(archive{})
 	cat.MustRegister(&pathscol.Collector{Client: app.Client(), Wordlist: []string{"login", "nope"}})
 	httpcol.Register(cat, app.Client())
 
@@ -66,7 +71,7 @@ func TestCDXAndPaths(t *testing.T) {
 		}
 	}
 	if !haveOld {
-		t.Fatalf("cdx url missing: %+v", ents)
+		t.Fatalf("archived url missing: %+v", ents)
 	}
 	if !haveLogin {
 		t.Fatalf("paths login missing: %+v", ents)

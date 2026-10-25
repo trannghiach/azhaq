@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // domainRow compares passive subdomain discovery on one domain. A name is
@@ -22,9 +25,10 @@ type domainRow struct {
 	AzhaqSeconds   float64 `json:"azhaq_seconds"`
 	SubSeconds     float64 `json:"subfinder_seconds"`
 	CT             string  `json:"ct"`
-	AzhaqURLs      int     `json:"azhaq_urls"`
+	AzhaqURLs      int     `json:"azhaq_urls"` // distinct, static assets left out
 	GauURLs        int     `json:"gau_urls"`
-	CDX            string  `json:"cdx"`
+	GauShared      int     `json:"gau_shared"` // gau's URLs Azhaq also listed
+	CDX            string  `json:"archives"`
 }
 
 func benchDomains() []domainRow {
@@ -39,7 +43,8 @@ func benchDomains() []domainRow {
 		logf("domain %s", d)
 		row := domainRow{Domain: d}
 		db := filepath.Join(dir, d+"-"+stamp+".db")
-		_, m := run(d, 15*time.Minute, dir, azhaq, "run", "-domain", d, "-passive", "-db", db, "-json")
+		urlsFile := filepath.Join(dir, d+"-"+stamp+"-urls.txt")
+		_, m := run(d, 15*time.Minute, dir, azhaq, "run", "-domain", d, "-passive", "-urls", urlsFile, "-db", db, "-json")
 		row.AzhaqSeconds = m.Seconds
 		exp, _ := runOut(azhaq, "export", "-db", db)
 		g := readExport(exp)
@@ -62,14 +67,11 @@ func benchDomains() []domainRow {
 				silent = false
 			}
 		}
-		for _, p := range g.payloads("azhaq-cdx") {
-			if _, ok := p["source"]; !ok {
+		for _, p := range g.payloads("azhaq-urls") {
+			if _, ok := p["sources"]; !ok {
 				continue
 			}
 			row.CDX = sourceSummary(p)
-			if c, _ := p["count"].(float64); c > 0 {
-				row.AzhaqURLs = int(c)
-			}
 			if !explained(p) {
 				silent = false
 			}
@@ -113,8 +115,14 @@ func benchDomains() []domainRow {
 			}
 		}
 
-		gauOut, _ := run(d, 5*time.Minute, dir, ref("gau"), "--subs", "--threads", "2", "--timeout", "30", d)
-		row.GauURLs = len(lines(gauOut))
+		// gau stops every provider when one cannot start, and Common Crawl's
+		// index refuses connections from some networks: it runs with the
+		// providers that start everywhere.
+		gauOut, _ := run(d, 10*time.Minute, dir, ref("gau"), "--providers", "wayback,otx,urlscan", "--subs", "--threads", "2", "--timeout", "30", d)
+		azURLs := urlSet(must1(os.ReadFile(urlsFile)), d)
+		gauURLs := urlSet(gauOut, d)
+		row.AzhaqURLs, row.GauURLs = len(azURLs), len(gauURLs)
+		row.GauShared = overlap(gauURLs, azURLs)
 		out = append(out, row)
 	}
 	addCheck("subdomain sources and archives: no silent zeros", silent, "every empty result is a failure flagged as error or degraded, or a zero every source answered")
@@ -130,7 +138,29 @@ func benchDomains() []domainRow {
 		"azhaq %d, subfinder %d (all domains, no API keys)", azLive, subLive)
 	addCheck("subdomains: within 2× subfinder's time", subTime > 0 && azTime <= 2*subTime,
 		"azhaq %.0fs, subfinder %.0fs", azTime, subTime)
+	var gauAll, gauShared, azAll int
+	for _, r := range out {
+		gauAll += r.GauURLs
+		gauShared += r.GauShared
+		azAll += r.AzhaqURLs
+	}
+	addCheck("historical URLs: ≥ 95% of gau's", gauAll > 0 && float64(gauShared) >= 0.95*float64(gauAll),
+		"azhaq has %d of gau's %d (azhaq %d in all; static assets left out on both sides)", gauShared, gauAll, azAll)
 	return out
+}
+
+// urlSet normalizes a URL list the way Azhaq stores URLs and leaves out
+// static assets and other domains.
+func urlSet(raw []byte, domain string) map[string]bool {
+	set := map[string]bool{}
+	for _, l := range lines(raw) {
+		u, err := normalize.URL(l)
+		if err != nil || !strings.HasPrefix(u, "http") || !inDomain(normalize.HostFromURL(u), domain) || webextract.ClassifyURL(u) == "asset" {
+			continue
+		}
+		set[u] = true
+	}
+	return set
 }
 
 func inDomain(name, domain string) bool {
