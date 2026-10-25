@@ -12,6 +12,7 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/types"
 )
@@ -122,6 +123,9 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 		meta.Drop = true
 	case dnsr.StatusOK:
 		payload["ips"] = a.IPs()
+		if name, kind := network(a); name != "" {
+			payload["cdn"], payload["cdn_type"] = name, kind
+		}
 		apex := normalize.RegistrableDomain(host)
 		if apex != "" && host != apex && c.Wild.Match(ctx, host, apex, a) {
 			payload["wildcard"] = true
@@ -194,4 +198,15 @@ func recordHosts(xs []string) []string {
 		}
 	}
 	return out
+}
+
+// network names the CDN, WAF or cloud in front of a name: by address
+// first, then by CNAME target.
+func network(a dnsr.Answer) (name, kind string) {
+	for _, ip := range a.IPs() {
+		if name, kind = fingerprint.Network(net.ParseIP(ip)); name != "" {
+			return name, kind
+		}
+	}
+	return fingerprint.NetworkByName(a.CNAME...)
 }

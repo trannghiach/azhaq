@@ -118,8 +118,10 @@ func TestDerivedSeedsJoinFirstWave(t *testing.T) {
 
 func TestHTTPIdempotent(t *testing.T) {
 	n := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n++
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" { // the favicon request is separate
+			n++
+		}
 		_, _ = w.Write([]byte(`<title>x</title>`))
 	}))
 	t.Cleanup(srv.Close)

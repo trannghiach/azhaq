@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"sync"
@@ -38,6 +39,12 @@ type Result struct {
 	StatusLine string
 	Hops       []Hop
 	Truncated  bool
+	// FinalHeader is the last hop's headers (equal to Header without redirects).
+	FinalHeader http.Header
+	// IP is the address the first request connected to; empty through a proxy.
+	IP string
+	// Elapsed covers every hop, headers and body.
+	Elapsed time.Duration
 }
 
 // Extra is copied onto every GET. Cookie values stay on the wire, not in Extra's docs.
@@ -78,13 +85,14 @@ func Client(c *http.Client) *http.Client {
 		return c
 	}
 	// InsecureSkipVerify: we are observing whatever cert is presented (same as azhaq-tls).
+	// 10 s like httpx: CDN edges and bot managers often answer slowly.
 	return &http.Client{
-		Timeout: 8 * time.Second,
+		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 5 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS12,
@@ -202,6 +210,8 @@ func cacheHopsLocked(res Result) {
 			Body:       res.Body,
 			Hops:       rest,
 			Truncated:  res.Truncated,
+
+			FinalHeader: res.FinalHeader,
 		}}
 	}
 }
@@ -215,8 +225,21 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 	var lastBody []byte
 	var lastURL string
 	var lastTrunc bool
+	var lastHeader http.Header
+	var remoteIP string
+	start := time.Now()
 	for i := 0; i < 6; i++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, current, nil)
+		rctx := ctx
+		if i == 0 {
+			rctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(ci httptrace.GotConnInfo) {
+				if ci.Conn != nil && remoteIP == "" {
+					if host, _, err := net.SplitHostPort(ci.Conn.RemoteAddr().String()); err == nil {
+						remoteIP = host
+					}
+				}
+			}})
+		}
+		req, err := http.NewRequestWithContext(rctx, http.MethodGet, current, nil)
 		if err != nil {
 			return Result{}, err
 		}
@@ -242,6 +265,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		}
 		lastBody = body
 		lastTrunc = truncated
+		lastHeader = resp.Header
 		lastURL = reqURL
 		if !isRedirect(resp.StatusCode) || loc == "" {
 			break
@@ -265,7 +289,32 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		Body:       lastBody,
 		Hops:       hops,
 		Truncated:  lastTrunc,
+
+		FinalHeader: lastHeader,
+		IP:          viaProxy(c, raw, remoteIP),
+		Elapsed:     time.Since(start),
 	}, nil
+}
+
+// viaProxy drops ip when the request went through a proxy: the address
+// is the proxy's, not the target's.
+func viaProxy(c *http.Client, raw, ip string) string {
+	rt := c.Transport
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	t, ok := rt.(*http.Transport)
+	if !ok || t.Proxy == nil {
+		return ip
+	}
+	req, err := http.NewRequest(http.MethodGet, raw, nil)
+	if err != nil {
+		return ip
+	}
+	if u, err := t.Proxy(req); err == nil && u != nil {
+		return ""
+	}
+	return ip
 }
 
 func applyHeaders(req *http.Request) {

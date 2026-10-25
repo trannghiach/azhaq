@@ -26,6 +26,7 @@ type Options struct {
 	DNS        *dnsr.Pool   // resolver pool; nil for the default resolvers
 	Subdomains subcol.Options
 	BruteWords []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
+	WebPorts   []int    // ports azhaq-http tries on each hostname; nil for 443 then 80
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -34,7 +35,9 @@ func RegisterAll(cat *catalog.Catalog, client *http.Client) {
 
 func Register(cat *catalog.Catalog, o Options) {
 	client := o.Client
-	httpcol.Register(cat, client)
+	hc := httpcol.New(client)
+	hc.Ports = o.WebPorts
+	cat.MustRegister(hc)
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)
 	apicol.Register(cat, client)

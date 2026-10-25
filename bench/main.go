@@ -6,7 +6,8 @@
 //
 // Apps run in docker (bench/compose.yaml). Reference tools are downloaded
 // to bench/.work/bin at pinned versions. Public domains get passive
-// lookups only. Results print as a table and are saved as JSON in
+// lookups, and the live names of the bug bounty domains one probe each
+// (GET / and the favicon) from each tool. Results print as a table and are saved as JSON in
 // bench/history.
 package main
 
@@ -32,6 +33,7 @@ type record struct {
 	Apps    []appResult  `json:"apps,omitempty"`
 	Domains []domainRow  `json:"domains,omitempty"`
 	Brute   *bruteRow    `json:"brute,omitempty"`
+	Probe   *probeRow    `json:"probe,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -64,6 +66,7 @@ func main() {
 	apps := flag.Bool("apps", true, "run the app benchmark (docker apps and ginandjuice.shop)")
 	domains := flag.Bool("domains", true, "run the passive domain benchmark")
 	brute := flag.Bool("brute", true, "run the DNS brute-force, wildcard and permutation benchmark (vulnweb.com only)")
+	probe := flag.Bool("probe", true, "compare probing with httpx: live names of the benchmark domains, ginandjuice.shop and the local apps")
 	crapi := flag.Bool("crapi", false, "also run OWASP crAPI (seven containers, about 2 GB of images)")
 	keep := flag.Bool("keep", false, "leave the docker apps running")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
@@ -110,6 +113,16 @@ func main() {
 	}
 	if *brute {
 		rec.Brute = benchBrute()
+	}
+	if *probe {
+		var local []string
+		if *apps {
+			local = append(local, "127.0.0.1:3101", "127.0.0.1:5102")
+		}
+		if *crapi {
+			local = append(local, "127.0.0.1:8888")
+		}
+		rec.Probe = benchProbe(local)
 	}
 
 	printReport()

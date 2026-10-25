@@ -40,7 +40,18 @@ func printReport() {
 		fmt.Fprintf(w, "permutations\t%d\t%d (alterx)\t%d\t\t\n", b.PermuteAzhaq, b.PermuteAlterx, b.PermuteShared)
 		fmt.Fprintf(w, "wildcard zone, %d words, %d real\t%d found, %d fake\t%d unfiltered\t\t\t\n", b.WildcardWords, b.WildcardReal, b.WildcardAzhaq, b.WildcardFake, b.WildcardNoWild)
 	}
+	if p := rec.Probe; p != nil {
+		fmt.Fprintf(w, "\nprobe (%d hosts)\tanswered\tshared\tstatus\ttitle\ttech\tall\tfavicon\tcdn\ttime\n", p.Hosts)
+		fmt.Fprintf(w, "azhaq\t%d\t%d\t%d\t%d\t%d\t%d\t%d/%d\t%d/%d\t%.1fs\n", p.AzhaqAnswered, p.Shared, p.Status, p.Title, p.Tech, p.All, p.FaviconAgree, p.FaviconBoth, p.CDNAgree, p.CDNHttpx, p.AzhaqSeconds)
+		fmt.Fprintf(w, "httpx\t%d\t\t\t\t\t\t\t\t%.1fs\n", p.HttpxAnswered, p.HttpxSeconds)
+	}
 	w.Flush()
+	if p := rec.Probe; p != nil && len(p.Disagree) > 0 {
+		fmt.Println("\nprobe differences (azhaq/httpx)")
+		for _, d := range p.Disagree {
+			fmt.Printf("  %s\n", d)
+		}
+	}
 	fmt.Println("\nchecks")
 	for _, c := range rec.Checks {
 		mark := "PASS"

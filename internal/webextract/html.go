@@ -343,3 +343,63 @@ func Hintable(raw string) bool {
 	}
 	return true
 }
+
+// Icons returns the page's icon links, .ico files first, as absolute URLs
+// or data: URLs. A <base href> moves relative links the way browsers do.
+func Icons(body []byte, base *url.URL) []string {
+	if base == nil {
+		return nil
+	}
+	var hrefs []string
+	z := html.NewTokenizer(bytes.NewReader(body))
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
+			continue
+		}
+		tok := z.Token()
+		switch strings.ToLower(tok.Data) {
+		case "base":
+			if b := attr(tok.Attr, "href"); b != "" {
+				if u, err := base.Parse(b); err == nil {
+					base = u
+				}
+			}
+		case "link":
+			href := attr(tok.Attr, "href")
+			if href == "" {
+				continue
+			}
+			for _, rel := range strings.Fields(strings.ToLower(attr(tok.Attr, "rel"))) {
+				if rel == "icon" || rel == "shortcut" || rel == "shortcut-icon" || rel == "apple-touch-icon" || rel == "mask-icon" {
+					hrefs = append(hrefs, href)
+					break
+				}
+			}
+		}
+	}
+	var ico, other []string
+	seen := map[string]bool{}
+	for _, h := range hrefs {
+		var u string
+		if strings.HasPrefix(strings.ToLower(h), "data:") {
+			u = h
+		} else if p, err := base.Parse(h); err == nil && (p.Scheme == "http" || p.Scheme == "https") {
+			p.Fragment = ""
+			u = p.String()
+		}
+		if u == "" || seen[u] {
+			continue
+		}
+		seen[u] = true
+		if strings.HasSuffix(strings.ToLower(strings.SplitN(u, "?", 2)[0]), ".ico") {
+			ico = append(ico, u)
+		} else {
+			other = append(other, u)
+		}
+	}
+	return append(ico, other...)
+}

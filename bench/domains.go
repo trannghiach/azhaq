@@ -100,6 +100,7 @@ func benchDomains() []domainRow {
 			live[strings.ToLower(strings.Fields(n)[0])] = true
 		}
 		row.Live = len(live)
+		liveHosts = append(liveHosts, sortedKeys(live)...)
 		for n := range live {
 			if az[n] {
 				row.AzhaqLive++

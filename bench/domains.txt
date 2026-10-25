@@ -1,5 +1,9 @@
-# Passive lookups only: Azhaq -passive, subfinder, gau, and DNS resolution with
-# dnsx. No HTTP or port traffic goes to these hosts.
+# Passive lookups: Azhaq -passive, subfinder, gau, and DNS resolution with
+# dnsx. The probe benchmark then sends each live name of hackerone.com,
+# tesla.com and vulnweb.com (bug bounty programs and a test zone) a few
+# requests per tool: GET / over HTTPS or HTTP, the favicon, and for Azhaq
+# one random path that tells catch-all pages apart. 16 in flight per tool,
+# no port scans.
 hackerone.com
 tesla.com
 vulnweb.com

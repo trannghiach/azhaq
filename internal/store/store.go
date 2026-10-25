@@ -569,13 +569,15 @@ func obsKey(o types.StoredObservation) string {
 	return o.Collector + "\x00" + o.Kind + "\x00" + stablePayload(o.Payload)
 }
 
-// volatile payload fields change between identical runs: a body hash on a
-// page with a CSRF token or captcha, the session a run was given.
-var volatile = []string{"body_hash", "auth"}
+// volatile payload fields change between identical runs: a body hash or
+// size on a page with a CSRF token or captcha, the session a run was given,
+// response times, the CDN address that answered.
+var volatile = []string{"body_hash", "auth", "length", "words", "lines", "ms", "ip"}
 
 // stablePayload is the payload as diff compares it: volatile fields
-// dropped and response headers reduced to their names (rate-limit
-// counters and request IDs change on every request).
+// dropped, per-source timings dropped and response headers reduced to
+// their names (rate-limit counters and request IDs change on every
+// request).
 func stablePayload(raw json.RawMessage) string {
 	var m map[string]any
 	if json.Unmarshal(raw, &m) != nil {
@@ -583,6 +585,13 @@ func stablePayload(raw json.RawMessage) string {
 	}
 	for _, k := range volatile {
 		delete(m, k)
+	}
+	if srcs, ok := m["sources"].(map[string]any); ok {
+		for _, v := range srcs {
+			if row, ok := v.(map[string]any); ok {
+				delete(row, "seconds")
+			}
+		}
 	}
 	if h, ok := m["headers"].(map[string]any); ok {
 		names := make([]string, 0, len(h))

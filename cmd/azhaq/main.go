@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,11 +15,13 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/connector"
 	"github.com/trannghiach/azhaq/internal/dnsr"
@@ -104,6 +108,9 @@ func cmdRun(args []string) error {
 	org := fs.String("org", "", "seed Organization name")
 	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
 	in := fs.String("in", "", "JSONL seeds")
+	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
+	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
+	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
 	dbPath := fs.String("db", "", "sqlite path (default: new file each run)")
@@ -161,6 +168,13 @@ func cmdRun(args []string) error {
 		if err != nil {
 			return err
 		}
+		if *list != "" {
+			more, err := loadList(*list)
+			if err != nil {
+				return err
+			}
+			seeds = append(seeds, more...)
+		}
 		for _, d := range domains {
 			h := normalize.Hostname(d)
 			if h == "" || strings.ContainsAny(h, "/: ") {
@@ -169,7 +183,7 @@ func cmdRun(args []string) error {
 			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
 		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" {
-			return fmt.Errorf("need -url, -domain, -org, -cloud, -in, -facts, -exec, or -demo")
+			return fmt.Errorf("need -url, -domain, -list, -org, -cloud, -in, -facts, -exec, or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
 			return fmt.Errorf("-exec needs a seed (-url, -org, -cloud, or -in)")
@@ -219,6 +233,10 @@ func cmdRun(args []string) error {
 	for _, name := range splitList(*skip) {
 		budgets.Skip[name] = true
 	}
+	ports, err := parsePorts(*webPorts)
+	if err != nil {
+		return err
+	}
 	budgets.Active = map[string]bool{}
 	if *bruteFile != "" {
 		budgets.Active["dns-brute"] = true
@@ -233,7 +251,7 @@ func cmdRun(args []string) error {
 		return err
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client}
+	opts := collectors.Options{Client: client, WebPorts: ports}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
 			return err
@@ -261,6 +279,14 @@ func cmdRun(args []string) error {
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
 	collectors.Register(cat, opts)
+	if *probe {
+		budgets.MaxDepth = 1 // the listed targets only: no CNAME or redirect targets
+		for _, n := range cat.Names() {
+			if n != "azhaq-dns" && n != "azhaq-http" {
+				budgets.Skip[n] = true
+			}
+		}
+	}
 	eng := &engine.Engine{Cat: cat, Store: st}
 
 	log := timing.New()
@@ -330,7 +356,12 @@ func cmdRun(args []string) error {
 	if !*quiet && !*jsonOut {
 		fmt.Fprint(os.Stderr, log.Report(time.Since(t0)))
 	}
-	if !*quiet && !*jsonOut {
+	if !*quiet && !*jsonOut && *probe {
+		fmt.Println("probe")
+		for _, r := range engine.ProbeRows(obs) {
+			fmt.Printf("  %s\n", r.Line())
+		}
+	} else if !*quiet && !*jsonOut {
 		fmt.Println("map")
 		printMap(rows)
 		if *showObs {
@@ -825,6 +856,74 @@ func loadSeeds(url, org, cloud, path string) ([]types.Seed, error) {
 	return seeds, nil
 }
 
+// loadList reads targets the way httpx does: a URL is fetched as given, a
+// bare host is probed over HTTPS then HTTP, and host:port or an IP address
+// becomes a URL that falls back to plain HTTP.
+func loadList(path string) ([]types.Seed, error) {
+	var lines []string
+	var err error
+	if path == "-" {
+		lines, err = readLines(os.Stdin)
+	} else {
+		lines, err = loadLines(path)
+	}
+	if err != nil {
+		return nil, err
+	}
+	var seeds []types.Seed
+	for i, line := range lines {
+		s, err := listSeed(line)
+		if err != nil {
+			return nil, fmt.Errorf("%s:%d: %w", path, i+1, err)
+		}
+		seeds = append(seeds, s)
+	}
+	return seeds, nil
+}
+
+func listSeed(line string) (types.Seed, error) {
+	if strings.Contains(line, "://") {
+		u, err := parseCLIURL(line)
+		if err != nil {
+			return types.Seed{}, err
+		}
+		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}}, nil
+	}
+	if strings.ContainsAny(line, " /?#@") {
+		return types.Seed{}, fmt.Errorf("want a URL, host, host:port or IP, got %q", line)
+	}
+	host, port, err := net.SplitHostPort(line)
+	if err != nil {
+		host, port = strings.Trim(line, "[]"), ""
+	}
+	if ip := net.ParseIP(host); ip == nil && port == "" {
+		return types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": normalize.Hostname(host)}}, nil
+	}
+	hp := host
+	if net.ParseIP(host) != nil && strings.Contains(host, ":") {
+		hp = "[" + host + "]"
+	}
+	if port == "80" {
+		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://" + hp + "/"}}, nil
+	}
+	if port != "" {
+		hp = net.JoinHostPort(host, port)
+	}
+	return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "https://" + hp + "/", httpcol.FallbackKey: "http"}}, nil
+}
+
+func parsePorts(raw string) ([]int, error) {
+	var out []int
+	for _, p := range splitList(raw) {
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 1 || n > 65535 {
+			return nil, fmt.Errorf("-web-ports: bad port %q", p)
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
 type stringsFlag []string
 
 func (s *stringsFlag) String() string { return strings.Join(*s, ", ") }
@@ -914,7 +1013,17 @@ func parseSeedLine(raw []byte) (types.Seed, error) {
 
 // loadLines reads one entry per line, skipping blanks and # comments.
 func loadLines(path string) ([]string, error) {
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return readLines(f)
+}
+
+// readLines returns non-empty lines that are not # comments.
+func readLines(r io.Reader) ([]string, error) {
+	raw, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err
 	}
