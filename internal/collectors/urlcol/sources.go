@@ -97,7 +97,15 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		}
 		resp, err := g.client.Do(req)
 		if err != nil {
-			return nil, err
+			// An archive that refuses or drops connections for a while
+			// (after a large query) is asked again, as a 503 would be.
+			if ctx.Err() != nil || attempt >= g.retries || attempt >= len(backoff) {
+				return nil, err
+			}
+			if err := sleep(ctx, backoff[attempt]); err != nil {
+				return nil, err
+			}
+			continue
 		}
 		if resp.StatusCode == http.StatusOK {
 			return resp.Body, nil

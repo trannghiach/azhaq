@@ -133,3 +133,24 @@ func TestCDXRowsKeepsWhatArrived(t *testing.T) {
 		t.Errorf("empty answer: n=%d err=%v", n, err)
 	}
 }
+
+func TestGetterRetriesADroppedConnection(t *testing.T) {
+	old := backoff
+	backoff = []time.Duration{10 * time.Millisecond, 10 * time.Millisecond, 10 * time.Millisecond}
+	defer func() { backoff = old }()
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) == 1 {
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close() // dropped, as an archive refusing for a while
+			return
+		}
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+	g := &getter{client: srv.Client(), maxPages: 1, retries: 3}
+	body, err := g.get(context.Background(), srv.URL)
+	if err != nil || string(body) != "ok" {
+		t.Fatalf("got %q, %v after %d tries", body, err, n.Load())
+	}
+}
