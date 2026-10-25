@@ -85,7 +85,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			key = ks[0]
 		}
 		if key == "" {
+			mu.Lock()
 			status[e.name] = map[string]any{"skipped": "needs a key"}
+			mu.Unlock()
 			continue
 		}
 		wg.Add(1)
