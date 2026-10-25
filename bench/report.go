@@ -21,6 +21,17 @@ func printReport() {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.Name, known(a.Azhaq), known(a.Katana), known(a.Jsluice), known(a.Union))
 		}
 		for _, a := range rec.Apps {
+			if b := a.Browser; b != nil {
+				fmt.Fprintf(w, "\nwith a browser (%s)\troutes\tknown\tshell\ttime\tRSS\n", a.Name)
+				fmt.Fprintf(w, "azhaq -browser\t%d\t%s\t%d\t%.1fs\t%.0fMB\n", b.Azhaq.Routes, known(b.Azhaq), b.Azhaq.Shell, b.Azhaq.Seconds, b.Azhaq.RSSMB)
+				stopped := ""
+				if b.KatanaStopped {
+					stopped = " (stopped)"
+				}
+				fmt.Fprintf(w, "katana -headless\t%d\t%s\t%d\t%.1fs%s\t%.0fMB\n", b.Katana.Routes, known(b.Katana), b.Katana.Shell, b.Katana.Seconds, stopped, b.Katana.RSSMB)
+			}
+		}
+		for _, a := range rec.Apps {
 			if r := a.Roles; r != nil {
 				fmt.Fprintf(w, "\nroles (%s)\tendpoints that differ\texpected 401 → 200\ttime\n", a.Name)
 				fmt.Fprintf(w, "anon → user (token)\t%d\t%d/%d\t%.1fs\n", r.Rows, len(r.Found), len(r.Expected), r.Seconds)

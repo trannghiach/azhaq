@@ -135,5 +135,9 @@ func benchCrapi() appResult {
 	res.Katana, res.Jsluice, res.Union = runKatanaJsluice(crapiURL, truth, shell)
 	addCheck("crapi: routes joined from constants ≥ 30/40", res.Azhaq.Truth >= 30,
 		"azhaq %d/%d, katana ∪ jsluice %d/%d", res.Azhaq.Truth, len(truth), res.Union.Truth, len(truth))
+	res.Browser = compareBrowsers(crapiURL, filepath.Join(dir, "crapi-browser-"+time.Now().Format("150405")+".db"), truth, shell)
+	addCheck("crapi: -browser finds the known routes katana -headless finds", res.Browser.Azhaq.Truth >= res.Browser.Katana.Truth,
+		"azhaq -browser %d/%d in %.0fs, katana -headless %d/%d in %.0fs", res.Browser.Azhaq.Truth, len(truth), res.Browser.Azhaq.Seconds,
+		res.Browser.Katana.Truth, len(truth), res.Browser.Katana.Seconds)
 	return res
 }

@@ -26,14 +26,41 @@ const (
 )
 
 type appResult struct {
-	Name    string    `json:"name"`
-	URL     string    `json:"url"`
-	Azhaq   toolScore `json:"azhaq"`
-	Katana  toolScore `json:"katana"`
-	Jsluice toolScore `json:"jsluice"`
-	Union   toolScore `json:"katana_jsluice"` // routes either found
-	Ffuf    *ffufRow  `json:"ffuf,omitempty"`
-	Roles   *rolesRow `json:"roles,omitempty"`
+	Name    string      `json:"name"`
+	URL     string      `json:"url"`
+	Azhaq   toolScore   `json:"azhaq"`
+	Katana  toolScore   `json:"katana"`
+	Jsluice toolScore   `json:"jsluice"`
+	Union   toolScore   `json:"katana_jsluice"` // routes either found
+	Ffuf    *ffufRow    `json:"ffuf,omitempty"`
+	Roles   *rolesRow   `json:"roles,omitempty"`
+	Browser *browserRow `json:"browser,omitempty"`
+}
+
+// browserRow is the crawl that runs the app's scripts: azhaq -browser
+// against katana -headless with the machine's Chrome.
+type browserRow struct {
+	Azhaq         toolScore `json:"azhaq"`
+	Katana        toolScore `json:"katana"`
+	KatanaStopped bool      `json:"katana_stopped,omitempty"` // still crawling at the time limit; scored on what it printed
+	Limit         float64   `json:"limit_seconds"`
+}
+
+// headlessLimit bounds katana -headless, which can crawl a single-page app
+// for a long time; what it printed by then is scored.
+const headlessLimit = 5 * time.Minute
+
+func compareBrowsers(target, db string, truth map[string]bool, shell string) *browserRow {
+	row := &browserRow{Limit: headlessLimit.Seconds()}
+	_, m := run(target, 10*time.Minute, filepath.Dir(db), azhaq, "run", "-url", target, "-db", db, "-browser", "-quiet")
+	out, _ := exec.Command(azhaq, "export", "-db", db).Output()
+	row.Azhaq = scoreAzhaq(readExport(out), target, truth, shell, m)
+	var km runMeasure
+	// -no-sandbox: Ubuntu's AppArmor refuses Chrome's sandbox to programs
+	// without a profile, and chromedp starts Chrome without it too.
+	row.Katana, _, km = runKatanaWith(target, truth, shell, headlessLimit, "-hl", "-system-chrome", "-nos")
+	row.KatanaStopped = km.Seconds >= headlessLimit.Seconds()-1
+	return row
 }
 
 // toolScore is what one tool found on one app.
@@ -110,6 +137,10 @@ func benchApps() []appResult {
 	addCheck("juice-shop: JS routes ≥ 40/45", juice.Azhaq.Truth >= 40, "azhaq %d/%d, katana %d/%d", juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth))
 	addCheck("juice-shop: no catch-all page reported as visited", juice.Azhaq.Shell == 0, "%d visited URLs return the SPA index", juice.Azhaq.Shell)
 	juice.Roles = benchRoles(juiceURL, dir)
+	juice.Browser = compareBrowsers(juiceURL, db("juice-browser"), truth, shell)
+	addCheck("juice-shop: -browser finds the known routes katana -headless finds", juice.Browser.Azhaq.Truth >= juice.Browser.Katana.Truth,
+		"azhaq -browser %d/%d in %.0fs, katana -headless %d/%d in %.0fs", juice.Browser.Azhaq.Truth, len(truth), juice.Browser.Azhaq.Seconds,
+		juice.Browser.Katana.Truth, len(truth), juice.Browser.Katana.Seconds)
 
 	_, _, _ = runAzhaq(juiceURL, db("juice-again"))
 	sum := diffSummary(db("juice"), db("juice-again"))
@@ -249,7 +280,13 @@ func download(u string) ([]byte, bool) {
 }
 
 func runKatana(target string, truth map[string]bool, shell string) (toolScore, []string) {
-	out, m := run(target, 10*time.Minute, work, ref("katana"), "-u", target, "-d", "3", "-jc", "-silent", "-nc", "-timeout", "10", "-c", "10")
+	s, urls, _ := runKatanaWith(target, truth, shell, 10*time.Minute)
+	return s, urls
+}
+
+func runKatanaWith(target string, truth map[string]bool, shell string, limit time.Duration, extra ...string) (toolScore, []string, runMeasure) {
+	args := append([]string{"-u", target, "-d", "3", "-jc", "-silent", "-nc", "-timeout", "10", "-c", "10"}, extra...)
+	out, m := run(target, limit, work, ref("katana"), args...)
 	urls := lines(out)
 	found := routes(urls, strings.TrimSuffix(target, "/"))
 	s := toolScore{Routes: len(found), Truth: matched(found, truth), TruthOf: len(truth), Seconds: m.Seconds, RSSMB: m.RSSMB}
@@ -264,7 +301,7 @@ func runKatana(target string, truth map[string]bool, shell string) (toolScore, [
 			s.Shell++
 		}
 	}
-	return s, urls
+	return s, urls, m
 }
 
 // shellHash is the body hash azhaq-http would record for a path that does
