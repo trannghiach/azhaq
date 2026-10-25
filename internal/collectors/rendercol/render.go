@@ -14,6 +14,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
@@ -43,9 +44,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
 // Skip: only with -browser, and only pages (not scripts, assets or API
-// routes, which render nothing).
+// routes, which render nothing); never a logout page while signed in.
 func (c *Collector) Skip(seed types.Seed) bool {
-	if c.Browser == nil {
+	if c.Browser == nil || fetch.EndsSession(seed.Keys["url"]) {
 		return true
 	}
 	switch webextract.ClassifyURL(seed.Keys["url"]) {

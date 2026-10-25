@@ -77,6 +77,7 @@ Common options:
 | `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have |
+| `-login URL -login-user U -login-pass P` | sign in on a login page with Chrome first (the password may come from `$AZHAQ_LOGIN_PASS`); the cookies the site sets and a token the page stores go with every request |
 | `-paths FILE` | extra paths to probe, merged with the built-in list |
 | `-sources A,B`, `-exclude-sources A,B`, `-all-sources` | choose subdomain sources (default: the fast set that needs no key, plus keyed sources you have keys for) |
 | `-providers FILE` | API keys per source, in subfinder's `provider-config.yaml` format (default `~/.config/azhaq/providers.yaml`, else subfinder's file) |
@@ -95,6 +96,7 @@ Other commands:
 
 ```
 azhaq roles  -role anon -role 'user=Authorization: Bearer …' -- -url URL
+azhaq roles  -login URL -role anon -role-login 'member=USER:PASS' -role-login 'owner=USER:PASS' -- -url URL
                                    # one run per session; endpoints whose status differs
 azhaq plan   -url URL              # show which collectors would run
 azhaq export [-db FILE]            # dump the graph as JSONL
@@ -156,7 +158,7 @@ azhaq diff -db acme.db                  # the full difference between the last t
 
 ### Comparing sessions
 
-`azhaq roles` runs the same target once per session and lists the endpoints whose answer depends on who asks. Azhaq never logs in: you give each role the cookie or header it should send, and a role with none is anonymous.
+`azhaq roles` runs the same target once per session and lists the endpoints whose answer depends on who asks. Give each role the cookie or header it should send (`-role`), or an account to sign in with (`-role-login`, on the `-login` page); a role with neither is anonymous.
 
 ```
 $ azhaq roles -role anon -role "user=Authorization: Bearer $TOKEN" -- -url http://localhost:3000/
@@ -164,7 +166,16 @@ roles  anon  user  (12 endpoints differ; databases in azhaq-roles-20261025-18150
   401 → 200  http://localhost:3000/api/Users
   401 → 200  http://localhost:3000/rest/user/authentication-details
   ...
+
+$ azhaq roles -login http://localhost:8080/login -role anon \
+    -role-login member=member@acme.test:$PW -role-login owner=owner@acme.test:$PW -- -url http://localhost:8080/
+roles  anon  member  owner  (7 endpoints differ; databases in azhaq-roles-20261025-201200)
+  401 → 403 → 200  http://localhost:8080/api/orgs/1/billing
+  401 → 403 → 403  http://localhost:8080/api/orgs/2/settings
+  ...
 ```
+
+Signing in (`-login`) opens the page in Chrome, waits for a password field (a single-page app draws its form late), fills the field before it and the password the way typing would, submits the form, and waits for the page to move on. The cookies the site set and a JSON Web Token the page stored in `localStorage` or `sessionStorage` then go with every request, and Chrome keeps the session for `-browser`. A form still there after submitting is an error: wrong credentials, a CAPTCHA or a second step. Logins that need more than a user name and a password (multi-step, one-time codes, SSO) take `-cookie` or `-header`.
 
 While a run carries a session, it does not request URLs that look like a logout (`/logout`, `/signout`, …), so the session lasts the whole run.
 

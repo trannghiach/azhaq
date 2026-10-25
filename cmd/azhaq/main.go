@@ -129,6 +129,7 @@ const helpText = `azhaq — generic recon engine
                [-scope FILE|PLATFORM -program NAME] [-asn AS64500] [-cidr 192.0.2.0/24] [-max-ips N]
                [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE] [-screenshots DIR] [-browser] [-tabs N]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
+               [-login URL -login-user U -login-pass P]
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
                [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
                [-allow D] [-deny D] [-passive]
@@ -183,6 +184,9 @@ func cmdRun(args []string) error {
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
+	login := fs.String("login", "", "sign in on this page with Chrome before the run; its cookies and token go with every request (needs -login-user and -login-pass)")
+	loginUser := fs.String("login-user", "", "user name or email for -login")
+	loginPass := fs.String("login-pass", "", "password for -login (default $AZHAQ_LOGIN_PASS)")
 	maxIPs := fs.Int("max-ips", 4096, "addresses expanded from -asn and -cidr prefixes, for the whole run")
 	scopeSpec := fs.String("scope", "", "a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack")
 	program := fs.String("program", "", "the program to take from a -scope list (handle, name or URL)")
@@ -405,6 +409,16 @@ func cmdRun(args []string) error {
 		}
 		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: fetch.Extra.Get("User-Agent"), Header: hdr}
 		defer opts.Browser.Close()
+	}
+	if *login != "" {
+		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass)
+		if err != nil {
+			return err
+		}
+		// The page the login ended on is the signed-in app.
+		if home != *login && hasHost(seeds, home) {
+			seeds = append(seeds, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": home}})
+		}
 	}
 	if *portsSpec != "" {
 		if opts.Ports, err = portscan.Ports(*portsSpec); err != nil {
@@ -1293,6 +1307,66 @@ func loadPathList(path string) ([]string, error) {
 		out = append(out, strings.TrimPrefix(line, "/"))
 	}
 	return out, nil
+}
+
+// hasHost says whether a URL seed is on the host of raw.
+func hasHost(seeds []types.Seed, raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	for _, sd := range seeds {
+		if su, err := url.Parse(sd.Keys["url"]); err == nil && sd.Type == types.TypeURL && su.Host == u.Host {
+			return true
+		}
+	}
+	return false
+}
+
+// signIn signs in on loginURL with Chrome (b, or a browser of its own) and
+// adds the session to every request; it returns the page the login ended
+// on.
+func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
+	if pass == "" {
+		pass = os.Getenv("AZHAQ_LOGIN_PASS")
+	}
+	if user == "" || pass == "" {
+		return "", fmt.Errorf("-login needs -login-user and -login-pass (or AZHAQ_LOGIN_PASS)")
+	}
+	if b == nil {
+		b = &browser.Browser{UserAgent: fetch.Extra.Get("User-Agent")}
+		defer b.Close()
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	s, err := b.Login(ctx, loginURL, user, pass)
+	if err != nil {
+		return "", fmt.Errorf("-login %s: %w", loginURL, err)
+	}
+	if len(s.Cookies) == 0 && s.Bearer == "" {
+		return "", fmt.Errorf("-login %s: signed in, but the site set no cookie and stored no token", loginURL)
+	}
+	if fetch.Extra == nil {
+		fetch.Extra = make(http.Header)
+	}
+	if len(s.Cookies) > 0 {
+		c := strings.Join(s.Cookies, "; ")
+		if old := fetch.Extra.Get("Cookie"); old != "" {
+			c = old + "; " + c
+		}
+		fetch.Extra.Set("Cookie", c)
+	}
+	what := fmt.Sprintf("%d cookies", len(s.Cookies))
+	if s.Bearer != "" && fetch.Extra.Get("Authorization") == "" {
+		fetch.Extra.Set("Authorization", "Bearer "+s.Bearer)
+		if b.Header == nil {
+			b.Header = map[string]any{}
+		}
+		b.Header["Authorization"] = "Bearer " + s.Bearer // the browser keeps the cookies itself
+		what += ", a token from " + s.From
+	}
+	fmt.Fprintf(os.Stderr, "azhaq: signed in as %s (%s); now on %s\n", user, what, s.URL)
+	return s.URL, nil
 }
 
 func applyExtra(cookies, headers []string) error {

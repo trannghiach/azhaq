@@ -13,11 +13,12 @@ import (
 	"github.com/trannghiach/azhaq/store"
 )
 
-// role is one session: a name and the headers its requests carry. A role
-// without headers is anonymous.
+// role is one session: a name and the headers its requests carry, or the
+// account it signs in with. A role with neither is anonymous.
 type role struct {
-	name    string
-	headers []string
+	name       string
+	headers    []string
+	user, pass string
 }
 
 // roleRow is an endpoint whose answer depends on the session.
@@ -30,10 +31,13 @@ type roleRow struct {
 // whose status differs between sessions:
 //
 //	azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url https://app/
+//	azhaq roles -login https://app/login -role anon -role-login 'member=m@x.test:pw' -- -url https://app/
 func cmdRoles(args []string) error {
 	fs := flag.NewFlagSet("roles", flag.ContinueOnError)
-	var specs stringsFlag
+	var specs, logins stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous)")
+	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome")
+	loginURL := fs.String("login", "", "the login page for -role-login")
 	dir := fs.String("dir", "", "directory for one database per role (default: azhaq-roles-<time>)")
 	jsonl := fs.Bool("jsonl", false, "print one JSON row per endpoint")
 	if err := fs.Parse(args); err != nil {
@@ -47,6 +51,12 @@ func cmdRoles(args []string) error {
 	if err != nil {
 		return err
 	}
+	if roles, err = addLogins(roles, logins); err != nil {
+		return err
+	}
+	if len(logins) > 0 && *loginURL == "" {
+		return fmt.Errorf("-role-login needs -login, the page to sign in on")
+	}
 	if len(roles) < 2 {
 		return fmt.Errorf("need at least two -role, for example -role anon -role 'user=Cookie: session=…'")
 	}
@@ -55,7 +65,7 @@ func cmdRoles(args []string) error {
 	}
 	for _, a := range runArgs {
 		switch strings.TrimLeft(strings.SplitN(a, "=", 2)[0], "-") {
-		case "db", "cookie", "header", "json", "quiet":
+		case "db", "cookie", "header", "json", "quiet", "login", "login-user", "login-pass":
 			return fmt.Errorf("roles sets -%s itself; leave it out of the run options", strings.TrimLeft(a, "-"))
 		}
 	}
@@ -72,6 +82,9 @@ func cmdRoles(args []string) error {
 		args := append([]string{"-db", db, "-quiet"}, runArgs...)
 		for _, h := range r.headers {
 			args = append(args, "-header", h)
+		}
+		if r.user != "" {
+			args = append(args, "-login", *loginURL, "-login-user", r.user, "-login-pass", r.pass)
 		}
 		fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
 		// Each run's summary goes to stderr; stdout carries the table.
@@ -140,6 +153,25 @@ func parseRoles(specs []string) ([]role, error) {
 		}
 	}
 	return out, nil
+}
+
+// addLogins adds the roles that sign in: NAME=USER:PASSWORD.
+func addLogins(roles []role, specs []string) ([]role, error) {
+	for _, s := range specs {
+		name, cred, _ := strings.Cut(s, "=")
+		user, pass, ok := strings.Cut(cred, ":")
+		name = strings.TrimSpace(name)
+		if !ok || name == "" || user == "" || pass == "" || strings.ContainsAny(name, `/\ `) {
+			return nil, fmt.Errorf("-role-login %q: want NAME=USER:PASSWORD", strings.SplitN(s, ":", 2)[0]+":…")
+		}
+		for _, r := range roles {
+			if r.name == name {
+				return nil, fmt.Errorf("-role-login %s: a role of that name is already given", name)
+			}
+		}
+		roles = append(roles, role{name: name, user: user, pass: pass})
+	}
+	return roles, nil
 }
 
 // endpointStatus is the status each URL answered with in one run: the

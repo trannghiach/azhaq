@@ -126,7 +126,7 @@ A script that names a same-origin source map has the map read: the map is record
 
 ### Sessions and roles
 
-`-cookie` and `-header` apply to every request of a run. While one is set, URLs that look like a logout are not requested. `azhaq roles` runs the same seeds once per role, in turn, each with its own database, and compares the first status each URL answered with: endpoints whose status differs between roles are printed, and URLs a role never reached show `-`.
+`-cookie` and `-header` apply to every request of a run, and so does the session `-login` gets: Chrome fills and submits the login form, and the cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). While a session is set, URLs that look like a logout are not requested, by the HTTP collectors or by `-browser`. A role of `azhaq roles` is headers (`-role`) or an account to sign in with (`-role-login`). `azhaq roles` runs the same seeds once per role, in turn, each with its own database, and compares the first status each URL answered with: endpoints whose status differs between roles are printed, and URLs a role never reached show `-`.
 
 ### Catch-all responses
 
@@ -223,15 +223,14 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 - **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo's matcher and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
-- **No browser.** JavaScript routes are extracted from script text. That covers bundled single-page apps without shipping Chromium.
+- **A browser only when asked.** JavaScript routes are extracted from script text, which covers bundled single-page apps. `-browser`, `-screenshots` and `-login` drive a Chrome already installed on the machine; Azhaq downloads none.
 - **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state. GraphQL introspection, a POST, runs only with `-graphql`.
 
 ## Limitations
 
-- No collector for IP ranges or service scanning yet.
-- Requests to a target are limited by concurrency per host (2) and an optional delay, not by a rate. Third-party sources and DNS resolvers have rate limits.
+- Requests to a target are limited by concurrency per host (4 by default) and an optional delay; path guessing, parameter discovery and port scans also have a rate. Third-party sources and DNS resolvers have rate limits.
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
-- Routes built at run time from anything but constants (user input, server responses, functions of several variables) are not visible without a browser.
+- Routes built at run time from anything but constants (user input, server responses, functions of several variables) are seen only with `-browser`, and only those a page requests while it loads: Azhaq does not click.
 - Routes only the server knows (admin APIs no page mentions) are found only by the path sweep or an API description.
 - One SQLite file per run suits a CLI. Many concurrent writers would need another store.
 
