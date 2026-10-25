@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,8 +23,10 @@ type domainRow struct {
 	AzhaqLive      int     `json:"azhaq_live"`
 	SubfinderLive  int     `json:"subfinder_live"`
 	SharedLive     int     `json:"shared_live"`
-	AzhaqSeconds   float64 `json:"azhaq_seconds"`
+	AzhaqSeconds   float64 `json:"azhaq_seconds"`      // the whole passive run: subdomains, DNS, archives
+	AzhaqSubs      float64 `json:"azhaq_subs_seconds"` // until the subdomain results were in
 	SubSeconds     float64 `json:"subfinder_seconds"`
+	GauSeconds     float64 `json:"gau_seconds"`
 	CT             string  `json:"ct"`
 	AzhaqURLs      int     `json:"azhaq_urls"` // distinct, static assets left out
 	GauURLs        int     `json:"gau_urls"`
@@ -44,10 +47,21 @@ func benchDomains() []domainRow {
 		row := domainRow{Domain: d}
 		db := filepath.Join(dir, d+"-"+stamp+".db")
 		urlsFile := filepath.Join(dir, d+"-"+stamp+"-urls.txt")
+		t0 := time.Now()
 		_, m := run(d, 15*time.Minute, dir, azhaq, "run", "-domain", d, "-passive", "-urls", urlsFile, "-db", db, "-json")
 		row.AzhaqSeconds = m.Seconds
 		exp, _ := runOut(azhaq, "export", "-db", db)
 		g := readExport(exp)
+		// The subdomain answer for d is what subfinder's time compares with;
+		// the archives, which subfinder does not read, take longer.
+		for _, o := range g.obs {
+			var p struct {
+				Domain string `json:"domain"`
+			}
+			if o.Collector == "azhaq-subdomains" && json.Unmarshal(o.Payload, &p) == nil && p.Domain == d && !o.ObservedAt.IsZero() {
+				row.AzhaqSubs = o.ObservedAt.Sub(t0).Seconds()
+			}
+		}
 
 		az := map[string]bool{}
 		for _, r := range g.rows {
@@ -118,26 +132,29 @@ func benchDomains() []domainRow {
 		// gau stops every provider when one cannot start, and Common Crawl's
 		// index refuses connections from some networks: it runs with the
 		// providers that start everywhere.
-		gauOut, _ := run(d, 10*time.Minute, dir, ref("gau"), "--providers", "wayback,otx,urlscan", "--subs", "--threads", "2", "--timeout", "30", d)
+		gauOut, gm := run(d, 10*time.Minute, dir, ref("gau"), "--providers", "wayback,otx,urlscan", "--subs", "--threads", "2", "--timeout", "30", d)
 		azURLs := urlSet(must1(os.ReadFile(urlsFile)), d)
 		gauURLs := urlSet(gauOut, d)
 		row.AzhaqURLs, row.GauURLs = len(azURLs), len(gauURLs)
+		row.GauSeconds = gm.Seconds
 		row.GauShared = overlap(gauURLs, azURLs)
 		out = append(out, row)
 	}
 	addCheck("subdomain sources and archives: no silent zeros", silent, "every empty result is a failure flagged as error or degraded, or a zero every source answered")
 	var azLive, subLive int
-	var azTime, subTime float64
+	var azTime, subTime, runTime, toolsTime float64
 	for _, r := range out {
 		azLive += r.AzhaqLive
 		subLive += r.SubfinderLive
-		azTime += r.AzhaqSeconds
+		azTime += r.AzhaqSubs
 		subTime += r.SubSeconds
+		runTime += r.AzhaqSeconds
+		toolsTime += r.SubSeconds + r.GauSeconds
 	}
 	addCheck("subdomains: live names ≥ 95% of subfinder's", subLive > 0 && float64(azLive) >= 0.95*float64(subLive),
 		"azhaq %d, subfinder %d (all domains, no API keys)", azLive, subLive)
-	addCheck("subdomains: within 2× subfinder's time", subTime > 0 && azTime <= 2*subTime,
-		"azhaq %.0fs, subfinder %.0fs", azTime, subTime)
+	addCheck("subdomains: within 2× subfinder's time", subTime > 0 && azTime > 0 && azTime <= 2*subTime,
+		"azhaq %.0fs to its subdomain results, subfinder %.0fs (the whole azhaq run, archives included, %.0fs; subfinder + gau %.0fs)", azTime, subTime, runTime, toolsTime)
 	var gauAll, gauShared, azAll int
 	for _, r := range out {
 		gauAll += r.GauURLs

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // graph is what `azhaq export` prints, parsed.
@@ -31,9 +32,10 @@ type row struct {
 }
 
 type obs struct {
-	Collector string          `json:"collector"`
-	Kind      string          `json:"kind"`
-	Payload   json.RawMessage `json:"payload"`
+	Collector  string          `json:"collector"`
+	Kind       string          `json:"kind"`
+	Payload    json.RawMessage `json:"payload"`
+	ObservedAt time.Time       `json:"observed_at"`
 }
 
 func readExport(out []byte) graph {
