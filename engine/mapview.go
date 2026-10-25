@@ -267,7 +267,7 @@ func gate(obs []types.StoredObservation) int {
 // proofOf summarizes a row's facts: the first value of each key, so a page
 // fetched by two collectors shows status=403 once.
 func proofOf(e types.Entity, obs []types.StoredObservation) string {
-	keys := []string{"status", "title", "role", "ips", "cname", "count", "error", "warning", "note", "auth", "via"}
+	keys := []string{"status", "title", "role", "ips", "cname", "open", "count", "error", "warning", "note", "auth", "via"}
 	vals := map[string]string{}
 	for _, o := range obs {
 		var m map[string]any

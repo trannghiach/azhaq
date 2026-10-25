@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -599,6 +600,81 @@ func cmdDNS(args []string) error {
 			w.line(name + " [" + strings.Join(append(append(a, aaaa...), cnames...), ",") + "]")
 		default:
 			w.line(name)
+		}
+	}
+	return w.close()
+}
+
+// cmdPorts is naabu (connect scan): host:port per open port. The hosts
+// given are the scope.
+func cmdPorts(args []string) error {
+	fs := flag.NewFlagSet("ports", flag.ContinueOnError)
+	var c common
+	c.register(fs)
+	var hosts stringsFlag
+	fs.Var(&hosts, "host", "host or IP (repeatable)")
+	list := fs.String("l", "", "file of hosts (- for stdin)")
+	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full or a list such as 22,80,8000-8100")
+	rate := fs.String("rate", "300", "connection attempts per second")
+	vals := pass(fs, "resolvers")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	hs, err := inputs(hosts, *list)
+	if err != nil {
+		return err
+	}
+	if len(hs) == 0 {
+		return fmt.Errorf("give -host HOST, -l FILE or hosts on stdin")
+	}
+	path, rm, err := tempList(hs)
+	if err != nil {
+		return err
+	}
+	defer rm()
+	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-ports"), "-ports", *spec, "-port-rate", *rate}
+	for _, h := range hs {
+		h = strings.TrimSpace(h)
+		if host, _, err := net.SplitHostPort(h); err == nil {
+			h = host
+		}
+		run = append(run, "-allow", h)
+	}
+	run = append(run, forward(vals)...)
+	st, done, err := runPreset(&c, run)
+	if err != nil {
+		return err
+	}
+	defer done()
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	for _, p := range payloads(st, "azhaq-ports") {
+		host, _ := p["host"].(string)
+		ip, _ := p["ip"].(string)
+		services, _ := p["services"].([]any)
+		for _, s := range services {
+			o, _ := s.(map[string]any)
+			port := fmt.Sprint(o["port"])
+			key := host + ":" + port
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			if w.json {
+				row := map[string]any{"host": host, "ip": ip, "port": o["port"], "protocol": "tcp"}
+				if v, ok := o["service"]; ok {
+					row["service"] = v
+				}
+				if v, ok := o["banner"]; ok {
+					row["banner"] = v
+				}
+				w.obj(row)
+			} else {
+				w.line(key)
+			}
 		}
 	}
 	return w.close()

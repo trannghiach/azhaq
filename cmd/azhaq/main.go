@@ -30,6 +30,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
@@ -83,6 +84,8 @@ func run(args []string) error {
 		return cmdURLs(args[1:])
 	case "dns":
 		return cmdDNS(args[1:])
+	case "ports":
+		return cmdPorts(args[1:])
 	case "ingest":
 		return cmdIngest(args[1:])
 	case "export":
@@ -122,6 +125,7 @@ const helpText = `azhaq — generic recon engine
   azhaq probe  -u TARGET | -l FILE | stdin  [-web-ports P] [-json] [-silent]     # like httpx
   azhaq crawl  -u URL | -l FILE | stdin  [-depth N] [-assets] [-json]            # like katana
   azhaq urls   -d DOMAIN | -dL FILE | stdin  [-json]                              # like gau
+  azhaq ports  -host HOST | -l FILE | stdin  [-p top-100|top-1000|full|LIST] [-rate N] [-json]  # like naabu
                # results on stdout, one per line; progress on stderr (-silent drops it)
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
   azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
@@ -174,6 +178,8 @@ func cmdRun(args []string) error {
 	dnsRate := fs.Float64("dns-rate", 100, "DNS queries per second per resolver")
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active: needs -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active: needs -allow)")
+	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list such as 22,80,8000-8100 (active: needs -allow)")
+	portRate := fs.Float64("port-rate", 300, "port connection attempts per second")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	var cookies, headers, allow, deny, domains stringsFlag
@@ -290,14 +296,22 @@ func cmdRun(args []string) error {
 	if *graphql {
 		budgets.Active["graphql"] = true
 	}
+	if *portsSpec != "" {
+		budgets.Active["ports"] = true
+	}
 	if len(budgets.Active) > 0 && len(allow) == 0 {
-		return fmt.Errorf("-dns-brute, -permute and -graphql are active: name the scope with -allow DOMAIN")
+		return fmt.Errorf("-dns-brute, -permute, -graphql and -ports are active: name the scope with -allow DOMAIN")
 	}
 	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
 		return err
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech}
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate}
+	if *portsSpec != "" {
+		if opts.Ports, err = portscan.Ports(*portsSpec); err != nil {
+			return fmt.Errorf("-ports: %w", err)
+		}
+	}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
 			return err

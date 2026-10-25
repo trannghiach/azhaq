@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 	"text/tabwriter"
 )
 
@@ -54,6 +55,10 @@ func printReport() {
 		fmt.Fprintf(w, "\nprobe (%d hosts)\tanswered\tshared\tstatus\ttitle\ttech\tall\tfavicon\tcdn\ttime\n", p.Hosts)
 		fmt.Fprintf(w, "azhaq\t%d\t%d\t%d\t%d\t%d\t%d\t%d/%d\t%d/%d\t%.1fs\n", p.AzhaqAnswered, p.Shared, p.Status, p.Title, p.Tech, p.All, p.FaviconAgree, p.FaviconBoth, p.CDNAgree, p.CDNHttpx, p.AzhaqSeconds)
 		fmt.Fprintf(w, "httpx\t%d\t\t\t\t\t\t\t\t%.1fs\n", p.HttpxAnswered, p.HttpxSeconds)
+	}
+	if p := rec.Ports; p != nil {
+		fmt.Fprintf(w, "\nports (top 1000, connect)\tazhaq\tnaabu\tshared\tazhaq time\tnaabu time\n")
+		fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%.1fs\t%.1fs\n", strings.Join(p.Hosts, ", "), p.AzhaqOpen, p.NaabuOpen, p.Shared, p.AzhaqSeconds, p.NaabuSeconds)
 	}
 	if d := rec.Dropin; d != nil {
 		fmt.Fprintf(w, "\ndrop-in and exports\tresult\n")

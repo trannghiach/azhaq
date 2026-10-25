@@ -35,6 +35,7 @@ type record struct {
 	Brute   *bruteRow    `json:"brute,omitempty"`
 	Probe   *probeRow    `json:"probe,omitempty"`
 	Dropin  *dropinRow   `json:"dropin,omitempty"`
+	Ports   *portsRow    `json:"ports,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -67,6 +68,7 @@ func main() {
 	apps := flag.Bool("apps", true, "run the app benchmark (docker apps and ginandjuice.shop)")
 	domains := flag.Bool("domains", true, "run the passive domain benchmark")
 	brute := flag.Bool("brute", true, "run the DNS brute-force, wildcard and permutation benchmark (vulnweb.com only)")
+	ports := flag.Bool("ports", true, "compare the port scan with naabu on scanme.nmap.org and this machine")
 	probe := flag.Bool("probe", true, "compare probing with httpx: live names of the benchmark domains, ginandjuice.shop and the local apps")
 	crapi := flag.Bool("crapi", false, "also run OWASP crAPI (seven containers, about 2 GB of images)")
 	keep := flag.Bool("keep", false, "leave the docker apps running")
@@ -119,6 +121,9 @@ func main() {
 	}
 	if *brute {
 		rec.Brute = benchBrute()
+	}
+	if *ports {
+		rec.Ports = benchPorts()
 	}
 	if *probe {
 		var local []string
