@@ -22,7 +22,9 @@ jobs:
         with:
           go-version: stable
       - name: bench
-        run: go run ./bench -apps=false -brute=false -probe=false | tee bench.txt || true
+        # Reverse DNS of a whole /25 is left to the local benchmark: the
+        # runner's resolvers answer few PTR queries.
+        run: go run ./bench -apps=false -brute=false -probe=false -network=false | tee bench.txt || true
       - name: results
         # Annotations can be read without signing in.
         run: |

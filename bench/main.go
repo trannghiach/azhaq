@@ -78,6 +78,7 @@ func main() {
 	brute := flag.Bool("brute", true, "run the DNS brute-force, wildcard and permutation benchmark (vulnweb.com only)")
 	ports := flag.Bool("ports", true, "compare the port scan with naabu on scanme.nmap.org and this machine")
 	probe := flag.Bool("probe", true, "compare probing with httpx: live names of the benchmark domains, ginandjuice.shop and the local apps")
+	network := flag.Bool("network", true, "compare ASN prefixes with RADb and reverse DNS with dnsx -ptr (needs the domain benchmark's DNS)")
 	crapi := flag.Bool("crapi", false, "also run OWASP crAPI (seven containers, about 2 GB of images)")
 	keep := flag.Bool("keep", false, "leave the docker apps running")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
@@ -147,7 +148,7 @@ func main() {
 	if *ports {
 		rec.Ports = benchPorts()
 	}
-	if *domains {
+	if *domains && *network {
 		rec.Network = benchNetwork()
 	}
 	if *probe {
