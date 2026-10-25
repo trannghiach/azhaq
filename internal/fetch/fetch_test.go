@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -214,5 +215,28 @@ func TestNoLogoutWithSession(t *testing.T) {
 	}
 	if hits != 1 {
 		t.Errorf("requests %d, want 1", hits)
+	}
+}
+
+func TestScopeStopsRequestsAndRedirects(t *testing.T) {
+	Reset()
+	defer Reset()
+	outside := 0
+	out := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { outside++ }))
+	defer out.Close()
+	in := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, strings.Replace(out.URL, "127.0.0.1", "localhost", 1)+"/sso", http.StatusFound)
+	}))
+	defer in.Close()
+	Allow = func(host string) bool { return host == "127.0.0.1" }
+	res, _, err := Do(context.Background(), in.Client(), in.URL+"/login")
+	if err != nil || len(res.Hops) != 1 || res.Hops[0].Status != http.StatusFound {
+		t.Fatalf("hops %+v err %v", res.Hops, err)
+	}
+	if _, _, err := Do(context.Background(), in.Client(), strings.Replace(out.URL, "127.0.0.1", "localhost", 1)+"/x"); !errors.Is(err, neterr.ErrOutOfScope) {
+		t.Fatalf("out of scope: %v", err)
+	}
+	if outside != 0 {
+		t.Errorf("%d requests left the scope", outside)
 	}
 }

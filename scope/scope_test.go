@@ -31,3 +31,20 @@ func TestEmptyAllowsAll(t *testing.T) {
 		t.Fatal("empty rules allow all")
 	}
 }
+
+func TestRuleForms(t *testing.T) {
+	r := Rules{
+		Allow: []string{"*.example.com", "=api.other.org", "10.1.0.0/16", "192.0.2.7"},
+		Deny:  []string{"=admin.example.com", "10.1.9.0/24"},
+	}
+	for host, want := range map[string]bool{
+		"example.com": true, "a.b.example.com": true, "admin.example.com": false,
+		"api.other.org": true, "x.api.other.org": false, "other.org": false,
+		"10.1.2.3": true, "10.1.9.9": false, "10.2.0.1": false,
+		"192.0.2.7": true, "192.0.2.70": false,
+	} {
+		if got := r.Allows(host); got != want {
+			t.Errorf("%s: %v, want %v", host, got, want)
+		}
+	}
+}

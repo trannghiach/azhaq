@@ -76,6 +76,12 @@ func run(args []string) error {
 		return cmdPlan(args[1:])
 	case "roles":
 		return cmdRoles(args[1:])
+	case "scope":
+		return cmdScope(args[1:])
+	case "watch":
+		return cmdWatch(args[1:])
+	case "new":
+		return cmdNew(args[1:])
 	case "subs":
 		return cmdSubs(args[1:])
 	case "probe":
@@ -113,6 +119,7 @@ func run(args []string) error {
 const helpText = `azhaq — generic recon engine
 
   azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
+               [-scope FILE|PLATFORM -program NAME]
                [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE]
                [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
                [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
@@ -136,6 +143,10 @@ const helpText = `azhaq — generic recon engine
   azhaq params -u URL | -l FILE | stdin  -w NAMES [-rate N] [-json]                # like arjun (GET)
                # results on stdout, one per line; progress on stderr (-silent drops it)
   azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
+  azhaq scope  -scope FILE|hackerone|bugcrowd|intigriti|yeswehack [-program NAME]  # show what a run would take
+  azhaq watch  -db WORKSPACE.db [-every 24h] [-notify WEBHOOK] [-notify-cmd CMD] [-json] -- RUN OPTIONS
+               # run again and again; report new hosts, services, URLs and ports
+  azhaq new    -db WORKSPACE.db [-since 168h] [-json]       # what the workspace first saw lately
   azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
                # one run per session; prints the endpoints whose status differs
   azhaq ingest -in facts.jsonl  [-db FILE]
@@ -157,6 +168,8 @@ func cmdRun(args []string) error {
 	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
 	in := fs.String("in", "", "JSONL seeds")
 	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
+	scopeSpec := fs.String("scope", "", "a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack")
+	program := fs.String("program", "", "the program to take from a -scope list (handle, name or URL)")
 	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
 	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 30 MB of memory)")
 	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
@@ -241,6 +254,23 @@ func cmdRun(args []string) error {
 			}
 			seeds = append(seeds, more...)
 		}
+		if *scopeSpec != "" {
+			sc, err := loadScope(*scopeSpec, *program)
+			if err != nil {
+				return err
+			}
+			more, err := scopeSeeds(sc)
+			if err != nil {
+				return err
+			}
+			seeds = append(seeds, more...)
+			allow = append(allow, sc.Allow...)
+			deny = append(deny, sc.Deny...)
+			if !*quiet && !*jsonOut {
+				fmt.Fprintf(os.Stderr, "scope %s: %d rules in, %d out, %d domains, %d targets, %d entries skipped\n",
+					sc.Program, len(sc.Allow), len(sc.Deny), len(sc.Domains), len(sc.Targets), len(sc.Skipped))
+			}
+		}
 		for _, d := range domains {
 			h := normalize.Hostname(d)
 			if h == "" || strings.ContainsAny(h, "/: ") {
@@ -249,7 +279,7 @@ func cmdRun(args []string) error {
 			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
 		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" {
-			return fmt.Errorf("need -url, -domain, -list, -org, -cloud, -in, -facts, -exec, or -demo")
+			return fmt.Errorf("need -url, -domain, -list, -scope, -org, -cloud, -in, -facts, -exec, or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
 			return fmt.Errorf("-exec needs a seed (-url, -org, -cloud, or -in)")
@@ -321,6 +351,9 @@ func cmdRun(args []string) error {
 	}
 	if *paramsFile != "" {
 		budgets.Active["params"] = true
+	}
+	if !budgets.Scope.Empty() {
+		fetch.Allow = budgets.Scope.Allows
 	}
 	if len(budgets.Active) > 0 && len(allow) == 0 {
 		return fmt.Errorf("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN")

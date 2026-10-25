@@ -82,7 +82,9 @@ Items on the seed's own host or IP run before fan-out items, but part of the ite
 
 The run's policy is applied when items are planned: `-passive` keeps only `Passive` collectors; an `Active` collector needs its flag, an `-allow` scope and a seed inside it; `-skip` removes collectors by name.
 
-A seen-set prevents running the same seed twice, and `-allow` / `-deny` filter hints before they are queued. URLs that differ only by an ID or a query value share a template (`/catalog/product?productId={n}`); at most 3 URLs per template are fetched, and the rest stay in the graph as found. Work left over when a limit is reached is stored and the run is marked `capped`.
+A seen-set prevents running the same seed twice, and `-allow` / `-deny` / `-scope` filter hints before they are queued. A scope entry is a domain with its subdomains (`example.com`, `*.example.com`), one host (`=api.example.com`), or an address range (`10.0.0.0/8`). When a scope is set, the shared HTTP client also refuses any request to a host outside it, and stops following a redirect at the first hop that leaves it (the hop is recorded with its `Location`); the path, parameter and GraphQL modules use their own clients without redirects, on seeds the scope already admitted.
+
+Collectors that read a page (crawl, scripts, API descriptions, paths, GraphQL) run after `azhaq-http` has answered for the same URL: a URL that does not answer is dropped, and so is every task waiting behind it. A target given as `host:port` or an IP address goes on as the scheme that answered. URLs that differ only by an ID or a query value share a template (`/catalog/product?productId={n}`); at most 3 URLs per template are fetched, and the rest stay in the graph as found. Work left over when a limit is reached is stored and the run is marked `capped`.
 
 ## HTTP
 

@@ -11,10 +11,14 @@ import (
 // header): one GET there would log the rest of the run out.
 var ErrEndsSession = errors.New("not requested: it would end the session")
 
+// ErrOutOfScope is returned instead of requesting a host the run's scope
+// (-allow, -deny, -scope) excludes.
+var ErrOutOfScope = errors.New("not requested: outside the scope")
+
 // Quiet errors are not failures of the run: a name that does not exist,
 // or a request Azhaq chose not to send.
 func Quiet(err error) bool {
-	return UnknownHost(err) || errors.Is(err, ErrEndsSession)
+	return UnknownHost(err) || errors.Is(err, ErrEndsSession) || errors.Is(err, ErrOutOfScope)
 }
 
 func UnknownHost(err error) bool {

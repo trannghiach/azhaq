@@ -53,6 +53,10 @@ type Result struct {
 // Extra is copied onto every GET. Cookie values stay on the wire, not in Extra's docs.
 var Extra http.Header
 
+// Allow, when set, is the run's scope: a host it rejects is never
+// requested, not even as a redirect target.
+var Allow func(host string) bool
+
 var (
 	cacheMu  sync.Mutex
 	cache    = map[string]cacheEnt{}
@@ -73,6 +77,7 @@ func Reset() {
 	inflight = map[string]chan struct{}{}
 	hostSem = map[string]chan struct{}{}
 	Extra = nil
+	Allow = nil
 	Delay = 0
 	cacheMu.Unlock()
 	resetProbes()
@@ -130,6 +135,9 @@ func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byt
 func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	if EndsSession(raw) {
 		return Result{}, false, neterr.ErrEndsSession
+	}
+	if !inScope(raw) {
+		return Result{}, false, neterr.ErrOutOfScope
 	}
 	cacheMu.Lock()
 	if e, ok := cache[raw]; ok {
@@ -279,8 +287,8 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 			break
 		}
 		next, err := resp.Request.URL.Parse(loc)
-		if err != nil {
-			break
+		if err != nil || !inScope(next.String()) {
+			break // the hop is recorded with its Location; the target is not requested
 		}
 		current = next.String()
 	}
@@ -418,6 +426,14 @@ func mustURL(raw string) *url.URL {
 		return &url.URL{}
 	}
 	return u
+}
+
+func inScope(raw string) bool {
+	if Allow == nil {
+		return true
+	}
+	u, err := url.Parse(raw)
+	return err != nil || u.Hostname() == "" || Allow(u.Hostname())
 }
 
 var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out", "sign_out", "logoff"}

@@ -64,6 +64,7 @@ Common options:
 
 | Option | Effect |
 | --- | --- |
+| `-scope FILE\|PLATFORM`, `-program NAME` | start from a bug bounty program's scope and stay inside it (see above) |
 | `-domain D`, `-org NAME`, `-cloud FILE`, `-in seeds.jsonl` | start from a domain, an organization, a cloud inventory or a list of seeds |
 | `-list FILE` | targets one per line (`-` for stdin): a URL is fetched as given, a host over HTTPS then HTTP, `host:port` or an IP address over HTTPS falling back to HTTP |
 | `-probe` | only resolve and fetch the targets themselves: no crawl, no enumeration, no redirect or CNAME targets |
@@ -123,13 +124,27 @@ azhaq export -format html     > report.html   # one self-contained page
 azhaq export -format urls | hosts             # plain lists
 ```
 
-### Watching a target over time
+### A bug bounty program
 
-Give every run of a target the same `-db` file and it becomes a workspace: each run redoes the work, entities keep the time they were first and last seen, and after each run Azhaq prints what changed since the previous one. `azhaq diff -db FILE` repeats that comparison, and `azhaq export -db FILE` lists everything with its first and last sighting.
+`-scope` takes a program's scope and makes it the run's: wildcards are enumerated as domains, hosts and URLs are probed as given, out-of-scope entries are excluded, and no request goes to a host outside it, not even a redirect target. It reads HackerOne's scope CSV export, a Burp project options file, plain lines (`*.example.com`, `app.example.org:8443`, `10.0.0.0/24`, `!excluded.example.com`), or the current scope of any public program on HackerOne, Bugcrowd, Intigriti or YesWeHack, from [bounty-targets-data](https://github.com/arkadiyt/bounty-targets-data):
 
 ```
-azhaq run -domain example.com -passive -db example.db    # every day, from cron
-azhaq diff -db example.db                                 # what appeared or vanished since the last run
+azhaq scope -scope hackerone -program security          # see what a run would take
+azhaq run -scope hackerone -program security -db h1.db
+azhaq run -scope acme-scope.csv -ports top-100 -dirs common.txt -db acme.db
+```
+
+Entries a run cannot use (mobile apps, source code, wildcards outside the leftmost label) are listed as skipped.
+
+### Watching a target over time
+
+Give every run of a target the same `-db` file and it becomes a workspace: each run redoes the work, entities keep the time they were first and last seen, and after each run Azhaq prints what changed since the previous one. `azhaq watch` runs that for you and reports only what a person watching cares about: new names that resolve, new web services, new URLs, open ports that changed, and what disappeared. It posts to Slack, Discord, Telegram or any JSON webhook, and stays quiet when nothing changed.
+
+```
+azhaq watch -db acme.db -notify https://hooks.slack.com/services/… -- -scope acme-scope.csv    # once, from cron
+azhaq watch -db acme.db -every 24h -notify "https://api.telegram.org/bot…/sendMessage?chat_id=…" -- -domain acme.com
+azhaq new -db acme.db -since 72h        # what the workspace first saw in the last three days
+azhaq diff -db acme.db                  # the full difference between the last two runs
 ```
 
 ### Comparing sessions

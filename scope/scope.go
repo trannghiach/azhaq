@@ -2,6 +2,7 @@
 package scope
 
 import (
+	"net"
 	"strings"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -9,7 +10,12 @@ import (
 )
 
 // Rules is an optional allow/deny list for active fan-out (hosts and URLs).
-// Empty Allow means any host is allowed unless it matches Deny.
+// Empty Allow means any host is allowed unless it matches Deny. An entry is
+//
+//	example.com      the domain and its subdomains
+//	*.example.com    the same (bug bounty scopes write wildcards this way)
+//	=api.example.com that host only
+//	10.0.0.0/8       addresses in the range; 192.0.2.7 is one address
 type Rules struct {
 	Allow []string
 	Deny  []string
@@ -56,12 +62,22 @@ func (r Rules) AllowsSeed(s types.Seed) bool {
 }
 
 func hostMatch(host, rule string) bool {
-	rule = normalize.Hostname(rule)
+	rule = strings.TrimSpace(rule)
+	if strings.Contains(rule, "/") {
+		_, n, err := net.ParseCIDR(rule)
+		ip := net.ParseIP(host)
+		return err == nil && ip != nil && n.Contains(ip)
+	}
+	exact := strings.HasPrefix(rule, "=")
+	rule = normalize.Hostname(strings.TrimPrefix(strings.TrimPrefix(rule, "="), "*."))
 	if rule == "" {
 		return false
 	}
 	if host == rule {
 		return true
+	}
+	if exact || net.ParseIP(rule) != nil {
+		return false
 	}
 	return strings.HasSuffix(host, "."+rule)
 }
