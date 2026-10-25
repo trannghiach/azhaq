@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,13 @@ import (
 
 // ErrNoChrome means no Chrome or Chromium was found.
 var ErrNoChrome = errors.New("no Chrome or Chromium found (install one, or set AZHAQ_CHROME to its path)")
+
+// ErrNoSandbox means the system refused Chrome its sandbox.
+var ErrNoSandbox = errors.New("Chrome could not start its sandbox (set AZHAQ_CHROME_NO_SANDBOX=1 to run it without one, knowing the pages are untrusted)")
+
+// Start launches Chrome now rather than on the first page, so a run can
+// report a Chrome that cannot start before it begins.
+func (b *Browser) Start() error { return b.start() }
 
 // Find returns the path of an installed Chrome or Chromium.
 func Find() (string, error) {
@@ -73,6 +81,12 @@ func (b *Browser) start() error {
 			chromedp.Flag("disable-extensions", true),
 			chromedp.Flag("mute-audio", true),
 		)
+		// The sandbox stays on: the pages are the targets'. Where the system
+		// refuses it (AppArmor on recent Ubuntu, some containers), the user
+		// may turn it off knowingly.
+		if os.Getenv("AZHAQ_CHROME_NO_SANDBOX") == "1" {
+			opts = append(opts, chromedp.NoSandbox)
+		}
 		if b.UserAgent != "" {
 			opts = append(opts, chromedp.UserAgent(b.UserAgent))
 		}
@@ -80,6 +94,9 @@ func (b *Browser) start() error {
 		root, _ := chromedp.NewContext(b.alloc)
 		if err := chromedp.Do(root); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
+			if strings.Contains(err.Error(), "sandbox") {
+				b.err = fmt.Errorf("%w: %v", ErrNoSandbox, err)
+			}
 			return
 		}
 		b.root = root

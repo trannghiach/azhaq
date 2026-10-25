@@ -449,6 +449,9 @@ func cmdRun(args []string) error {
 		}
 		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: fetch.Extra.Get("User-Agent"), Header: hdr}
 		defer opts.Browser.Close()
+		if err := opts.Browser.Start(); err != nil {
+			return fmt.Errorf("-screenshots and -browser: %w", err)
+		}
 	}
 	if *login != "" {
 		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass)

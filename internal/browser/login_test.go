@@ -70,6 +70,11 @@ func TestLogin(t *testing.T) {
 	defer srv.Close()
 	b := &Browser{}
 	defer b.Close()
+	if err := b.Start(); errors.Is(err, ErrNoSandbox) {
+		t.Skip(err)
+	} else if err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
