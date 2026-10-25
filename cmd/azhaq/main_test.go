@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/store"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/store"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func captureStdout(t *testing.T, fn func() error) (string, error) {

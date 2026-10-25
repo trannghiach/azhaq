@@ -10,11 +10,11 @@ import (
 
 	"github.com/miekg/dns"
 
-	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 const Name = "azhaq-dns"

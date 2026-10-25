@@ -7,11 +7,11 @@ import (
 	"net"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 const Name = "azhaq-tls"

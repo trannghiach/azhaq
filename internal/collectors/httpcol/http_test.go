@@ -12,7 +12,7 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 var icon, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg==")

@@ -10,7 +10,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/trannghiach/azhaq/internal/dnsr"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func zone(w dns.ResponseWriter, r *dns.Msg) {

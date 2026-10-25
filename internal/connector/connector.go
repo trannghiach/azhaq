@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 // Protocol is the stdin/stdout JSONL contract version.

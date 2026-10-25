@@ -116,6 +116,22 @@ roles  anon  user  (12 endpoints differ; databases in azhaq-roles-20261025-18150
 
 While a run carries a session, it does not request URLs that look like a logout (`/logout`, `/signout`, …), so the session lasts the whole run.
 
+### As a library
+
+The catalog, engine, store and types are public packages, so a worker or a tool of your own can run Azhaq in-process and add collectors of its own (`catalog.Collector`):
+
+```go
+st, _ := store.Open("example.db")
+cat := catalog.New()
+collectors.RegisterAll(cat, nil)
+eng := &engine.Engine{Cat: cat, Store: st}
+budgets := engine.DefaultBudgets()
+budgets.Passive = true
+err := eng.RunLocal(ctx, []types.Seed{{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.com"}}}, budgets)
+```
+
+The API may still change before 1.0.
+
 ## Collectors
 
 | Collector | Input | Collects |

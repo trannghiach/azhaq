@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 const openapi3 = `{

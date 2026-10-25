@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func jsServer(t *testing.T, hits map[string]*atomic.Int32) *httptest.Server {

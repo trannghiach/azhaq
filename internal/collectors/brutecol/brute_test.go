@@ -11,7 +11,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/trannghiach/azhaq/internal/dnsr"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 // live names in example.org; *.wild.example.org is a wildcard.

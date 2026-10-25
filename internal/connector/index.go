@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 // HostIndex is a local stand-in for a paid hostname index.

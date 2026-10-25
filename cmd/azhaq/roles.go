@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/store"
+	"github.com/trannghiach/azhaq/store"
 )
 
 // role is one session: a name and the headers its requests carry. A role

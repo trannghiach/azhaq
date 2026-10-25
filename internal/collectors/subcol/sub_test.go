@@ -13,9 +13,9 @@ import (
 
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
 
-	"github.com/trannghiach/azhaq/internal/catalog"
+	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/limit"
-	"github.com/trannghiach/azhaq/internal/types"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func fake(name string, need keyNeed, deflt bool, names []string, err error) source {

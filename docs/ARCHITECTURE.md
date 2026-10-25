@@ -47,7 +47,7 @@ type Collector interface {
 
 `Run` only reports: it calls `emit` for each fact and returns follow-up seeds in `RunMeta.NextHints`. It never writes the graph or schedules work.
 
-All collectors register in one in-process catalog (`internal/catalog`, filled by `collectors.RegisterAll`). Planning is a lookup, `catalog.Where(seed.Type)`, so the engine and CLI never name a collector. Adding a capability means writing a collector and registering it.
+All collectors register in one in-process catalog (`catalog`, filled by `collectors.RegisterAll`). Planning is a lookup, `catalog.Where(seed.Type)`, so the engine and CLI never name a collector. Adding a capability means writing a collector and registering it.
 
 A collector may also implement:
 
@@ -59,7 +59,7 @@ A collector can also hand over seeds before it returns with `catalog.Hint(ctx, s
 
 ## Engine
 
-`internal/engine` exposes four operations:
+`engine` exposes four operations:
 
 - **Plan** turns seeds into work items, one per matching collector.
 - **Run** executes one work item. It upserts the seed entity, passes an `emit` function that writes each observation and its edges to the store, then returns the collector's hints plus derived seeds (URL → hostname → eTLD+1). Each item has an idempotency key, a hash of collector, seed type and seed key. An item already in the store is skipped, so retries are free.
@@ -204,20 +204,22 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 ```
 bench/                    comparison with reference tools (go run ./bench)
+catalog/                  collector registry and interfaces (public)
 cmd/azhaq/                CLI
 cmd/azhaq-index-fixture/  example connector used by tests
+collectors/               registers the built-in collectors (public)
+engine/                   Plan, Run, Ingest, scheduler, identity, map view (public)
+scope/                    -allow / -deny rules (public)
+store/                    SQLite graph, runs and diff (public)
+types/                    seeds, observations, entities (public)
 internal/
-  catalog/                collector registry
   collectors/             one package per collector
   connector/              JSONL protocol for external collectors
   dnsr/                   resolver pool and wildcard detection
-  engine/                 Plan, Run, Ingest, scheduler, identity, map view
   fetch/                  shared HTTP client
   fingerprint/            technologies, CDN ranges, favicon hash
   limit/                  rate limits per host, source or resolver
   normalize/              seed and hostname normalization
-  scope/                  -allow / -deny rules
-  store/                  SQLite graph and run diff
   webextract/             HTML and JavaScript URL extraction
 fixtures/                 inputs for tests and the demo
 ```
