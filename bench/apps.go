@@ -133,7 +133,6 @@ func benchApps() []appResult {
 	juice.Azhaq = scoreAzhaq(g, juiceURL, truth, shell, m)
 	juice.Katana, juice.Jsluice, juice.Union = runKatanaJsluice(juiceURL, truth, shell)
 	juice.Ffuf = compareFfuf(juiceURL, g, shell)
-	res = append(res, juice)
 	addCheck("juice-shop: JS routes ≥ 40/45", juice.Azhaq.Truth >= 40, "azhaq %d/%d, katana %d/%d", juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth))
 	addCheck("juice-shop: no catch-all page reported as visited", juice.Azhaq.Shell == 0, "%d visited URLs return the SPA index", juice.Azhaq.Shell)
 	juice.Roles = benchRoles(juiceURL, dir)
@@ -141,6 +140,7 @@ func benchApps() []appResult {
 	addCheck("juice-shop: -browser finds the known routes katana -headless finds", juice.Browser.Azhaq.Truth >= juice.Browser.Katana.Truth,
 		"azhaq -browser %d/%d in %.0fs, katana -headless %d/%d in %.0fs", juice.Browser.Azhaq.Truth, len(truth), juice.Browser.Azhaq.Seconds,
 		juice.Browser.Katana.Truth, len(truth), juice.Browser.Katana.Seconds)
+	res = append(res, juice)
 
 	_, _, _ = runAzhaq(juiceURL, db("juice-again"))
 	sum := diffSummary(db("juice"), db("juice-again"))
