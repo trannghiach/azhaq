@@ -68,7 +68,7 @@ Common options:
 | `-list FILE` | targets one per line (`-` for stdin): a URL is fetched as given, a host over HTTPS then HTTP, `host:port` or an IP address over HTTPS falling back to HTTP |
 | `-probe` | only resolve and fetch the targets themselves: no crawl, no enumeration, no redirect or CNAME targets |
 | `-web-ports 80,443,8080` | ports to probe on each hostname (default: 443, falling back to 80) |
-| `-no-tech` | skip technology fingerprints; their compiled patterns take about 190 MB of memory |
+| `-no-tech` | skip technology fingerprints (about 30 MB of memory) |
 | `-urls FILE` | write every historical URL found for the run's domains, one per line (what gau prints) |
 | `-passive` | only third-party sources and DNS resolution; nothing is sent to the hosts |
 | `-allow D` / `-deny D` | keep the run inside, or out of, a domain |
@@ -179,4 +179,4 @@ The memory row is a loss: technology fingerprints cost about 170 MB. [bench/READ
 
 ## License
 
-[MIT](LICENSE). Dependencies are MIT, BSD, Apache or Unlicense licensed, and CI checks it. Most subdomain sources are [subfinder](https://github.com/projectdiscovery/subfinder)'s (MIT, ProjectDiscovery), run in-process; technology fingerprints come from [wappalyzergo](https://github.com/projectdiscovery/wappalyzergo) and CDN ranges from [cdncheck](https://github.com/projectdiscovery/cdncheck) (both MIT, ProjectDiscovery).
+[MIT](LICENSE). Dependencies are MIT, BSD, Apache or Unlicense licensed, and CI checks it. Most subdomain sources are [subfinder](https://github.com/projectdiscovery/subfinder)'s (MIT, ProjectDiscovery), run in-process; technology fingerprints come from [wappalyzergo](https://github.com/projectdiscovery/wappalyzergo), whose passive matcher is included in `internal/wappalyzer` with its regexps compiled on first use, and CDN ranges from [cdncheck](https://github.com/projectdiscovery/cdncheck) (both MIT, ProjectDiscovery).

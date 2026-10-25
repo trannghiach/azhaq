@@ -38,8 +38,7 @@ type Collector struct {
 	Ports []int
 	// NoFavicon skips the favicon request on root pages.
 	NoFavicon bool
-	// NoTech skips technology fingerprints, whose compiled patterns take
-	// about 190 MB of memory.
+	// NoTech skips technology fingerprints (about 30 MB of memory).
 	NoTech bool
 
 	emitted sync.Map // URLs already reported in this run

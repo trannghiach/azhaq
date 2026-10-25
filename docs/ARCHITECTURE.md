@@ -98,7 +98,7 @@ All HTTP collectors share one client (`internal/fetch`):
 
 `azhaq-http` probes a hostname over HTTPS and falls back to HTTP; with `-web-ports` it tries each port, HTTPS first except on port 80. A `host:port` or IP address from `-list` becomes a URL with the same fallback. For each answer it stores, besides status, title and headers:
 
-- `tech`: wappalyzer fingerprints (`internal/fingerprint`, wappalyzergo) of the final response's headers and body, as `Name` or `Name:version`;
+- `tech`: wappalyzer fingerprints of the final response's headers and body, as `Name` or `Name:version`. `internal/wappalyzer` is wappalyzergo's passive matcher with one change: each pattern's regexp compiles the first time its literal prefilter passes. Upstream compiles all of them at load, and because it bounds `+` and `*` to 250 repetitions, which Go unrolls, that held about 80 MB; on first use it is a few MB. A test runs both matchers over a page built for each of the 7,642 fingerprints and requires identical results;
 - `favicon`: on a site's front page, the MurmurHash3 of the icon's base64 encoding, the value Shodan indexes as `http.favicon.hash`. The icon is the page's `<link rel=icon>` (`.ico` first) or `/favicon.ico`, at most two requests, and only on the same site;
 - `length`, `words`, `lines` of the final body (counted like httpx), `ms` for the whole redirect chain, and `ip`, the address the request connected to (left out behind a proxy);
 - `final_status` when the request was redirected.
@@ -186,7 +186,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 ## Design choices
 
-- **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
+- **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo's matcher and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
 - **No browser.** JavaScript routes are extracted from script text. That covers bundled single-page apps without shipping Chromium.
 - **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state. GraphQL introspection, a POST, runs only with `-graphql`.

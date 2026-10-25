@@ -130,7 +130,7 @@ func cmdRun(args []string) error {
 	in := fs.String("in", "", "JSONL seeds")
 	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
 	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
-	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 190 MB of memory)")
+	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 30 MB of memory)")
 	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")

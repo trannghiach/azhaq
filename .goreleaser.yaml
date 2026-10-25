@@ -6,6 +6,9 @@ before:
     # The license text of every dependency compiled into the binary.
     - rm -rf third_party
     - go run github.com/google/go-licenses/v2@v2.0.1 save ./cmd/azhaq --save_path=third_party
+    # Code included from wappalyzergo (internal/wappalyzer) keeps its license.
+    - mkdir -p third_party/github.com/projectdiscovery/wappalyzergo
+    - cp internal/wappalyzer/LICENSE.md third_party/github.com/projectdiscovery/wappalyzergo/LICENSE.md
 
 builds:
   - id: azhaq
