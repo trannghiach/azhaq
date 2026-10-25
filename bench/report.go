@@ -88,6 +88,12 @@ func printReport() {
 		fmt.Fprintf(w, "OpenAPI export, VAmPI / crAPI paths\t%d/12, %d/40\n", d.OpenAPIVampi, d.OpenAPICrapi)
 		fmt.Fprintf(w, "targets, HTML report, urls\t%d, %d bytes, %d\n", d.Targets, d.HTMLBytes, d.URLs)
 	}
+	if s := rec.Scale; s != nil {
+		fmt.Fprintf(w, "\nscale (juice-shop, %d URLs in one run)\tURLs as one run\tdetail\n", s.URLs)
+		fmt.Fprintf(w, "-max-requests %d, resumed\t%v\t%d processes, at most %d requests received from one\n", s.Budget, s.BudgetSame, s.Processes, s.MostReceived)
+		fmt.Fprintf(w, "kill -9, resumed\t%v\tkilled after %.1fs\n", s.KilledSame, s.KilledAfter)
+		fmt.Fprintf(w, "two workers\t%v\t%d tasks on the workers, %.1fs (one process %.1fs)\n", s.WorkersSame, s.WorkerTasks, s.Seconds, s.OneSeconds)
+	}
 	if t := rec.Tenants; t != nil {
 		fmt.Fprintln(w, "\nroles (multi-tenant fixture)\trows as expected\twrong\textra\tsigned-in logouts\ttime")
 		fmt.Fprintf(w, "anon → member → owner\t%d/%d\t%d\t%d\t%d\t%.1fs\n", t.Matched, t.Expected, len(t.Wrong), len(t.Extra), t.Logouts, t.Seconds)
