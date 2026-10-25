@@ -36,17 +36,21 @@ func SetRate(perSecond float64) {
 // spent. Every request to a target goes through it (GETs, path and
 // parameter guesses, GraphQL, pages loaded in Chrome).
 func Spend(ctx context.Context) error {
+	w, _ := ctx.Value(refusedKey{}).(*watch)
 	for {
 		n := sent.Load()
 		if MaxRequests > 0 && n >= MaxRequests {
-			if b, ok := ctx.Value(refusedKey{}).(*atomic.Bool); ok {
-				b.Store(true)
+			if w != nil {
+				w.refused.Store(true)
 			}
 			return neterr.ErrBudget
 		}
 		if sent.CompareAndSwap(n, n+1) {
 			break
 		}
+	}
+	if w != nil {
+		w.used.Add(1)
 	}
 	paceMu.Lock()
 	p := pace
@@ -59,18 +63,27 @@ func Spend(ctx context.Context) error {
 
 type refusedKey struct{}
 
+type watch struct {
+	refused atomic.Bool
+	used    atomic.Int64
+}
+
 // WatchBudget marks ctx so that refused reports whether the budget refused
-// a request made with it: a collector may take a refused request for a
-// path that does not exist, and its work is then not done.
-func WatchBudget(ctx context.Context) (_ context.Context, refused func() bool) {
-	b := new(atomic.Bool)
-	return context.WithValue(ctx, refusedKey{}, b), b.Load
+// a request made with it (a collector may take a refused request for a
+// path that does not exist, and its work is then not done), and used how
+// many it allowed.
+func WatchBudget(ctx context.Context) (_ context.Context, refused func() bool, used func() int) {
+	w := new(watch)
+	return context.WithValue(ctx, refusedKey{}, w), w.refused.Load, func() int { return int(w.used.Load()) }
 }
 
 // Count accounts for requests already sent without asking (the
 // subresources a page loaded in Chrome fetched): they count against the
 // budget, which may then be spent.
 func Count(n int) { sent.Add(int64(n)) }
+
+// Spent says the budget allows no more requests.
+func Spent() bool { return MaxRequests > 0 && sent.Load() >= MaxRequests }
 
 // Sent is how many requests the run has sent to its targets.
 func Sent() int64 { return sent.Load() }

@@ -37,7 +37,7 @@ func OpenExisting(path string) (*Store, error) {
 }
 
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)")
+	db, err := sql.Open("sqlite", path+"?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)")
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +98,18 @@ CREATE TABLE IF NOT EXISTS run_entities (
   entity_id TEXT NOT NULL,
   PRIMARY KEY (run_id, entity_id)
 );
+CREATE TABLE IF NOT EXISTS tasks (
+  run_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  collector TEXT NOT NULL,
+  seed TEXT NOT NULL,
+  depth INTEGER NOT NULL,
+  prio INTEGER NOT NULL,
+  done INTEGER NOT NULL DEFAULT 0,
+  tries INTEGER NOT NULL DEFAULT 0,
+  need INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (run_id, id)
+);
 CREATE TABLE IF NOT EXISTS spend (
   program TEXT NOT NULL,
   day TEXT NOT NULL,
@@ -115,7 +127,10 @@ CREATE TABLE IF NOT EXISTS run_edges (
 	if err != nil {
 		return err
 	}
-	return s.ensureColumn("observations", "run_id", "TEXT")
+	if err := s.ensureColumn("observations", "run_id", "TEXT"); err != nil {
+		return err
+	}
+	return s.ensureColumn("runs", "args", "TEXT")
 }
 
 func (s *Store) ensureColumn(table, col, decl string) error {
@@ -241,7 +256,14 @@ func (s *Store) AddObservation(entityID string, o types.Observation) (string, er
 	if len(raw) == 0 {
 		raw = []byte("{}")
 	}
-	sum := sha256.Sum256([]byte(entityID + o.Collector + o.Kind + string(o.Payload) + o.ObservedAt.UTC().Format(time.RFC3339Nano)))
+	// Within a run, the same fact is stored once (a task run again after
+	// an interruption reports it again); facts ingested outside a run keep
+	// their time.
+	stamp := s.runID
+	if stamp == "" {
+		stamp = o.ObservedAt.UTC().Format(time.RFC3339Nano)
+	}
+	sum := sha256.Sum256([]byte(entityID + o.Collector + o.Kind + string(o.Payload) + stamp))
 	id := hex.EncodeToString(sum[:16])
 	_, err := s.db.Exec(`
 INSERT OR IGNORE INTO observations (id, entity_id, collector, source, kind, payload, confidence, observed_at, run_id)

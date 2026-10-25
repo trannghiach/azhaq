@@ -79,6 +79,8 @@ func run(args []string) error {
 		return cmdPlan(args[1:])
 	case "roles":
 		return cmdRoles(args[1:])
+	case "resume":
+		return cmdResume(args[1:])
 	case "scope":
 		return cmdScope(args[1:])
 	case "watch":
@@ -211,6 +213,7 @@ func cmdRun(args []string) error {
 	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
 	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
 	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
+	resumeRun := fs.String("resume-run", "", "continue this run of -db (azhaq resume sets it)")
 	daily := fs.Int64("daily-requests", 0, "requests a day to the program's targets (-program, else this run's targets), counted over the runs in -db")
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
@@ -397,8 +400,18 @@ func cmdRun(args []string) error {
 	if len(budgets.Active) > 0 && len(allow) == 0 {
 		return fmt.Errorf("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN")
 	}
-	if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
-		return err
+	doneBefore := 0
+	if *resumeRun != "" {
+		st.UseRun(*resumeRun)
+		budgets.Resume = true
+		doneBefore = st.TasksDone()
+	} else {
+		if err := st.BeginRun(newRunID(), *depth, budgets.MaxItems); err != nil {
+			return err
+		}
+		if err := st.SetRunArgs(keptArgs(args)); err != nil {
+			return err
+		}
 	}
 	fetch.SetRate(*rateFlag)
 	fetch.MaxRequests = *maxRequests
@@ -493,7 +506,7 @@ func cmdRun(args []string) error {
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
 	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, Timeout: *urlsTimeout}
-	if *urlsOut != "" {
+	if *urlsOut != "" && *resumeRun == "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends
 			return err
 		}
@@ -602,6 +615,12 @@ func cmdRun(args []string) error {
 		fmt.Println(stats.Line())
 		if err := json.NewEncoder(os.Stdout).Encode(stats); err != nil {
 			return err
+		}
+	}
+	if left := st.TasksLeft(); left > 0 && !*quiet {
+		fmt.Fprintf(os.Stderr, "azhaq: %d tasks left; azhaq resume -db %s continues the run\n", left, path)
+		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
+			fmt.Fprintf(os.Stderr, "azhaq: no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests\n", fetch.MaxRequests)
 		}
 	}
 	if *failErrs && stats.Errors+stats.Degraded > 0 {

@@ -5,13 +5,14 @@ package engine
 
 import (
 	"context"
-	"errors"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
@@ -70,6 +71,20 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	e.linkInDomain(seed, ent, now)
 
 	meta := types.RunMeta{ItemID: item.ID, Status: types.StatusOK}
+	write := func(o types.Observation) error {
+		if _, err := e.Store.AddObservation(ent.ID, o); err != nil {
+			return err
+		}
+		e.linkFacts(ent, o, time.Now().UTC())
+		return nil
+	}
+	// Under a request budget, what a task reports is held until it ends: a
+	// refused request can pass for a missing page (a catch-all check that
+	// never ran), so the reports of a task the budget stopped are dropped
+	// and its run after azhaq resume reports again.
+	var mu sync.Mutex
+	var held []types.Observation
+	hold := fetch.MaxRequests > 0
 	emit := func(o types.Observation) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -80,31 +95,48 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		if o.Collector == "" {
 			o.Collector = col.Name()
 		}
-		if _, err := e.Store.AddObservation(ent.ID, o); err != nil {
-			return err
-		}
-		e.linkFacts(ent, o, time.Now().UTC())
+		mu.Lock()
+		defer mu.Unlock()
 		meta.EmitCount++
+		if hold {
+			held = append(held, o)
+			return nil
+		}
+		return write(o)
+	}
+	release := func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		for _, o := range held {
+			if err := write(o); err != nil {
+				return err
+			}
+		}
+		held = nil
 		return nil
 	}
 
 	done := timing.Start(ctx, col.Name(), seed.Key())
-	ctx, refused := fetch.WatchBudget(ctx)
+	ctx, refused, used := fetch.WatchBudget(ctx)
 	got, err := col.Run(ctx, seed, emit)
 	done()
+	if errors.Is(err, neterr.ErrBudget) || refused() {
+		// Not done, whatever the collector made of the refusal: nothing
+		// waiting on it is dropped, and azhaq resume runs it again.
+		meta.Status, meta.Error, meta.Drop = types.StatusCapped, neterr.ErrBudget.Error(), false
+		meta.Requests, meta.EmitCount = used(), 0
+		e.markCapped()
+		return meta, neterr.ErrBudget
+	}
+	if err := release(); err != nil {
+		return types.RunMeta{ItemID: item.ID, Status: types.StatusError, Error: err.Error()}, err
+	}
 	if ctx.Err() != nil {
 		meta.Status = types.StatusCancelled
 		meta.Error = ctx.Err().Error()
 		return meta, ctx.Err()
 	}
 	meta.Drop = got.Drop
-	if errors.Is(err, neterr.ErrBudget) || refused() {
-		// Not done, whatever the collector made of the refusal: nothing
-		// waiting on it is dropped, and azhaq resume runs it again.
-		meta.Status, meta.Error, meta.Drop = types.StatusCapped, neterr.ErrBudget.Error(), false
-		e.markCapped()
-		return meta, neterr.ErrBudget
-	}
 	if err != nil {
 		meta.Status = types.StatusError
 		meta.Error = err.Error()

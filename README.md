@@ -100,6 +100,7 @@ Other commands:
 azhaq roles  -role anon -role 'user=Authorization: Bearer …' -- -url URL
 azhaq roles  -login URL -role anon -role-login 'member=USER:PASS' -role-login 'owner=USER:PASS' -- -url URL
                                    # one run per session; endpoints whose status differs
+azhaq resume -db FILE              # continue a run that was interrupted or stopped by a budget
 azhaq plan   -url URL              # show which collectors would run
 azhaq export [-db FILE]            # dump the graph as JSONL
 azhaq diff   -a OLD.db -b NEW.db   # compare two runs of the same seeds
@@ -157,6 +158,19 @@ azhaq watch -db acme.db -every 24h -notify "https://api.telegram.org/bot…/send
 azhaq new -db acme.db -since 72h        # what the workspace first saw in the last three days
 azhaq diff -db acme.db                  # the full difference between the last two runs
 ```
+
+### Budgets and resuming
+
+A program's rules often cap the traffic: `-rate 10` paces requests to its targets, `-max-requests 5000` stops a run after that many, and `-daily-requests 20000 -program NAME` spreads a day's allowance over the runs in a workspace (`-db`). Work a budget stops is not lost: `azhaq resume -db FILE` continues the run where it stopped, and so it does after Ctrl-C or a crash.
+
+```
+$ azhaq run -url https://app.example.com/ -db app.db -max-requests 2000
+azhaq: 412 tasks left; azhaq resume -db app.db continues the run
+$ azhaq resume -db app.db                  # the stored options, a fresh -max-requests 2000
+$ azhaq resume -db app.db -cookie sid=…    # sessions are not stored: give them again
+```
+
+A run stopped and resumed finds what an uninterrupted one does: on Juice Shop, 40 requests per process and 46 resumes give the same 147 URLs as one run, and so does a run killed with `kill -9` and resumed.
 
 ### Comparing sessions
 

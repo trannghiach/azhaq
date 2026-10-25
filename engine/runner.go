@@ -27,6 +27,9 @@ type Budgets struct {
 	MaxNames int
 	// Skip names collectors that must not run.
 	Skip map[string]bool
+	// Resume continues the store's current run from its recorded tasks
+	// instead of starting from the seeds.
+	Resume bool
 }
 
 type quietKey struct{}

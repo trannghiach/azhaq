@@ -110,6 +110,9 @@ type RunMeta struct {
 	// Drop tells collectors that wait on this one (catalog.Info.After) to
 	// leave the seed alone: a name that does not resolve, a wildcard answer.
 	Drop bool `json:"drop,omitempty"`
+	// Requests is how many requests to targets the work sent, set when the
+	// request budget stopped it.
+	Requests int `json:"requests,omitempty"`
 }
 
 type Entity struct {

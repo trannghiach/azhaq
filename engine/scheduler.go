@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/webextract"
+	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -55,12 +57,20 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	if !b.Passive {
 		s.reserve = fanReserve(b)
 	}
-	expanded := expandDerived(seeds, map[string]bool{})
-	e.persistSeeds(expanded)
-	for _, seed := range expanded {
-		s.add(seed, 0, false)
+	if b.Resume && e.Store != nil {
+		if err := s.restore(); err != nil {
+			return err
+		}
+	} else {
+		expanded := expandDerived(seeds, map[string]bool{})
+		e.persistSeeds(expanded)
+		for _, seed := range expanded {
+			s.add(seed, 0, false)
+		}
 	}
+	s.flush()
 	s.loop(ctx)
+	s.flush()
 	leftover := s.leftover()
 	if len(leftover) > 0 && s.ran+s.names > 0 {
 		e.markCapped()
@@ -104,6 +114,101 @@ type scheduler struct {
 	inflight                int
 	beyond                  []types.Seed // hints past MaxDepth
 	results                 chan finished
+
+	// The frontier as the store records it (see store.Task): tasks
+	// planned and tasks done since the last flush.
+	planned []store.Task
+	done    []string
+	stopped []store.Stopped
+	held    []task // work that contacts targets, kept back once the budget is spent
+	retry   []task // work the budget stopped before, cheapest first: one at a time
+}
+
+// record notes a planned task for the store.
+func (s *scheduler) record(t task) {
+	if s.e.Store != nil {
+		s.planned = append(s.planned, store.Task{ID: workID(t.col, t.seed), Collector: t.col, Seed: t.seed, Depth: t.depth, Prio: t.prio})
+	}
+}
+
+// finish notes a task that will not run again in this run.
+func (s *scheduler) finish(t task) {
+	if s.e.Store != nil {
+		s.done = append(s.done, workID(t.col, t.seed))
+	}
+}
+
+// flush writes the noted tasks in one transaction.
+func (s *scheduler) flush() {
+	if s.e.Store == nil || len(s.planned)+len(s.done)+len(s.stopped) == 0 {
+		return
+	}
+	if err := s.e.Store.SaveTasks(s.planned, s.done, s.stopped); err != nil {
+		fmt.Fprintf(os.Stderr, "azhaq: recording tasks: %v\n", err)
+	}
+	s.planned, s.done, s.stopped = s.planned[:0], s.done[:0], s.stopped[:0]
+}
+
+// restore rebuilds the queues from the run's recorded tasks: done ones
+// count against the budgets, the rest are queued again (behind the task
+// they wait for, when that is not done either).
+func (s *scheduler) restore() error {
+	rows, err := s.e.Store.Tasks()
+	if err != nil {
+		return err
+	}
+	open := map[string]map[string]bool{} // seed → collectors not done
+	for _, r := range rows {
+		seed := normalize.Seed(r.Seed)
+		k := seedKey(seed)
+		if !s.seen[k] {
+			s.seen[k] = true
+			if seed.Type == types.TypeURL && webextract.Templated(seed.Key()) {
+				s.tmpl[webextract.Template(seed.Key())]++
+			}
+		}
+		if open[k] == nil {
+			open[k] = map[string]bool{}
+		}
+		if !r.Done {
+			open[k][r.Collector] = true
+			continue
+		}
+		col, ok := s.e.Cat.Get(r.Collector)
+		if _, batch := col.(catalog.Batcher); ok && batch {
+			s.names++
+		} else {
+			s.ran++
+			if r.Prio == 0 {
+				s.originRan++
+			}
+		}
+	}
+	var again []string
+	for _, r := range rows {
+		col, ok := s.e.Cat.Get(r.Collector)
+		if r.Done || !ok {
+			continue
+		}
+		seed := normalize.Seed(r.Seed)
+		k := seedKey(seed)
+		t := task{col: r.Collector, seed: seed, depth: r.Depth, prio: r.Prio}
+		again = append(again, r.ID)
+		if after := catalog.InfoOf(col).After; after != "" && open[k][after] {
+			pk := k + "\x00" + after
+			s.parked[pk] = append(s.parked[pk], t)
+			continue
+		}
+		if _, batch := col.(catalog.Batcher); r.Tries > 0 && !batch {
+			// Run alone, it gets the whole budget: a sweep started next to
+			// it cannot take the requests a cheap task needs.
+			s.retry = append(s.retry, t)
+			continue
+		}
+		s.enqueue(t)
+	}
+	// A task that ran but whose end was not recorded runs again whole.
+	return s.e.Store.Forget(again)
 }
 
 // add queues every allowed collector for a seed. Hints are checked against
@@ -148,6 +253,7 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 			continue
 		}
 		t := task{col: col.Name(), seed: seed, depth: depth, prio: prio}
+		s.record(t)
 		if after := catalog.InfoOf(col).After; after != "" && planned[after] {
 			pk := k + "\x00" + after
 			s.parked[pk] = append(s.parked[pk], t)
@@ -164,6 +270,7 @@ func (s *scheduler) drop(seedK, col string) {
 	waiting := s.parked[pk]
 	delete(s.parked, pk)
 	for _, w := range waiting {
+		s.finish(w)
 		s.drop(seedK, w.col)
 	}
 }
@@ -204,6 +311,12 @@ func (s *scheduler) allowed(col catalog.Collector, seed types.Seed) bool {
 	}
 }
 
+// contacts says whether a task's collector sends requests to targets.
+func (s *scheduler) contacts(t task) bool {
+	col, ok := s.e.Cat.Get(t.col)
+	return ok && catalog.InfoOf(col).Kind != catalog.Passive
+}
+
 func (s *scheduler) skip(t task) bool {
 	col, ok := s.e.Cat.Get(t.col)
 	if !ok {
@@ -218,6 +331,7 @@ func (s *scheduler) loop(ctx context.Context) {
 		if ctx.Err() == nil {
 			s.dispatch(ctx)
 		}
+		s.flush()
 		if s.inflight == 0 {
 			return
 		}
@@ -232,8 +346,25 @@ func (s *scheduler) dispatch(ctx context.Context) {
 		}
 		t, ok := s.next()
 		if !ok {
+			s.startRetry(ctx)
 			return
 		}
+		s.start(ctx, t)
+	}
+}
+
+// startRetry runs the cheapest task the budget stopped before, when
+// nothing else runs.
+func (s *scheduler) startRetry(ctx context.Context) {
+	for s.inflight == 0 && len(s.retry) > 0 && !fetch.Spent() && s.ran < s.b.MaxItems {
+		t := s.retry[0]
+		s.retry = s.retry[1:]
+		if s.skip(t) {
+			s.finish(t)
+			s.unpark(t)
+			continue
+		}
+		s.ran++
 		s.start(ctx, t)
 	}
 }
@@ -246,7 +377,14 @@ func (s *scheduler) next() (task, bool) {
 			t := s.queue[p][0]
 			if s.skip(t) {
 				s.queue[p] = s.queue[p][1:]
+				s.finish(t)
 				s.unpark(t) // nothing to wait for
+				continue
+			}
+			if fetch.Spent() && s.contacts(t) {
+				// It would only be refused: it waits for azhaq resume.
+				s.queue[p] = s.queue[p][1:]
+				s.held = append(s.held, t)
 				continue
 			}
 			if s.ran >= s.b.MaxItems {
@@ -349,9 +487,20 @@ func (s *scheduler) handle(f finished) {
 	}
 	for i, t := range f.tasks {
 		meta, err := f.metas[i], f.errs[i]
-		if meta.Drop {
+		switch {
+		case meta.Status == types.StatusCapped:
+			// Not done, nor what waits on it: azhaq resume runs them,
+			// after the work the budget has not stopped yet.
+			if s.e.Store != nil {
+				s.stopped = append(s.stopped, store.Stopped{ID: workID(t.col, t.seed), Used: meta.Requests})
+			}
+		case meta.Status == types.StatusCancelled:
+			// Not done, nor what waits on it: azhaq resume runs them.
+		case meta.Drop:
+			s.finish(t)
 			s.drop(seedKey(t.seed), t.col)
-		} else {
+		default:
+			s.finish(t)
 			s.unpark(t)
 		}
 		if err != nil && meta.Status != types.StatusCancelled {
@@ -386,6 +535,9 @@ func (s *scheduler) leftover() []types.Seed {
 		for _, t := range waiting {
 			put(t.seed)
 		}
+	}
+	for _, t := range append(s.held, s.retry...) {
+		put(t.seed)
 	}
 	for _, waiting := range s.parked {
 		for _, t := range waiting {
