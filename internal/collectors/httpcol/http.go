@@ -233,10 +233,12 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech bool)
 	if last == nil {
 		last = res.Header
 	}
-	if !noTech && page(last) {
-		body := res.Body
-		if len(body) > maxTechBody {
-			body = body[:maxTechBody]
+	// Documents get the full fingerprint; a site's front page that is not
+	// HTML (an API root) still gets its headers read (Server, cookies).
+	if !noTech && (page(last) || isRoot(reqURL) || isRoot(final)) {
+		var body []byte
+		if page(last) {
+			body = res.Body[:min(len(res.Body), maxTechBody)]
 		}
 		if tech := fingerprint.Tech(last, body); len(tech) > 0 {
 			out["tech"] = tech

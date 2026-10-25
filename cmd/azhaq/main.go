@@ -15,6 +15,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"time"
@@ -36,7 +37,19 @@ import (
 )
 
 const lastDBFile = ".azhaq-last"
-const version = "0.3.1"
+
+// version is set at release time (-ldflags "-X main.version=0.4.0"); a
+// go install of a tagged version reports the module version instead.
+var version = "dev"
+
+func init() {
+	if version == "dev" {
+		if bi, ok := debug.ReadBuildInfo(); ok && strings.HasPrefix(bi.Main.Version, "v") {
+			version = strings.TrimPrefix(bi.Main.Version, "v")
+		}
+	}
+	fetch.UserAgent = "azhaq/" + version
+}
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {

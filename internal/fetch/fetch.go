@@ -22,8 +22,10 @@ type Hop struct {
 	Location string `json:"location,omitempty"`
 }
 
+// UserAgent goes on every request Azhaq sends; the CLI sets the version.
+var UserAgent = "azhaq"
+
 const (
-	UserAgent = "azhaq/0.3.1"
 	// MaxBody caps HTML and other documents.
 	MaxBody = 2 << 20
 	// MaxScriptBody caps JavaScript, JSON and source maps: bundles of
