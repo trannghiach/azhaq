@@ -42,6 +42,7 @@ type record struct {
 	Network *networkRow  `json:"network,omitempty"`
 	Shots   *shotsRow    `json:"shots,omitempty"`
 	Secrets *secretsRow  `json:"secrets,omitempty"`
+	Tenants *tenantsRow  `json:"tenants,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -128,6 +129,7 @@ func main() {
 		rec.Dirs = benchDirs(local)
 		rec.Scope = benchScope(juiceURL)
 		rec.Secrets = benchSecrets()
+		rec.Tenants = benchTenants()
 		rec.Shots = benchShots([]string{juiceURL, vampiURL, ginURL, "http://rest.vulnweb.com/"})
 		rec.Params = benchParams([]string{
 			juiceURL + "rest/products/search", juiceURL + "rest/user/whoami", vampiURL + "users/v1",

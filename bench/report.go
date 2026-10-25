@@ -23,7 +23,8 @@ func printReport() {
 		for _, a := range rec.Apps {
 			if r := a.Roles; r != nil {
 				fmt.Fprintf(w, "\nroles (%s)\tendpoints that differ\texpected 401 → 200\ttime\n", a.Name)
-				fmt.Fprintf(w, "anon → user\t%d\t%d/%d\t%.1fs\n", r.Rows, len(r.Found), len(r.Expected), r.Seconds)
+				fmt.Fprintf(w, "anon → user (token)\t%d\t%d/%d\t%.1fs\n", r.Rows, len(r.Found), len(r.Expected), r.Seconds)
+				fmt.Fprintf(w, "anon → user (-role-login)\t%d\t%d/%d\t%.1fs\n", r.ChromeRows, len(r.ChromeFound), len(r.Expected), r.ChromeSecs)
 			}
 		}
 		for _, a := range rec.Apps {
@@ -75,6 +76,10 @@ func printReport() {
 		fmt.Fprintf(w, "azhaq subs -live vs subfinder | dnsx (vulnweb.com)\t%d vs %d, shared %d\n", d.SubsLive, d.SubfinderLive, d.SubsShared)
 		fmt.Fprintf(w, "OpenAPI export, VAmPI / crAPI paths\t%d/12, %d/40\n", d.OpenAPIVampi, d.OpenAPICrapi)
 		fmt.Fprintf(w, "targets, HTML report, urls\t%d, %d bytes, %d\n", d.Targets, d.HTMLBytes, d.URLs)
+	}
+	if t := rec.Tenants; t != nil {
+		fmt.Fprintln(w, "\nroles (multi-tenant fixture)\trows as expected\twrong\textra\tsigned-in logouts\ttime")
+		fmt.Fprintf(w, "anon → member → owner\t%d/%d\t%d\t%d\t%d\t%.1fs\n", t.Matched, t.Expected, len(t.Wrong), len(t.Extra), t.Logouts, t.Seconds)
 	}
 	w.Flush()
 	if p := rec.Probe; p != nil && len(p.Disagree) > 0 {
