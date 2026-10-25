@@ -6,6 +6,7 @@
 go run ./bench                  # apps and domains
 go run ./bench -domains=false   # apps only
 go run ./bench -crapi           # also OWASP crAPI (about 2 GB of images)
+go run ./bench -brute=false     # skip DNS brute force and permutations on vulnweb.com
 go run ./bench -keep            # leave the docker apps running afterwards
 ```
 
@@ -19,7 +20,9 @@ Run it from the repository root. It needs Docker, network access and linux/amd64
 | VAmPI | `bench/compose.yaml`, port 5102 | full run |
 | ginandjuice.shop | PortSwigger's public test site | full run |
 | OWASP crAPI v1.1.6 (`-crapi`) | upstream compose with images pinned by digest (`bench/crapi-override.yaml`), port 8888 | full run |
-| `bench/domains.txt` | public domains | passive only: CT logs, archives and DNS resolution; no HTTP or port traffic to the hosts |
+| `bench/domains.txt` | public domains | passive only: subdomain sources, archives and DNS resolution; no HTTP or port traffic to the hosts |
+| vulnweb.com | Acunetix's public test zone | DNS brute force (5,000 words) and permutations, through public resolvers |
+| `wild.example.com` | a DNS server inside the bench on 127.0.0.1 | brute force against a zone where every label resolves |
 
 ## Reference tools
 
@@ -29,10 +32,13 @@ Downloaded to `bench/.work/bin` and verified against pinned SHA-256 sums (`bench
 | --- | --- | --- |
 | katana | 1.8.0 | crawling with JavaScript parsing (`-d 3 -jc`) |
 | subfinder | 2.17.0 | passive subdomains, default sources, no API keys |
-| dnsx | 1.3.1 | deciding which names are live, for both tools |
+| dnsx | 1.3.1 | deciding which names are live, for both tools; brute force with the same words and resolvers |
+| alterx | 0.1.0 | permutations of the live names, resolved by dnsx |
 | gau | 2.2.4 | historical URLs |
 | ffuf | 2.3.0 | the same wordlist as Azhaq's path sweep, with auto-calibration (`-ac`) |
 | httpx, naabu | 1.12.0, 2.6.1 | installed; not compared until Azhaq has probing parity and a port scanner |
+
+The brute-force wordlist is SecLists' `subdomains-top1million-5000.txt` (MIT), fetched at a pinned commit and checked against its SHA-256 sum.
 
 ## What is measured
 
@@ -50,27 +56,38 @@ The command fails when one of these does not hold:
 - Two identical Juice Shop runs produce an empty diff; a diff between two different targets is labelled.
 - VAmPI: every path of its OpenAPI document.
 - ginandjuice.shop: the four page scripts are read and the routes only they contain are found; product and blog pages fold into one template row each.
-- Domains: no empty CT or archive result without an error or `degraded` flag, unless every source answered and found nothing (vulnweb.com has no certificates in CT logs).
+- Domains: no empty subdomain or archive result without an error or `degraded` flag, unless every source answered and found nothing.
+- Subdomains: across all domains, at least 95% of subfinder's live names, in at most twice its time.
+- Brute force on vulnweb.com: at least 95% of what dnsx finds with the same words and resolvers, in at most twice its time.
+- Wildcard zone: the three real names and nothing else.
 
 ## Latest results
 
-2026-10-25, commit `bef171a`, Go 1.27.1, one machine; record `bench/history/2026-10-25T071201-bef171a.json`.
+2026-10-25, commit `c7db18e`, Go 1.27.1, one machine; record `bench/history/2026-10-25T101708-c7db18e.json`.
 
 | App | Azhaq routes | known | shell | time | RSS | katana routes | known | shell | time | RSS |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Juice Shop | 120 | 45/45 | 0 | 6.6 s | 43 MB | 5 | 0/45 | 3 | 13.3 s | 61 MB |
-| VAmPI | 14 | 12/12 | 0 | 0.6 s | 20 MB | 1 | 1/12 | 0 | 11.1 s | 35 MB |
-| ginandjuice.shop | 12 | 3/3 | 0 | 23.2 s | 32 MB | 13 | 1/3 | 0 | 17.9 s | 61 MB |
-| crAPI | 25 | 0/40 | 0 | 1.0 s | 29 MB | 3 | 0/40 | 1 | 12.9 s | 57 MB |
+| Juice Shop | 120 | 45/45 | 0 | 5.7 s | 44 MB | 5 | 0/45 | 3 | 13.1 s | 60 MB |
+| VAmPI | 14 | 12/12 | 0 | 0.5 s | 22 MB | 1 | 1/12 | 0 | 11.1 s | 35 MB |
+| ginandjuice.shop | 14 | 3/3 | 0 | 19.8 s | 38 MB | 13 | 1/3 | 0 | 16.6 s | 61 MB |
+| crAPI | 25 | 0/40 | 0 | 0.9 s | 32 MB | 3 | 0/40 | 1 | 12.9 s | 58 MB |
 
-crAPI's frontend builds every API path at run time (`"identity/" + "api/auth/login"`), which neither tool resolves yet. ginandjuice.shop is a remote host: Azhaq keeps at most 2 requests in flight per host and made about 60, while katana ran with `-c 10`.
+crAPI's frontend builds every API path at run time (`"identity/" + "api/auth/login"`), which neither tool resolves yet. ginandjuice.shop is a remote host: Azhaq keeps at most 2 requests in flight per host, while katana ran with `-c 10`; Azhaq's time also includes its domain fan-out, bounded by the slowest subdomain source.
 
 Path sweep on Juice Shop, 33 words: Azhaq 3 hits, ffuf `-ac` 3 hits, 3 shared, no catch-all page in either.
 
 | Domain (passive) | live | Azhaq live | names | time | subfinder live | names | time |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| hackerone.com | 12 | 10 | 10 | 14 s | 11 | 527 | 31 s |
-| tesla.com | 503 | 54 | 145 | 8 s | 499 | 1808 | 31 s |
-| vulnweb.com | 5 | 0 | 0 | 9 s | 5 | 519 | 31 s |
+| hackerone.com | 13 | 12 | 526 | 20 s | 12 | 524 | 31 s |
+| tesla.com | 509 | 490 | 1814 | 31 s | 486 | 1802 | 31 s |
+| vulnweb.com | 7 | 7 | 520 | 20 s | 6 | 519 | 31 s |
 
-Subfinder queries far more sources. Azhaq asks two CT logs, and in this run crt.sh answered 502 or timed out for all three domains, so its numbers are Cert Spotter alone (marked `degraded`). In an earlier run where crt.sh answered, Azhaq found 184 of 503 live tesla.com names. No historical URLs came back from either tool: the Wayback Machine answered 429 to every request from this address and arquivo.pt failed; gau returned none as well (in a manual run its Wayback source got 429 and Common Crawl refused the connection).
+Both tools run subfinder's default keyless sources; in this run 7 of 14 answered for each domain (the others were rate limited, timed out or need a key for useful results), and Azhaq reports each failure in its payload. No historical URLs came back from gau: the Wayback Machine answered 429 to this address.
+
+| Active DNS on vulnweb.com | Azhaq | dnsx | shared | Azhaq time | dnsx time |
+| --- | --- | --- | --- | --- | --- |
+| brute force, 5,000 words | 3 | 3 | 3 | 36.8 s | 75.8 s |
+| permutations of live names | 0 | 0 (alterx) | 0 | | |
+| wildcard zone, 50 words, 3 real | 3 found, 0 fake | 50 (no filtering) | | | |
+
+vulnweb.com has few names, so the permutation row says little; dnsx's `-wd` filter needs the zone to be named, and without it every guess in the wildcard zone comes back.
