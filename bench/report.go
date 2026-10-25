@@ -15,6 +15,16 @@ func printReport() {
 				a.Azhaq.Routes, known(a.Azhaq), a.Azhaq.Shell, a.Azhaq.Seconds, a.Azhaq.RSSMB,
 				a.Katana.Routes, known(a.Katana), a.Katana.Shell, a.Katana.Seconds, a.Katana.RSSMB)
 		}
+		fmt.Fprintln(w, "\nknown routes\tazhaq\tkatana\tjsluice\tkatana ∪ jsluice")
+		for _, a := range rec.Apps {
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.Name, known(a.Azhaq), known(a.Katana), known(a.Jsluice), known(a.Union))
+		}
+		for _, a := range rec.Apps {
+			if r := a.Roles; r != nil {
+				fmt.Fprintf(w, "\nroles (%s)\tendpoints that differ\texpected 401 → 200\ttime\n", a.Name)
+				fmt.Fprintf(w, "anon → user\t%d\t%d/%d\t%.1fs\n", r.Rows, len(r.Found), len(r.Expected), r.Seconds)
+			}
+		}
 		for _, a := range rec.Apps {
 			if f := a.Ffuf; f != nil {
 				fmt.Fprintf(w, "\nwordlist (%d words)\tazhaq hits\tshell\tffuf -ac hits\tshell\tshared\tffuf time\n", f.Words)

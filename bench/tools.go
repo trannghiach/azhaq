@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -36,6 +37,31 @@ var tools = []tool{
 	{"gau", "2.2.4", "lc/gau", "gau_2.2.4_linux_amd64.tar.gz", "10e2e248c37cafb0be3f6d2931125296b95cd4186066d596d47fa417237529a9"},
 	{"ffuf", "2.3.0", "ffuf/ffuf", "ffuf_2.3.0_linux_amd64.tar.gz", "b2a3c725fcb9da175159682f54d6e9149f2905b00d84d155e7efc5d599975ceb"},
 	{"alterx", "0.1.0", "projectdiscovery/alterx", "alterx_0.1.0_linux_amd64.zip", "ffae5b25138cb27b58900b9b5849e02d0390385fce404252d32e469f2a0e97ac"},
+}
+
+// builtTools have no release binaries and are built from a pinned
+// commit with go install. jsluice needs cgo (tree-sitter).
+var builtTools = []tool{
+	{Name: "jsluice", Version: "v0.0.0-20240110145140-0ddfab153e06", repo: "github.com/BishopFox/jsluice/cmd/jsluice"},
+}
+
+func installBuilt(dir string) error {
+	for _, t := range builtTools {
+		marker := filepath.Join(dir, "."+t.Name+"-"+t.Version)
+		if _, err := os.Stat(marker); err == nil {
+			continue
+		}
+		logf("building %s %s", t.Name, t.Version)
+		cmd := exec.Command("go", "install", t.repo+"@"+t.Version)
+		cmd.Env = append(os.Environ(), "GOBIN="+dir, "CGO_ENABLED=1", "GOFLAGS=")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("%s: %v\n%s", t.Name, err, out)
+		}
+		if err := os.WriteFile(marker, nil, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // wordlist is a pinned data file the bench downloads once.

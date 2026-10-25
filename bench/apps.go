@@ -26,11 +26,14 @@ const (
 )
 
 type appResult struct {
-	Name   string    `json:"name"`
-	URL    string    `json:"url"`
-	Azhaq  toolScore `json:"azhaq"`
-	Katana toolScore `json:"katana"`
-	Ffuf   *ffufRow  `json:"ffuf,omitempty"`
+	Name    string    `json:"name"`
+	URL     string    `json:"url"`
+	Azhaq   toolScore `json:"azhaq"`
+	Katana  toolScore `json:"katana"`
+	Jsluice toolScore `json:"jsluice"`
+	Union   toolScore `json:"katana_jsluice"` // routes either found
+	Ffuf    *ffufRow  `json:"ffuf,omitempty"`
+	Roles   *rolesRow `json:"roles,omitempty"`
 }
 
 // toolScore is what one tool found on one app.
@@ -101,11 +104,12 @@ func benchApps() []appResult {
 	g, _, m := runAzhaq(juiceURL, db("juice"))
 	shell := shellHash(juiceURL)
 	juice.Azhaq = scoreAzhaq(g, juiceURL, truth, shell, m)
-	juice.Katana = runKatana(juiceURL, truth, shell)
+	juice.Katana, juice.Jsluice, juice.Union = runKatanaJsluice(juiceURL, truth, shell)
 	juice.Ffuf = compareFfuf(juiceURL, g, shell)
 	res = append(res, juice)
 	addCheck("juice-shop: JS routes ≥ 40/45", juice.Azhaq.Truth >= 40, "azhaq %d/%d, katana %d/%d", juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth))
 	addCheck("juice-shop: no catch-all page reported as visited", juice.Azhaq.Shell == 0, "%d visited URLs return the SPA index", juice.Azhaq.Shell)
+	juice.Roles = benchRoles(juiceURL, dir)
 
 	_, _, _ = runAzhaq(juiceURL, db("juice-again"))
 	sum := diffSummary(db("juice"), db("juice-again"))
@@ -117,7 +121,7 @@ func benchApps() []appResult {
 	vtruth := specPaths(vampiURL + "openapi.json")
 	g, _, m = runAzhaq(vampiURL, db("vampi"))
 	vampi.Azhaq = scoreAzhaq(g, vampiURL, vtruth, shellHash(vampiURL), m)
-	vampi.Katana = runKatana(vampiURL, vtruth, shellHash(vampiURL))
+	vampi.Katana, vampi.Jsluice, vampi.Union = runKatanaJsluice(vampiURL, vtruth, shellHash(vampiURL))
 	res = append(res, vampi)
 	addCheck("vampi: paths from /openapi.json", vampi.Azhaq.Truth == len(vtruth) && len(vtruth) > 0, "azhaq %d/%d, katana %d/%d", vampi.Azhaq.Truth, len(vtruth), vampi.Katana.Truth, len(vtruth))
 
@@ -140,7 +144,7 @@ func benchApps() []appResult {
 			gin.Azhaq.Truth++
 		}
 	}
-	gin.Katana = runKatana(ginURL, gtruth, shellHash(ginURL))
+	gin.Katana, gin.Jsluice, gin.Union = runKatanaJsluice(ginURL, gtruth, shellHash(ginURL))
 	res = append(res, gin)
 	scripts := 0
 	for _, s := range []string{"stockCheck.js", "searchLogger.js", "subscribeNow.js", "xmlStockCheckPayload.js"} {
@@ -184,7 +188,67 @@ func scoreAzhaq(g graph, target string, truth map[string]bool, shell string, m r
 	return s
 }
 
-func runKatana(target string, truth map[string]bool, shell string) toolScore {
+// runKatanaJsluice runs katana, then jsluice on the scripts katana found
+// (the usual pipeline), and scores each and their union.
+func runKatanaJsluice(target string, truth map[string]bool, shell string) (toolScore, toolScore, toolScore) {
+	k, urls := runKatana(target, truth, shell)
+	j, jurls := runJsluice(target, urls, truth)
+	origin := strings.TrimSuffix(target, "/")
+	found := routes(append(append([]string(nil), urls...), jurls...), origin)
+	u := toolScore{Routes: len(found), Truth: matched(found, truth), TruthOf: len(truth), Shell: k.Shell + j.Shell,
+		Seconds: k.Seconds + j.Seconds, RSSMB: max(k.RSSMB, j.RSSMB)}
+	return k, j, u
+}
+
+// runJsluice downloads the same-origin scripts in urls and lists the URLs
+// jsluice finds in them, resolved against the app's root.
+func runJsluice(target string, urls []string, truth map[string]bool) (toolScore, []string) {
+	dir, err := os.MkdirTemp(work, "jsluice-")
+	must(err)
+	defer os.RemoveAll(dir)
+	origin := strings.TrimSuffix(target, "/")
+	var files []string
+	seen := map[string]bool{}
+	for _, u := range urls {
+		p := strings.SplitN(u, "?", 2)[0]
+		if !strings.HasPrefix(u, origin+"/") || !strings.HasSuffix(p, ".js") || seen[p] || len(files) >= 64 {
+			continue
+		}
+		seen[p] = true
+		if body, ok := download(u); ok {
+			f := filepath.Join(dir, fmt.Sprintf("%03d.js", len(files)))
+			must(os.WriteFile(f, body, 0o644))
+			files = append(files, f)
+		}
+	}
+	if len(files) == 0 {
+		return toolScore{TruthOf: len(truth)}, nil
+	}
+	out, m := run(target, 10*time.Minute, dir, ref("jsluice"), append([]string{"urls", "-R", origin + "/"}, files...)...)
+	var found []string
+	for _, l := range lines(out) {
+		var x struct {
+			URL string `json:"url"`
+		}
+		if json.Unmarshal([]byte(l), &x) == nil && x.URL != "" {
+			found = append(found, x.URL)
+		}
+	}
+	r := routes(found, origin)
+	return toolScore{Routes: len(r), Truth: matched(r, truth), TruthOf: len(truth), Seconds: m.Seconds, RSSMB: m.RSSMB}, found
+}
+
+func download(u string) ([]byte, bool) {
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Get(u)
+	if err != nil {
+		return nil, false
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+	return body, err == nil && resp.StatusCode == http.StatusOK
+}
+
+func runKatana(target string, truth map[string]bool, shell string) (toolScore, []string) {
 	out, m := run(target, 10*time.Minute, work, ref("katana"), "-u", target, "-d", "3", "-jc", "-silent", "-nc", "-timeout", "10", "-c", "10")
 	urls := lines(out)
 	found := routes(urls, strings.TrimSuffix(target, "/"))
@@ -200,7 +264,7 @@ func runKatana(target string, truth map[string]bool, shell string) toolScore {
 			s.Shell++
 		}
 	}
-	return s
+	return s, urls
 }
 
 // shellHash is the body hash azhaq-http would record for a path that does
@@ -383,4 +447,22 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// appChecks holds every app to the union of katana and jsluice: at least
+// as many known routes, and no catch-all page reported as visited.
+func appChecks(apps []appResult) {
+	ok, clean := true, true
+	var parts []string
+	for _, a := range apps {
+		if a.Azhaq.Truth < a.Union.Truth {
+			ok = false
+		}
+		if a.Azhaq.Shell > 0 {
+			clean = false
+		}
+		parts = append(parts, fmt.Sprintf("%s %d/%d vs %d", a.Name, a.Azhaq.Truth, a.Azhaq.TruthOf, a.Union.Truth))
+	}
+	addCheck("known routes ≥ katana ∪ jsluice on every app", ok, "%s", strings.Join(parts, ", "))
+	addCheck("no catch-all page reported as visited on any app", clean, "%d apps", len(apps))
 }

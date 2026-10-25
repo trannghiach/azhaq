@@ -132,6 +132,8 @@ func benchCrapi() appResult {
 	g, _, m := runAzhaq(crapiURL, db)
 	shell := shellHash(crapiURL)
 	res.Azhaq = scoreAzhaq(g, crapiURL, truth, shell, m)
-	res.Katana = runKatana(crapiURL, truth, shell)
+	res.Katana, res.Jsluice, res.Union = runKatanaJsluice(crapiURL, truth, shell)
+	addCheck("crapi: routes joined from constants ≥ 30/40", res.Azhaq.Truth >= 30,
+		"azhaq %d/%d, katana ∪ jsluice %d/%d", res.Azhaq.Truth, len(truth), res.Union.Truth, len(truth))
 	return res
 }

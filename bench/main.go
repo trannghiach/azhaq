@@ -84,7 +84,7 @@ func main() {
 		Date:   time.Now().UTC().Format(time.RFC3339),
 		Commit: commit(),
 		Go:     runtime.Version(),
-		Tools:  tools,
+		Tools:  append(append([]tool(nil), tools...), builtTools...),
 	}
 
 	must(os.MkdirAll(binDir, 0o755))
@@ -93,6 +93,7 @@ func main() {
 		fatal("go build: %v", err)
 	}
 	must(installTools(binDir))
+	must(installBuilt(binDir))
 
 	if *apps {
 		must(startApps())
@@ -107,6 +108,9 @@ func main() {
 			defer stopCrapi()
 		}
 		rec.Apps = append(rec.Apps, benchCrapi())
+	}
+	if len(rec.Apps) > 0 {
+		appChecks(rec.Apps)
 	}
 	if *domains {
 		rec.Domains = benchDomains()
