@@ -226,8 +226,9 @@ func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (
 			return page - 1, limited(err, page-1)
 		}
 		var r struct {
-			HasNext bool `json:"has_next"`
-			URLList []struct {
+			HasNext  bool `json:"has_next"`
+			FullSize int  `json:"full_size"`
+			URLList  []struct {
 				URL string `json:"url"`
 			} `json:"url_list"`
 		}
@@ -239,7 +240,8 @@ func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (
 			urls = append(urls, u.URL)
 		}
 		add(urls)
-		if !r.HasNext || len(r.URLList) == 0 {
+		// has_next is sometimes false while full_size says more remain.
+		if len(r.URLList) == 0 || (!r.HasNext && r.FullSize <= page*500) {
 			return page, nil
 		}
 	}

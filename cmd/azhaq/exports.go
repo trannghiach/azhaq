@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -117,7 +118,7 @@ var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 func openAPI(g *graphView, origin string) (map[string]any, error) {
 	byOrigin := map[string][]engine.MapEntry{}
 	for _, r := range g.rows {
-		if r.Entity.Type != types.TypeURL || (r.Role != "api" && len(r.Methods) == 0) {
+		if r.Entity.Type != types.TypeURL || !isAPI(r) {
 			continue
 		}
 		u, err := url.Parse(r.Entity.Key)
@@ -271,7 +272,7 @@ func htmlReport(g *graphView, w io.Writer) error {
 	sort.Slice(hosts, func(i, j int) bool { return hosts[i].Name < hosts[j].Name })
 	var api []engine.MapEntry
 	for _, r := range g.rows {
-		if r.Entity.Type == types.TypeURL && (r.Role == "api" || len(r.Methods) > 0) {
+		if r.Entity.Type == types.TypeURL && isAPI(r) {
 			api = append(api, r)
 		}
 	}
@@ -337,4 +338,11 @@ func graphML(path string, w io.Writer) error {
 	}
 	_, err = fmt.Fprint(w, "  </graph>\n</graphml>\n")
 	return err
+}
+
+// isAPI: a route the map calls an API, one with methods from a
+// description, or one whose path says so even when it answered 401 or 403
+// (the map shows those as auth or forbidden).
+func isAPI(r engine.MapEntry) bool {
+	return r.Role == "api" || len(r.Methods) > 0 || webextract.ClassifyURL(r.Entity.Key) == "api"
 }
