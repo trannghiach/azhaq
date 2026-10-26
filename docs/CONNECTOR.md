@@ -9,6 +9,15 @@ azhaq run -url https://app.example.com/ -exec ./my-connector   # Azhaq starts it
 azhaq ingest -in facts.jsonl                                   # load output produced earlier
 ```
 
+`azhaq ingest` also reads what the usual tools write, so their results can join a graph without a connector: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report (`-of json`), Azhaq's own `export`, and plain lines of URLs, hostnames and addresses. Each line is read by its fields; the summary counts the lines of each format. Into a workspace, the facts join its newest run.
+
+```
+subfinder -d example.com -json | azhaq ingest -in - -db example.db
+httpx -l hosts.txt -json -o httpx.jsonl && azhaq ingest -in httpx.jsonl -db example.db
+```
+
+Names taken in this way are `unresolved` until a run or `azhaq dns` looks them up; the dnsx and httpx lines that carry addresses count as resolved.
+
 `cmd/azhaq-index-fixture` is a small working example.
 
 ## Transport
@@ -63,4 +72,4 @@ Only `kind` is checked. The other fields are free-form for logs.
 
 A line that is not valid JSON, or has an unknown `kind`, is rejected with `line N: <reason>`.
 
-The output of `azhaq export` is not valid connector input: its lines wrap records as `{"entity":{…}}` and reference internal IDs. To combine two graphs, write both runs to the same `-db` file instead.
+`azhaq ingest` reads the output of `azhaq export` too: entities and their observations come back; edges are rebuilt from the observations. `-exec` connectors must write facts.

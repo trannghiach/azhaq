@@ -337,6 +337,7 @@ func TestMapVisitedBeforeHint(t *testing.T) {
 	}
 	seeds := []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": "https://app.example.test/"}}}
 	obs := []types.StoredObservation{
+		{EntityID: "h", Observation: types.Observation{Collector: "azhaq-dns", Kind: "dns", Payload: json.RawMessage(`{"fqdn":"app.example.test","ips":["192.0.2.1"],"result":"ok"}`)}},
 		{EntityID: "v", Observation: types.Observation{Collector: "azhaq-http", Kind: "application", Payload: json.RawMessage(`{"status":200,"title":"Home"}`)}},
 		{EntityID: "a", Observation: types.Observation{Collector: "azhaq-js", Kind: "url", Payload: json.RawMessage(`{"url":"https://app.example.test/api/Users","role":"api"}`)}},
 	}

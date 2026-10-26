@@ -718,21 +718,33 @@ func printMap(rows []engine.MapEntry) {
 	}
 }
 
+// cmdIngest adds what other tools found to a database: their JSON
+// output, Azhaq's own export, connector facts or plain lists.
 func cmdIngest(args []string) error {
 	fs := newFlags("ingest")
-	in := fs.String("in", "", "JSONL connector facts")
-	dbPath := fs.String("db", "", "sqlite path (default: new file each run)")
+	in := fs.String("in", "", "a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report, azhaq export, connector facts, or lines of URLs, hostnames and addresses")
+	dbPath := fs.String("db", "", "the database to add to (default: a new file)")
+	asJSON := fs.Bool("json", false, "the summary as JSON")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *in == "" {
-		return fmt.Errorf("need -in facts.jsonl")
+		return usagef("need -in FILE (or -in - for stdin)")
 	}
-	facts, err := connector.ReadFile(*in)
+	var raw []byte
+	var err error
+	if *in == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(*in)
+	}
 	if err != nil {
 		return err
 	}
-
+	facts, formats, err := connector.ReadAny(raw)
+	if err != nil {
+		return usagef("%s: %v", *in, err)
+	}
 	path, remember := resolveDB(*dbPath)
 	if remember {
 		if err := os.WriteFile(lastDBFile, []byte(path+"\n"), 0o644); err != nil {
@@ -744,7 +756,21 @@ func cmdIngest(args []string) error {
 		return err
 	}
 	defer st.Close()
-
+	// Into the newest run of a workspace, so query, show and export see
+	// it with what that run found; a new database gets a run of its own.
+	runs, err := st.Runs()
+	if err != nil {
+		return err
+	}
+	fresh := len(runs) == 0
+	if fresh {
+		if err := st.BeginRun(newRunID(), 0, 0); err != nil {
+			return err
+		}
+		_ = st.SetRunArgs([]string{"ingest", *in})
+	} else {
+		st.UseRun(runs[len(runs)-1].ID)
+	}
 	eng := &engine.Engine{Store: st}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -752,18 +778,14 @@ func cmdIngest(args []string) error {
 	if err != nil {
 		return err
 	}
-	_ = st.SaveSeeds(hints)
-	ents, _ := st.Entities()
-	obs, _ := st.Observations()
-	fmt.Println("map")
-	printMap(engine.BuildMap(ents, hints, obs, nil, false))
-	fmt.Printf("db %s\n", path)
-	sum, err := st.Summary()
-	if err != nil {
-		return err
+	if fresh {
+		_ = st.SaveSeeds(hints)
 	}
-	fmt.Println(sum)
-	return nil
+	rep := newReport("ingest")
+	rep.what = "facts"
+	rep.Results, rep.Counts, rep.DB = len(facts), formats, path
+	rep.Next = []string{"azhaq query -db " + path, "azhaq dns -l NAMES -db " + path + "   (resolve names taken in without addresses)"}
+	return rep.finish(*asJSON, false)
 }
 
 func cmdBench(args []string) error {

@@ -299,9 +299,16 @@ func payloads(st *store.Store, collector string) []map[string]any {
 // to its payload.
 func liveNames(st *store.Store) map[string]map[string]any {
 	out := map[string]map[string]any{}
-	for _, p := range payloads(st, "azhaq-dns") {
-		name, _ := p["fqdn"].(string)
-		if live(p) && name != "" {
+	obs, _ := st.Observations()
+	for _, o := range obs {
+		if o.Collector != "azhaq-dns" && o.Kind != "dns" {
+			continue // dnsx and httpx answers taken in with ingest count too
+		}
+		var p map[string]any
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		if name, _ := p["fqdn"].(string); live(p) && name != "" && out[name] == nil {
 			out[name] = p
 		}
 	}

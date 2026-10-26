@@ -217,7 +217,7 @@ func sameRoute(a, b string) bool {
 // answered only by a wildcard record, from azhaq-dns.
 func dnsResult(obs []types.StoredObservation) string {
 	for _, o := range obs {
-		if o.Collector != "azhaq-dns" {
+		if o.Collector != "azhaq-dns" && o.Kind != "dns" {
 			continue
 		}
 		var p struct {
@@ -239,7 +239,7 @@ func dnsResult(obs []types.StoredObservation) string {
 // resolved: azhaq-dns looked the name up in this run.
 func resolved(obs []types.StoredObservation) bool {
 	for _, o := range obs {
-		if o.Collector == "azhaq-dns" {
+		if o.Collector == "azhaq-dns" || o.Kind == "dns" {
 			return true
 		}
 	}
@@ -276,8 +276,8 @@ func roleOf(e types.Entity, obs []types.StoredObservation, hosts map[string]bool
 		if r := dnsResult(obs); r != "" {
 			return r
 		}
-		if !resolved(obs) && !hosts[e.Key] {
-			return "unresolved" // a name from a source, not looked up in this run
+		if !resolved(obs) {
+			return "unresolved" // a name from a source or a list, not looked up
 		}
 		if hosts[e.Key] {
 			return "live"
