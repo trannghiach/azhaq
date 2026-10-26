@@ -34,13 +34,40 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 	return buf.String(), fnErr
 }
 
-func lastSummary(t *testing.T, out string) store.Stats {
+// captureBoth runs fn with stdout and stderr captured.
+func captureBoth(t *testing.T, fn func() error) (string, string, error) {
 	t.Helper()
-	var last store.Stats
+	var errOut string
+	out, err := captureStdout(t, func() error {
+		r, w, perr := os.Pipe()
+		if perr != nil {
+			t.Fatal(perr)
+		}
+		old := os.Stderr
+		os.Stderr = w
+		done := make(chan string)
+		go func() {
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+			done <- buf.String()
+		}()
+		ferr := fn()
+		_ = w.Close()
+		os.Stderr = old
+		errOut = <-done
+		return ferr
+	})
+	return out, errOut, err
+}
+
+// lastReport is the last JSON summary in a command's stderr.
+func lastReport(t *testing.T, errOut string) report {
+	t.Helper()
+	var last report
 	found := false
-	for _, line := range strings.Split(out, "\n") {
+	for _, line := range strings.Split(errOut, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "{") || !strings.Contains(line, `"kind":"summary"`) {
+		if !strings.HasPrefix(line, "{") || !strings.Contains(line, `"type":"summary"`) {
 			continue
 		}
 		if err := json.Unmarshal([]byte(line), &last); err != nil {
@@ -49,7 +76,7 @@ func lastSummary(t *testing.T, out string) store.Stats {
 		found = true
 	}
 	if !found {
-		t.Fatalf("no summary JSON in %q", out)
+		t.Fatalf("no summary JSON in %q", errOut)
 	}
 	return last
 }
@@ -160,126 +187,107 @@ func TestNewRunID(t *testing.T) {
 
 func TestRunDemoSummaryJSON(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
-		return run([]string{"run", "-demo", "-quiet", "-db", "demo.db"})
+	out, errOut, err := captureBoth(t, func() error {
+		return run([]string{"run", "-demo", "-quiet", "-json", "-db", "demo.db"})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := lastSummary(t, out)
-	if sum.RunID == "" || sum.Entities == 0 {
-		t.Fatalf("%+v out=%q", sum, out)
+	if out != "" {
+		t.Fatalf("-quiet printed a map: %q", out)
 	}
-	if !strings.Contains(out, "run_id="+sum.RunID) {
-		t.Fatalf("human line missing run_id in %q", out)
+	sum := lastReport(t, errOut)
+	if sum.RunID == "" || sum.Results == 0 || sum.DB != "demo.db" || !sum.Complete || sum.Exit != 0 {
+		t.Fatalf("%+v", sum)
 	}
 }
 
 func TestRunConnectorFailureCounted(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
-		return run([]string{"run", "-demo", "-quiet", "-db", "conn.db", "-exec", "/bin/false"})
+	_, errOut, err := captureBoth(t, func() error {
+		return run([]string{"run", "-demo", "-quiet", "-json", "-db", "conn.db", "-exec", "/bin/false"})
 	})
-	if err != nil {
-		t.Fatalf("connector failure should not abort: %v\n%s", err, out)
+	if exitCode(err) != exitPartial {
+		t.Fatalf("a failed connector leaves the run incomplete: exit %d (%v)\n%s", exitCode(err), err, errOut)
 	}
-	sum := lastSummary(t, out)
-	if sum.Errors == 0 {
-		t.Fatalf("want errors>=1, got %+v", sum)
+	sum := lastReport(t, errOut)
+	if len(sum.Failed) == 0 || sum.Failed[0].Collector != "connector" || sum.Complete {
+		t.Fatalf("want the connector failure listed: %+v", sum)
 	}
-	if sum.Entities == 0 {
-		t.Fatal("native collectors should still write the db")
-	}
-	_, failErr := captureStdout(t, func() error {
-		return run([]string{"run", "-demo", "-quiet", "-db", "conn-fail.db", "-exec", "/bin/false", "-fail-on-errors"})
-	})
-	if failErr == nil {
-		t.Fatal("want fail-on-errors")
-	}
-	st, err := store.OpenExisting("conn-fail.db")
+	st, err := store.OpenExisting("conn.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	ents, _ := st.Entities()
-	if len(ents) == 0 {
-		t.Fatal("fail-on-errors must not leave an empty db")
+	if ents, _ := st.Entities(); len(ents) == 0 {
+		t.Fatal("native collectors should still write the db")
 	}
 }
 
-func TestRunFailOnCapped(t *testing.T) {
+func TestRunMaxItemsStops(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
-		return run([]string{"run", "-demo", "-quiet", "-db", "cap.db", "-max-items", "1"})
+	_, errOut, err := captureBoth(t, func() error {
+		return run([]string{"run", "-demo", "-quiet", "-json", "-db", "cap.db", "-max-items", "1"})
 	})
-	if err != nil {
-		t.Fatal(err)
+	if exitCode(err) != exitLimit {
+		t.Fatalf("exit %d, want %d: %s", exitCode(err), exitLimit, errOut)
 	}
-	if !lastSummary(t, out).Capped {
-		t.Fatalf("want capped: %q", out)
-	}
-	out, err = captureStdout(t, func() error {
-		return run([]string{"run", "-demo", "-quiet", "-db", "cap-fail.db", "-max-items", "1", "-fail-on-capped"})
-	})
-	if err == nil {
-		t.Fatal("want fail-on-capped")
-	}
-	if !lastSummary(t, out).Capped {
-		t.Fatalf("summary should still print: %q", out)
+	sum := lastReport(t, errOut)
+	if sum.Stopped == "" || !strings.Contains(sum.Resume, "azhaq resume -db cap.db") {
+		t.Fatalf("%+v", sum)
 	}
 }
 
 func TestRunJSONOnly(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
+	out, errOut, err := captureBoth(t, func() error {
 		return run([]string{"run", "-demo", "-json", "-db", "json.db"})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out, "db ") || strings.Contains(out, "entities=") {
-		t.Fatalf("json mode leaked human lines: %q", out)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 3 {
+		t.Fatalf("want map rows: %q", out)
 	}
-	sum := lastSummary(t, out)
-	if sum.RunID == "" || sum.DB == "" || sum.Entities == 0 {
-		t.Fatalf("%+v", sum)
+	for _, line := range lines {
+		var row map[string]any
+		if err := json.Unmarshal([]byte(line), &row); err != nil || row["type"] == nil || row["key"] == nil {
+			t.Fatalf("not a map row: %q", line)
+		}
 	}
-	if n := strings.Count(out, `"kind":"summary"`); n != 1 {
-		t.Fatalf("want one summary, got %d in %q", n, out)
+	if n := strings.Count(errOut, `"type":"summary"`); n != 1 {
+		t.Fatalf("want one summary on stderr, got %d in %q", n, errOut)
 	}
 }
 
 func TestRunDepthZeroJSON(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
+	out, errOut, err := captureBoth(t, func() error {
 		return run([]string{"run", "-demo", "-json", "-depth", "0", "-db", "d0.db"})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := lastSummary(t, out)
-	if sum.Depth != 0 {
-		t.Fatalf("depth %+v", sum)
+	if !strings.Contains(out, `/app.js"`) {
+		t.Fatalf("the script found at depth 0 is listed: %q", out)
 	}
-	if !strings.Contains(out, `"depth":0`) {
-		t.Fatalf("depth omitted: %q", out)
+	if sum := lastReport(t, errOut); sum.Exit != 0 {
+		t.Fatalf("%+v", sum)
 	}
 }
 
 func TestRunDemoPassive(t *testing.T) {
 	t.Chdir(t.TempDir())
-	out, err := captureStdout(t, func() error {
+	_, errOut, err := captureBoth(t, func() error {
 		return run([]string{"run", "-demo", "-passive", "-json", "-db", "pass.db"})
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sum := lastSummary(t, out)
-	if sum.Entities == 0 {
-		t.Fatalf("want seed entities: %+v", sum)
-	}
-	if sum.Capped {
-		t.Fatalf("passive demo must not be capped: %+v", sum)
+	sum := lastReport(t, errOut)
+	if sum.Results == 0 || sum.Stopped != "" || sum.Requests != 0 {
+		t.Fatalf("passive: seed entities, nothing sent, nothing left: %+v", sum)
 	}
 	exp, err := captureStdout(t, func() error {
 		return run([]string{"export", "-db", "pass.db"})

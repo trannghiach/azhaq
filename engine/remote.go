@@ -105,6 +105,9 @@ func (e *Engine) Record(item types.WorkItem, o Outcome) (types.RunMeta, error) {
 			return types.RunMeta{ItemID: item.ID, Status: types.StatusError, Error: err.Error()}, err
 		}
 		e.linkFacts(ent, ob, time.Now().UTC())
+		if e.Observe != nil {
+			e.Observe(ent, ob)
+		}
 		meta.EmitCount++
 	}
 	meta.Drop = o.Meta.Drop

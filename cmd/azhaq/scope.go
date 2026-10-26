@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 
@@ -48,10 +47,10 @@ func scopeSeeds(sc scopefile.Scope) ([]types.Seed, error) {
 
 // cmdScope prints what a run would take from a scope.
 func cmdScope(args []string) error {
-	fs := flag.NewFlagSet("scope", flag.ContinueOnError)
+	fs := newFlags("scope")
 	spec := fs.String("scope", "", "a file or hackerone, bugcrowd, intigriti, yeswehack")
 	program := fs.String("program", "", "the program to take from a list")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *spec == "" {

@@ -17,9 +17,11 @@ import (
 type MapEntry struct {
 	Entity   types.Entity
 	Scope    string // target, fanout
-	Coverage string // visited, catchall, hint, capped (URLs)
+	Coverage string // visited, catchall, error, hint, capped (URLs)
 	Role     string // live, app, auth, forbidden, api, page, script, sibling, …
 	Proof    string
+	Status   int      // the URL's own answer (first hop), 0 if not fetched
+	Title    string   // the page title, if any
 	Template string   // URL template; set on every templated URL row
 	Count    int      // URLs folded into this row by GroupTemplates
 	Folded   int      // hostnames folded into a summary row (dead, wildcard)
@@ -68,6 +70,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			Proof:    proofOf(e, rows),
 		}
 		if e.Type == types.TypeURL {
+			m.Status, m.Title = answerOf(rows)
 			if webextract.Templated(e.Key) {
 				m.Template = webextract.Template(e.Key)
 			}
@@ -95,6 +98,32 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	return out
 }
 
+// answerOf is the status and title a URL answered with: a real page
+// first, else the catch-all answer.
+func answerOf(obs []types.StoredObservation) (int, string) {
+	status, title := 0, ""
+	for _, o := range obs {
+		if o.Kind == "error" || (o.Collector != "azhaq-http" && o.Collector != "azhaq-paths" && o.Kind != "application") {
+			continue
+		}
+		st := statusOf(o.Payload)
+		if st == 0 {
+			continue
+		}
+		var p struct {
+			Title string `json:"title"`
+		}
+		_ = json.Unmarshal(o.Payload, &p)
+		if !isCatchAll(o) {
+			return st, p.Title
+		}
+		if status == 0 {
+			status, title = st, p.Title
+		}
+	}
+	return status, title
+}
+
 func scopeLabel(e types.Entity, hosts, domains, ips map[string]bool) string {
 	if entityRank(e, hosts, domains, ips) <= 1 {
 		return "target"
@@ -112,6 +141,11 @@ func coverageOf(e types.Entity, obs []types.StoredObservation, leftover map[stri
 	for _, o := range obs {
 		if isCatchAll(o) {
 			return "catchall"
+		}
+	}
+	for _, o := range obs {
+		if o.Kind == "error" && o.Collector == "azhaq-http" {
+			return "error" // requested, no answer
 		}
 	}
 	if leftover[e.Key] && runCapped {
@@ -185,10 +219,10 @@ func isCatchAll(o types.StoredObservation) bool {
 
 func fetched(obs []types.StoredObservation) bool {
 	for _, o := range obs {
-		if isCatchAll(o) {
+		if isCatchAll(o) || o.Kind == "error" {
 			continue
 		}
-		if o.Collector == "azhaq-http" || o.Kind == "application" {
+		if (o.Collector == "azhaq-http" || o.Kind == "application") && statusOf(o.Payload) > 0 {
 			return true
 		}
 		if o.Collector == "azhaq-paths" && o.Kind == "url" && statusOf(o.Payload) > 0 {
@@ -280,6 +314,9 @@ func proofOf(e types.Entity, obs []types.StoredObservation) string {
 			}
 			if v, ok := m[k]; ok && v != nil && fmt.Sprint(v) != "" {
 				vals[k] = fmt.Sprint(v)
+				if k == "error" {
+					vals[k] = ShortError(vals[k])
+				}
 			}
 		}
 	}

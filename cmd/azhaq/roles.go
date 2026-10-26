@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,14 +32,14 @@ type roleRow struct {
 //	azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url https://app/
 //	azhaq roles -login https://app/login -role anon -role-login 'member=m@x.test:pw' -- -url https://app/
 func cmdRoles(args []string) error {
-	fs := flag.NewFlagSet("roles", flag.ContinueOnError)
+	fs := newFlags("roles")
 	var specs, logins stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous)")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome")
 	loginURL := fs.String("login", "", "the login page for -role-login")
 	dir := fs.String("dir", "", "directory for one database per role (default: azhaq-roles-<time>)")
 	jsonl := fs.Bool("jsonl", false, "print one JSON row per endpoint")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	runArgs := fs.Args()
@@ -88,11 +87,7 @@ func cmdRoles(args []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
 		// Each run's summary goes to stderr; stdout carries the table.
-		stdout := os.Stdout
-		os.Stdout = os.Stderr
-		err := cmdRun(args)
-		os.Stdout = stdout
-		if err != nil {
+		if _, err := runEmbedded(args); err != nil {
 			return fmt.Errorf("role %s: %w", r.name, err)
 		}
 		got, err := endpointStatus(db)

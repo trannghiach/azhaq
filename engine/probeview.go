@@ -23,6 +23,8 @@ type ProbeRow struct {
 	CDNType     string   `json:"cdn_type,omitempty"`
 	IP          string   `json:"ip,omitempty"`
 	Favicon     string   `json:"favicon,omitempty"`
+	ContentType string   `json:"content_type,omitempty"`
+	Location    string   `json:"location,omitempty"`
 	Length      int      `json:"length"`
 	Words       int      `json:"words"`
 	Lines       int      `json:"lines"`
@@ -50,17 +52,11 @@ func ProbeRows(obs []types.StoredObservation) []ProbeRow {
 	var rows []ProbeRow
 	seen := map[string]bool{}
 	for _, o := range obs {
-		if o.Collector != "azhaq-http" {
-			continue
-		}
-		var r ProbeRow
-		if json.Unmarshal(o.Payload, &r) != nil || r.URL == "" || seen[r.URL] {
+		r, ok := ProbeRowOf(o.Observation)
+		if !ok || seen[r.URL] {
 			continue
 		}
 		seen[r.URL] = true
-		if r.FinalURL == r.URL {
-			r.FinalURL = ""
-		}
 		if c, ok := cdn[normalize.HostFromURL(r.URL)]; ok {
 			r.CDN, r.CDNType = c[0], c[1]
 		}
@@ -68,6 +64,19 @@ func ProbeRows(obs []types.StoredObservation) []ProbeRow {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].URL < rows[j].URL })
 	return rows
+}
+
+// ProbeRowOf reads one azhaq-http observation, without the CDN (it comes
+// from DNS).
+func ProbeRowOf(o types.Observation) (ProbeRow, bool) {
+	var r ProbeRow
+	if o.Collector != "azhaq-http" || o.Kind == "error" || json.Unmarshal(o.Payload, &r) != nil || r.URL == "" || r.Status == 0 {
+		return ProbeRow{}, false
+	}
+	if r.FinalURL == r.URL {
+		r.FinalURL = ""
+	}
+	return r, true
 }
 
 // Line is the row in httpx's bracket style.

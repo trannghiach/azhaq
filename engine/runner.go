@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -146,24 +147,53 @@ func (e *Engine) markCapped() {
 	_ = e.Store.MarkCapped()
 }
 
+// progress is how much a run says on stderr while it works.
+type progress struct {
+	verbose bool
+	mu      sync.Mutex
+	errs    map[string]int
+}
+
+type progressKey struct{}
+
+// WithVerbose makes the run print a line for every finished task, not
+// only for failures.
+func WithVerbose(ctx context.Context) context.Context {
+	return context.WithValue(ctx, progressKey{}, &progress{verbose: true, errs: map[string]int{}})
+}
+
+// errorLines caps the lines one kind of failure prints while a run works;
+// the summary counts all of them.
+const errorLines = 3
+
 func printItem(ctx context.Context, item types.WorkItem, d time.Duration, meta types.RunMeta, err error) {
-	if isQuiet(ctx) {
+	if isQuiet(ctx) || meta.Status == types.StatusCapped {
 		return
 	}
-	if meta.Status == types.StatusCapped {
-		return // counted in the summary
-	}
-	if timing.From(ctx) == nil {
-		if err != nil && meta.Status != types.StatusCancelled {
-			fmt.Fprintf(os.Stderr, "  ! %s %s: %s\n", item.Collector, item.Seed.Key(), err)
+	p, _ := ctx.Value(progressKey{}).(*progress)
+	if err != nil {
+		if meta.Status == types.StatusCancelled || neterr.Quiet(err) {
+			return
+		}
+		short := ShortError(err.Error())
+		if p == nil {
+			fmt.Fprintf(os.Stderr, "  ! %s %s: %s\n", item.Collector, item.Seed.Key(), short)
+			return
+		}
+		p.mu.Lock()
+		k := item.Collector + "\x00" + short
+		p.errs[k]++
+		n := p.errs[k]
+		p.mu.Unlock()
+		switch {
+		case p.verbose || n <= errorLines:
+			fmt.Fprintf(os.Stderr, "  ! %s %s: %s\n", item.Collector, item.Seed.Key(), short)
+		case n == errorLines+1:
+			fmt.Fprintf(os.Stderr, "  ! %s: more %q failures; the summary counts them\n", item.Collector, short)
 		}
 		return
 	}
-	if err != nil && meta.Status != types.StatusCancelled {
-		fmt.Fprintf(os.Stderr, "  ! %s %s: %s  %s\n", item.Collector, item.Seed.Key(), err, d.Round(time.Millisecond))
-		return
-	}
-	if err != nil {
+	if p == nil || !p.verbose {
 		return
 	}
 	mark := "."
@@ -171,6 +201,14 @@ func printItem(ctx context.Context, item types.WorkItem, d time.Duration, meta t
 		mark = "~"
 	}
 	fmt.Fprintf(os.Stderr, "  %s %s %s  %s\n", mark, item.Collector, item.Seed.Key(), d.Round(time.Millisecond))
+}
+
+// WithProgress counts failures for printItem without printing every task.
+func WithProgress(ctx context.Context) context.Context {
+	if _, ok := ctx.Value(progressKey{}).(*progress); ok {
+		return ctx
+	}
+	return context.WithValue(ctx, progressKey{}, &progress{errs: map[string]int{}})
 }
 
 func seedKey(s types.Seed) string {

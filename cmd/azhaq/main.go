@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -58,126 +59,69 @@ func init() {
 }
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
-		if err == flag.ErrHelp {
-			os.Exit(0)
+	err := run(os.Args[1:])
+	if err != nil && !errors.Is(err, flag.ErrHelp) {
+		var ee exitErr
+		switch {
+		case errors.As(err, &ee):
+			if ee.msg != "" {
+				fmt.Fprintf(os.Stderr, "azhaq: %s\n", ee.msg)
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "azhaq: %v\n", err)
+			var ue usageErr
+			if errors.As(err, &ue) && len(os.Args) > 1 {
+				if _, ok := lookup(os.Args[1]); ok {
+					fmt.Fprintf(os.Stderr, "azhaq: azhaq help %s shows its flags and examples\n", os.Args[1])
+				}
+			}
 		}
-		fmt.Fprintf(os.Stderr, "azhaq: %v\n", err)
-		os.Exit(1)
 	}
+	os.Exit(exitCode(err))
 }
 
 func run(args []string) error {
 	if len(args) == 0 {
-		fmt.Fprint(os.Stderr, helpText)
-		return fmt.Errorf("need a command")
+		printOverview(os.Stderr)
+		return usagef("need a command")
 	}
 	switch args[0] {
-	case "run":
-		return cmdRun(args[1:])
-	case "plan":
-		return cmdPlan(args[1:])
-	case "roles":
-		return cmdRoles(args[1:])
-	case "resume":
-		return cmdResume(args[1:])
-	case "worker":
-		return cmdWorker(args[1:])
-	case "scope":
-		return cmdScope(args[1:])
-	case "watch":
-		return cmdWatch(args[1:])
-	case "new":
-		return cmdNew(args[1:])
-	case "subs":
-		return cmdSubs(args[1:])
-	case "probe":
-		return cmdProbe(args[1:])
-	case "crawl":
-		return cmdCrawl(args[1:])
-	case "urls":
-		return cmdURLs(args[1:])
-	case "dns":
-		return cmdDNS(args[1:])
-	case "ports":
-		return cmdPorts(args[1:])
-	case "dirs":
-		return cmdDirs(args[1:])
-	case "params":
-		return cmdParams(args[1:])
-	case "asn":
-		return cmdASN(args[1:])
-	case "shots":
-		return cmdShots(args[1:])
-	case "ingest":
-		return cmdIngest(args[1:])
-	case "export":
-		return cmdExport(args[1:])
-	case "diff":
-		return cmdDiff(args[1:])
-	case "bench":
-		return cmdBench(args[1:])
-	case "version":
-		fmt.Printf("azhaq %s\n", version)
-		return nil
-	case "help", "-h", "--help":
-		return usage()
-	default:
-		return fmt.Errorf("unknown command %q\n%s", args[0], helpText)
+	case "-h", "-help", "--help":
+		return cmdHelp(args[1:])
+	case "-v", "-V", "-version", "--version":
+		return cmdVersion(args[1:])
 	}
-}
-
-const helpText = `azhaq — generic recon engine
-
-  azhaq run    -url URL | -domain D | -list FILE | -org NAME | -cloud FILE | -in seeds.jsonl | -demo
-               [-scope FILE|PLATFORM -program NAME] [-asn AS64500] [-cidr 192.0.2.0/24] [-max-ips N]
-               [-probe] [-web-ports 80,443,8080] [-no-tech] [-urls FILE] [-screenshots DIR] [-browser] [-tabs N]
-               [-db FILE] [-exec CMD] [-facts FILE] [-cookie N=V] [-header 'K: V']
-               [-login URL -login-user U -login-pass P]
-               [-paths FILE] [-depth N] [-max-items N] [-max-names N] [-parallel N]
-               [-max-requests N] [-rate N] [-daily-requests N]
-               [-delay D] [-quiet] [-json] [-obs] [-fail-on-errors] [-fail-on-capped]
-               [-allow D] [-deny D] [-passive]
-               [-sources A,B] [-exclude-sources A,B] [-all-sources] [-providers FILE]
-               [-resolvers FILE] [-dns-rate N] [-dns-brute FILE] [-permute] [-graphql] [-skip A,B]
-               # -depth 0 = seed wave only (not unlimited); default 4
-               # -passive keeps third-party sources and DNS; nothing is sent to the target
-               # -dns-brute, -permute and -graphql are active and need -allow
-               # -probe: resolve and fetch each target once, one line per web service
-               # print is a ranked map (visited/hint); -obs dumps the observation log
-               # parallel runs: give each its own -db FILE or AZHAQ_DB
-  azhaq subs   -d DOMAIN | -dL FILE | stdin  [-live] [-json] [-silent] [-o FILE]   # like subfinder
-  azhaq dns    -d NAME | -l FILE | stdin  [-resp] [-json]                        # like dnsx
-  azhaq probe  -u TARGET | -l FILE | stdin  [-web-ports P] [-json] [-silent]     # like httpx
-  azhaq crawl  -u URL | -l FILE | stdin  [-depth N] [-assets] [-json]            # like katana
-  azhaq urls   -d DOMAIN | -dL FILE | stdin  [-json]                              # like gau
-  azhaq ports  -host HOST | -l FILE | stdin  [-p top-100|top-1000|full|LIST] [-rate N] [-json]  # like naabu
-  azhaq dirs   -u URL | -l FILE | stdin  -w WORDLIST [-e EXT] [-depth N] [-mc LIST] [-json]   # like ffuf -ac
-  azhaq params -u URL | -l FILE | stdin  -w NAMES [-rate N] [-json]                # like arjun (GET)
-  azhaq asn    -a AS64500 | -l FILE | stdin  [-json]                               # like asnmap
-  azhaq shots  -u TARGET | -l FILE | stdin  [-dir DIR] [-tabs N] [-json]           # like gowitness
-               # results on stdout, one per line; progress on stderr (-silent drops it)
-  azhaq plan   -url URL | -domain D | -org NAME | -cloud FILE | -in seeds.jsonl
-  azhaq scope  -scope FILE|hackerone|bugcrowd|intigriti|yeswehack [-program NAME]  # show what a run would take
-  azhaq watch  -db WORKSPACE.db [-every 24h] [-notify WEBHOOK] [-notify-cmd CMD] [-json] -- RUN OPTIONS
-               # run again and again; report new hosts, services, URLs and ports
-  azhaq new    -db WORKSPACE.db [-since 168h] [-json]       # what the workspace first saw lately
-  azhaq roles  -role anon -role 'user=Authorization: Bearer …' [-dir DIR] [-jsonl] -- RUN OPTIONS
-               # one run per session; prints the endpoints whose status differs
-  azhaq ingest -in facts.jsonl  [-db FILE]
-  azhaq export [-db FILE]
-  azhaq diff   -a OLD.db -b NEW.db | -db WORKSPACE.db  [-jsonl] [-quiet]
-  azhaq bench
-  azhaq version
-`
-
-func usage() error {
-	fmt.Fprint(os.Stderr, helpText)
-	return flag.ErrHelp
+	c, ok := lookup(args[0])
+	if !ok {
+		if near := suggest(args[0]); len(near) > 0 {
+			return usagef("unknown command %q; did you mean %s? (azhaq help lists every command)", args[0], strings.Join(near, " or "))
+		}
+		return usagef("unknown command %q (azhaq help lists every command)", args[0])
+	}
+	return c.run(args[1:])
 }
 
 func cmdRun(args []string) error {
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	rep := newReport("run")
+	var out runOut
+	if err := mapTarget(args, rep, &out); err != nil {
+		return err
+	}
+	return rep.finish(out.json, false)
+}
+
+// runOut is how a run prints its map: text, JSON lines, or not at all.
+// embedded: a command built on run owns stdout.
+type runOut struct{ json, quiet, embedded bool }
+
+// observer, when set, sees every observation of the next run as it is
+// stored: the drop-in commands print their results as they come.
+var observer func(types.Entity, types.Observation)
+
+// mapTarget runs the engine as azhaq run does and fills rep; run and the
+// commands built on it print rep.
+func mapTarget(args []string, rep *report, out *runOut) error {
+	fs := newFlags("run")
 	url := fs.String("url", "", "seed URL")
 	org := fs.String("org", "", "seed Organization name")
 	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
@@ -205,11 +149,13 @@ func cmdRun(args []string) error {
 	dbPath := fs.String("db", "", "sqlite path (default: new file each run)")
 	demo := fs.Bool("demo", false, "run against the built-in fixture server (no internet)")
 	pathsFile := fs.String("paths", "", "extra path wordlist (one path per line)")
-	quiet := fs.Bool("quiet", false, "print summary only (human line + JSON)")
-	jsonOut := fs.Bool("json", false, "stdout is one JSON summary only")
+	quiet := fs.Bool("quiet", false, "print no map, only the summary (on stderr)")
+	jsonOut := fs.Bool("json", false, "print the map as JSON lines, and the summary as one JSON object on stderr")
+	verbose := fs.Bool("v", false, "print a line for every finished task, not only failures")
+	timeout := fs.Duration("timeout", 0, "stop after this long and keep what was found; azhaq resume continues (0: no limit)")
 	showObs := fs.Bool("obs", false, "also print the observation log")
-	failErrs := fs.Bool("fail-on-errors", false, "exit 1 on collector errors, connector failures, or degraded third-party calls (429/503)")
-	failCapped := fs.Bool("fail-on-capped", false, "exit 1 if the run hit -max-items or -depth with work left")
+	failErrs := fs.Bool("fail-on-errors", false, "exit 3 also when only fan-out failed (a source for the domain of a URL)")
+	failCapped := fs.Bool("fail-on-capped", false, "exit 4 also when the run hit -depth with hints left")
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
 	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
@@ -251,9 +197,10 @@ func cmdRun(args []string) error {
 	fs.Var(&headers, "header", "extra request header K: V (repeatable)")
 	fs.Var(&allow, "allow", "allowed domain or host for fan-out (repeatable)")
 	fs.Var(&deny, "deny", "excluded domain or host (repeatable)")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
+	out.json, out.quiet = *jsonOut, *quiet
 
 	fetch.Reset()
 	fetch.Delay = *delay
@@ -290,14 +237,14 @@ func cmdRun(args []string) error {
 		for _, a := range asns {
 			n, ok := asncol.NormalizeASN(a)
 			if !ok {
-				return fmt.Errorf("-asn wants a number such as AS64500, got %q", a)
+				return usagef("-asn wants a number such as AS64500, got %q", a)
 			}
 			seeds = append(seeds, types.Seed{Type: types.TypeASN, Keys: map[string]string{"asn": n}})
 		}
 		for _, c := range cidrs {
 			pf, err := netip.ParsePrefix(strings.TrimSpace(c))
 			if err != nil {
-				return fmt.Errorf("-cidr: %w", err)
+				return usagef("-cidr: %v", err)
 			}
 			seeds = append(seeds, types.Seed{Type: types.TypePrefix, Keys: map[string]string{"prefix": pf.Masked().String()}})
 		}
@@ -317,19 +264,22 @@ func cmdRun(args []string) error {
 				fmt.Fprintf(os.Stderr, "scope %s: %d rules in, %d out, %d domains, %d targets, %d entries skipped\n",
 					sc.Program, len(sc.Allow), len(sc.Deny), len(sc.Domains), len(sc.Targets), len(sc.Skipped))
 			}
+			for _, e := range sc.Skipped {
+				rep.Skipped = append(rep.Skipped, engine.Skip{Target: e, Reason: "a scope entry a run cannot use"})
+			}
 		}
 		for _, d := range domains {
 			h := normalize.Hostname(d)
 			if h == "" || strings.ContainsAny(h, "/: ") {
-				return fmt.Errorf("-domain wants a bare domain such as example.com, got %q", d)
+				return usagef("-domain wants a bare domain such as example.com, got %q", d)
 			}
 			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
 		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" {
-			return fmt.Errorf("need -url, -domain, -list, -scope, -asn, -cidr, -org, -cloud, -in, -facts, -exec, or -demo")
+			return usagef("need a target: -url, -domain, -list, -scope, -asn, -cidr, -org, -cloud, -in, -facts, -exec or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
-			return fmt.Errorf("-exec needs a seed (-url, -org, -cloud, or -in)")
+			return usagef("-exec needs a seed (-url, -org, -cloud, or -in)")
 		}
 	}
 
@@ -358,6 +308,22 @@ func cmdRun(args []string) error {
 	budgets.FailOnCapped = *failCapped
 	budgets.Passive = *passive
 	budgets.Scope = scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
+	if !budgets.Scope.Empty() {
+		// What the scope excludes is never touched, even when it was given
+		// as a target: it is listed in the summary instead.
+		kept := seeds[:0]
+		for _, s := range seeds {
+			if budgets.Scope.AllowsSeed(s) {
+				kept = append(kept, s)
+			} else {
+				rep.Skipped = append(rep.Skipped, engine.Skip{Target: s.Key(), Reason: "outside the scope"})
+			}
+		}
+		seeds = kept
+		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
+			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
+		}
+	}
 	if *depth == 0 {
 		budgets.MaxDepth = 1
 	} else {
@@ -403,7 +369,7 @@ func cmdRun(args []string) error {
 		fetch.Allow = budgets.Scope.Allows
 	}
 	if len(budgets.Active) > 0 && len(allow) == 0 {
-		return fmt.Errorf("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN")
+		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN or -scope")
 	}
 	doneBefore := 0
 	if *resumeRun != "" {
@@ -499,6 +465,8 @@ func cmdRun(args []string) error {
 		}
 	}
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
+	// HTTP connects to the addresses azhaq-dns found: one answer per name.
+	fetch.Resolver = func(ctx context.Context, host string) []string { return opts.DNS.Resolve(ctx, host).IPs() }
 	if *bruteFile != "" {
 		if opts.BruteWords, err = loadLines(*bruteFile); err != nil {
 			return err
@@ -531,7 +499,7 @@ func cmdRun(args []string) error {
 	if *workerOf != "" {
 		return runWorker(cat, *workerOf, *workerToken, budgets.Parallel)
 	}
-	eng := &engine.Engine{Cat: cat, Store: st}
+	eng := &engine.Engine{Cat: cat, Store: st, Observe: observer}
 	if *serve != "" {
 		if *workerToken == "" {
 			*workerToken = newToken()
@@ -553,10 +521,22 @@ func cmdRun(args []string) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	ctx = timing.With(ctx, log)
-	if *quiet || *jsonOut {
-		ctx = engine.WithQuiet(ctx)
+	if *timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, *timeout)
+		defer cancel()
 	}
+	ctx = timing.With(ctx, log)
+	switch {
+	case *quiet && !*verbose:
+		ctx = engine.WithQuiet(ctx)
+	case *verbose:
+		ctx = engine.WithVerbose(ctx)
+	default:
+		ctx = engine.WithProgress(ctx)
+	}
+	stopTicker := progressTicker(ctx, st, *quiet && !*verbose)
+	defer stopTicker()
 
 	t0 := time.Now()
 	if *factsPath != "" {
@@ -599,9 +579,11 @@ func cmdRun(args []string) error {
 	if err := st.SaveSeeds(engine.ExpandSeeds(seeds)); err != nil {
 		return err
 	}
-	if err := eng.RunLocal(ctx, seeds, budgets); err != nil && err != context.Canceled {
-		return err
+	runErr := eng.RunLocal(ctx, seeds, budgets)
+	if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
+		return runErr
 	}
+	stopTicker()
 	ents, _ := st.Entities()
 	obs, _ := st.Observations()
 	edges, _ := st.Edges()
@@ -613,16 +595,23 @@ func cmdRun(args []string) error {
 		return err
 	}
 	rows := engine.BuildMap(ents, scope, obs, leftover, stats.Capped)
-	if !*quiet && !*jsonOut {
+	if *verbose {
 		fmt.Fprint(os.Stderr, log.Report(time.Since(t0)))
 	}
-	if !*quiet && !*jsonOut && *probe {
-		fmt.Println("probe")
-		for _, r := range engine.ProbeRows(obs) {
-			fmt.Printf("  %s\n", r.Line())
+	switch {
+	case *quiet || out.embedded:
+	case *jsonOut:
+		enc := json.NewEncoder(os.Stdout)
+		for _, r := range engine.GroupTemplates(rows) {
+			if err := enc.Encode(mapRowJSON(r)); err != nil {
+				return err
+			}
 		}
-	} else if !*quiet && !*jsonOut {
-		fmt.Println("map")
+	case *probe:
+		for _, r := range engine.ProbeRows(obs) {
+			fmt.Println(r.Line())
+		}
+	default:
 		printMap(rows)
 		if *showObs {
 			fmt.Println("observations")
@@ -631,40 +620,41 @@ func cmdRun(args []string) error {
 			}
 		}
 	}
-	stats.DB = path
-	stats.Requests, stats.MaxRequests = fetch.Sent(), fetch.MaxRequests
-	if *jsonOut {
-		if err := json.NewEncoder(os.Stdout).Encode(stats); err != nil {
-			return err
+	fillReport(rep, path, seeds, ents, obs, rows)
+	rep.RunID = stats.RunID
+	rep.Requests = fetch.Sent()
+	if left := st.TasksLeft(); left > 0 {
+		switch {
+		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks left", *timeout, left)
+		case ctx.Err() != nil:
+			rep.Stopped = fmt.Sprintf("interrupted with %d tasks left", left)
+		case fetch.Spent():
+			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks left", fetch.MaxRequests, left)
+		default:
+			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks left", budgets.MaxItems, left)
 		}
-	} else {
-		fmt.Printf("db %s\n", path)
-		fmt.Println(stats.Line())
-		if err := json.NewEncoder(os.Stdout).Encode(stats); err != nil {
-			return err
-		}
-	}
-	if left := st.TasksLeft(); left > 0 && !*quiet {
-		fmt.Fprintf(os.Stderr, "azhaq: %d tasks left; azhaq resume -db %s continues the run\n", left, path)
+		rep.Resume = "azhaq resume -db " + path
 		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
-			fmt.Fprintf(os.Stderr, "azhaq: no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests\n", fetch.MaxRequests)
+			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
 		}
+	} else if *failCapped && stats.Capped {
+		rep.Stopped = fmt.Sprintf("-depth %d reached with hints left", stats.Depth)
 	}
-	if *failErrs && stats.Errors+stats.Degraded > 0 {
-		return fmt.Errorf("run %s: %d error(s), %d degraded", stats.RunID, stats.Errors, stats.Degraded)
-	}
-	if *failCapped && stats.Capped {
-		return fmt.Errorf("run %s: capped (depth=%d max-items=%d)", stats.RunID, stats.Depth, stats.MaxItems)
+	if *failErrs {
+		for i := range rep.Failed {
+			rep.Failed[i].Fanout = false
+		}
 	}
 	if remember && !*demo && input != "" {
 		_ = recordRun(input, path)
 	}
-	if !*quiet && !*jsonOut && !*demo && prevDB != "" && prevDB != path {
+	if !*quiet && !*jsonOut && !out.embedded && !*demo && prevDB != "" && prevDB != path {
 		if err := printDiff(prevDB, path, diffOpts{}); err != nil {
 			fmt.Fprintf(os.Stderr, "azhaq: diff vs %s: %v\n", prevDB, err)
 		}
 	}
-	if !*quiet && !*jsonOut && !*demo && !remember {
+	if !*quiet && !*jsonOut && !out.embedded && !*demo && !remember {
 		// -db names a workspace: compare with its previous run, if any.
 		if err := printRunDiff(path, diffOpts{}); err != nil {
 			fmt.Fprintf(os.Stderr, "azhaq: diff vs the previous run in %s: %v\n", path, err)
@@ -727,10 +717,10 @@ func printMap(rows []engine.MapEntry) {
 }
 
 func cmdIngest(args []string) error {
-	fs := flag.NewFlagSet("ingest", flag.ContinueOnError)
+	fs := newFlags("ingest")
 	in := fs.String("in", "", "JSONL connector facts")
 	dbPath := fs.String("db", "", "sqlite path (default: new file each run)")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *in == "" {
@@ -775,8 +765,8 @@ func cmdIngest(args []string) error {
 }
 
 func cmdBench(args []string) error {
-	fs := flag.NewFlagSet("bench", flag.ContinueOnError)
-	if err := fs.Parse(args); err != nil {
+	fs := newFlags("bench")
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	fetch.Reset()
@@ -830,14 +820,14 @@ func cmdBench(args []string) error {
 }
 
 func cmdPlan(args []string) error {
-	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
+	fs := newFlags("plan")
 	url := fs.String("url", "", "seed URL")
 	org := fs.String("org", "", "seed Organization name")
 	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
 	in := fs.String("in", "", "JSONL seeds")
 	var domains stringsFlag
 	fs.Var(&domains, "domain", "seed Domain (repeatable)")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	seeds, err := loadSeeds(*url, *org, *cloud, *in)
@@ -866,13 +856,13 @@ func cmdPlan(args []string) error {
 }
 
 func cmdDiff(args []string) error {
-	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
+	fs := newFlags("diff")
 	a := fs.String("a", "", "old sqlite")
 	b := fs.String("b", "", "new sqlite (default: last run)")
 	ws := fs.String("db", "", "workspace: compare the last two runs recorded in this database")
 	jsonl := fs.Bool("jsonl", false, "emit JSONL instead of a text report")
 	quiet := fs.Bool("quiet", false, "entities and counts only (skip observation lines)")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *ws != "" {
@@ -1014,11 +1004,11 @@ func newRunID() string {
 }
 
 func cmdExport(args []string) error {
-	fs := flag.NewFlagSet("export", flag.ContinueOnError)
+	fs := newFlags("export")
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
 	format := fs.String("format", "jsonl", "jsonl, urls, hosts, targets (for nuclei -l), openapi, burp (scope), html, graphml, secrets")
 	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes)")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *format != "jsonl" {

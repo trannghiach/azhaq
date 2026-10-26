@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"net/url"
 	"os"
@@ -40,7 +39,7 @@ func (c changes) any() bool {
 // cmdWatch runs the same target into a workspace again and again and
 // reports what changed: azhaq watch -db acme.db -every 24h -notify URL -- -scope acme.csv
 func cmdWatch(args []string) error {
-	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
+	fs := newFlags("watch")
 	db := fs.String("db", "", "workspace database (required)")
 	every := fs.Duration("every", 0, "run again after this long (default: run once, for cron)")
 	var hooks stringsFlag
@@ -48,7 +47,7 @@ func cmdWatch(args []string) error {
 	notifyCmd := fs.String("notify-cmd", "", "command that gets the change set as JSON on stdin")
 	always := fs.Bool("always", false, "notify after every run, not only when something changed")
 	jsonOut := fs.Bool("json", false, "print the change set as JSON")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	runArgs := fs.Args()
@@ -61,11 +60,7 @@ func cmdWatch(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	for {
-		stdout := os.Stdout
-		os.Stdout = os.Stderr
-		err := cmdRun(append(append([]string(nil), runArgs...), "-db", *db, "-quiet"))
-		os.Stdout = stdout
-		if err != nil {
+		if _, err := runEmbedded(append(append([]string(nil), runArgs...), "-db", *db, "-quiet")); err != nil {
 			return err
 		}
 		ch, err := diffRuns(*db)
@@ -270,11 +265,11 @@ func (c changes) text() string {
 
 // cmdNew lists what a workspace first saw within a window, for triage.
 func cmdNew(args []string) error {
-	fs := flag.NewFlagSet("new", flag.ContinueOnError)
+	fs := newFlags("new")
 	db := fs.String("db", "", "workspace database (required)")
 	since := fs.Duration("since", 7*24*time.Hour, "first seen within this long")
 	jsonOut := fs.Bool("json", false, "JSONL")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *db == "" {

@@ -57,6 +57,11 @@ var Extra http.Header
 // requested, not even as a redirect target.
 var Allow func(host string) bool
 
+// Resolver, when set, gives the addresses to connect to for a name: the
+// run's own DNS answers, so a service is reached at the address its
+// names were seen to resolve to. Nil, or no answer: the system resolver.
+var Resolver func(ctx context.Context, host string) []string
+
 var (
 	cacheMu  sync.Mutex
 	cache    = map[string]cacheEnt{}
@@ -78,6 +83,7 @@ func Reset() {
 	hostSem = map[string]chan struct{}{}
 	Extra = nil
 	Allow = nil
+	Resolver = nil
 	Delay = 0
 	cacheMu.Unlock()
 	resetProbes()
@@ -101,7 +107,7 @@ func Client(c *http.Client) *http.Client {
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
+			DialContext:           dial,
 			TLSHandshakeTimeout:   5 * time.Second,
 			ResponseHeaderTimeout: 10 * time.Second,
 			TLSClientConfig: &tls.Config{
@@ -113,6 +119,31 @@ func Client(c *http.Client) *http.Client {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+// dial connects through Resolver's addresses when it has an answer.
+func dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: 5 * time.Second}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || Resolver == nil || net.ParseIP(host) != nil {
+		return d.DialContext(ctx, network, addr)
+	}
+	ips := Resolver(ctx, host)
+	if len(ips) == 0 {
+		return d.DialContext(ctx, network, addr) // /etc/hosts, special-use names
+	}
+	var last error
+	for _, ip := range ips {
+		c, err := d.DialContext(ctx, network, net.JoinHostPort(ip, port))
+		if err == nil {
+			return c, nil
+		}
+		last = err
+		if ctx.Err() != nil {
+			break
+		}
+	}
+	return nil, last
 }
 
 func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byte, error) {

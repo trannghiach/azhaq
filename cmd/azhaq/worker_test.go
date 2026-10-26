@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"net"
 	"os"
 	"path/filepath"
@@ -25,7 +24,7 @@ func TestForWorkers(t *testing.T) {
 	if err := os.WriteFile(words, []byte("admin\nbackup\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	fs := newFlags("run")
 	fs.String("url", "", "")
 	fs.String("db", "", "")
 	fs.String("dirs", "", "")
@@ -34,7 +33,7 @@ func TestForWorkers(t *testing.T) {
 	fs.String("login-pass", "", "")
 	fs.String("serve", "", "")
 	args := []string{"-url", "https://app.test/", "-db", "x.db", "-dirs", words, "-no-tech", "-depth=2", "-login-pass", "pw", "-serve", ":7777"}
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		t.Fatal(err)
 	}
 	if err := applyExtra([]string{"sid=1"}, nil); err != nil {

@@ -9,7 +9,6 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -670,17 +669,16 @@ func (s *scheduler) leftover() []types.Seed {
 }
 
 func printBatch(ctx context.Context, name string, n int, d time.Duration, err error) {
-	if isQuiet(ctx) || timing.From(ctx) == nil {
-		if err != nil && !isQuiet(ctx) {
-			fmt.Fprintf(os.Stderr, "  ! %s %d seeds: %s\n", name, n, err)
-		}
+	if isQuiet(ctx) {
 		return
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  ! %s %d seeds: %s  %s\n", name, n, err, d.Round(time.Millisecond))
+		fmt.Fprintf(os.Stderr, "  ! %s %d seeds: %s\n", name, n, ShortError(err.Error()))
 		return
 	}
-	fmt.Fprintf(os.Stderr, "  . %s %d seeds  %s\n", name, n, d.Round(time.Millisecond))
+	if p, _ := ctx.Value(progressKey{}).(*progress); p != nil && p.verbose {
+		fmt.Fprintf(os.Stderr, "  . %s %d seeds  %s\n", name, n, d.Round(time.Millisecond))
+	}
 }
 
 // hintStep is how much deeper a hint goes: none for the same target under

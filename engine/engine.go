@@ -29,6 +29,9 @@ type Engine struct {
 	Store *store.Store
 	// Workers, when set, hands tasks to other processes (azhaq worker).
 	Workers *Workers
+	// Observe, when set, sees every observation once it is stored, from
+	// any goroutine: commands print results as they come.
+	Observe func(ent types.Entity, o types.Observation)
 }
 
 func (e *Engine) Plan(seeds []types.Seed) []types.WorkItem {
@@ -78,6 +81,9 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 			return err
 		}
 		e.linkFacts(ent, o, time.Now().UTC())
+		if e.Observe != nil {
+			e.Observe(ent, o)
+		}
 		return nil
 	}
 	// Under a request budget, what a task reports is held until it ends: a
@@ -220,6 +226,9 @@ func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) 
 			return err
 		}
 		e.linkFacts(ent, o, time.Now().UTC())
+		if e.Observe != nil {
+			e.Observe(ent, o)
+		}
 		return nil
 	}
 	done := timing.Start(ctx, name, fmt.Sprintf("%d seeds", len(todo)))

@@ -175,11 +175,11 @@ var workerHeaders []string
 //
 //	azhaq worker -server http://10.0.0.5:7777 -token T [-slots 8]
 func cmdWorker(args []string) error {
-	fs := flag.NewFlagSet("worker", flag.ContinueOnError)
+	fs := newFlags("worker")
 	server := fs.String("server", "", "the run's address (azhaq run -serve)")
 	token := fs.String("token", os.Getenv("AZHAQ_WORKER_TOKEN"), "the run's worker token (default $AZHAQ_WORKER_TOKEN)")
 	slots := fs.Int("slots", 8, "tasks run at once")
-	if err := fs.Parse(args); err != nil {
+	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *server == "" || *token == "" {
