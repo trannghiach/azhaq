@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -24,9 +25,9 @@ const Name = "azhaq-js"
 
 const (
 	// maxEmit caps URLs from one page and the scripts it pulls in.
-	maxEmit = 512
+	maxEmit = 4096
 	// maxScripts caps scripts fetched for one page, chunks included.
-	maxScripts = 64
+	maxScripts = 256
 	// maxMaps caps source maps read for one page.
 	maxMaps = 8
 	// maxMapFiles caps the source file names kept per map.
@@ -139,6 +140,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		c.parsed.Store(final, true)
 		queue = append(queue, script{url: base, body: string(res.Body)})
 	case strings.Contains(ct, "html") || ct == "":
+		if fetch.ErrorPage(res) {
+			return types.RunMeta{Status: types.StatusOK}, nil
+		}
 		if fetch.FinalCatchAll(ctx, c.Client, res) {
 			// The generic shell: its scripts were read from the real page.
 			return types.RunMeta{Status: types.StatusOK}, nil
@@ -154,6 +158,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 
 	var found []string
+	var calls []webextract.Call
 	var maps []sourceMap
 	var ops []string
 	opSeen := map[string]bool{}
@@ -179,6 +184,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				found = append(found, link)
 			}
 		}
+		calls = append(calls, webextract.Calls(s.body)...)
 		for _, sec := range webextract.Secrets(s.body) {
 			if !secretSeen[sec.Value] && len(secrets) < 100 {
 				secretSeen[sec.Value] = true
@@ -272,6 +278,74 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 	}
+	// Requests the scripts make: method, path and the names they send.
+	// A route called with GET is fetched like any other found route.
+	origin := base.Scheme + "://" + base.Host
+	callOps := map[string][]map[string]any{}
+	var opOrder []string
+	gets := map[string]bool{}
+	for _, c := range webextract.MergeCalls(calls) {
+		link := c.Path
+		if strings.HasPrefix(link, "/") {
+			link = origin + link
+		}
+		n, err := normalize.URL(link)
+		if err != nil || !webextract.SameOrigin(raw, n) {
+			continue
+		}
+		k := webextract.RouteKey(n)
+		if _, ok := callOps[k]; !ok {
+			opOrder = append(opOrder, k)
+		}
+		op := map[string]any{"method": c.Method}
+		if len(c.Query) > 0 {
+			op["query"] = c.Query
+		}
+		if len(c.Body) > 0 {
+			op["body"] = c.Body
+		}
+		callOps[k] = append(callOps[k], op)
+		if c.Method == "GET" {
+			gets[k] = true
+		}
+	}
+	for _, k := range opOrder {
+		if meta.EmitCount >= maxEmit {
+			break
+		}
+		var methods, params, body []string
+		for _, op := range callOps[k] {
+			methods = addAll(methods, op["method"].(string))
+			if q, ok := op["query"].([]string); ok {
+				params = addAll(params, q...)
+			}
+			if b, ok := op["body"].([]string); ok {
+				body = addAll(body, b...)
+			}
+		}
+		row := map[string]any{"url": k, "via": "js-call", "role": "api", "methods": methods, "ops": callOps[k]}
+		if len(params) > 0 {
+			row["params"] = params
+		}
+		if len(body) > 0 {
+			row["body"] = body
+		}
+		payload, _ := json.Marshal(row)
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "url", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+		if gets[k] && !strings.Contains(k, "{") && webextract.Hintable(k) {
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": k}})
+		}
+	}
+	if len(fetched) >= maxScripts || meta.EmitCount >= maxEmit {
+		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js",
+			"warning": fmt.Sprintf("the scripts of %s hold more than Azhaq reads from one page (%d scripts, %d routes): some were left unread", raw, maxScripts, maxEmit)})
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "note", Payload: payload, Confidence: 1, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+	}
 	for _, src := range fetched {
 		if err := put(src, "script"); err != nil {
 			return meta, err
@@ -332,6 +406,22 @@ func (c *Collector) load(ctx context.Context, page, src string, needExt bool, qu
 	}
 	*fetched = append(*fetched, src)
 	return append(queue, script{url: u, body: string(res.Body)})
+}
+
+func addAll(xs []string, ys ...string) []string {
+	for _, y := range ys {
+		dup := false
+		for _, x := range xs {
+			if x == y {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			xs = append(xs, y)
+		}
+	}
+	return xs
 }
 
 func queryNames(raw string) []string {

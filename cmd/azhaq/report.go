@@ -279,6 +279,8 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("title", r.Title, r.Title != "")
 	set("methods", r.Methods, len(r.Methods) > 0)
 	set("params", r.Params, len(r.Params) > 0)
+	set("body", r.Body, len(r.Body) > 0)
+	set("ops", r.Ops, len(r.Ops) > 0)
 	set("forms", r.Forms, len(r.Forms) > 0)
 	set("template", r.Template, r.Template != "")
 	set("count", r.Count, r.Count > 1)

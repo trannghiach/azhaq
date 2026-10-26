@@ -371,6 +371,16 @@ func viaProxy(c *http.Client, raw, ip string) string {
 	return ip
 }
 
+// ErrorPage: the final answer is a "not found" or a server error, whose
+// relative links point under a path that does not exist.
+func ErrorPage(res Result) bool {
+	st := res.Status
+	if n := len(res.Hops); n > 0 {
+		st = res.Hops[n-1].Status
+	}
+	return st == 400 || st == 404 || st == 410 || st >= 500
+}
+
 // ApplyHeaders adds -cookie/-header values and the default User-Agent.
 func ApplyHeaders(req *http.Request) {
 	for k, vs := range Extra {

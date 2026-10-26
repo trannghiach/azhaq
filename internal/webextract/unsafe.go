@@ -13,10 +13,14 @@ var stateVerbs = map[string]bool{
 	"logout": true, "logoff": true, "signout": true,
 	"delete": true, "del": true, "remove": true, "destroy": true, "drop": true, "purge": true, "erase": true, "wipe": true, "truncate": true,
 	"reset": true, "reinit": true, "init": true, "initialize": true, "setup": true, "install": true, "uninstall": true,
-	"create": true, "createdb": true, "add": true, "save": true, "update": true, "change": true, "edit": false,
+	"create": true, "createdb": true, "add": true, "save": true, "update": true, "change": true,
 	"clear": true, "flush": true, "kill": true, "shutdown": true, "restart": true, "reboot": true,
 	"revoke": true, "unsubscribe": true, "cancel": true, "approve": true, "reject": true,
 	"disable": true, "enable": true, "activate": true, "deactivate": true, "send": true, "vote": true,
+	"sync": true, "refresh": true, "trigger": true, "run": true, "execute": true, "exec": true, "start": true, "stop": true,
+	"import": true, "generate": true, "rebuild": true, "restore": true, "migrate": true, "populate": true,
+	"deploy": true, "publish": true, "unpublish": true, "lock": true, "unlock": true, "ban": true, "unban": true,
+	"block": true, "unblock": true, "invite": true, "transfer": true, "pay": true, "checkout": true, "confirm": true,
 }
 
 // actionKeys are query keys whose value names what the request does.

@@ -25,9 +25,19 @@ type MapEntry struct {
 	Template string   // URL template; set on every templated URL row
 	Count    int      // URLs folded into this row by GroupTemplates
 	Folded   int      // hostnames folded into a summary row (dead, wildcard)
-	Methods  []string // from API descriptions
+	Methods  []string // from API descriptions and the calls scripts make
 	Params   []string // query, form and API parameter names
+	Body     []string // names scripts send in request bodies
+	Ops      []Op     // per method: what is sent, from API descriptions and scripts
 	Forms    []MapForm
+}
+
+// Op is one operation on a route: a method and the names it sends.
+type Op struct {
+	Method string   `json:"method"`
+	Query  []string `json:"query,omitempty"`
+	Body   []string `json:"body,omitempty"`
+	Source string   `json:"source,omitempty"` // js-call, openapi, form
 }
 
 // MapForm is a form on a page: where it submits and the fields it sends.
@@ -77,6 +87,14 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			if op, ok := apiOps[e.Key]; ok {
 				m.Methods = op.methods
 				m.Params = op.params
+				m.Body = op.body
+				m.Ops = op.ops
+				if m.Coverage == "catchall" && !hasGET(op.methods) {
+					// Called with POST or PUT: a GET answered like an
+					// unknown path, which says nothing about the route.
+					m.Coverage, m.Status, m.Title = "hint", 0, ""
+					m.Proof = "GET answers like an unknown path"
+				}
 				if m.Role == "page" && len(op.methods) > 0 {
 					m.Role = "api"
 				}
@@ -470,7 +488,22 @@ func (m MapEntry) Details() []string {
 		}
 		out = append(out, line)
 	}
-	if len(m.Params) > 0 {
+	seen := map[string]bool{}
+	for _, op := range m.Ops {
+		line := op.Method
+		if len(op.Query) > 0 {
+			line += "  ?" + strings.Join(op.Query, " ")
+		}
+		if len(op.Body) > 0 {
+			line += "  body " + strings.Join(op.Body, " ")
+		}
+		if seen[line] {
+			continue
+		}
+		seen[line] = true
+		out = append(out, line)
+	}
+	if len(m.Params) > 0 && len(m.Ops) == 0 {
 		out = append(out, "params "+strings.Join(m.Params, " "))
 	}
 	return out
@@ -545,6 +578,8 @@ func groupTemplates(rows []MapEntry) []MapEntry {
 type apiOp struct {
 	methods []string
 	params  []string
+	body    []string
+	ops     []Op
 }
 
 // pathProbes indexes wordlist hits by the URL they probed. They are stored
@@ -573,8 +608,11 @@ func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 		}
 		var p struct {
 			URL     string   `json:"url"`
+			Via     string   `json:"via"`
 			Methods []string `json:"methods"`
 			Params  []string `json:"params"`
+			Body    []string `json:"body"`
+			Ops     []Op     `json:"ops"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil || len(p.Methods)+len(p.Params) == 0 {
 			continue
@@ -589,6 +627,15 @@ func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 		}
 		for _, n := range p.Params {
 			op.params = addName(op.params, n)
+		}
+		for _, n := range p.Body {
+			op.body = addName(op.body, n)
+		}
+		for _, x := range p.Ops {
+			if x.Source == "" {
+				x.Source = p.Via
+			}
+			op.ops = append(op.ops, x)
 		}
 		out[u] = op
 	}
@@ -630,6 +677,15 @@ func pageForms(obs []types.StoredObservation, params []string) ([]MapForm, []str
 		}
 	}
 	return forms, params
+}
+
+func hasGET(methods []string) bool {
+	for _, m := range methods {
+		if strings.EqualFold(m, "GET") {
+			return true
+		}
+	}
+	return false
 }
 
 func addForm(xs []MapForm, f MapForm) []MapForm {

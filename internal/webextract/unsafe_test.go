@@ -24,6 +24,12 @@ func TestStateChanging(t *testing.T) {
 		"http://app/rest/products/search?q=":        "",
 		"http://app/rest/user/change-password?new=": "change",
 		"http://app/api/SecurityQuestions":          "",
+		"http://app/api/jobs/run":                   "run",
+		"http://app/api/cache/refresh":              "refresh",
+		"http://app/runtime":                        "",
+		"http://app/started":                        "",
+		"http://app/blockchain":                     "",
+		"http://app/bank/transfer":                  "transfer",
 	} {
 		if got := StateChanging(raw); got != want {
 			t.Errorf("%s: %q, want %q", raw, got, want)

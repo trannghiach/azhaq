@@ -77,6 +77,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		// Redirected: the page it landed on is visited and crawled itself.
 		return meta, nil
 	}
+	if fetch.ErrorPage(res) {
+		// A site's 404 page links to its pages relative to a path that
+		// does not exist: /swagger/v1/ + index.jsp is not a page.
+		return meta, nil
+	}
 	ct := strings.ToLower(res.Header.Get("Content-Type"))
 	switch {
 	case strings.Contains(ct, "json"):

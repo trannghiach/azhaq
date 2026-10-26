@@ -1,6 +1,9 @@
 // Package apicol reads OpenAPI 3 and Swagger 2 documents and maps the
-// operations they declare. It never calls those operations: a GET in a
-// spec can still change state (VAmPI's /createdb resets its database).
+// operations they declare. Of those it asks only the GETs that need no
+// parameter, and the run leaves out the ones whose names say they do
+// something (VAmPI's GET /createdb resets its database). A Swagger UI page
+// that builds its document's URL at run time is read for the names of
+// the documents it may load.
 package apicol
 
 import (
@@ -8,6 +11,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -18,6 +22,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -76,6 +81,7 @@ func specLike(p string) bool {
 
 type doc struct {
 	OpenAPI  string                          `json:"openapi" yaml:"openapi"`
+	Security []map[string]any                `json:"security" yaml:"security"`
 	Swagger  string                          `json:"swagger" yaml:"swagger"`
 	Info     struct{ Title, Version string } `json:"info" yaml:"info"`
 	Servers  []struct{ URL string }          `json:"servers" yaml:"servers"`
@@ -83,9 +89,12 @@ type doc struct {
 	BasePath string                          `json:"basePath" yaml:"basePath"`
 	Paths    map[string]map[string]any       `json:"paths" yaml:"paths"`
 	Comps    struct {
-		Schemas map[string]any `json:"schemas" yaml:"schemas"`
+		Schemas       map[string]any `json:"schemas" yaml:"schemas"`
+		Parameters    map[string]any `json:"parameters" yaml:"parameters"`
+		RequestBodies map[string]any `json:"requestBodies" yaml:"requestBodies"`
 	} `json:"components" yaml:"components"`
-	Defs map[string]any `json:"definitions" yaml:"definitions"`
+	Defs   map[string]any `json:"definitions" yaml:"definitions"`
+	Params map[string]any `json:"parameters" yaml:"parameters"`
 }
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
@@ -106,7 +115,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	d, ok := parse(res.Body)
 	if !ok {
-		return meta, nil
+		return c.swaggerUI(ctx, raw, res, emit)
 	}
 	final := res.URL
 	if final == "" {
@@ -124,9 +133,17 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if version == "" {
 		version = "swagger " + d.Swagger
 	}
-	summary, _ := json.Marshal(map[string]any{
-		"url": raw, "spec": version, "title": d.Info.Title, "count": len(paths), "base": base,
-	})
+	row := map[string]any{"url": raw, "spec": version, "title": d.Info.Title, "count": len(paths), "base": base}
+	if len(res.Body) <= maxDocument && !res.Truncated {
+		// Kept whole, so an export can hand the original on.
+		var whole any
+		if json.Unmarshal(res.Body, &whole) == nil {
+			row["document"] = whole
+		} else if yaml.Unmarshal(res.Body, &whole) == nil {
+			row["document"] = whole
+		}
+	}
+	summary, _ := json.Marshal(row)
 	if err := emit(types.Observation{
 		Collector: Name, Source: raw, Kind: "api",
 		Payload: summary, Confidence: 0.9, ObservedAt: now,
@@ -139,18 +156,53 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if meta.EmitCount > maxOps {
 			break
 		}
-		ops := d.Paths[p]
-		var ms []string
-		var params []string
-		params = addParams(params, ops["parameters"], d)
+		item := d.Paths[p]
+		var ms, params []string
+		var ops []map[string]any
+		shared := paramsIn(item["parameters"], d)
 		for _, m := range methods {
-			op, ok := ops[m].(map[string]any)
+			op, ok := item[m].(map[string]any)
 			if !ok {
 				continue
 			}
 			ms = append(ms, strings.ToUpper(m))
-			params = addParams(params, op["parameters"], d)
-			params = addBody(params, op["requestBody"], d)
+			in := merge(shared, paramsIn(op["parameters"], d))
+			x := map[string]any{"method": strings.ToUpper(m)}
+			for _, where := range []string{"query", "path", "header", "cookie"} {
+				if len(in[where]) > 0 {
+					x[where] = in[where]
+					if where == "query" || where == "path" {
+						for _, n := range in[where] {
+							params = addName(params, n)
+						}
+					}
+				}
+			}
+			if names, media := bodyOf(op, d); media != "" {
+				x["body"], x["body_type"] = names, media
+				for _, n := range names {
+					params = addName(params, n)
+				}
+			}
+			if len(in["formData"]) > 0 { // Swagger 2 forms
+				x["body"], x["body_type"] = in["formData"], "application/x-www-form-urlencoded"
+			}
+			if secured(op, d) {
+				x["auth"] = true
+			}
+			if s, _ := op["summary"].(string); s != "" {
+				x["summary"] = s
+			}
+			if id, _ := op["operationId"].(string); id != "" {
+				x["operation_id"] = id
+			}
+			ops = append(ops, x)
+			if m == "get" && len(in["path"]) == 0 && len(requiredQuery(item, op, d)) == 0 {
+				// A read that needs nothing: asked, to see who may read it.
+				if u, err := normalize.URL(strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(p, "/")); err == nil && !strings.Contains(u, "{") && webextract.StateChanging(u) == "" {
+					meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}})
+				}
+			}
 		}
 		if len(ms) == 0 {
 			continue
@@ -159,7 +211,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if err != nil {
 			continue
 		}
-		row := map[string]any{"url": target, "via": "openapi", "methods": ms, "role": "api"}
+		row := map[string]any{"url": target, "via": "openapi", "methods": ms, "role": "api", "ops": ops, "path": p}
 		if len(params) > 0 {
 			row["params"] = params
 		}
@@ -222,50 +274,213 @@ func apiBase(specURL string, d doc) string {
 	return origin + "/" + strings.Trim(prefix, "/")
 }
 
-func addParams(out []string, v any, d doc) []string {
+// maxDocument caps the size of a document kept whole for exports.
+const maxDocument = 2 << 20
+
+// paramsIn sorts a parameter list by where each goes: query, path,
+// header, cookie, and Swagger 2's body and formData.
+func paramsIn(v any, d doc) map[string][]string {
+	out := map[string][]string{}
 	list, _ := v.([]any)
 	for _, x := range list {
 		m, _ := x.(map[string]any)
 		if ref, _ := m["$ref"].(string); ref != "" {
-			m, _ = resolve(ref, d).(map[string]any)
+			m, _ = resolveRef(ref, d).(map[string]any)
 		}
-		if name, _ := m["name"].(string); name != "" {
-			out = addName(out, name)
+		name, _ := m["name"].(string)
+		in, _ := m["in"].(string)
+		if name == "" || in == "" {
+			continue
+		}
+		if in == "body" { // Swagger 2: the body's fields are in its schema
+			schema, _ := m["schema"].(map[string]any)
+			out["body"] = append(out["body"], fieldNames(schema, d)...)
+			continue
+		}
+		out[in] = addName(out[in], name)
+	}
+	return out
+}
+
+func merge(a, b map[string][]string) map[string][]string {
+	out := map[string][]string{}
+	for _, m := range []map[string][]string{a, b} {
+		for k, v := range m {
+			for _, n := range v {
+				out[k] = addName(out[k], n)
+			}
 		}
 	}
 	return out
 }
 
-func addBody(out []string, v any, d doc) []string {
-	body, _ := v.(map[string]any)
+// requiredQuery lists the query parameters an operation cannot go without.
+func requiredQuery(item, op map[string]any, d doc) []string {
+	var out []string
+	for _, v := range []any{item["parameters"], op["parameters"]} {
+		list, _ := v.([]any)
+		for _, x := range list {
+			m, _ := x.(map[string]any)
+			if ref, _ := m["$ref"].(string); ref != "" {
+				m, _ = resolveRef(ref, d).(map[string]any)
+			}
+			// A required header (a token) is what the request is sent
+			// to find out about; a required query value would be made up.
+			if req, _ := m["required"].(bool); req && m["in"] == "query" {
+				if name, _ := m["name"].(string); name != "" {
+					out = append(out, name)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// bodyOf is the field names and media type of an operation's body: an
+// OpenAPI 3 requestBody, or a Swagger 2 body parameter.
+func bodyOf(op map[string]any, d doc) ([]string, string) {
+	body, _ := op["requestBody"].(map[string]any)
+	if ref, _ := body["$ref"].(string); ref != "" {
+		body, _ = resolveRef(ref, d).(map[string]any)
+	}
 	content, _ := body["content"].(map[string]any)
-	for _, media := range content {
-		m, _ := media.(map[string]any)
-		schema, _ := m["schema"].(map[string]any)
-		if ref, _ := schema["$ref"].(string); ref != "" {
-			schema, _ = resolve(ref, d).(map[string]any)
-		}
-		props, _ := schema["properties"].(map[string]any)
-		names := make([]string, 0, len(props))
-		for name := range props {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		for _, name := range names {
-			out = addName(out, name)
+	types := make([]string, 0, len(content))
+	for t := range content {
+		types = append(types, t)
+	}
+	sort.Strings(types)
+	for _, t := range types { // JSON first when there is a choice
+		if strings.Contains(t, "json") {
+			types = append([]string{t}, types...)
+			break
 		}
 	}
-	return out
+	for _, t := range types {
+		m, _ := content[t].(map[string]any)
+		schema, _ := m["schema"].(map[string]any)
+		return fieldNames(schema, d), t
+	}
+	if in := paramsIn(op["parameters"], d)["body"]; len(in) > 0 {
+		return in, "application/json"
+	}
+	return nil, ""
 }
 
-func resolve(ref string, d doc) any {
+// fieldNames are the properties of a schema, through one $ref.
+func fieldNames(schema map[string]any, d doc) []string {
+	if ref, _ := schema["$ref"].(string); ref != "" {
+		schema, _ = resolveRef(ref, d).(map[string]any)
+	}
+	props, _ := schema["properties"].(map[string]any)
+	names := make([]string, 0, len(props))
+	for name := range props {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// secured: the operation, or the document for every operation, asks for
+// credentials.
+func secured(op map[string]any, d doc) bool {
+	if sec, ok := op["security"].([]any); ok {
+		for _, s := range sec {
+			if m, _ := s.(map[string]any); len(m) > 0 {
+				return true
+			}
+		}
+		return false // security: [] opts out
+	}
+	return len(d.Security) > 0
+}
+
+func resolveRef(ref string, d doc) any {
 	switch {
 	case strings.HasPrefix(ref, "#/components/schemas/"):
 		return d.Comps.Schemas[strings.TrimPrefix(ref, "#/components/schemas/")]
+	case strings.HasPrefix(ref, "#/components/parameters/"):
+		return d.Comps.Parameters[strings.TrimPrefix(ref, "#/components/parameters/")]
+	case strings.HasPrefix(ref, "#/components/requestBodies/"):
+		return d.Comps.RequestBodies[strings.TrimPrefix(ref, "#/components/requestBodies/")]
 	case strings.HasPrefix(ref, "#/definitions/"):
 		return d.Defs[strings.TrimPrefix(ref, "#/definitions/")]
+	case strings.HasPrefix(ref, "#/parameters/"):
+		return d.Params[strings.TrimPrefix(ref, "#/parameters/")]
 	}
 	return nil
+}
+
+var (
+	// specName: a document a Swagger UI page may load, as a string in it.
+	specName  = regexp.MustCompile(`["'\x60]([\w./-]*\.(?:json|ya?ml))["'\x60]`)
+	swaggerUI = regexp.MustCompile(`(?i)swagger-?ui|SwaggerUIBundle|redoc`)
+)
+
+// siblings are where a description usually sits next to its UI.
+var siblings = []string{"swagger.json", "openapi.json", "swagger.yaml", "openapi.yaml", "v1/swagger.json", "v2/swagger.json", "api-docs"}
+
+// swaggerUI reads a Swagger UI or ReDoc page that was not a description
+// itself for the documents it may load: names in the page and its
+// initializer script, and the usual names next to it.
+func (c *Collector) swaggerUI(ctx context.Context, raw string, res fetch.Result, emit func(types.Observation) error) (types.RunMeta, error) {
+	meta := types.RunMeta{Status: types.StatusOK}
+	body := string(res.Body)
+	if !swaggerUI.MatchString(body) {
+		return meta, nil
+	}
+	base, err := url.Parse(raw)
+	if err != nil {
+		return meta, nil
+	}
+	texts := []string{body}
+	for _, m := range regexp.MustCompile(`src=["']([^"']*(?:swagger-initializer|swagger-ui-init|initializer)[^"']*\.js)["']`).FindAllStringSubmatch(body, -1) {
+		if u, err := base.Parse(m[1]); err == nil && u.Host == base.Host {
+			if r, _, err := fetch.Do(ctx, c.Client, u.String()); err == nil && r.Status == http.StatusOK {
+				texts = append(texts, string(r.Body))
+			}
+		}
+	}
+	seen := map[string]bool{}
+	var found []string
+	add := func(ref string) {
+		u, err := base.Parse(ref)
+		if err != nil || u.Host != base.Host {
+			return
+		}
+		if n, err := normalize.URL(u.String()); err == nil && !seen[n] && n != raw {
+			seen[n] = true
+			found = append(found, n)
+		}
+	}
+	for _, t := range texts {
+		for _, m := range specName.FindAllStringSubmatch(t, -1) {
+			if !strings.Contains(m[1], "package") {
+				add(m[1])
+			}
+		}
+	}
+	for _, s := range siblings {
+		add(s)
+	}
+	// Only what turns out to be a description is handed on: a guess that
+	// answers 404 is not part of the map.
+	var specs []string
+	for _, u := range found {
+		r, _, err := fetch.Do(ctx, c.Client, u)
+		if err != nil || r.Status != http.StatusOK {
+			continue
+		}
+		if _, ok := parse(r.Body); ok {
+			specs = append(specs, u)
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}})
+		}
+	}
+	payload, _ := json.Marshal(map[string]any{"url": raw, "via": "openapi", "ui": true, "tried": len(found), "documents": specs})
+	if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "api-ui", Payload: payload, Confidence: 0.6, ObservedAt: time.Now().UTC()}); err != nil {
+		return meta, err
+	}
+	meta.EmitCount++
+	return meta, nil
 }
 
 func addName(xs []string, n string) []string {

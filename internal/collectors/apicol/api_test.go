@@ -94,9 +94,27 @@ func TestOpenAPI3(t *testing.T) {
 	if got := strings.Join(ops["/users/v1/login"].Params, ","); got != "password,username" {
 		t.Errorf("body params %q", got)
 	}
-	if len(meta.NextHints) != 0 || calls != 0 {
-		t.Errorf("operations must be mapped, not called: hints=%v calls=%d", meta.NextHints, calls)
+	// GETs that need no parameter are handed on to be asked; one whose
+	// name says it does something is not.
+	var hints []string
+	for _, h := range meta.NextHints {
+		hints = append(hints, strings.TrimPrefix(h.Keys["url"], srv(meta)))
 	}
+	if strings.Join(hints, ",") != "/users/v1" || calls != 0 {
+		t.Errorf("hints %v, calls %d: want /users/v1 handed on, nothing called here", hints, calls)
+	}
+}
+
+// srv is the origin of the first hint.
+func srv(meta types.RunMeta) string {
+	if len(meta.NextHints) == 0 {
+		return ""
+	}
+	u := meta.NextHints[0].Keys["url"]
+	if i := strings.Index(u[len("http://"):], "/"); i >= 0 {
+		return u[:len("http://")+i]
+	}
+	return u
 }
 
 func TestSwagger2YAML(t *testing.T) {
