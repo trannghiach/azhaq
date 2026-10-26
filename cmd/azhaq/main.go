@@ -191,6 +191,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
+	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
 	var cookies, headers, allow, deny, domains stringsFlag
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
 	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable; sent as one Cookie header)")
@@ -307,6 +308,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	budgets.FailOnErrors = *failErrs
 	budgets.FailOnCapped = *failCapped
 	budgets.Passive = *passive
+	budgets.AllGets = *allGets
 	budgets.Scope = scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
 	if !budgets.Scope.Empty() {
 		// What the scope excludes is never touched, even when it was given
@@ -1006,7 +1008,7 @@ func newRunID() string {
 func cmdExport(args []string) error {
 	fs := newFlags("export")
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
-	format := fs.String("format", "jsonl", "jsonl, urls, hosts, targets (for nuclei -l), openapi, burp (scope), html, graphml, secrets")
+	format := fs.String("format", "jsonl", "jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, burp (scope), html, graphml, secrets")
 	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes)")
 	if err := parse(fs, args); err != nil {
 		return err

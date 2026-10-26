@@ -118,15 +118,23 @@ func Skips(ents []types.Entity, obs []types.StoredObservation) []Skip {
 	seen := map[string]bool{}
 	var out []Skip
 	for _, o := range obs {
-		if o.Kind != "error" {
-			continue
-		}
 		var p struct {
-			Error string `json:"error"`
+			Error   string `json:"error"`
+			Skipped string `json:"skipped"`
+			Word    string `json:"word"`
 		}
-		_ = json.Unmarshal(o.Payload, &p)
-		reason, ok := strings.CutPrefix(p.Error, "not requested: ")
-		if !ok {
+		var reason string
+		switch o.Kind {
+		case "error":
+			_ = json.Unmarshal(o.Payload, &p)
+			var ok bool
+			if reason, ok = strings.CutPrefix(p.Error, "not requested: "); !ok {
+				continue
+			}
+		case "skipped":
+			_ = json.Unmarshal(o.Payload, &p)
+			reason = p.Skipped
+		default:
 			continue
 		}
 		s := Skip{Target: keys[o.EntityID], Reason: reason}

@@ -262,6 +262,22 @@ func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) 
 func (e *Engine) linkFacts(from types.Entity, o types.Observation, now time.Time) {
 	e.linkFoundURL(from, o, now)
 	e.linkDNS(from, o, now)
+	e.linkNames(from, o, now)
+}
+
+// linkNames keeps every name a subdomain source gave as an entity, found
+// by its domain, whether or not the run goes on to resolve it.
+func (e *Engine) linkNames(from types.Entity, o types.Observation, now time.Time) {
+	if o.Kind != "subdomains" {
+		return
+	}
+	var p struct {
+		Names []string `json:"names"`
+	}
+	if json.Unmarshal(o.Payload, &p) != nil || len(p.Names) == 0 {
+		return
+	}
+	_ = e.Store.UpsertMany(types.TypeHostname, p.Names, now, from.ID, "FOUND")
 }
 
 func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.Time) {
@@ -379,6 +395,26 @@ func (e *Engine) NoteExternalError(seeds []types.Seed, collector string, err err
 	}
 	e.noteError(ent.ID, collector, err)
 	return nil
+}
+
+// SkipStateChanging is the reason given for a found URL that was not
+// requested because it looks like a GET there would change something.
+const SkipStateChanging = "looks like a GET would change something"
+
+// noteSkip records a URL the run found and chose not to request.
+func (e *Engine) noteSkip(seed types.Seed, word string) {
+	if e == nil || e.Store == nil {
+		return
+	}
+	now := time.Now().UTC()
+	ent, err := e.Store.UpsertEntity(seed.Type, seed.Key(), now)
+	if err != nil {
+		return
+	}
+	payload, _ := json.Marshal(map[string]string{"skipped": SkipStateChanging, "word": word})
+	_, _ = e.Store.AddObservation(ent.ID, types.Observation{
+		Collector: "azhaq-http", Source: "run", Kind: "skipped", Payload: payload, ObservedAt: now,
+	})
 }
 
 func (e *Engine) noteError(entityID, collector string, err error) {

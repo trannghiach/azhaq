@@ -249,6 +249,67 @@ ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen
 	return types.Entity{ID: id, Type: t, Key: key, FirstSeen: at, LastSeen: at}, nil
 }
 
+// UpsertMany adds entities of one type in one transaction and, when from
+// is set, an edge of edgeType from it to each: the names a source gave
+// for a domain.
+func (s *Store) UpsertMany(t types.SeedType, keys []string, at time.Time, from, edgeType string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	ts := at.UnixNano()
+	ent, err := tx.Prepare(`INSERT INTO entities (id, type, key, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen`)
+	if err != nil {
+		return err
+	}
+	defer ent.Close()
+	runEnt, err := tx.Prepare(`INSERT OR IGNORE INTO run_entities (run_id, entity_id) VALUES (?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer runEnt.Close()
+	edge, err := tx.Prepare(`INSERT OR IGNORE INTO edges (from_id, to_id, type, observed_at) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer edge.Close()
+	runEdge, err := tx.Prepare(`INSERT OR IGNORE INTO run_edges (run_id, from_id, to_id, type) VALUES (?, ?, ?, ?)`)
+	if err != nil {
+		return err
+	}
+	defer runEdge.Close()
+	for _, k := range keys {
+		id := EntityID(t, k)
+		if _, err := ent.Exec(id, string(t), k, ts, ts); err != nil {
+			return err
+		}
+		if s.runID != "" {
+			if _, err := runEnt.Exec(s.runID, id); err != nil {
+				return err
+			}
+		}
+		if from == "" {
+			continue
+		}
+		if _, err := edge.Exec(from, id, edgeType, ts); err != nil {
+			return err
+		}
+		if s.runID != "" {
+			if _, err := runEdge.Exec(s.runID, from, id, edgeType); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
 func (s *Store) AddObservation(entityID string, o types.Observation) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

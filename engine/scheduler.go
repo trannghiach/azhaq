@@ -234,6 +234,15 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	if s.seen[k] {
 		return
 	}
+	if hint && seed.Type == types.TypeURL && !s.b.Passive && !s.b.AllGets {
+		// Found in a page, a script or an archive: a GET there would do
+		// something (log out, reset, save). It stays in the map unrequested.
+		if w := webextract.StateChanging(seed.Key()); w != "" {
+			s.seen[k] = true
+			s.e.noteSkip(seed, w)
+			return
+		}
+	}
 	if depth >= s.b.MaxDepth {
 		s.beyond = append(s.beyond, seed)
 		return

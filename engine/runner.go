@@ -31,6 +31,9 @@ type Budgets struct {
 	// Resume continues the store's current run from its recorded tasks
 	// instead of starting from the seeds.
 	Resume bool
+	// AllGets also requests found URLs that look like they change state
+	// (logout, delete, save…); by default they are listed, not requested.
+	AllGets bool
 }
 
 type quietKey struct{}

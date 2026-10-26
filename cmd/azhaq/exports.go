@@ -69,6 +69,18 @@ func exportAs(path, format, origin string, w io.Writer) error {
 				fmt.Fprintln(w, r.Entity.Key)
 			}
 		}
+	case "names":
+		// Every hostname in the graph, resolved or not.
+		var names []string
+		for _, r := range g.rows {
+			if r.Entity.Type == types.TypeHostname {
+				names = append(names, r.Entity.Key)
+			}
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			fmt.Fprintln(w, n)
+		}
 	case "hosts":
 		names := make([]string, 0, len(g.live))
 		for n := range g.live {
@@ -110,7 +122,7 @@ func exportAs(path, format, origin string, w io.Writer) error {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Severity, s.Kind, s.Value, s.Where)
 		}
 	default:
-		return fmt.Errorf("unknown -format %q (jsonl, urls, hosts, targets, openapi, burp, html, graphml)", format)
+		return usagef("unknown -format %q (jsonl, urls, hosts, names, targets, openapi, burp, html, graphml, secrets)", format)
 	}
 	return nil
 }
