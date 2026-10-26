@@ -161,6 +161,9 @@ func coverageOf(e types.Entity, obs []types.StoredObservation, leftover map[stri
 		return ""
 	}
 	if fetched(obs) {
+		if st := gone(obs); st {
+			return "gone" // found somewhere, and the server says it is not there
+		}
 		return "visited"
 	}
 	for _, o := range obs {
@@ -253,6 +256,23 @@ func isCatchAll(o types.StoredObservation) bool {
 	}
 	_ = json.Unmarshal(o.Payload, &p)
 	return p.CatchAll
+}
+
+// gone: the URL's own answer is 404 or 410.
+func gone(obs []types.StoredObservation) bool {
+	for _, o := range obs {
+		if o.Kind == "error" || isCatchAll(o) || o.Collector != "azhaq-http" && o.Kind != "application" {
+			continue
+		}
+		switch statusOf(o.Payload) {
+		case 404, 410:
+			return true
+		case 0:
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func fetched(obs []types.StoredObservation) bool {
@@ -426,6 +446,8 @@ func mapRank(m MapEntry, hosts, domains, ips map[string]bool) int {
 			return 9
 		}
 		switch {
+		case m.Coverage == "gone":
+			return 8
 		case m.Coverage == "visited" && m.Role == "app":
 			return 2
 		case m.Role == "auth":

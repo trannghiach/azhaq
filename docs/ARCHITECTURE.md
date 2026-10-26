@@ -222,6 +222,7 @@ Diffs compare facts, not bytes: body hashes and sizes, response times, the addre
 | `visited` | fetched, and the response is the URL's own |
 | `catchall` | fetched, but the answer is the one any path gets |
 | `error` | requested, no answer (timeout, refused, reset) |
+| `gone` | requested, answered 404 or 410: found in an archive or a link, not there now |
 | `hint` | found (in a link, script, archive or API description) but not fetched; also a route scripts call only with POST or PUT whose GET answers like an unknown path |
 | `skipped` | found, and deliberately not requested: its name says a GET would change something |
 | `capped` | left over when the run hit its item or depth limit |

@@ -18,7 +18,7 @@ Every command follows the same contract, so a script or an assistant can read an
 | 3 | Finished, but some sources or requests failed. The results are usable. | The summary lists each failure, whether it is worth retrying, and its targets. |
 | 4 | Stopped by a limit (`-max-requests`, `-timeout`, `-daily-requests`, `-max-items`) with work left. | `azhaq resume -db FILE` continues where it stopped. |
 
-Failures on fan-out (a subdomain source that failed for the domain of the URL you mapped, for example) are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. `run -fail-on-errors` counts them too.
+Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count. `run -fail-on-errors` counts every failure.
 
 ## The summary
 
@@ -61,7 +61,7 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | --- | --- |
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
-| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `hint`: found (in a script, an API description, an archive) but not requested, or called by scripts only with POST or PUT. `skipped`: found, not requested because its name says a GET would change something. `capped`: left when a limit was hit. |
+| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `gone`: answered 404 or 410 (found in an archive or a link, not there now). `hint`: found (in a script, an API description, an archive) but not requested, or called by scripts only with POST or PUT. `skipped`: found, not requested because its name says a GET would change something. `capped`: left when a limit was hit. |
 | `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`. |
 | `role` (names) | `live` (resolves; one of your targets), `sibling` (resolves; found on the way), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
 | `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `source` (`js-call`, `openapi`). |

@@ -255,7 +255,7 @@ func MarkFanout(fs []Failure, seeds []types.Seed) []Failure {
 	for i := range fs {
 		own := false
 		for _, t := range fs[i].Targets {
-			if Own(t, seeds) {
+			if thirdParty[fs[i].Collector] && ownDomain(t, seeds) || !thirdParty[fs[i].Collector] && Own(t, seeds) {
 				own = true
 				break
 			}
@@ -263,6 +263,23 @@ func MarkFanout(fs []Failure, seeds []types.Seed) []Failure {
 		fs[i].Fanout = !own
 	}
 	return fs
+}
+
+// thirdParty collectors ask others about a domain (archives, CT, RDAP):
+// what they fail to say is part of a map only when the domain itself was
+// asked about, not when it is the domain of a URL being mapped.
+var thirdParty = map[string]bool{"azhaq-subdomains": true, "azhaq-urls": true, "azhaq-rdap": true, "azhaq-search": true, "azhaq-asn": true}
+
+// ownDomain: target is a domain the user named (-domain, subs -d), or
+// under one.
+func ownDomain(target string, seeds []types.Seed) bool {
+	h := normalize.Hostname(target)
+	for _, s := range seeds {
+		if s = normalize.Seed(s); s.Type == types.TypeDomain && !s.Derived() && (h == s.Key() || strings.HasSuffix(h, "."+s.Key())) {
+			return true
+		}
+	}
+	return false
 }
 
 // Unreachable lists the URL seeds that never answered: every request to
