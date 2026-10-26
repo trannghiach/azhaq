@@ -82,7 +82,7 @@ func printReport() {
 	}
 	if d := rec.Dropin; d != nil {
 		fmt.Fprintf(w, "\ndrop-in and exports\tresult\n")
-		fmt.Fprintf(w, "azhaq crawl, Juice Shop known routes\t%d/45\n", d.CrawlKnown)
+		fmt.Fprintf(w, "azhaq crawl, Juice Shop known routes\t%d/%d\n", d.CrawlKnown, d.CrawlOf)
 		fmt.Fprintf(w, "azhaq probe -json on stdin\t%d of 2, httpx fields %v\n", d.ProbeRows, d.ProbeFields)
 		fmt.Fprintf(w, "azhaq subs -live vs subfinder | dnsx (vulnweb.com)\t%d vs %d, shared %d\n", d.SubsLive, d.SubfinderLive, d.SubsShared)
 		fmt.Fprintf(w, "OpenAPI export, VAmPI / crAPI paths\t%d/12, %d/40\n", d.OpenAPIVampi, d.OpenAPICrapi)

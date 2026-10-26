@@ -15,6 +15,7 @@ import (
 // answers as a full run, through the plumbing a recon script uses.
 type dropinRow struct {
 	CrawlKnown    int  `json:"crawl_known"`    // Juice Shop known routes from azhaq crawl
+	CrawlOf       int  `json:"crawl_of"`       // of the known routes
 	ProbeRows     int  `json:"probe_rows"`     // local apps answered by azhaq probe -json
 	ProbeFields   bool `json:"probe_fields"`   // httpx's field names present
 	OpenAPIVampi  int  `json:"openapi_vampi"`  // VAmPI spec paths in the OpenAPI export
@@ -49,7 +50,7 @@ func benchDropin(crapi bool) *dropinRow {
 			crawled = append(crawled, r.URL)
 		}
 	}
-	row.CrawlKnown = matched(routes(crawled, origin), truth)
+	row.CrawlKnown, row.CrawlOf = matched(routes(crawled, origin), truth), len(truth)
 	addCheck("drop-in: azhaq crawl finds Juice Shop's known routes", row.CrawlKnown*10 >= len(truth)*9,
 		"%d/%d", row.CrawlKnown, len(truth))
 
