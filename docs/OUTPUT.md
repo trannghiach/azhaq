@@ -61,9 +61,11 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | --- | --- |
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
-| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `hint`: found (in a script, an API description, an archive) but not requested. `capped`: left when a limit was hit. |
+| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `hint`: found (in a script, an API description, an archive) but not requested, or called by scripts only with POST or PUT. `skipped`: found, not requested because its name says a GET would change something. `capped`: left when a limit was hit. |
 | `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`. |
-| `role` (names) | `live` (resolves; one of your targets), `sibling` (resolves; found on the way), `dead`, `wildcard`. |
+| `role` (names) | `live` (resolves; one of your targets), `sibling` (resolves; found on the way), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
+| `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `source` (`js-call`, `openapi`). |
+| `body` | the body field names of all its operations. |
 | `status`, `title` | The URL's own answer (the first hop of a redirect). |
 | `methods`, `params` | From API descriptions, call sites in scripts, forms and links. |
 | `forms` | `{"method","action","fields"}` for each form on the page. |
@@ -79,7 +81,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | --- | --- |
 | `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them); with `-live`, `a`. |
 | `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. |
-| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code`, `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon`, `cdn`, `cdn_name`, `cdn_type`, `final_url`, `chain_status_codes`, `location`, `timestamp`. |
+| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code`, `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url`, `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. |
 | `crawl` | `url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`). |
 | `urls` | `url`. |
 | `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`. |
@@ -89,3 +91,23 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
 
 `probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found.
+
+## roles
+
+One row per endpoint whose answer depends on the session (`-all`: every endpoint compared):
+
+```json
+{"url":"http://localhost:5000/books/v1/bookTitle55","verdict":"every signed-in role reads the same object",
+ "template":"http://localhost:5000/books/v1/{book_title}","found_by":["name1","admin"],
+ "status":{"anon":401,"name1":200,"admin":200},
+ "answers":{"anon":{"status":401,"length":95,"hash":"…"},"name1":{"status":200,"length":83,"hash":"9f…","keys":["book_title","owner","secret"]},"admin":{…}}}
+```
+
+`status` has 0 for a role that was never asked. `template` is set on an object URL made by filling a route's path parameters with values the roles' answers held. Verdicts: `every signed-in role reads the same object`, `anyone reads the same object, signed in or not`, `same answer for a session that did not find it`, `signed-in only`, `some roles refused`, `different fields per role`, `status differs`, and, with `-all`, `different data per role`, `same for every role`. The summary counts each verdict.
+
+## query, show, plan, ingest
+
+- `query -json` prints map rows (as `run -json`), or only the `-fields` asked for. The summary says how many rows matched when `-limit` cut them.
+- `show -json` prints one object: `row` (the map row), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`).
+- `plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`.
+- `ingest` prints only its summary: `results` is the facts read, `counts` the lines read per format.

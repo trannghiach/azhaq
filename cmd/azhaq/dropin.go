@@ -614,11 +614,22 @@ func httpxRow(r engine.ProbeRow, input string, addrs []string) map[string]any {
 	if len(addrs) == 0 && r.IP != "" {
 		addrs = []string{r.IP}
 	}
+	var a, aaaa []string
+	for _, ip := range addrs {
+		if strings.Contains(ip, ":") {
+			aaaa = append(aaaa, ip)
+		} else {
+			a = append(a, ip)
+		}
+	}
 	out := map[string]any{
 		"timestamp": time.Now().Format(time.RFC3339Nano), "url": strings.TrimSuffix(r.URL, "/"), "input": input,
 		"host": host, "host_ip": r.IP, "port": port, "scheme": scheme, "path": path, "method": "GET",
 		"status_code": status, "content_length": r.Length, "words": r.Words, "lines": r.Lines,
-		"time": fmt.Sprintf("%dms", r.MS), "a": addrs, "failed": false,
+		"time": fmt.Sprintf("%dms", r.MS), "a": a, "failed": false,
+	}
+	if len(aaaa) > 0 {
+		out["aaaa"] = aaaa
 	}
 	for k, v := range map[string]string{"title": r.Title, "webserver": r.Server, "content_type": r.ContentType} {
 		if v != "" {

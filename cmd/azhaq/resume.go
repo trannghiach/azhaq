@@ -32,7 +32,7 @@ func cmdResume(args []string) error {
 		}
 	}
 	if db == "" {
-		return fmt.Errorf("usage: azhaq resume -db FILE [run options to add, such as -cookie or -login-pass]")
+		return usagef("give -db FILE, the database of the run to continue (run options to add, such as -cookie or -login-pass, may follow)")
 	}
 	st, err := store.OpenExisting(db)
 	if err != nil {

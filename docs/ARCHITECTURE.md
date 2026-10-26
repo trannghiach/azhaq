@@ -139,7 +139,7 @@ A script that names a same-origin source map has the map read: the map is record
 
 ### Sessions and roles
 
-`-cookie` and `-header` apply to every request of a run, and so does the session `-login` gets: Chrome fills and submits the login form, and the cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). While a session is set, URLs that look like a logout are not requested, by the HTTP collectors or by `-browser`. A role of `azhaq roles` is headers (`-role`) or an account to sign in with (`-role-login`). `azhaq roles` runs the same seeds once per role, in turn, each with its own database, and compares the first status each URL answered with: endpoints whose status differs between roles are printed, and URLs a role never reached show `-`.
+`-cookie` and `-header` apply to every request of a run, and so does the session `-login` gets: Chrome fills and submits the login form, and the cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). While a session is set, URLs that look like a logout are not requested, by the HTTP collectors or by `-browser`. A role of `azhaq roles` is headers (`-role`) or an account to sign in with (`-role-login`). `azhaq roles` runs the same seeds once per role, in turn, each with its own database. Then it replays: every URL any role reached (on the run's hosts, a GET whose name does not say it changes something) is asked with each role that did not reach it, through that role's session, and GET routes with path parameters are filled with the values of identifier-like fields (`id`, `username`, `*_id`, `*_title`, …) the roles' own JSON answers held, a few per role. Each endpoint then has an answer per role (status, length, body hash, top-level JSON fields), and a verdict names the difference: an object every signed-in role reads alike, an object anyone reads, the same answer for a role that never found the URL, signed-in only, some roles refused, different fields, status differs, different data, the same for all.
 
 ### Catch-all responses
 
@@ -221,10 +221,18 @@ Diffs compare facts, not bytes: body hashes and sizes, response times, the addre
 | --- | --- |
 | `visited` | fetched, and the response is the URL's own |
 | `catchall` | fetched, but the answer is the one any path gets |
-| `hint` | found (in a link, script, archive or API description) but not fetched |
+| `error` | requested, no answer (timeout, refused, reset) |
+| `hint` | found (in a link, script, archive or API description) but not fetched; also a route scripts call only with POST or PUT whose GET answers like an unknown path |
+| `skipped` | found, and deliberately not requested: its name says a GET would change something |
 | `capped` | left over when the run hit its item or depth limit |
 
-Roles: `app` (the site root), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`. API description rows also list their methods. Hostnames are `live` (a seed host), `sibling`, `dead` (no address) or `wildcard`; dead and wildcard names are folded into one summary line each.
+Roles: `app` (the site root), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`. Routes list their methods, and below the row, each operation with its query names and body fields, from API descriptions and from the calls scripts make. Hostnames are `live` (a seed host), `sibling`, `unresolved` (from a source or a list, not looked up), `dead` (no address) or `wildcard`; dead, wildcard and unresolved names are folded into one summary line each.
+
+### What is requested
+
+A found URL is requested with GET when it is on the run's hosts and in scope, has no unfilled parameter, and its path (or an `action=` value) does not start with a verb that does something: logout, delete, remove, reset, create, save, update, change, send, run, import, … (`webextract.StateChanging`). Those are kept as `skipped`; `-all-gets` requests them too. API description operations are asked when they are GETs that need no path or query parameter; the same verbs keep them out (VAmPI's `GET /createdb` resets its database). Junk that is not a URL never enters the graph: path segments such as `NaN` or `undefined` from a script that ran without its data, links cut short in archives, scanner payloads.
+
+Requests to targets carry a current browser's User-Agent (CDN bot managers hold other requests open without an answer) and connect to the addresses the run's own resolver found for the name, IPv6 first where the machine has a route for it and IPv4 alongside after 300 ms, so `host_ip` is always one of the name's addresses. Third-party sources get `azhaq/VERSION` as User-Agent.
 
 Rows that share a URL template are folded into one line with a count. Forms appear indented under the first row that has them, with their method, action and field names, followed by the page's other parameter names. `azhaq export` keeps every entity unfolded and adds `template`, `methods`, `params` and `forms` fields.
 
@@ -237,13 +245,14 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 - **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo's matcher and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
 - **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
 - **A browser only when asked.** JavaScript routes are extracted from script text, which covers bundled single-page apps. `-browser`, `-screenshots` and `-login` drive a Chrome already installed on the machine; Azhaq downloads none.
-- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Operations read from an API description are mapped and never called, since a GET in a spec can still change state. GraphQL introspection, a POST, runs only with `-graphql`.
+- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Every request to a target is a GET, except Chrome submitting a login form when given an account and GraphQL introspection (a POST) with `-graphql`. Operations read from an API description or a script call are mapped with their method and fields; only the parameterless GETs among them are asked.
+- **Every outcome said.** Each command ends with a summary: what failed and whether it is worth retrying, targets that never answered, what was left alone and why, the limit that stopped the work. The exit code says the same (0 complete, 3 finished with failures, 4 stopped by a limit), so a script or an assistant never has to guess whether an empty result is an honest zero.
 
 ## Limitations
 
 - Requests to a target are limited by concurrency per host (4 by default) and an optional delay; path guessing, parameter discovery and port scans also have a rate. Third-party sources and DNS resolvers have rate limits.
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
-- Routes built at run time from anything but constants (user input, server responses, functions of several variables) are seen only with `-browser`, and only those a page requests while it loads: Azhaq does not click.
+- Routes built at run time from anything but constants, template literals and variables assigned once (user input, server responses, functions of several variables) are seen only with `-browser`, and only those a page requests while it loads: Azhaq does not click.
 - Routes only the server knows (admin APIs no page mentions) are found only by the path sweep or an API description.
 - One SQLite file holds a run, written by the run's own process; workers send their results to it rather than writing a shared store.
 
