@@ -330,6 +330,12 @@ func strs(v any) []string {
 	return out
 }
 
+// intOf reads a JSON number as an int (1048576, not 1.048576e+06).
+func intOf(v any) int {
+	f, _ := v.(float64)
+	return int(f)
+}
+
 func payloadOf(o types.Observation) map[string]any {
 	var p map[string]any
 	_ = json.Unmarshal(o.Payload, &p)
@@ -1028,7 +1034,7 @@ func cmdDirs(args []string) error {
 		case c.silent:
 			w.line(u)
 		default:
-			w.line(fmt.Sprintf("%s [Status: %v, Size: %v, Words: %v, Lines: %v]", u, p["status"], p["length"], p["words"], p["lines"]))
+			w.line(fmt.Sprintf("%s [Status: %d, Size: %d, Words: %d, Lines: %d]", u, intOf(p["status"]), intOf(p["length"]), intOf(p["words"]), intOf(p["lines"])))
 		}
 	}
 	rep := newReport("dirs")
