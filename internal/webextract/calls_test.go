@@ -20,6 +20,8 @@ const juiceServices = "var F$={hostServer:\".\"};" +
 	"deluxe(e,t){return this.http.post(this.hostServer+`/rest/deluxe-membership`,{paymentMode:e,paymentId:t})}" +
 	"repeat(e){return this.http.get(this.hostServer+`/rest/repeat-notification`,{params:{challenge:e},responseType:`text`})}" +
 	"lang(){return this.http.get(`${this.hostServer}/rest/languages`)}}" +
+	"class C{hostServer=F$.hostServer;host=this.hostServer+`/rest/web3`;" +
+	"submitKey(t){let r=this.host+`/submitKey`,n={privateKey:t};return this.http.post(r,n)}}" +
 	"m.get(\"key\");cache.delete(e);"
 
 func TestCalls(t *testing.T) {
@@ -38,6 +40,7 @@ func TestCalls(t *testing.T) {
 		"POST /rest/deluxe-membership":   {Method: "POST", Path: "/rest/deluxe-membership", Body: []string{"paymentId", "paymentMode"}},
 		"GET /rest/repeat-notification":  {Method: "GET", Path: "/rest/repeat-notification", Query: []string{"challenge"}},
 		"GET /rest/languages":            {Method: "GET", Path: "/rest/languages"},
+		"POST /rest/web3/submitKey":      {Method: "POST", Path: "/rest/web3/submitKey", Body: []string{"privateKey"}},
 	}
 	for k, w := range want {
 		g, ok := got[k]

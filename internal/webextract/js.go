@@ -11,6 +11,8 @@ import (
 var (
 	absURL = regexp.MustCompile(`https?://[A-Za-z0-9._~:/?#\[\]@!$&*+,;=%-]+`)
 	relURL = regexp.MustCompile(`['"\x60](/[A-Za-z0-9._~/?#&=+-]{1,256})['"\x60]`)
+	// dotURL is a link written relative to the page: "./redirect?to=".
+	dotURL = regexp.MustCompile(`['"\x60](\./[A-Za-z][A-Za-z0-9._~/-]{0,200})(?:\?[A-Za-z0-9._~&=+-]*)?['"\x60?]`)
 	// numericPath is "/160" or "/2/3": sizes and ratios, not routes.
 	numericPath = regexp.MustCompile(`^[/0-9.]+$`)
 	jsonPath    = regexp.MustCompile(`"(?:url|href|path|route|page|api|endpoint)"\s*:\s*"(/[A-Za-z0-9._~/?#&=+-]{1,256})"`)
@@ -37,6 +39,12 @@ func JSURLs(script string, base *url.URL) []string {
 	for _, m := range relURL.FindAllStringSubmatch(script, -1) {
 		if len(m) == 2 && !numericPath.MatchString(m[1]) {
 			add(m[1])
+		}
+	}
+	for _, m := range dotURL.FindAllStringSubmatch(script, -1) {
+		if p := m[1]; !strings.HasSuffix(p, ".js") && !strings.HasSuffix(p, ".mjs") && !strings.HasSuffix(p, ".css") {
+			// Relative to the app's root, where a single-page app runs.
+			add("/" + strings.TrimPrefix(p, "./"))
 		}
 	}
 	for _, m := range jsonPath.FindAllStringSubmatch(script, -1) {

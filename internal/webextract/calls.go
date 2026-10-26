@@ -59,6 +59,13 @@ func Calls(script string) []Call {
 			switch method {
 			case "POST", "PUT", "PATCH":
 				c.Body = objectKeys(opts)
+				if c.Body == nil && identChain.MatchString(opts) && len(opts) <= 2 {
+					// post(r,n) with n declared just before as an object.
+					ev := evaluator{src: script}
+					if rhs, _, ok := ev.declared(opts, m[0]); ok {
+						c.Body = objectKeys(rhs)
+					}
+				}
 				if strings.HasPrefix(opts, "{") && len(args) > 2 {
 					c.Query = append(c.Query, paramsOption(args[2])...)
 				}
@@ -241,7 +248,14 @@ func (ev evaluator) binding(name string, pos, depth int) (string, bool) {
 		return "", false // a property of another object: environment.apiUrl
 	}
 	if field == name && len(field) <= 2 {
-		return "", false // a minified local: its name is reused everywhere
+		// A minified local: its name is reused everywhere, so only a
+		// declaration just before, in the same function, is trusted:
+		// let r=this.host+`/submitKey`,n={…};return this.http.post(r,n)
+		rhs, at, ok := ev.declared(field, pos)
+		if !ok {
+			return "", false
+		}
+		return ev.eval(rhs, at, depth+1)
 	}
 	window := 3000
 	if field != name || len(field) > 2 {
@@ -262,6 +276,21 @@ func (ev evaluator) binding(name string, pos, depth int) (string, bool) {
 		return "", false
 	}
 	return ev.eval(rhs, at, depth+1)
+}
+
+// declared finds `let NAME=…`, `const NAME=…` or `, NAME=…` of a
+// declaration list in the 300 bytes before pos, and returns what it is
+// set to and where.
+func (ev evaluator) declared(name string, pos int) (string, int, bool) {
+	start := max(0, pos-300)
+	re := regexp.MustCompile(`(?:\b(?:let|const|var)\s+|,\s*)` + regexp.QuoteMeta(name) + `\s*=([^=>])`)
+	locs := re.FindAllStringSubmatchIndex(ev.src[start:pos], -1)
+	if len(locs) == 0 {
+		return "", 0, false
+	}
+	at := start + locs[len(locs)-1][2]
+	rhs := topExpr(ev.src[at:])
+	return rhs, at, rhs != ""
 }
 
 // placeholderFor names a run-time part of a path after the variable that
