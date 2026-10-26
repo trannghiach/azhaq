@@ -259,6 +259,19 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Results = len(engine.GroupTemplates(rows))
 	rep.what = "map rows"
 	rep.Counts = counts
+	if path == "" {
+		return
+	}
+	if counts["auth"]+counts["forbidden"] > 0 {
+		rep.Next = append(rep.Next, "azhaq query -db "+path+" -role auth,forbidden   (what needs a session)")
+	}
+	if counts["api"] > 0 {
+		rep.Next = append(rep.Next, "azhaq query -db "+path+" -role api -fields key,methods,params,body",
+			"azhaq export -db "+path+" -format openapi > api.json   (for Burp, Postman, ZAP)")
+	}
+	if counts["auth"] > 0 {
+		rep.Next = append(rep.Next, "azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)")
+	}
 }
 
 // mapRowJSON is one row of the map for -json output and azhaq query.
