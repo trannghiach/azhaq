@@ -22,8 +22,15 @@ type Hop struct {
 	Location string `json:"location,omitempty"`
 }
 
-// UserAgent goes on every request Azhaq sends; the CLI sets the version.
-var UserAgent = "azhaq"
+// UserAgent goes on every request to a target: a current browser's, as
+// httpx and katana send, because CDN bot managers hold requests from
+// anything else open without an answer (Akamai does, for curl and for a
+// tool's name). -header 'User-Agent: …' replaces it.
+var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+
+// ToolAgent names Azhaq to the third-party services it asks (archives,
+// RDAP, RIPEstat, search APIs); the CLI sets the version.
+var ToolAgent = "azhaq (+https://github.com/trannghiach/azhaq)"
 
 const (
 	// MaxBody caps HTML and other documents.
@@ -121,7 +128,10 @@ func Client(c *http.Client) *http.Client {
 	}
 }
 
-// dial connects through Resolver's addresses when it has an answer.
+// dial connects through Resolver's addresses when it has an answer, the
+// way the system would: IPv6 first where the machine has a route for it,
+// IPv4 tried too after a short head start (RFC 8305). Some edges answer
+// only one family from a given network.
 func dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{Timeout: 5 * time.Second}
 	host, port, err := net.SplitHostPort(addr)
@@ -132,19 +142,101 @@ func dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if len(ips) == 0 {
 		return d.DialContext(ctx, network, addr) // /etc/hosts, special-use names
 	}
-	var last error
+	var v4, v6 []string
 	for _, ip := range ips {
-		c, err := d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-		if err == nil {
-			return c, nil
-		}
-		last = err
-		if ctx.Err() != nil {
-			break
+		if strings.Contains(ip, ":") {
+			v6 = append(v6, ip)
+		} else {
+			v4 = append(v4, ip)
 		}
 	}
-	return nil, last
+	primary, fallback := v4, v6
+	if ipv6Routable() && len(v6) > 0 {
+		primary, fallback = v6, v4
+	} else if !ipv6Routable() {
+		fallback = nil
+	}
+	if len(primary) == 0 {
+		primary, fallback = fallback, nil
+	}
+	return dialEither(ctx, d, network, port, primary, fallback)
 }
+
+// fallbackDelay is the head start of the preferred address family.
+const fallbackDelay = 300 * time.Millisecond
+
+// dialEither tries primary addresses in order and, from fallbackDelay on,
+// the fallback ones alongside; the first connection wins.
+func dialEither(ctx context.Context, d *net.Dialer, network, port string, primary, fallback []string) (net.Conn, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	type result struct {
+		c   net.Conn
+		err error
+	}
+	results := make(chan result, 2)
+	try := func(ips []string, wait time.Duration) {
+		if wait > 0 {
+			select {
+			case <-ctx.Done():
+				results <- result{err: ctx.Err()}
+				return
+			case <-time.After(wait):
+			}
+		}
+		var last error
+		for _, ip := range ips {
+			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip, port))
+			if err == nil {
+				results <- result{c: c}
+				return
+			}
+			last = err
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		results <- result{err: last}
+	}
+	n := 1
+	go try(primary, 0)
+	if len(fallback) > 0 {
+		n++
+		go try(fallback, fallbackDelay)
+	}
+	var first error
+	for i := 0; i < n; i++ {
+		r := <-results
+		if r.err == nil {
+			cancel()
+			// The other attempt may still connect: close what it opens.
+			go func(left int) {
+				for j := 0; j < left; j++ {
+					if r := <-results; r.c != nil {
+						r.c.Close()
+					}
+				}
+			}(n - i - 1)
+			return r.c, nil
+		}
+		if first == nil {
+			first = r.err
+		}
+	}
+	return nil, first
+}
+
+var ipv6Routable = sync.OnceValue(func() bool {
+	// A UDP "connection" sends nothing; it only asks the kernel for a
+	// route and a source address.
+	c, err := net.Dial("udp6", "[2001:4860:4860::8888]:53")
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	ip := c.LocalAddr().(*net.UDPAddr).IP
+	return ip.IsGlobalUnicast() && !ip.IsPrivate()
+})
 
 func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byte, error) {
 	res, _, err := Do(ctx, c, raw)
@@ -300,11 +392,17 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		}
 		resp, err := c.Do(req)
 		if err != nil {
+			if i > 0 {
+				break // the redirect answered; where it points did not
+			}
 			return Result{}, err
 		}
 		body, truncated, err := readBody(resp.Body, bodyLimit(resp))
 		resp.Body.Close()
 		if err != nil {
+			if i > 0 {
+				break
+			}
 			return Result{}, err
 		}
 		loc := strings.TrimSpace(resp.Header.Get("Location"))

@@ -94,8 +94,10 @@ func Failures(ents []types.Entity, obs []types.StoredObservation) []Failure {
 			continue
 		}
 		if o.Collector == "azhaq-http" || o.Collector == "azhaq-paths" {
+			// 429 is the target slowing the run down; a 503 is an answer
+			// (a service that is down, an edge with no origin).
 			switch st := statusOf(o.Payload); st {
-			case 429, 503:
+			case 429:
 				u, _ := p["url"].(string)
 				if u == "" {
 					u = target

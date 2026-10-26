@@ -42,6 +42,9 @@ type Collector struct {
 	NoFavicon bool
 	// NoTech skips technology fingerprints (about 30 MB of memory).
 	NoTech bool
+	// Probe answers like httpx: one request per service, no catch-all
+	// check (nothing is crawled from it).
+	Probe bool
 
 	emitted sync.Map // URLs already reported in this run
 }
@@ -208,7 +211,7 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 		final = n
 	}
 	row := describe(reqURL, final, res, title, c.NoTech)
-	catchAll := fetch.CatchAll(ctx, c.Client, res)
+	catchAll := !c.Probe && fetch.CatchAll(ctx, c.Client, res)
 	if catchAll {
 		// Same answer as a path that does not exist: not a page of its own.
 		row["catchall"] = true

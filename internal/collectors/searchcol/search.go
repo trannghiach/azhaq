@@ -162,7 +162,7 @@ func getJSON(ctx context.Context, c *http.Client, raw string, header http.Header
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", fetch.UserAgent)
+	req.Header.Set("User-Agent", fetch.ToolAgent)
 	req.Header.Set("Accept", "application/json")
 	for k, vs := range header {
 		req.Header[k] = vs

@@ -505,6 +505,7 @@ func cmdProbe(args []string) error {
 	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
 	list := fs.String("l", "", "file of targets (- for stdin)")
 	given := inherit(fs, append([]string{"web-ports", "parallel", "host-parallel", "delay", "no-tech", "resolvers"}, targetFlags...)...)
+	favicon := fs.Bool("favicon", false, "also hash each front page's favicon (one or two more requests per service)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -534,7 +535,11 @@ func cmdProbe(args []string) error {
 	out := &probeOut{w: w, c: &c, cdn: map[string][2]string{}, seen: map[string]bool{}, input: input}
 	rep := newReport("probe")
 	rep.what = "web services"
-	st, done, err := runPreset(&c, append([]string{"-list", path, "-probe"}, given()...), rep, out.see)
+	run := append([]string{"-list", path, "-probe"}, given()...)
+	if !*favicon {
+		run = append(run, "-no-favicon")
+	}
+	st, done, err := runPreset(&c, run, rep, out.see)
 	if err != nil {
 		return err
 	}

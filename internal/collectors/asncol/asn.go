@@ -126,7 +126,7 @@ func (a *ASN) get(ctx context.Context, path string, v any) error {
 	if err != nil {
 		return err
 	}
-	req.Header.Set("User-Agent", fetch.UserAgent)
+	req.Header.Set("User-Agent", fetch.ToolAgent)
 	resp, err := a.Client.Do(req)
 	if err != nil {
 		return err

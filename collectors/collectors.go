@@ -39,6 +39,8 @@ type Options struct {
 	URLs       urlcol.Options
 	WebPorts   []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
 	NoTech     bool             // skip technology fingerprints
+	Probe      bool             // azhaq-http answers like httpx: no catch-all check
+	NoFavicon  bool             // azhaq-http does not hash favicons
 	Ports      []int            // azhaq-ports: ports to scan (runs only with -ports)
 	PortRate   float64          // azhaq-ports: connection attempts per second
 	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
@@ -58,6 +60,8 @@ func Register(cat *catalog.Catalog, o Options) {
 	hc := httpcol.New(client)
 	hc.Ports = o.WebPorts
 	hc.NoTech = o.NoTech
+	hc.Probe = o.Probe
+	hc.NoFavicon = o.NoFavicon
 	cat.MustRegister(hc)
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)

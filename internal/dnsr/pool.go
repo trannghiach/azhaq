@@ -62,6 +62,7 @@ type Pool struct {
 
 	mu    sync.Mutex
 	cache map[string]*entry
+	six   map[string]*entry // AAAA asked for names that have A records
 
 	// Exchange replaces the network call (tests).
 	Exchange func(ctx context.Context, m *dns.Msg, server string) (*dns.Msg, error)
@@ -114,6 +115,7 @@ func New(o Options) *Pool {
 		udp:     &dns.Client{Net: "udp", Timeout: o.Timeout},
 		tcp:     &dns.Client{Net: "tcp", Timeout: o.Timeout},
 		cache:   map[string]*entry{},
+		six:     map[string]*entry{},
 	}
 }
 
@@ -133,6 +135,30 @@ func (p *Pool) Resolve(ctx context.Context, name string) Answer {
 	p.mu.Unlock()
 	e.once.Do(func() { e.ans = p.resolve(ctx, name) })
 	return e.ans
+}
+
+// ResolveBoth is Resolve with the AAAA records of names that also have
+// A records: what a connection needs on a network that prefers IPv6.
+func (p *Pool) ResolveBoth(ctx context.Context, name string) Answer {
+	a := p.Resolve(ctx, name)
+	if len(a.A) == 0 || len(a.AAAA) > 0 || a.Status != StatusOK {
+		return a
+	}
+	name = normalize.Hostname(name)
+	p.mu.Lock()
+	e, ok := p.six[name]
+	if !ok {
+		e = &entry{}
+		p.six[name] = e
+	}
+	p.mu.Unlock()
+	e.once.Do(func() {
+		if m, err := p.Query(ctx, name, dns.TypeAAAA); err == nil && m.Rcode == dns.RcodeSuccess {
+			e.ans.AAAA, _ = records(m, dns.TypeAAAA)
+		}
+	})
+	a.AAAA = e.ans.AAAA
+	return a
 }
 
 // ResolveMany resolves names with up to workers queries in flight and

@@ -208,7 +208,7 @@ func (c *Collector) pull(ctx context.Context, rawURL, span string) (json.RawMess
 		if err != nil {
 			return nil, current, 0, err
 		}
-		req.Header.Set("User-Agent", fetch.UserAgent)
+		req.Header.Set("User-Agent", fetch.ToolAgent)
 		req.Header.Set("Accept", "application/rdap+json, application/json")
 		resp, err := cli.Do(req)
 		if err != nil {

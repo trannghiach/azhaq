@@ -90,7 +90,7 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		if err != nil {
 			return nil, err
 		}
-		req.Header.Set("User-Agent", fetch.UserAgent)
+		req.Header.Set("User-Agent", fetch.ToolAgent)
 		req.Header.Set("Accept", "application/json")
 		for k, vs := range g.header {
 			req.Header[k] = vs
