@@ -749,8 +749,9 @@ func obsKey(o types.StoredObservation) string {
 
 // volatile payload fields change between identical runs: a body hash or
 // size on a page with a CSRF token or captcha, the session a run was given,
-// response times, the CDN address that answered.
-var volatile = []string{"body_hash", "auth", "length", "words", "lines", "ms", "ip"}
+// response times, the CDN address that answered, the identifiers an
+// answer held (a captcha id).
+var volatile = []string{"body_hash", "auth", "length", "words", "lines", "ms", "ip", "json_ids"}
 
 // stablePayload is the payload as diff compares it: volatile fields
 // dropped, per-source timings dropped and response headers reduced to
