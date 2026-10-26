@@ -30,6 +30,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
+	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/connector"
@@ -55,7 +56,7 @@ func init() {
 			version = strings.TrimPrefix(bi.Main.Version, "v")
 		}
 	}
-	fetch.UserAgent = "azhaq/" + version
+	fetch.ToolAgent = "azhaq/" + version + " (+https://github.com/trannghiach/azhaq)"
 }
 
 func main() {
@@ -112,7 +113,7 @@ func cmdRun(args []string) error {
 
 // runOut is how a run prints its map: text, JSON lines, or not at all.
 // embedded: a command built on run owns stdout.
-type runOut struct{ json, quiet, embedded bool }
+type runOut struct{ json, quiet, embedded, plan bool }
 
 // observer, when set, sees every observation of the next run as it is
 // stored: the drop-in commands print their results as they come.
@@ -142,6 +143,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	program := fs.String("program", "", "the program to take from a -scope list (handle, name or URL)")
 	probe := fs.Bool("probe", false, "resolve and fetch each target once, print one line per web service, no crawl or enumeration")
 	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 30 MB of memory)")
+	noFavicon := fs.Bool("no-favicon", false, "do not hash the favicon of front pages (one or two requests less per web service)")
 	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
@@ -286,6 +288,15 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 
 	input := store.SeedsKey(normalizeSeeds(seeds))
 	path, remember := resolveDB(*dbPath)
+	if out.plan {
+		// A plan writes nothing: its database is a scratch one.
+		dir, err := os.MkdirTemp("", "azhaq-plan-")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(dir)
+		path, remember = filepath.Join(dir, "plan.db"), false
+	}
 	prevDB := ""
 	if remember {
 		prevDB = previousRun(input)
@@ -404,8 +415,8 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		defer func() { _ = st.AddSpent(key, day, fetch.Sent()) }()
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
-	if *shots != "" || *render {
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	if (*shots != "" || *render) && !out.plan {
 		if _, err := browser.Find(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
 		}
@@ -421,7 +432,9 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
 		}
 	}
-	if *login != "" {
+	if *login != "" && out.plan {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("the run signs in at %s as %s with Chrome first", *login, *loginUser))
+	} else if *login != "" {
 		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass)
 		if err != nil {
 			return err
@@ -468,7 +481,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	}
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
 	// HTTP connects to the addresses azhaq-dns found: one answer per name.
-	fetch.Resolver = func(ctx context.Context, host string) []string { return opts.DNS.Resolve(ctx, host).IPs() }
+	fetch.Resolver = func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() }
 	if *bruteFile != "" {
 		if opts.BruteWords, err = loadLines(*bruteFile); err != nil {
 			return err
@@ -490,6 +503,12 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		}
 	}
 	collectors.Register(cat, opts)
+	if out.plan {
+		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
+		plan := buildPlan(cat, seeds, budgets, paths, limitsOf(budgets, *maxRequests, *rateFlag, *timeout, *daily), rep)
+		rep.Results, rep.what = len(plan.Targets), "targets"
+		return printPlan(plan, *jsonOut)
+	}
 	if *probe {
 		budgets.MaxDepth = 1 // the listed targets only: no CNAME or redirect targets
 		for _, n := range cat.Names() {
@@ -839,42 +858,6 @@ func cmdBench(args []string) error {
 	}
 	if ms.HeapAlloc > maxHeap {
 		return fmt.Errorf("bench: heap %dMB over %dMB", ms.HeapAlloc>>20, maxHeap>>20)
-	}
-	return nil
-}
-
-func cmdPlan(args []string) error {
-	fs := newFlags("plan")
-	url := fs.String("url", "", "seed URL")
-	org := fs.String("org", "", "seed Organization name")
-	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
-	in := fs.String("in", "", "JSONL seeds")
-	var domains stringsFlag
-	fs.Var(&domains, "domain", "seed Domain (repeatable)")
-	if err := parse(fs, args); err != nil {
-		return err
-	}
-	seeds, err := loadSeeds(*url, *org, *cloud, *in)
-	if err != nil {
-		return err
-	}
-	for _, d := range domains {
-		seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": normalize.Hostname(d)}})
-	}
-	if len(seeds) == 0 {
-		return fmt.Errorf("need -url, -domain, -org, -cloud, or -in")
-	}
-	cat := catalog.New()
-	collectors.RegisterAll(cat, nil)
-	eng := &engine.Engine{Cat: cat}
-	enc := json.NewEncoder(os.Stdout)
-	for _, item := range eng.Plan(engine.ExpandSeeds(seeds)) {
-		if col, ok := cat.Get(item.Collector); ok && catalog.InfoOf(col).Kind == catalog.Active {
-			continue // runs only with its own flag
-		}
-		if err := enc.Encode(item); err != nil {
-			return err
-		}
 	}
 	return nil
 }

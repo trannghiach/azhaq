@@ -134,13 +134,24 @@ func (b *builder) add(raw, kind string, in bool) {
 	// An entry is a list of identifiers, or a sentence ("Any host
 	// verified to be owned by Tesla"): the words of a sentence are one
 	// skipped entry, not one each.
+	ids := strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' })
 	prose := false
-	for _, id := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' }) {
-		id = strings.TrimSpace(id)
-		if strings.ContainsAny(id, ".:/") {
-			b.one(id, in)
-		} else if id != "" {
+	for _, id := range ids {
+		if !strings.ContainsAny(id, ".:/") {
 			prose = true
+		}
+	}
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if !prose {
+			b.one(id, in)
+			continue
+		}
+		// In a sentence, only what is plainly a host, a URL or an
+		// address is taken: "Inc." and "(domains/IP" are words.
+		bare := strings.Trim(strings.ToLower(id), "().;'\"")
+		if strings.Contains(bare, "://") || hostLike.MatchString(bare) && !strings.HasSuffix(bare, ".") || net.ParseIP(bare) != nil {
+			b.one(bare, in)
 		}
 	}
 	if prose {

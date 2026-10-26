@@ -315,7 +315,12 @@ func (s *scheduler) enqueue(t task) {
 // not contact the target, and an active technique needs its flag, an
 // -allow scope, and a seed inside it.
 func (s *scheduler) allowed(col catalog.Collector, seed types.Seed) bool {
-	if s.b.Skip[col.Name()] {
+	return s.b.Allows(col, seed)
+}
+
+// Allows applies the run's policy to one collector on one seed.
+func (b Budgets) Allows(col catalog.Collector, seed types.Seed) bool {
+	if b.Skip[col.Name()] {
 		return false
 	}
 	in := catalog.InfoOf(col)
@@ -323,9 +328,9 @@ func (s *scheduler) allowed(col catalog.Collector, seed types.Seed) bool {
 	case catalog.Passive:
 		return true
 	case catalog.Active:
-		return in.Flag != "" && s.b.Active[in.Flag] && len(s.b.Scope.Allow) > 0 && s.b.Scope.AllowsSeed(seed)
+		return in.Flag != "" && b.Active[in.Flag] && len(b.Scope.Allow) > 0 && b.Scope.AllowsSeed(seed)
 	default:
-		return !s.b.Passive
+		return !b.Passive
 	}
 }
 

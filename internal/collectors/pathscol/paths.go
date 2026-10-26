@@ -29,7 +29,6 @@ var DefaultWordlist = []string{
 	".well-known/security.txt",
 	".well-known/openid-configuration",
 	"login",
-	"logout",
 	"admin",
 	"dashboard",
 	"register",
