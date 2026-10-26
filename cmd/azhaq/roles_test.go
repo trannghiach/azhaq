@@ -28,20 +28,45 @@ func TestRoleSpecs(t *testing.T) {
 	}
 }
 
-func TestRoleDiff(t *testing.T) {
-	roles := []role{{name: "anon"}, {name: "member"}, {name: "owner"}}
-	rows := roleDiff(roles, map[string]map[string]int{
-		"anon":   {"/": 200, "/api/me": 401, "/api/settings": 401},
-		"member": {"/": 200, "/api/me": 200, "/api/settings": 403},
-		"owner":  {"/": 200, "/api/me": 200, "/api/settings": 200, "/api/billing": 200},
-	})
-	want := []roleRow{
-		{URL: "/api/billing", Status: map[string]int{"anon": 0, "member": 0, "owner": 200}},
-		{URL: "/api/me", Status: map[string]int{"anon": 401, "member": 200, "owner": 200}},
-		{URL: "/api/settings", Status: map[string]int{"anon": 401, "member": 403, "owner": 200}},
+func TestRoleVerdicts(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", user: "a", pass: "p"}, {name: "bob", user: "b", pass: "p"}}
+	ok := func(hash string, keys ...string) answer {
+		return answer{Status: 200, Length: 10, Hash: hash, Keys: keys}
 	}
-	if !reflect.DeepEqual(rows, want) {
-		t.Errorf("rows %+v", rows)
+	no := func(s int) answer { return answer{Status: s} }
+	answers := map[string]map[string]answer{
+		"anon": {"/": ok("h"), "/api/me": no(401), "/api/settings": no(401), "/api/users": no(401), "/rest/basket/6": no(401), "/api/products": ok("p")},
+		"alice": {"/": ok("h"), "/api/me": ok("a", "email"), "/api/settings": ok("s"), "/api/users": ok("u", "email", "id"),
+			"/rest/basket/6": ok("b6", "items"), "/api/products": ok("p")},
+		"bob": {"/": ok("h"), "/api/me": ok("b", "email"), "/api/settings": no(403), "/api/users": ok("u2", "id"),
+			"/rest/basket/6": ok("b6", "items"), "/api/products": ok("p")},
+	}
+	found := map[string][]string{
+		"/": {"anon", "alice", "bob"}, "/api/me": {"anon", "alice", "bob"}, "/api/settings": {"anon", "alice", "bob"},
+		"/api/users": {"anon", "alice", "bob"}, "/rest/basket/6": {"alice"}, "/api/products": {"anon", "alice", "bob"},
+	}
+	got := map[string]string{}
+	for _, r := range roleRows(roles, answers, found, nil) {
+		got[r.URL] = r.Verdict
+	}
+	want := map[string]string{
+		"/":              verdictSame,
+		"/api/products":  verdictSame,
+		"/api/me":        verdictSignedIn,
+		"/api/settings":  verdictRoleGated,
+		"/api/users":     verdictSignedIn,
+		"/rest/basket/6": verdictStatus,
+	}
+	// bob gets alice's basket; the anonymous visitor does not.
+	want["/rest/basket/6"] = verdictSignedIn
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("verdicts %v\nwant %v", got, want)
+	}
+	answers["anon"]["/rest/basket/6"] = ok("b6", "items")
+	for _, r := range roleRows(roles, answers, found, nil) {
+		if r.URL == "/rest/basket/6" && r.Verdict != verdictShared {
+			t.Errorf("alice's basket answers everyone the same: %s", r.Verdict)
+		}
 	}
 }
 

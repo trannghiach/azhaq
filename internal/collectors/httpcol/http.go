@@ -12,6 +12,8 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -286,6 +288,11 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech bool)
 	}
 	if res.Truncated {
 		out["truncated"] = true
+	} else if keys := JSONKeys(res.Body, headerGet(last, "Content-Type")); len(keys) > 0 {
+		out["json_keys"] = keys
+		if ids := JSONIDs(res.Body); len(ids) > 0 {
+			out["json_ids"] = ids
+		}
 	}
 	if len(res.Hops) > 0 {
 		out["hops"] = res.Hops
@@ -349,6 +356,102 @@ func cookieNames(h http.Header) []map[string]any {
 			m["samesite"] = "None"
 		}
 		out = append(out, m)
+	}
+	return out
+}
+
+// JSONKeys are the top-level fields of a JSON answer ("[]" and the fields
+// of the first element for an array; one level into a small envelope
+// such as {"status":…,"data":{…}}), so answers can be compared by shape.
+func JSONKeys(body []byte, contentType string) []string {
+	if !strings.Contains(strings.ToLower(contentType), "json") {
+		return nil
+	}
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return nil
+	}
+	prefix := ""
+	if xs, ok := v.([]any); ok {
+		prefix = "[]"
+		if len(xs) == 0 {
+			return []string{"[]"}
+		}
+		v = xs[0]
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return []string{prefix + "value"}
+	}
+	keys := make([]string, 0, len(m))
+	for k, x := range m {
+		if inner, ok := x.(map[string]any); ok && len(m) <= 3 {
+			for ik := range inner {
+				keys = append(keys, prefix+k+"."+ik)
+			}
+			continue
+		}
+		keys = append(keys, prefix+k)
+	}
+	sort.Strings(keys)
+	if len(keys) > 64 {
+		keys = keys[:64]
+	}
+	return keys
+}
+
+// idKey: a field that names an object others may ask for by that value.
+var idKey = regexp.MustCompile(`(?i)^(id|uuid|guid|slug|key|name|username|user_?name|login|email|title|.*_id|.*Id|.*_name|.*_title|.*_uuid)$`)
+
+// JSONIDs collects the values of identifier-like fields in a JSON answer
+// (top level, the elements of an array, one envelope deep), a few per
+// field: what a path such as /users/{username} can be filled with.
+func JSONIDs(body []byte) map[string][]string {
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return nil
+	}
+	out := map[string][]string{}
+	var objs []map[string]any
+	var walk func(x any, depth int)
+	walk = func(x any, depth int) {
+		switch t := x.(type) {
+		case map[string]any:
+			objs = append(objs, t)
+			if depth < 1 {
+				for _, inner := range t {
+					walk(inner, depth+1)
+				}
+			}
+		case []any:
+			for i, e := range t {
+				if i == 20 {
+					break
+				}
+				walk(e, depth)
+			}
+		}
+	}
+	walk(v, 0)
+	for _, o := range objs {
+		for k, x := range o {
+			if !idKey.MatchString(k) || len(out) >= 16 && out[k] == nil {
+				continue
+			}
+			var s string
+			switch t := x.(type) {
+			case string:
+				s = t
+			case float64:
+				s = strconv.FormatFloat(t, 'f', -1, 64)
+			default:
+				continue
+			}
+			if s == "" || len(s) > 64 || strings.ContainsAny(s, "/?#") || len(out[k]) >= 10 || slices.Contains(out[k], s) {
+				continue
+			}
+			out[k] = append(out[k], s)
+		}
 	}
 	return out
 }
