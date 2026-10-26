@@ -335,6 +335,9 @@ func Hintable(raw string) bool {
 	if err != nil {
 		return false
 	}
+	if JunkURL(raw) {
+		return false
+	}
 	path := strings.ToLower(u.Path)
 	for ext := range skipExt {
 		if strings.HasSuffix(path, ext) {

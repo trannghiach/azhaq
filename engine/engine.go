@@ -20,6 +20,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -291,7 +292,7 @@ func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.T
 		return
 	}
 	u, err := normalize.URL(p.URL)
-	if err != nil {
+	if err != nil || webextract.JunkURL(u) {
 		return
 	}
 	to, err := e.Store.UpsertEntity(types.TypeURL, u, now)

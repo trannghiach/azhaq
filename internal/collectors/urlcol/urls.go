@@ -208,7 +208,7 @@ func clean(raw, domain string) (string, bool) {
 		return "", false
 	}
 	u, err := normalize.URL(raw)
-	if err != nil {
+	if err != nil || webextract.JunkURL(u) {
 		return "", false
 	}
 	host := normalize.HostFromURL(u)

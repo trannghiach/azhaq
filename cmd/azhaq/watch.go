@@ -28,12 +28,14 @@ type changes struct {
 	Services  []string  `json:"services,omitempty"` // new web services, "url [status] title"
 	URLs      []string  `json:"urls,omitempty"`     // other new URLs
 	Ports     []string  `json:"ports,omitempty"`    // "host: 22,80,8443" where the open set changed
+	Changed   []string  `json:"changed,omitempty"`  // "url: [200] old title → [403] new title"
 	GoneHosts []string  `json:"gone_hosts,omitempty"`
 	GoneSvcs  []string  `json:"gone_services,omitempty"`
+	GoneURLs  []string  `json:"gone_urls,omitempty"`
 }
 
 func (c changes) any() bool {
-	return len(c.Hosts)+len(c.Services)+len(c.URLs)+len(c.Ports)+len(c.GoneHosts)+len(c.GoneSvcs) > 0
+	return len(c.Hosts)+len(c.Services)+len(c.URLs)+len(c.Ports)+len(c.Changed)+len(c.GoneHosts)+len(c.GoneSvcs)+len(c.GoneURLs) > 0
 }
 
 // cmdWatch runs the same target into a workspace again and again and
@@ -150,11 +152,25 @@ func diffRuns(path string) (changes, error) {
 		}
 	}
 	for _, e := range d.Removed {
+		f := oldFacts[e.ID]
 		switch {
-		case e.Type == types.TypeHostname && len(oldFacts[e.ID].ips) > 0:
+		case e.Type == types.TypeHostname && len(f.ips) > 0:
 			ch.GoneHosts = append(ch.GoneHosts, e.Key)
-		case e.Type == types.TypeURL && oldFacts[e.ID].status != 0 && isFront(e.Key):
+		case e.Type == types.TypeURL && f.status != 0 && isFront(e.Key):
 			ch.GoneSvcs = append(ch.GoneSvcs, e.Key)
+		case e.Type == types.TypeURL && f.status != 0 && !f.catchAll && f.role != "script" && f.role != "asset" && f.role != "sourcemap":
+			ch.GoneURLs = append(ch.GoneURLs, e.Key)
+		}
+	}
+	// What answered in both runs, differently: a page that now needs a
+	// login, a service that changed its title.
+	for id, nf := range newFacts {
+		of, ok := oldFacts[id]
+		if !ok || nf.status == 0 || of.status == 0 || nf.catchAll || of.catchAll {
+			continue
+		}
+		if nf.status != of.status || nf.title != of.title {
+			ch.Changed = append(ch.Changed, fmt.Sprintf("%s: [%d] %s → [%d] %s", nf.url, of.status, of.title, nf.status, nf.title))
 		}
 	}
 	// Ports: the open set of a host that was scanned in both runs.
@@ -166,7 +182,7 @@ func diffRuns(path string) (changes, error) {
 			ch.Ports = append(ch.Ports, f.host+": "+strings.Join(f.ports, ","))
 		}
 	}
-	for _, xs := range [][]string{ch.Hosts, ch.Services, ch.URLs, ch.Ports, ch.GoneHosts, ch.GoneSvcs} {
+	for _, xs := range [][]string{ch.Hosts, ch.Services, ch.URLs, ch.Ports, ch.Changed, ch.GoneHosts, ch.GoneSvcs, ch.GoneURLs} {
 		sort.Strings(xs)
 	}
 	return ch, nil
@@ -175,6 +191,7 @@ func diffRuns(path string) (changes, error) {
 type facts struct {
 	ips         []string
 	status      int
+	url         string
 	title, role string
 	catchAll    bool
 	ports       []string
@@ -200,6 +217,7 @@ func factsByEntity(st *store.Store) map[string]facts {
 		case "azhaq-http":
 			if st, ok := p["status"].(float64); ok && f.status == 0 {
 				f.status = int(st)
+				f.url, _ = p["url"].(string)
 			}
 			if t, ok := p["title"].(string); ok && f.title == "" {
 				f.title = t
@@ -258,8 +276,10 @@ func (c changes) text() string {
 	section("+", "web services", c.Services)
 	section("+", "URLs", c.URLs)
 	section("~", "hosts whose open ports changed", c.Ports)
+	section("~", "pages that answer differently", c.Changed)
 	section("-", "hostnames gone", c.GoneHosts)
 	section("-", "web services gone", c.GoneSvcs)
+	section("-", "URLs gone", c.GoneURLs)
 	return b.String()
 }
 
@@ -280,6 +300,10 @@ func cmdNew(args []string) error {
 		return err
 	}
 	defer st.Close()
+	// What the newest run still saw: a page removed since is not new.
+	if runs, err := st.Runs(); err == nil && len(runs) > 0 {
+		st.UseRun(runs[len(runs)-1].ID)
+	}
 	ents, err := st.Entities()
 	if err != nil {
 		return err

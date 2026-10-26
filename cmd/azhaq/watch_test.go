@@ -88,9 +88,18 @@ func TestWatchReportsOnlyWhatChanged(t *testing.T) {
 	if third["urls"] != nil || third["services"] != nil {
 		t.Fatalf("an unchanged run reported %v", third)
 	}
+	// /a goes away: the link and the page.
+	mu.Lock()
+	links = `<a href="/b">b</a>`
+	mu.Unlock()
+	fourth := watch()
+	gone, _ := fourth["gone_urls"].([]any)
+	if len(gone) != 1 || !strings.HasSuffix(gone[0].(string), "/a") {
+		t.Fatalf("a removed page is reported: %v", fourth)
+	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(hooks) != 2 || !strings.Contains(hooks[1], "+ 1 URLs") {
+	if len(hooks) != 3 || !strings.Contains(hooks[1], "+ 1 URLs") || !strings.Contains(hooks[2], "- 1 URLs gone") {
 		t.Errorf("webhook calls %q (the unchanged run must not notify)", hooks)
 	}
 }

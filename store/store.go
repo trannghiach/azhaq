@@ -682,11 +682,11 @@ func Compare(old, neu *Store) (Diff, error) {
 	}
 	om := map[string]types.Entity{}
 	for _, e := range oe {
-		om[string(e.Type)+"\x00"+e.Key] = e
+		om[stableKey(e)] = e
 	}
 	nm := map[string]types.Entity{}
 	for _, e := range ne {
-		k := string(e.Type) + "\x00" + e.Key
+		k := stableKey(e)
 		nm[k] = e
 		if _, ok := om[k]; !ok {
 			d.Added = append(d.Added, e)
@@ -715,6 +715,32 @@ func Compare(old, neu *Store) (Diff, error) {
 		}
 	}
 	return d, nil
+}
+
+// volatileParams change on every request of the same page: cache
+// busters, timestamps, socket.io's session and poll counter.
+var volatileParams = map[string]bool{"t": true, "_": true, "ts": true, "timestamp": true, "cb": true, "cachebuster": true,
+	"nocache": true, "rand": true, "random": true, "nonce": true, "sid": true, "_t": true, "v": false}
+
+// stableKey identifies an entity across runs: a URL without the query
+// values that change on every request.
+func stableKey(e types.Entity) string {
+	k := string(e.Type) + "\x00" + e.Key
+	if e.Type != types.TypeURL || !strings.Contains(e.Key, "?") {
+		return k
+	}
+	base, q, _ := strings.Cut(e.Key, "?")
+	var keep []string
+	for _, kv := range strings.Split(q, "&") {
+		name, _, _ := strings.Cut(kv, "=")
+		if !volatileParams[strings.ToLower(name)] {
+			keep = append(keep, kv)
+		}
+	}
+	if len(keep) == 0 {
+		return string(e.Type) + "\x00" + base
+	}
+	return string(e.Type) + "\x00" + base + "?" + strings.Join(keep, "&")
 }
 
 func obsKey(o types.StoredObservation) string {
