@@ -29,6 +29,7 @@ type Collector struct {
 	mu    sync.Mutex
 	count map[string]int
 	done  map[string]bool
+	hash  map[string]bool // origins whose app routes after a # (/#/basket)
 }
 
 func (c *Collector) Name() string { return Name }
@@ -65,8 +66,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	key := webextract.Template(raw)
 	c.mu.Lock()
 	if c.count == nil {
-		c.count, c.done = map[string]int{}, map[string]bool{}
+		c.count, c.done, c.hash = map[string]int{}, map[string]bool{}, map[string]bool{}
 	}
+	origin := u.Scheme + "://" + u.Host
+	hashed := c.hash[origin]
 	limit := c.PerHost
 	if limit <= 0 {
 		limit = 30
@@ -86,13 +89,26 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		c.mu.Unlock()
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}
-	p, err := c.Browser.Load(ctx, raw, false)
+	load := raw
+	if hashed && u.Path != "/" && u.Path != "" && spaRoute(ctx, raw) {
+		// The app routes after a #: /basket is its shell, /#/basket the
+		// page whose requests are wanted.
+		load = origin + "/#" + u.Path
+	}
+	p, err := c.Browser.Load(ctx, load, false)
+	if u.Path == "/" || u.Path == "" {
+		if f, err := url.Parse(p.URL); err == nil && strings.HasPrefix(f.Fragment, "/") {
+			c.mu.Lock()
+			c.hash[origin] = true
+			c.mu.Unlock()
+		}
+	}
 	fetch.Count(max(0, len(p.Requests)-1)) // what the page fetched besides itself
 	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
 	base, _ := url.Parse(raw)
-	if p.URL != "" {
+	if p.URL != "" && load == raw {
 		if f, err := url.Parse(p.URL); err == nil {
 			base = f
 		}
@@ -137,4 +153,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		meta.EmitCount++
 	}
 	return meta, nil
+}
+
+// spaRoute: the server answers this path with the app's shell, as it
+// answers any unknown path (the fetch is cached from the HTTP collector).
+func spaRoute(ctx context.Context, raw string) bool {
+	client := fetch.Client(nil)
+	res, _, err := fetch.Do(ctx, client, raw)
+	return err == nil && fetch.FinalCatchAll(ctx, client, res)
 }

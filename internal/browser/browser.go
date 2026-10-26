@@ -5,6 +5,7 @@ package browser
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -55,6 +57,9 @@ type Browser struct {
 	cancel context.CancelFunc
 	root   context.Context
 	sem    chan struct{}
+
+	mu      sync.Mutex
+	session map[string]string // sessionStorage a login left, for every tab
 }
 
 func (b *Browser) start() error {
@@ -120,6 +125,18 @@ type Page struct {
 	Requests []string // every URL the page asked for while loading
 }
 
+// sessionScript restores the login's sessionStorage in a new tab before
+// the page's own scripts run, or is "".
+func (b *Browser) sessionScript() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.session) == 0 {
+		return ""
+	}
+	raw, _ := json.Marshal(b.session)
+	return `(() => { try { const s = ` + string(raw) + `; for (const k in s) if (sessionStorage.getItem(k) === null) sessionStorage.setItem(k, s[k]); } catch (e) {} })()`
+}
+
 // Load opens rawURL in a new tab, waits for the network to settle, and
 // returns the page; shot adds a screenshot of the viewport.
 func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, error) {
@@ -159,6 +176,11 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {
+			return p, err
+		}
+	}
+	if js := b.sessionScript(); js != "" {
+		if _, err := chromedp.Call(tab, page.AddScriptToEvaluateOnNewDocument, page.AddScriptToEvaluateOnNewDocumentParams{Source: js}); err != nil {
 			return p, err
 		}
 	}

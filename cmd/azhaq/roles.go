@@ -66,10 +66,12 @@ const (
 	verdictStatus     = "status differs"
 	verdictData       = "different data per role"
 	verdictSame       = "same for every role"
+	verdictNone       = "no role reads it"
 	verdictUnanswered = "not answered"
 )
 
-var verdictOrder = map[string]int{verdictObject: -2, verdictPublicObj: -1, verdictShared: 0, verdictSignedIn: 1, verdictRoleGated: 2, verdictFields: 3, verdictStatus: 4, verdictData: 5, verdictSame: 6, verdictUnanswered: 7}
+var verdictOrder = map[string]int{verdictObject: 0, verdictShared: 1, verdictSignedIn: 2, verdictRoleGated: 3, verdictFields: 4,
+	verdictPublicObj: 5, verdictStatus: 6, verdictData: 7, verdictSame: 8, verdictNone: 9, verdictUnanswered: 10}
 
 // cmdRoles maps the same target once per session, then asks every
 // endpoint any session reached with every other session, and lists the
@@ -355,7 +357,7 @@ func verdict(roles []role, row roleRow) string {
 	for _, n := range row.FoundBy {
 		found[n] = true
 	}
-	var anonOK, anonNo bool
+	var anonOK, anonNo, stranger bool
 	signedOK, signedNo := 0, 0
 	statuses := map[int]bool{}
 	hashes := map[string]bool{}
@@ -369,6 +371,9 @@ func verdict(roles []role, row roleRow) string {
 		if ok2xx(a.Status) {
 			hashes[a.Hash] = true
 			shapes[strings.Join(a.Keys, ",")] = true
+			if !found[r.name] {
+				stranger = true // it reads what it never reached itself
+			}
 		}
 		denied := a.Status == 401 || a.Status == 403
 		switch {
@@ -382,24 +387,23 @@ func verdict(roles []role, row roleRow) string {
 			signedNo++
 		}
 	}
+	same := len(hashes) == 1
 	switch {
-	case row.From != "" && signedOK > 0 && len(hashes) == 1 && signedNo == 0 && anonOK:
+	case signedOK == 0 && !anonOK:
+		return verdictNone
+	case row.From != "" && same && anonOK && signedNo == 0:
 		return verdictPublicObj
-	case row.From != "" && signedOK > 1 && len(hashes) == 1 && signedNo == 0:
+	case row.From != "" && same && signedOK > 1 && signedNo == 0:
 		// An object named in one answer (a book, a basket, a user) that
 		// every signed-in role reads alike: worth a look for whose it is.
 		return verdictObject
-	case len(statuses) == 1 && ok2xx(firstKey(statuses)) && len(hashes) == 1:
-		// One answer for everyone: news if a session that never reached
-		// the URL itself (another user, no session) gets what the session
-		// that found it got.
-		for _, r := range roles {
-			if !found[r.name] && (r.anonymous() || signedOK > 1) && !public(row.URL) {
-				return verdictShared
-			}
-		}
+	case same && stranger && !public(row.URL):
+		// A role that never reached the URL gets the answer the role
+		// that found it got: another user's basket, an order.
+		return verdictShared
+	case len(statuses) == 1 && same:
 		return verdictSame
-	case len(statuses) == 1 && ok2xx(firstKey(statuses)):
+	case len(statuses) == 1:
 		if len(shapes) > 1 {
 			return verdictFields
 		}
@@ -408,10 +412,8 @@ func verdict(roles []role, row roleRow) string {
 		return verdictSignedIn
 	case signedOK > 0 && signedNo > 0:
 		return verdictRoleGated
-	case len(statuses) > 1:
-		return verdictStatus
 	}
-	return verdictSame
+	return verdictStatus
 }
 
 // public: a front page or a static document every visitor gets.

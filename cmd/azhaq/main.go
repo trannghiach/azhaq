@@ -426,7 +426,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 				hdr[k] = strings.Join(vs, ", ")
 			}
 		}
-		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: fetch.Extra.Get("User-Agent"), Header: hdr}
+		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: browserAgent(), Header: hdr}
 		defer opts.Browser.Close()
 		if err := opts.Browser.Start(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -1400,7 +1400,7 @@ func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
 		return "", fmt.Errorf("-login needs -login-user and -login-pass (or AZHAQ_LOGIN_PASS)")
 	}
 	if b == nil {
-		b = &browser.Browser{UserAgent: fetch.Extra.Get("User-Agent")}
+		b = &browser.Browser{UserAgent: browserAgent()}
 		defer b.Close()
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -1433,6 +1433,15 @@ func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
 	}
 	fmt.Fprintf(os.Stderr, "azhaq: signed in as %s (%s); now on %s\n", user, what, s.URL)
 	return s.URL, nil
+}
+
+// browserAgent is the User-Agent Chrome sends: the run's, not Chrome's
+// headless one, which bot managers refuse.
+func browserAgent() string {
+	if ua := fetch.Extra.Get("User-Agent"); ua != "" {
+		return ua
+	}
+	return fetch.UserAgent
 }
 
 func applyExtra(cookies, headers []string) error {

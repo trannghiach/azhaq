@@ -57,15 +57,17 @@ func TestRoleVerdicts(t *testing.T) {
 		"/api/users":     verdictSignedIn,
 		"/rest/basket/6": verdictStatus,
 	}
-	// bob gets alice's basket; the anonymous visitor does not.
-	want["/rest/basket/6"] = verdictSignedIn
+	// bob gets alice's basket, which his own run never reached; the
+	// anonymous visitor does not.
+	want["/rest/basket/6"] = verdictShared
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("verdicts %v\nwant %v", got, want)
 	}
-	answers["anon"]["/rest/basket/6"] = ok("b6", "items")
+	answers["anon"]["/api/x/1"], answers["alice"]["/api/x/1"], answers["bob"]["/api/x/1"] = no(401), no(400), no(400)
+	found["/api/x/1"] = []string{"alice"}
 	for _, r := range roleRows(roles, answers, found, nil) {
-		if r.URL == "/rest/basket/6" && r.Verdict != verdictShared {
-			t.Errorf("alice's basket answers everyone the same: %s", r.Verdict)
+		if r.URL == "/api/x/1" && r.Verdict != verdictNone {
+			t.Errorf("an object no role reads: %s", r.Verdict)
 		}
 	}
 }

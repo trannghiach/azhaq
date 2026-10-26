@@ -5,10 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"html"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -44,6 +46,8 @@ type fingerprint struct {
 	title    string
 	lines    int
 	words    int
+	size     int
+	keys     string // a JSON answer's top-level fields; "" for anything else
 }
 
 var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
@@ -153,7 +157,41 @@ func fingerprintOf(res Result, origin, target string) fingerprint {
 	}
 	fp.lines = strings.Count(body, "\n")
 	fp.words = len(strings.Fields(body))
+	fp.size = len(body)
+	fp.keys = jsonShape(body)
 	return fp
+}
+
+// jsonShape is a JSON object's sorted top-level field names ("[]" for an
+// array), or "" when the body is not JSON.
+func jsonShape(body string) string {
+	t := strings.TrimSpace(body)
+	if !strings.HasPrefix(t, "{") && !strings.HasPrefix(t, "[") {
+		return ""
+	}
+	var v any
+	if json.Unmarshal([]byte(t), &v) != nil {
+		return ""
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return "[]"
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return "{" + strings.Join(keys, ",") + "}"
+}
+
+// near: two sizes within a fraction of the larger.
+func near(a, b int, frac float64) bool {
+	d := a - b
+	if d < 0 {
+		d = -d
+	}
+	return float64(d) <= frac*float64(max(a, b))
 }
 
 // stripEcho removes the requested path from a body or header, in the forms
@@ -187,6 +225,11 @@ func (b fingerprint) matches(o fingerprint) bool {
 	if b.hash == o.hash {
 		return true
 	}
+	if b.keys != "" || o.keys != "" {
+		// JSON on one line has one "word": an object with data and the
+		// same object empty would read alike. Fields and size decide.
+		return b.keys == o.keys && near(b.size, o.size, 0.1)
+	}
 	// Pages with a CSRF token or timestamp differ byte-wise but keep their shape.
-	return b.title == o.title && b.lines == o.lines && b.words == o.words && b.words > 0
+	return b.title == o.title && b.lines == o.lines && b.words == o.words && b.words > 0 && near(b.size, o.size, 0.2)
 }

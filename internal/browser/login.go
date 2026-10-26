@@ -211,6 +211,18 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 		return s, err
 	}
 	s.Bearer, s.From = storedToken(kv)
+	// sessionStorage belongs to the tab: what the login put there (a
+	// basket id, a tenant) goes into every tab opened afterwards.
+	b.mu.Lock()
+	for i := 0; i+1 < len(kv); i += 2 {
+		if k, ok := strings.CutPrefix(kv[i], "sessionStorage."); ok {
+			if b.session == nil {
+				b.session = map[string]string{}
+			}
+			b.session[k] = kv[i+1]
+		}
+	}
+	b.mu.Unlock()
 	return s, nil
 }
 
