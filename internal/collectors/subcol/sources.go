@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/alienvault"
@@ -21,7 +22,6 @@ import (
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/chinaz"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/commoncrawl"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/crtname"
-	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/crtsh"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/digitalyama"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/digitorus"
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping/sources/dnsdb"
@@ -143,9 +143,8 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &chinaz.Source{} }, 0),
 		pd(func() subscraping.Source { return &commoncrawl.Source{} }, 0),
 		pd(func() subscraping.Source { return &crtname.Source{} }, 0),
-		pd(func() subscraping.Source { return &crtsh.Source{} }, 0),
 		pd(func() subscraping.Source { return &digitalyama.Source{} }, 0),
-		pd(func() subscraping.Source { return &digitorus.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &digitorus.Source{} }, 0)),
 		pd(func() subscraping.Source { return &dnsdb.Source{} }, 0),
 		pd(func() subscraping.Source { return &dnsdumpster.Source{} }, 0),
 		pd(func() subscraping.Source { return &dnsrepo.Source{} }, 0),
@@ -166,10 +165,10 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &pugrecon.Source{} }, 10),
 		pd(func() subscraping.Source { return &quake.Source{} }, 0),
 		pd(func() subscraping.Source { return &rapiddns.Source{} }, 0),
-		pd(func() subscraping.Source { return &reconcloud.Source{} }, 0),
-		pd(func() subscraping.Source { return &reconeer.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &reconcloud.Source{} }, 0)),
+		keyed(pd(func() subscraping.Source { return &reconeer.Source{} }, 0)),
 		pd(func() subscraping.Source { return &redhuntlabs.Source{} }, 0),
-		pd(func() subscraping.Source { return &riddler.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &riddler.Source{} }, 0)),
 		pd(func() subscraping.Source { return &robtex.Source{} }, 0),
 		pd(func() subscraping.Source { return &rsecloud.Source{} }, 0),
 		pd(func() subscraping.Source { return &scanmalware.Source{} }, 0),
@@ -178,11 +177,11 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &shodanct.Source{} }, 0),
 		pd(func() subscraping.Source { return &sitedossier.Source{} }, 8*perMinute),
 		pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0),
-		pd(func() subscraping.Source { return &submd.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &submd.Source{} }, 0)),
 		pd(func() subscraping.Source { return &thc.Source{} }, 0),
 		pd(func() subscraping.Source { return &threatbook.Source{} }, 0),
 		pd(func() subscraping.Source { return &threatcrowd.Source{} }, 0),
-		pd(func() subscraping.Source { return &threatminer.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &threatminer.Source{} }, 0)),
 		pd(func() subscraping.Source { return &urlscan.Source{} }, 1),
 		pd(func() subscraping.Source { return &virustotal.Source{} }, 4*perMinute),
 		pd(func() subscraping.Source { return &waybackarchive.Source{} }, 15*perMinute),
@@ -191,7 +190,73 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &zoomeyeapi.Source{} }, 0),
 		certspotterSource(),
 		chaosSource(),
+		crtshSource(),
 	}
+}
+
+// off takes a source out of the default set: it was dead or refused
+// every request when last checked (2026-10-26), and a run that always
+// reports the same failures teaches its reader to ignore failures.
+// -sources NAME or -all-sources still runs it.
+func off(s source) source {
+	s.deflt = false
+	return s
+}
+
+// keyed marks a source that has started to require a key.
+func keyed(s source) source {
+	s.need = requiredKey
+	return s
+}
+
+// crtshSource asks crt.sh's JSON endpoint. subfinder's version tries the
+// public Postgres server first (usually full) and then a URL crt.sh no
+// longer serves; /json answers, though with the odd 502, so it is asked
+// again a few times.
+func crtshSource() source {
+	return source{
+		name:  "crtsh",
+		need:  noKey,
+		deflt: true,
+		collect: func(ctx context.Context, domain string, _ []string, sess *subscraping.Session) ([]string, error) {
+			u := "https://crt.sh/json?q=" + url.QueryEscape(domain)
+			var rows []struct {
+				CommonName string `json:"common_name"`
+				NameValue  string `json:"name_value"`
+			}
+			var err error
+			for attempt, wait := 0, 2*time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
+				if err = getJSON(ctx, sess, "crtsh", u, nil, &rows); err == nil || !retry(err) {
+					break
+				}
+				select {
+				case <-ctx.Done():
+					return nil, err
+				case <-time.After(wait):
+				}
+			}
+			if err != nil {
+				return nil, err
+			}
+			var names []string
+			for _, r := range rows {
+				names = append(names, r.CommonName)
+				names = append(names, strings.Split(r.NameValue, "\n")...)
+			}
+			return names, nil
+		},
+	}
+}
+
+// retry: crt.sh's gateway errors and dropped connections pass.
+func retry(err error) bool {
+	s := err.Error()
+	for _, code := range []string{" 429", " 500", " 502", " 503", " 504"} {
+		if strings.HasSuffix(s, code) {
+			return true
+		}
+	}
+	return strings.Contains(s, "EOF") || strings.Contains(s, "connection reset") || strings.Contains(s, "unexpected end of JSON")
 }
 
 // certspotterSource asks Cert Spotter. Unlike subfinder's version it also

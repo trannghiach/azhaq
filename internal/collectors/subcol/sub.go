@@ -216,21 +216,27 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 
 	seen := map[string]bool{}
 	var names []string
+	foundBy := map[string][]string{} // name → the sources that gave it
 	status := map[string]any{}
 	var failed []string
 	for i, s := range run {
 		r := results[i]
 		row := map[string]any{"count": 0, "seconds": round(r.took.Seconds())}
 		n := 0
+		mine := map[string]bool{}
 		for _, raw := range r.names {
 			name := clean(raw, domain)
-			if name == "" {
+			if name == "" || mine[name] {
 				continue
 			}
+			mine[name] = true
 			n++
 			if !seen[name] && len(names) < maxNames {
 				seen[name] = true
 				names = append(names, name)
+			}
+			if seen[name] {
+				foundBy[name] = append(foundBy[name], s.name)
 			}
 		}
 		row["count"] = n
@@ -244,7 +250,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		status[name] = map[string]any{"skipped": why}
 	}
 	sort.Strings(names)
-	payload := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status}
+	for _, by := range foundBy {
+		sort.Strings(by)
+	}
+	payload := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status, "found_by": foundBy}
 	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
 	if len(failed) > 0 {
 		sort.Strings(failed)
