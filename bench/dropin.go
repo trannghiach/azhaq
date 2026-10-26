@@ -37,9 +37,9 @@ func benchDropin(crapi bool) *dropinRow {
 
 	// crawl, like katana: Juice Shop's known routes.
 	out, _ := run("dropin", 10*time.Minute, dir, azhaq, "crawl", "-silent", "-u", juiceURL)
-	truth := readTruth("bench/truth/juice-shop-v20.3.0-js.txt")
+	truth := readTruth("bench/truth/juice-shop-v20.3.0-routes.txt")
 	row.CrawlKnown = matched(routes(lines(out), origin), truth)
-	addCheck("drop-in: azhaq crawl finds Juice Shop's known routes", row.CrawlKnown >= 40,
+	addCheck("drop-in: azhaq crawl finds Juice Shop's known routes", row.CrawlKnown*10 >= len(truth)*9,
 		"%d/%d", row.CrawlKnown, len(truth))
 
 	// probe, like httpx -json, on stdin.
@@ -51,7 +51,9 @@ func benchDropin(crapi bool) *dropinRow {
 			continue
 		}
 		row.ProbeRows++
-		for _, k := range []string{"url", "status_code", "title", "tech", "webserver", "content_length", "host"} {
+		// httpx's fields that are always there; title, tech and webserver
+		// are left out when empty, by httpx too.
+		for _, k := range []string{"url", "input", "status_code", "content_length", "host", "host_ip", "port", "scheme", "a"} {
 			if _, ok := m[k]; !ok {
 				row.ProbeFields = false
 			}

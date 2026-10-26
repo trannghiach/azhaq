@@ -127,13 +127,14 @@ func benchApps() []appResult {
 
 	// Juice Shop: JS routes, SPA catch-all pages, diff stability.
 	juice := appResult{Name: "juice-shop", URL: juiceURL}
-	truth := readTruth("bench/truth/juice-shop-v20.3.0-js.txt")
+	truth := readTruth("bench/truth/juice-shop-v20.3.0-routes.txt")
 	g, _, m := runAzhaq(juiceURL, db("juice"))
 	shell := shellHash(juiceURL)
 	juice.Azhaq = scoreAzhaq(g, juiceURL, truth, shell, m)
 	juice.Katana, juice.Jsluice, juice.Union = runKatanaJsluice(juiceURL, truth, shell)
 	juice.Ffuf = compareFfuf(juiceURL, g, shell)
-	addCheck("juice-shop: JS routes ≥ 40/45", juice.Azhaq.Truth >= 40, "azhaq %d/%d, katana %d/%d", juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth))
+	addCheck("juice-shop: ≥ 90% of the server routes its frontend calls", juice.Azhaq.Truth*10 >= len(truth)*9, "azhaq %d/%d, katana %d/%d, jsluice %d/%d",
+		juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth), juice.Jsluice.Truth, len(truth))
 	addCheck("juice-shop: no catch-all page reported as visited", juice.Azhaq.Shell == 0, "%d visited URLs return the SPA index", juice.Azhaq.Shell)
 	juice.Roles = benchRoles(juiceURL, dir)
 	juice.Browser = compareBrowsers(juiceURL, db("juice-browser"), truth, shell)
@@ -341,14 +342,15 @@ func matched(found, truth map[string]bool) int {
 			n++
 			continue
 		}
-		i := strings.Index(t, "{")
-		if i < 0 {
+		if !strings.Contains(t, "{") {
 			continue
 		}
+		// A concrete instance of the route, or the same template whatever
+		// its parameters are called; not the bare prefix (/rest/basket
+		// is not /rest/basket/{id}/checkout).
 		re := templateRE(t)
-		prefix := route(t[:i])
 		for f := range found {
-			if re.MatchString(f) || f == prefix {
+			if re.MatchString(f) || canonical(f) == canonical(t) {
 				n++
 				break
 			}
@@ -356,6 +358,11 @@ func matched(found, truth map[string]bool) int {
 	}
 	return n
 }
+
+var paramRE = regexp.MustCompile(`\{[^}]*\}`)
+
+// canonical is a template with its parameters unnamed.
+func canonical(t string) string { return paramRE.ReplaceAllString(t, "{}") }
 
 // templateRE matches concrete paths of a template: {id} is one segment.
 func templateRE(t string) *regexp.Regexp {

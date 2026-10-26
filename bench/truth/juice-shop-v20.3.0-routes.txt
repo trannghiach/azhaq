@@ -1,0 +1,85 @@
+# Server routes of OWASP Juice Shop v20.3.0 that its frontend calls: every
+# path its server.js defines (app.get/post/put/patch/delete/use/all), kept
+# when each static part of it is written in the frontend's main.js, as is
+# or as a prefix constant plus a suffix ("/rest/admin" + "/application-
+# configuration"). Static files, the Swagger mount and hidden challenge
+# pages fall out. {name} is a path parameter. Generated with
+# bench/truth/juice_routes.py from the container's /juice-shop/build/server.js
+# and the served main.js; independent of Azhaq.
+/api/Addresss
+/api/Addresss/{id}
+/api/BasketItems
+/api/BasketItems/{id}
+/api/Cards
+/api/Cards/{id}
+/api/Challenges
+/api/Challenges/{id}
+/api/Complaints
+/api/Complaints/{id}
+/api/Deliverys
+/api/Deliverys/{id}
+/api/Feedbacks
+/api/Feedbacks/{id}
+/api/Hints
+/api/Products
+/api/Products/{id}
+/api/Quantitys
+/api/Quantitys/{id}
+/api/Recycles
+/api/Recycles/{id}
+/api/SecurityAnswers
+/api/SecurityAnswers/{id}
+/api/SecurityQuestions
+/api/SecurityQuestions/{id}
+/api/Users
+/dataerasure
+/file-upload
+/ftp
+/profile
+/redirect
+/rest/2fa/disable
+/rest/2fa/setup
+/rest/2fa/status
+/rest/2fa/verify
+/rest/admin/application-configuration
+/rest/admin/application-version
+/rest/basket
+/rest/basket/{id}
+/rest/basket/{id}/checkout
+/rest/basket/{id}/coupon/{coupon}
+/rest/basket/{id}/order
+/rest/captcha
+/rest/chat
+/rest/continue-code
+/rest/continue-code-findIt
+/rest/continue-code-findIt/apply/{continueCode}
+/rest/continue-code-fixIt
+/rest/continue-code-fixIt/apply/{continueCode}
+/rest/continue-code/apply/{continueCode}
+/rest/country-mapping
+/rest/deluxe-membership
+/rest/image-captcha
+/rest/languages
+/rest/memories
+/rest/order-history
+/rest/order-history/{id}/delivery-status
+/rest/order-history/orders
+/rest/products/{id}/reviews
+/rest/products/reviews
+/rest/products/search
+/rest/repeat-notification
+/rest/saveLoginIp
+/rest/track-order/{id}
+/rest/user/authentication-details
+/rest/user/change-password
+/rest/user/data-export
+/rest/user/login
+/rest/user/reset-password
+/rest/user/security-question
+/rest/user/whoami
+/rest/wallet/balance
+/rest/web3/nftMintListen
+/rest/web3/nftUnlocked
+/rest/web3/submitKey
+/rest/web3/walletExploitAddress
+/rest/web3/walletNFTVerify
