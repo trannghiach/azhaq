@@ -187,9 +187,9 @@ func benchTenants() *tenantsRow {
 		got := [3]int{r.Status["anon"], r.Status["member"], r.Status["owner"]}
 		want, ok := tenantsTable[path]
 		switch {
-		case !ok && (r.Verdict == "same for every role" || r.Verdict == "not answered" || r.Verdict == "different data per role"):
-			// Pages everyone gets, and /logout, which only the anonymous
-			// visitor may follow.
+		case !ok && (r.Verdict == "same for every role" || r.Verdict == "not answered" || r.Verdict == "different data per role" || r.Verdict == "no role reads it"):
+			// Pages everyone gets, /logout, which only the anonymous visitor
+			// may follow, and the login API, which answers GET with 401.
 		case !ok:
 			row.Extra = append(row.Extra, fmt.Sprintf("%s %v", path, got))
 		case got != want:
