@@ -168,7 +168,7 @@ func benchTenants() *tenantsRow {
 	}))
 
 	out, m := run("tenants", 10*time.Minute, dir, azhaq, "roles", "-dir", filepath.Join(dir, "tenants-"+time.Now().Format("150405")),
-		"-jsonl", "-login", site+"login", "-role", "anon",
+		"-jsonl", "-all", "-login", site+"login", "-role", "anon",
 		"-role-login", "member=member@acme.test:"+password, "-role-login", "owner=owner@acme.test:"+password,
 		"--", "-url", site)
 	row.Seconds = m.Seconds
@@ -176,8 +176,9 @@ func benchTenants() *tenantsRow {
 	origin := strings.TrimSuffix(site, "/")
 	for _, l := range lines(out) {
 		var r struct {
-			URL    string         `json:"url"`
-			Status map[string]int `json:"status"`
+			URL     string         `json:"url"`
+			Status  map[string]int `json:"status"`
+			Verdict string         `json:"verdict"`
 		}
 		if json.Unmarshal([]byte(l), &r) != nil {
 			continue
@@ -186,6 +187,9 @@ func benchTenants() *tenantsRow {
 		got := [3]int{r.Status["anon"], r.Status["member"], r.Status["owner"]}
 		want, ok := tenantsTable[path]
 		switch {
+		case !ok && (r.Verdict == "same for every role" || r.Verdict == "not answered" || r.Verdict == "different data per role"):
+			// Pages everyone gets, and /logout, which only the anonymous
+			// visitor may follow.
 		case !ok:
 			row.Extra = append(row.Extra, fmt.Sprintf("%s %v", path, got))
 		case got != want:
@@ -195,9 +199,7 @@ func benchTenants() *tenantsRow {
 		}
 	}
 	sort.Strings(row.Extra)
-	// Only the anonymous visitor may follow Sign out: it has no session to
-	// lose, and the signed-in roles keep theirs.
-	extraOK := len(row.Extra) == 0 || len(row.Extra) == 1 && strings.HasPrefix(row.Extra[0], "/logout ")
+	extraOK := len(row.Extra) == 0
 	addCheck("roles: anon → member → owner on a multi-tenant app, signed in with Chrome",
 		row.Matched == row.Expected && len(row.Wrong) == 0 && extraOK && row.Logouts == 0,
 		"%d/%d rows as expected; wrong %v; extra %v; signed-in logouts %d %s", row.Matched, row.Expected, row.Wrong, row.Extra, row.Logouts, m.Error)
