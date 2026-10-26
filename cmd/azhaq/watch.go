@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/notify"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -242,6 +243,12 @@ func factsByEntity(st *store.Store) map[string]facts {
 	return out
 }
 
+// isStatic: a script, style sheet or image, which no one triages.
+func isStatic(raw string) bool {
+	c := webextract.ClassifyURL(raw)
+	return c == "asset" || c == "script"
+}
+
 func isFront(raw string) bool {
 	u, err := url.Parse(raw)
 	return err == nil && (u.Path == "" || u.Path == "/")
@@ -322,7 +329,7 @@ func cmdNew(args []string) error {
 			continue
 		}
 		x := f[e.ID]
-		if e.Type == types.TypeURL && x.catchAll {
+		if e.Type == types.TypeURL && (x.catchAll || x.role == "script" || x.role == "asset" || x.role == "sourcemap" || isStatic(e.Key)) {
 			continue
 		}
 		if *jsonOut {

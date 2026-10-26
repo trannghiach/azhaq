@@ -67,11 +67,15 @@ func TestBurpAndLines(t *testing.T) {
 func TestFreeTextEntryIsOneSkip(t *testing.T) {
 	var b builder
 	b.add("Any host verified to be owned by Tesla, such as shop.tesla.com", "other_web", true)
+	b.add("energysupport.tesla.com (report it to bugbounty.zoho.com)", "website", false)
 	sc := b.scope()
-	if len(sc.Skipped) != 1 || !strings.HasPrefix(sc.Skipped[0], "Any host verified") {
+	if len(sc.Skipped) != 2 || !strings.HasPrefix(sc.Skipped[0], "Any host verified") {
 		t.Fatalf("skipped %q", sc.Skipped)
 	}
-	if len(sc.Targets) != 1 || sc.Targets[0] != "shop.tesla.com" {
-		t.Fatalf("the host named in the sentence is kept: %v", sc.Targets)
+	if len(sc.Targets) != 0 || len(sc.Allow) != 0 {
+		t.Fatalf("a host named in a sentence widened the scope: %v %v", sc.Targets, sc.Allow)
+	}
+	if strings.Join(sc.Deny, ",") != "=bugbounty.zoho.com,=energysupport.tesla.com" {
+		t.Fatalf("hosts named in an exclusion narrow it: %v", sc.Deny)
 	}
 }

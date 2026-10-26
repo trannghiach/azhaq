@@ -147,10 +147,11 @@ func (b *builder) add(raw, kind string, in bool) {
 			b.one(id, in)
 			continue
 		}
-		// In a sentence, only what is plainly a host, a URL or an
-		// address is taken: "Inc." and "(domains/IP" are words.
+		// A host named in a sentence widens nothing ("Any domains from
+		// acquisitions, such as maxwell.com" is not a target list); in an
+		// exclusion it is taken, which only narrows the scope.
 		bare := strings.Trim(strings.ToLower(id), "().;'\"")
-		if strings.Contains(bare, "://") || hostLike.MatchString(bare) && !strings.HasSuffix(bare, ".") || net.ParseIP(bare) != nil {
+		if !in && (strings.Contains(bare, "://") || hostLike.MatchString(bare) && !strings.HasSuffix(bare, ".") || net.ParseIP(bare) != nil) {
 			b.one(bare, in)
 		}
 	}
