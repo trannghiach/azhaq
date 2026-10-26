@@ -103,7 +103,7 @@ One row per endpoint whose answer depends on the session (`-all`: every endpoint
  "answers":{"anon":{"status":401,"length":95,"hash":"…"},"name1":{"status":200,"length":83,"hash":"9f…","keys":["book_title","owner","secret"]},"admin":{…}}}
 ```
 
-`status` has 0 for a role that was never asked. `template` is set on an object URL made by filling a route's path parameters with values the roles' answers held. Verdicts: `every signed-in role reads the same object`, `anyone reads the same object, signed in or not`, `same answer for a session that did not find it`, `signed-in only`, `some roles refused`, `different fields per role`, `status differs`, and, with `-all`, `different data per role`, `same for every role`. The summary counts each verdict.
+`status` has 0 for a role that was never asked. `template` is set on an object URL made by filling a route's path parameters with values the roles' answers held. Verdicts: `every signed-in role reads the same object`, `anyone reads the same object, signed in or not`, `same answer for a session that did not find it`, `signed-in only`, `some roles refused`, `different fields per role`, `status differs`, and, with `-all`, `different data per role`, `same for every role`, `no role reads it`. The summary counts each verdict.
 
 ## query, show, plan, ingest
 
