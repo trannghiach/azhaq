@@ -198,8 +198,8 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
 	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable; sent as one Cookie header)")
 	fs.Var(&headers, "header", "extra request header K: V (repeatable)")
-	fs.Var(&allow, "allow", "allowed domain or host for fan-out (repeatable)")
-	fs.Var(&deny, "deny", "excluded domain or host (repeatable)")
+	fs.Var(&allow, "allow", "a domain, host or address range the run may touch; with any -allow, nothing else is requested (repeatable)")
+	fs.Var(&deny, "deny", "a domain, host or address range the run must not touch, even when given as a target (repeatable)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
