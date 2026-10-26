@@ -13,6 +13,7 @@ import (
 var topics = []struct{ name, file, about string }{
 	{"readme", "", "what Azhaq does, install, examples, benchmarks"},
 	{"output", "OUTPUT.md", "what every command prints: fields, the summary, exit codes"},
+	{"mcp", "MCP.md", "serving Azhaq to MCP clients: tools, scope lock, budget"},
 	{"connector", "CONNECTOR.md", "feeding other tools' results in: facts and connectors"},
 	{"architecture", "ARCHITECTURE.md", "how the engine works: seeds, collectors, the graph"},
 }

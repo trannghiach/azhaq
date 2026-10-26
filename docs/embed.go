@@ -6,5 +6,5 @@ import "embed"
 
 // Files are the documents, by file name.
 //
-//go:embed ARCHITECTURE.md CONNECTOR.md OUTPUT.md
+//go:embed ARCHITECTURE.md CONNECTOR.md OUTPUT.md MCP.md
 var Files embed.FS
