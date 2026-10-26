@@ -202,7 +202,28 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. BENCH_TABLE
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-26, v0.6.0; archives and ports also on GitHub's network, since the Wayback Machine and Common Crawl refuse the bench machine and its security software removes naabu):
+
+| Job | Replaces | Azhaq | Reference |
+| --- | --- | --- | --- |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 537, in 35 s | 508, in 57 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 37 s | 3 in 72 s |
+| Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
+| Probing 551 live hosts | httpx | 406 answered; status, title and technologies agree on all 396 shared; 100 s | 396 answered, 142 s |
+| Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
+| VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
+| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 18 s | 6/77 in 7 s, 0/40 in 54 s |
+| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,103, including 2,333 of gau's 2,339 | 2,339 |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 54 s | 36 hits, 4 false positives, 60 s |
+| Parameters, 5 pages | arjun | 5, including arjun's 2, in 115 s | 2 in 29 s |
+| Screenshots, 4 front pages | gowitness | 4 | 3 |
+| Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
+| Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
+| Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
+| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 184 URLs as one run each time | |
+| Memory, Juice Shop | katana | 86 MB | 58 MB |
+
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (4× arjun's), memory (above katana's), and one path of ffuf's 36.
 
 [bench/README.md](bench/README.md) has what is measured, every table and the caveats.
 

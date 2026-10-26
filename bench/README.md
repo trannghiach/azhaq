@@ -56,7 +56,7 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 ## What is measured
 
 - **routes**: distinct paths on the app's origin a tool reported, static assets excluded.
-- **known**: routes from an independent list that a tool found. For Juice Shop the list is every `/api/*` and `/rest/*` string in the frontend bundle plus the server-rendered pages it links to (`bench/truth/`). For VAmPI and crAPI it is the paths of the app's own OpenAPI document. A templated path (`/users/v1/{username}`) counts when a tool found it as written, a concrete instance of it, or its static part (`/users/v1`). For ginandjuice.shop it is three routes that appear only in page scripts or script-driven forms.
+- **known**: routes from an independent list that a tool found. For Juice Shop the list is the 77 routes its server defines (`app.get/post/…` in the container's `build/server.js`) whose static parts its frontend bundle writes, as they are or as a prefix constant plus a suffix (`bench/truth/juice_routes.py`, `bench/truth/juice-shop-v20.3.0-routes.txt`); until v0.6 it was the 45 `/api` and `/rest` strings a search of the bundle found, which left out every route built in a template literal. For VAmPI and crAPI it is the paths of the app's own OpenAPI document. A templated path (`/users/v1/{username}`) counts when a tool found a concrete instance of it or the same template, whatever its parameters are called; its static part alone (`/users/v1`) no longer counts. For ginandjuice.shop it is three routes that appear only in page scripts or script-driven forms.
 - **shell**: reported URLs whose response is the page the app returns for any path (the SPA index on Juice Shop). For Azhaq these are URLs marked `visited`; katana does not claim to have visited what it lists, so its number is how much of its output is that page.
 - **live**: names that dnsx resolves (A, AAAA or CNAME), out of the union of both tools' names. Each tool is credited with the live names it found.
 - **katana ∪ jsluice**: known routes that either tool found, katana crawling and jsluice reading the scripts katana listed.
@@ -68,7 +68,7 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 
 The command fails when one of these does not hold:
 
-- Apps: Juice Shop at least 40 of its 45 known routes, VAmPI every path of its OpenAPI document, crAPI at least 30 of its 40; on every app at least as many known routes as katana ∪ jsluice, and no catch-all page reported as visited. ginandjuice.shop: the page scripts are read and the routes only they contain are found; product and blog pages fold into one template row each.
+- Apps: Juice Shop at least 90% of its 77 known routes, VAmPI every path of its OpenAPI document, crAPI at least 30 of its 40; on every app at least as many known routes as katana ∪ jsluice, and no catch-all page reported as visited. ginandjuice.shop: the page scripts are read and the routes only they contain are found; product and blog pages fold into one template row each.
 - With a browser: `-browser` finds at least the known routes katana `-headless` finds, on Juice Shop and crAPI.
 - Diffs: two identical Juice Shop runs produce an empty diff; a diff between two different targets is labelled; `azhaq watch` reports no change on an unchanged app.
 - Roles: on Juice Shop, anonymous against a registered user (with its token, and signed in on the login page with Chrome), `/api/Users` and `/rest/user/authentication-details` go from 401 to 200; on the multi-tenant app, anonymous, member and owner match the known access table, and no signed-in role requests the sign-out link.
@@ -83,52 +83,51 @@ The command fails when one of these does not hold:
 
 ## Latest results
 
-2026-10-25, commit `ab72fed`, Go 1.27.1, one machine, `go run ./bench -crapi -ports=false`; record `bench/history/2026-10-25T172610-ab72fed.json`. All 43 checks pass. The archive and port comparisons are from GitHub's network the same day (workflow `bench-archives`, tag `bench-archives-6`), where all their checks pass too.
+2026-10-26, v0.6.0, Go 1.27.1, one machine. Domains, probing, active DNS and networks: `go run ./bench -crapi -ports=false` on commit `b71b8ab` (record `bench/history/2026-10-26T155916-b71b8ab.json`; its one failure, a captcha id that made two identical runs differ, is fixed). Applications, sessions, discovery, scope and scale: `go run ./bench -crapi -domains=false -brute=false -probe=false -network=false -ports=false` on commit `bde1d85` (record `bench/history/2026-10-26T161159-bde1d85.json`; its one failure, the access table counting the login API that answers every role 401 as an extra row, was a filter of the bench, fixed). Ports and archives are compared on GitHub's network (workflow `bench-archives`).
 
 ### Applications
 
 | App | Azhaq routes | known | shell | time | RSS | katana routes | known | shell | time | RSS |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Juice Shop | 120 | 45/45 | 0 | 6.7 s | 89 MB | 5 | 0/45 | 3 | 13.2 s | 66 MB |
-| VAmPI | 14 | 12/12 | 0 | 0.8 s | 65 MB | 1 | 1/12 | 0 | 11.0 s | 36 MB |
-| ginandjuice.shop | 14 | 3/3 | 0 | 24.0 s | 90 MB | 13 | 1/3 | 0 | 17.1 s | 65 MB |
-| crAPI | 69 | 32/40 | 0 | 6.2 s | 94 MB | 4 | 0/40 | 2 | 13.0 s | 60 MB |
+| Juice Shop | 157 | 70/77 | 0 | 5.6 s | 83 MB | 5 | 1/77 | 3 | 13.6 s | 59 MB |
+| VAmPI | 14 | 12/12 | 0 | 0.6 s | 69 MB | 1 | 1/12 | 0 | 11.1 s | 35 MB |
+| ginandjuice.shop | 14 | 3/3 | 0 | 22.9 s | 91 MB | 13 | 1/3 | 0 | 16.2 s | 63 MB |
+| crAPI | 85 | 32/40 | 0 | 4.3 s | 94 MB | 3 | 0/40 | 1 | 13.2 s | 60 MB |
 
 | Known routes | Azhaq | katana | jsluice | katana ∪ jsluice |
 | --- | --- | --- | --- | --- |
-| Juice Shop | 45/45 | 0/45 | 0/45 | 0/45 |
+| Juice Shop | 70/77 | 1/77 | 0/77 | 1/77 |
 | VAmPI | 12/12 | 1/12 | 0/12 | 1/12 |
 | ginandjuice.shop | 3/3 | 1/3 | 1/3 | 2/3 |
 | crAPI | 32/40 | 0/40 | 0/40 | 0/40 |
 
 | With a browser | routes | known | shell | time |
 | --- | --- | --- | --- | --- |
-| Juice Shop, Azhaq `-browser` | 145 | 45/45 | 0 | 13.9 s |
-| Juice Shop, katana `-headless` | 30 | 2/45 | 4 | 19.0 s |
-| crAPI, Azhaq `-browser` | 70 | 32/40 | 0 | 17.5 s |
-| crAPI, katana `-headless` | 5 | 0/40 | 1 | 47.1 s |
+| Juice Shop, Azhaq `-browser` | 177 | 70/77 | 0 | 12.4 s |
+| Juice Shop, katana `-headless` | 30 | 6/77 | 4 | 6.9 s |
+| crAPI, Azhaq `-browser` | 90 | 32/40 | 0 | 18.0 s |
+| crAPI, katana `-headless` | 5 | 0/40 | 1 | 44.3 s |
 
-crAPI's frontend joins every API path from constants (`"identity/" + API.LOGIN`); Azhaq resolves 32 of the 40 its OpenAPI document lists, and the other 8 (admin and management endpoints) appear nowhere in the frontend. Memory is the process alone, without Chrome for the browser rows. ginandjuice.shop's time includes the domain fan-out, which waits for the slowest subdomain source.
+Juice Shop's routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, …)`); the seven Azhaq misses are parameter routes of `/api/*` resources the server defines and the frontend never asks for by id, and two middleware mounts. crAPI's frontend joins every API path from constants (`"identity/" + API.LOGIN`); the other 8 of its 40 (admin and management endpoints) appear nowhere in the frontend. Memory is the process alone, without Chrome for the browser rows. ginandjuice.shop's time includes the domain fan-out, which waits for the slowest subdomain source.
 
 ### Sessions and roles
 
-| | endpoints that differ | expected | time |
+| | endpoints listed | expected | time |
 | --- | --- | --- | --- |
-| Juice Shop, anonymous → user, with the user's token | 12 | `/api/Users`, `/rest/user/authentication-details` 401 → 200 | 16.0 s |
-| Juice Shop, anonymous → user, signed in with `-role-login` | 14 | both, 401 → 200 | 17.1 s |
-| multi-tenant app, anonymous → member → owner, `-role-login` | 7 | 6/6 rows of the access table; no signed-in role requested the sign-out link | 8.8 s |
+| Juice Shop, anonymous → user, with the user's token | 30 | `/api/Users`, `/rest/user/authentication-details` 401 → 200 | 10.8 s |
+| Juice Shop, anonymous → user, signed in with `-role-login` | 32 | both, 401 → 200 | 14.9 s |
+| multi-tenant app, anonymous → member → owner, `-role-login` | | 6/6 rows of the access table; no signed-in role requested the sign-out link | 7.3 s |
 
-Juice Shop's login form is an Angular form behind a welcome dialog; the multi-tenant app draws its form with a script and stores a token in `localStorage`. The seventh row is the sign-out link, which only the anonymous visitor requests.
+`azhaq roles` now asks every endpoint any role reached with every other role and fills path parameters from identifiers in the answers, so the table is a full matrix. Outside the bench, with Chrome sign-in and `-browser` on Juice Shop, it reports another user's basket (`/rest/basket/10`, found by alice, answered to bob alike) and every `/api/Users/{id}` readable by any signed-in user; on VAmPI with two tokens, every book's secret readable by both users.
 
 ### Discovery
 
 | | Azhaq | Reference | shared | Azhaq time | reference time |
 | --- | --- | --- | --- | --- | --- |
-| paths, 4,750 words on 3 apps (ffuf `-ac`) | 35 hits | 36 | 35 | 62.6 s | 68.2 s |
+| paths, 4,750 words on 3 apps (ffuf `-ac`) | 35 hits | 36 | 35 | 53.7 s | 59.3 s |
 | false positives (hits that answer like a missing path) | 4 | 4 | | | |
-| parameters, 5 pages, 6,453 names (arjun) | 5 | 2 | 2 | 155.4 s | 40.1 s |
-| ports, top 1,000, connect scan (naabu; GitHub) | 4 | 4 | 4 | | |
-| screenshots, 4 front pages (gowitness) | 4 | 3 | | 36 s | 35 s |
+| parameters, 5 pages, 6,453 names (arjun) | 5 | 2 | 2 | 120.1 s | 29.5 s |
+| screenshots, 4 front pages (gowitness) | 4 | 3 | | 36 s | 34 s |
 | secrets in the planted script (jsluice) | 12 | 4 | 4 | | |
 
 Azhaq's parameter search is slower than arjun's: it confirms each name it finds on its own, and it sends at most 20 requests a second per host.
@@ -136,40 +135,40 @@ Azhaq's parameter search is slower than arjun's: it confirms each name it finds 
 ### Scope, watch and scale
 
 - Scope: no request reached the host outside the program's scope (links, scripts, a redirect, a form and `robots.txt` pointed at it, with path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped.
-- Watch: three runs of an unchanged app, no change reported.
-- Juice Shop behind a counting proxy, 147 URLs in one run of 7.5 s:
+- Watch: three runs of an unchanged app, no change reported. Two identical Juice Shop runs diff empty.
+- Juice Shop behind a counting proxy, 184 URLs in one run of 5.2 s:
 
 | | URLs as one run | detail |
 | --- | --- | --- |
-| `-max-requests 100`, then `azhaq resume` until done | yes | 3 processes; Juice Shop received at most 100 requests from one |
-| killed with SIGKILL after 2.5 s, then `azhaq resume` | yes | |
-| `-serve` with two `azhaq worker` processes | yes | the workers ran 200 tasks; 10.3 s |
+| `-max-requests 100`, then `azhaq resume` until done | yes | 5 processes; Juice Shop received at most 100 requests from one |
+| killed with SIGKILL after 1.7 s, then `azhaq resume` | yes | |
+| `-serve` with two `azhaq worker` processes | yes | the workers ran 270 tasks; 6.9 s |
 
 ### Domains
 
 | Domain | live | Azhaq live | names | subdomains at | whole run | subfinder live | names | time | Azhaq URLs | gau URLs | gau's in Azhaq |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| hackerone.com | 12 | 12 | 567 | 20 s | 40 s | 11 | 514 | 36 s | 3,095 | 1,623 | 1,623 |
-| tesla.com | 460 | 448 | 1,389 | 21 s | 71 s | 432 | 1,368 | 14 s | 4,079 | 651 | 651 |
-| vulnweb.com | 7 | 7 | 529 | 20 s | 20 s | 6 | 514 | 21 s | 144 | 65 | 65 |
+| hackerone.com | 14 | 14 | 607 | 10 s | 19 s | 12 | 529 | 27 s | 2,981 | 1,621 | 1,620 |
+| tesla.com | 526 | 516 | 1,855 | 9 s | 19 s | 490 | 1,806 | 19 s | 3,981 | 653 | 651 |
+| vulnweb.com | 7 | 7 | 532 | 17 s | 25 s | 6 | 517 | 11 s | 141 | 65 | 62 |
 
-Both tools run subfinder's default keyless sources; 6 or 7 of 14 answered per domain, and Azhaq records each failure. Here both lost the Wayback Machine and Common Crawl, which refuse this address. From GitHub's network the same day: Azhaq held all 17,251 of gau's historical URLs (499,306 in all; 625,236 Wayback rows for hackerone.com in 6 pages and 152 s), 429 live names against subfinder's 411, its subdomain results in 121 s as subfinder's, and the whole passive run, archives included, in 233 s against 508 s for subfinder and gau. The Wayback Machine refused connections for tesla.com in that run, to gau as well.
+Azhaq's default sources: 8 per domain, all of which answered (crt.sh is read from its `/json` endpoint; the sources that were dead or refusing every request are out of the default set). Both tools lost the Wayback Machine and Common Crawl, which refuse this address; Azhaq says so in every summary.
 
 | Networks | Azhaq | Reference | shared |
 | --- | --- | --- | --- |
 | AS394161, announced prefixes (RIPEstat) against registered routes (RADb) | 102 | 39 | 31 |
 | 45.33.32.128/25, addresses with a reverse name (dnsx `-ptr`) | 36 | 36 | 36 |
 
-| Probing, 483 live hosts | answered | status, title and tech agree | favicon agrees | CDN agrees | time |
+| Probing, 551 live hosts | answered | status, title and tech agree | favicon agrees | CDN agrees | time |
 | --- | --- | --- | --- | --- | --- |
-| Azhaq | 337 | 337/337 | 41/48 | 41/45 | 85.8 s |
-| httpx | 339 | | | | 132.8 s |
+| Azhaq | 406 | 396/396 | 43/50 | 48/52 | 100.5 s |
+| httpx | 396 | | | | 141.7 s |
 
-Both sent the same User-Agent with 16 requests in flight. The two hosts only httpx answered (`www.hackerone.com`, `www.tesla.com`) sit behind bot managers that answer one client and not the other from run to run.
+Both sent the same User-Agent (a current browser's) with 16 requests in flight. Azhaq connects to the addresses its resolver found, IPv6 first where the machine has a route, and keeps the first hop of a redirect whose target fails.
 
 | Active DNS on vulnweb.com | Azhaq | dnsx | shared | Azhaq time | dnsx time |
 | --- | --- | --- | --- | --- | --- |
-| brute force, 5,000 words | 3 | 2 | 2 | 35.8 s | 71.8 s |
+| brute force, 5,000 words | 3 | 3 | 3 | 37.0 s | 72.3 s |
 | permutations of live names | 0 | 0 (alterx) | 0 | | |
 | wildcard zone, 50 words, 3 real | 3 found, 0 fake | 50 (no filtering) | | | |
 
