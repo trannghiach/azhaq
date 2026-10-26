@@ -33,6 +33,11 @@ archives:
     files:
       - LICENSE
       - README.md
+      - CHANGELOG.md
+      - docs/OUTPUT.md
+      - docs/MCP.md
+      - docs/CONNECTOR.md
+      - docs/ARCHITECTURE.md
       - src: third_party/**/*
         dst: third_party
 
