@@ -719,6 +719,9 @@ func cmdCrawl(args []string) error {
 		if !*assets && (r.Role == "script" || r.Role == "asset" || r.Role == "sourcemap") {
 			continue
 		}
+		if !w.json && strings.Contains(r.Entity.Key, "{") {
+			continue // a route with a parameter (/api/Cards/{id}) is no URL to request; -json lists it
+		}
 		counts[r.Coverage]++
 		if w.json {
 			row := mapRowJSON(r)

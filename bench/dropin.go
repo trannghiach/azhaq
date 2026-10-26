@@ -36,9 +36,20 @@ func benchDropin(crapi bool) *dropinRow {
 	origin := strings.TrimSuffix(juiceURL, "/")
 
 	// crawl, like katana: Juice Shop's known routes.
-	out, _ := run("dropin", 10*time.Minute, dir, azhaq, "crawl", "-silent", "-u", juiceURL)
+	// -json: the routes with parameters (/api/Cards/{id}) are there too;
+	// the plain list holds only URLs that can be requested.
+	out, _ := run("dropin", 10*time.Minute, dir, azhaq, "crawl", "-json", "-silent", "-u", juiceURL)
 	truth := readTruth("bench/truth/juice-shop-v20.3.0-routes.txt")
-	row.CrawlKnown = matched(routes(lines(out), origin), truth)
+	var crawled []string
+	for _, l := range lines(out) {
+		var r struct {
+			URL string `json:"url"`
+		}
+		if json.Unmarshal([]byte(l), &r) == nil && r.URL != "" {
+			crawled = append(crawled, r.URL)
+		}
+	}
+	row.CrawlKnown = matched(routes(crawled, origin), truth)
 	addCheck("drop-in: azhaq crawl finds Juice Shop's known routes", row.CrawlKnown*10 >= len(truth)*9,
 		"%d/%d", row.CrawlKnown, len(truth))
 
