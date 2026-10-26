@@ -388,6 +388,11 @@ func verdict(roles []role, row roleRow) string {
 		}
 	}
 	same := len(hashes) == 1
+	for _, r := range roles {
+		if r.anonymous() && found[r.name] {
+			stranger = false // the anonymous visitor reached it: no one's private data
+		}
+	}
 	switch {
 	case signedOK == 0 && !anonOK:
 		return verdictNone
