@@ -34,10 +34,17 @@ type MapEntry struct {
 
 // Op is one operation on a route: a method and the names it sends.
 type Op struct {
-	Method string   `json:"method"`
-	Query  []string `json:"query,omitempty"`
-	Body   []string `json:"body,omitempty"`
-	Source string   `json:"source,omitempty"` // js-call, openapi, form
+	Method      string   `json:"method"`
+	Query       []string `json:"query,omitempty"`
+	Path        []string `json:"path,omitempty"`
+	Header      []string `json:"header,omitempty"`
+	Cookie      []string `json:"cookie,omitempty"`
+	Body        []string `json:"body,omitempty"`
+	BodyType    string   `json:"body_type,omitempty"`
+	Auth        bool     `json:"auth,omitempty"` // the description asks for credentials
+	Summary     string   `json:"summary,omitempty"`
+	OperationID string   `json:"operation_id,omitempty"`
+	Source      string   `json:"source,omitempty"` // js-call, openapi
 }
 
 // MapForm is a form on a page: where it submits and the fields it sends.

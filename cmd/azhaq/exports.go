@@ -8,9 +8,11 @@ import (
 	"io"
 	"net/url"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
@@ -129,13 +131,16 @@ func exportAs(path, format, origin string, w io.Writer) error {
 
 var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 
-// openAPI describes the API routes found on one origin as OpenAPI 3.0, for
-// tools that import a description (Burp's API scan, Postman, ZAP). What
-// was seen, not a contract: operations without a known method are GET.
+// openAPI describes what was mapped on one origin as OpenAPI 3, for tools
+// that import a description (Burp, Postman, ZAP, nuclei's fuzzing). A
+// description the target serves itself is the base, as it is; routes it
+// does not list are added from what scripts call (method, query, body
+// fields), from forms and from what answered. x-azhaq on each operation
+// says where it came from and how the route answered a GET.
 func openAPI(g *graphView, origin string) (map[string]any, error) {
 	byOrigin := map[string][]engine.MapEntry{}
 	for _, r := range g.rows {
-		if r.Entity.Type != types.TypeURL || !isAPI(r) {
+		if r.Entity.Type != types.TypeURL || !(isAPI(r) || len(r.Forms) > 0) {
 			continue
 		}
 		u, err := url.Parse(r.Entity.Key)
@@ -152,59 +157,293 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 			}
 		}
 	}
-	rows := byOrigin[strings.TrimSuffix(origin, "/")]
+	origin = strings.TrimSuffix(origin, "/")
+	rows := byOrigin[origin]
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("no API routes found%s", map[bool]string{true: " on " + origin}[origin != ""])
 	}
-	paths := map[string]map[string]any{}
+	doc := map[string]any{
+		"openapi": "3.0.3",
+		"info":    map[string]any{"title": "Routes mapped on " + origin, "version": version, "description": "Mapped by azhaq " + version + " from " + g.path + ": the target's own API description where it serves one, plus what its scripts call and its pages link to. Seen, not a contract."},
+		"servers": []any{map[string]any{"url": origin}},
+	}
+	paths := map[string]any{}
+	doc["paths"] = paths
+	for _, d := range served(g.obs, origin) {
+		mergeDoc(doc, paths, d)
+	}
 	for _, r := range rows {
-		u, _ := url.Parse(r.Entity.Key)
-		p := u.Path
-		if p == "" {
-			p = "/"
+		addRoute(paths, r)
+	}
+	for _, r := range rows {
+		for _, f := range r.Forms {
+			addForm(paths, origin, f)
 		}
-		// Path placeholders become parameters with names OpenAPI accepts.
-		var params []map[string]any
-		n := 0
-		p = placeholder.ReplaceAllStringFunc(p, func(string) string {
-			n++
-			name := fmt.Sprintf("p%d", n)
-			params = append(params, map[string]any{"name": name, "in": "path", "required": true, "schema": map[string]string{"type": "string"}})
-			return "{" + name + "}"
-		})
-		query := map[string]bool{}
-		for k := range u.Query() {
-			query[k] = true
+	}
+	return doc, nil
+}
+
+// servedDoc is an OpenAPI 3 document the target serves, with the path
+// its operations live under.
+type servedDoc struct {
+	doc    map[string]any
+	prefix string
+}
+
+// served lists the OpenAPI 3 documents found on origin (Swagger 2 ones
+// are described operation by operation instead).
+func served(obs []types.StoredObservation, origin string) []servedDoc {
+	var out []servedDoc
+	for _, o := range obs {
+		if o.Collector != "azhaq-openapi" || o.Kind != "api" {
+			continue
 		}
-		for _, k := range r.Params {
-			query[k] = true
+		var p struct {
+			Base     string         `json:"base"`
+			Document map[string]any `json:"document"`
 		}
-		for _, k := range sortedKeys(query) {
-			params = append(params, map[string]any{"name": k, "in": "query", "schema": map[string]string{"type": "string"}})
+		if json.Unmarshal(o.Payload, &p) != nil || p.Document == nil {
+			continue
 		}
+		v, _ := p.Document["openapi"].(string)
+		b, err := url.Parse(p.Base)
+		if !strings.HasPrefix(v, "3.") || err != nil || b.Scheme+"://"+b.Host != origin {
+			continue
+		}
+		out = append(out, servedDoc{doc: p.Document, prefix: strings.TrimSuffix(b.Path, "/")})
+	}
+	return out
+}
+
+// mergeDoc copies a served document's operations and components in.
+func mergeDoc(doc, paths map[string]any, d servedDoc) {
+	if v, _ := d.doc["openapi"].(string); v != "" {
+		doc["openapi"] = v
+	}
+	if info, ok := d.doc["info"].(map[string]any); ok {
+		if t, _ := info["title"].(string); t != "" {
+			doc["info"].(map[string]any)["title"] = t
+		}
+	}
+	if sec, ok := d.doc["security"]; ok {
+		doc["security"] = sec
+	}
+	if comps, ok := d.doc["components"].(map[string]any); ok {
+		mine, _ := doc["components"].(map[string]any)
+		if mine == nil {
+			mine = map[string]any{}
+			doc["components"] = mine
+		}
+		for kind, v := range comps {
+			src, _ := v.(map[string]any)
+			dst, _ := mine[kind].(map[string]any)
+			if dst == nil {
+				dst = map[string]any{}
+				mine[kind] = dst
+			}
+			for name, x := range src {
+				dst[name] = x
+			}
+		}
+	}
+	ps, _ := d.doc["paths"].(map[string]any)
+	for p, v := range ps {
+		item, _ := v.(map[string]any)
+		key := d.prefix + "/" + strings.TrimPrefix(p, "/")
+		dst, _ := paths[key].(map[string]any)
+		if dst == nil {
+			dst = map[string]any{}
+			paths[key] = dst
+		}
+		for m, op := range item {
+			if _, ok := dst[m]; !ok {
+				if opm, ok := op.(map[string]any); ok {
+					opm["x-azhaq"] = map[string]any{"source": "served description"}
+				}
+				dst[m] = op
+			}
+		}
+	}
+}
+
+// addRoute adds a mapped route's operations that the path item lacks.
+func addRoute(paths map[string]any, r engine.MapEntry) {
+	u, err := url.Parse(r.Entity.Key)
+	if err != nil {
+		return
+	}
+	p, pathParams := openAPIPath(u.Path)
+	item, _ := paths[p].(map[string]any)
+	if item == nil {
+		item = map[string]any{}
+	}
+	ops := r.Ops
+	if len(ops) == 0 {
 		methods := r.Methods
 		if len(methods) == 0 {
 			methods = []string{"GET"}
 		}
-		item := paths[p]
-		if item == nil {
-			item = map[string]any{}
-			paths[p] = item
-		}
 		for _, m := range methods {
-			op := map[string]any{"responses": map[string]any{"default": map[string]string{"description": "not described; mapped by azhaq"}}}
-			if len(params) > 0 {
-				op["parameters"] = params
+			op := engine.Op{Method: m}
+			if strings.EqualFold(m, "GET") {
+				op.Query = r.Params
 			}
-			item[strings.ToLower(m)] = op
+			ops = append(ops, op)
 		}
 	}
-	return map[string]any{
-		"openapi": "3.0.3",
-		"info":    map[string]string{"title": "Routes mapped on " + origin, "version": version, "description": "Mapped by azhaq " + version + " from " + g.path + ". Seen, not a contract."},
-		"servers": []map[string]string{{"url": origin}},
-		"paths":   paths,
-	}, nil
+	for k := range u.Query() {
+		for i := range ops {
+			if strings.EqualFold(ops[i].Method, "GET") && !slices.Contains(ops[i].Query, k) {
+				ops[i].Query = append(ops[i].Query, k)
+			}
+		}
+	}
+	for _, o := range ops {
+		m := strings.ToLower(o.Method)
+		if _, ok := item[m]; ok || m == "" {
+			continue
+		}
+		var params []any
+		for _, n := range pathParams {
+			params = append(params, map[string]any{"name": n, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
+		}
+		for where, names := range map[string][]string{"query": o.Query, "header": o.Header, "cookie": o.Cookie} {
+			for _, n := range names {
+				params = append(params, map[string]any{"name": n, "in": where, "schema": map[string]any{"type": "string"}})
+			}
+		}
+		sort.SliceStable(params, func(i, j int) bool {
+			a, b := params[i].(map[string]any), params[j].(map[string]any)
+			return a["in"].(string) > b["in"].(string) // path, query, header, cookie
+		})
+		op := map[string]any{
+			"operationId": operationID(o, m, p),
+			"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
+		}
+		if o.Summary != "" {
+			op["summary"] = o.Summary
+		}
+		if len(params) > 0 {
+			op["parameters"] = params
+		}
+		switch {
+		case len(o.Body) > 0 || o.BodyType != "":
+			op["requestBody"] = requestBody(o.Body, o.BodyType)
+		case m == "post" || m == "put" || m == "patch":
+			op["requestBody"] = requestBody(nil, "") // sent, fields not known
+		}
+		x := map[string]any{"source": source(o, r)}
+		if r.Coverage != "" {
+			x["coverage"] = r.Coverage
+		}
+		if r.Status != 0 {
+			x["status"] = r.Status
+		}
+		if o.Auth || r.Role == "auth" {
+			x["needs_credentials"] = true
+		}
+		op["x-azhaq"] = x
+		item[m] = op
+	}
+	if len(item) > 0 {
+		paths[p] = item
+	}
+}
+
+// addForm adds the operation an HTML form submits.
+func addForm(paths map[string]any, origin string, f engine.MapForm) {
+	u, err := url.Parse(f.Action)
+	if err != nil || u.Scheme+"://"+u.Host != origin {
+		return
+	}
+	method := strings.ToLower(f.Method)
+	if method == "" {
+		method = "get"
+	}
+	p, _ := openAPIPath(u.Path)
+	item, _ := paths[p].(map[string]any)
+	if item == nil {
+		item = map[string]any{}
+	}
+	if _, ok := item[method]; ok {
+		return
+	}
+	op := map[string]any{
+		"operationId": operationID(engine.Op{}, method, p),
+		"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
+		"x-azhaq":     map[string]any{"source": "form"},
+	}
+	if method == "get" {
+		var params []any
+		for _, n := range f.Fields {
+			params = append(params, map[string]any{"name": n, "in": "query", "schema": map[string]any{"type": "string"}})
+		}
+		if len(params) > 0 {
+			op["parameters"] = params
+		}
+	} else {
+		op["requestBody"] = requestBody(f.Fields, "application/x-www-form-urlencoded")
+	}
+	item[method] = op
+	paths[p] = item
+}
+
+// openAPIPath turns a mapped path into an OpenAPI one: every placeholder
+// has a name, and a name used twice gets a number.
+func openAPIPath(p string) (string, []string) {
+	if p == "" {
+		p = "/"
+	}
+	var names []string
+	seen := map[string]int{}
+	p = placeholder.ReplaceAllStringFunc(p, func(ph string) string {
+		n := strings.Trim(ph, "{}")
+		switch n {
+		case "", "n", "v", "hex", "uuid":
+			n = "id"
+		}
+		seen[n]++
+		if seen[n] > 1 {
+			n = fmt.Sprintf("%s%d", n, seen[n])
+		}
+		names = append(names, n)
+		return "{" + n + "}"
+	})
+	return p, names
+}
+
+func requestBody(fields []string, media string) map[string]any {
+	if media == "" {
+		media = "application/json"
+	}
+	props := map[string]any{}
+	for _, f := range fields {
+		props[f] = map[string]any{"type": "string"}
+	}
+	return map[string]any{"content": map[string]any{media: map[string]any{"schema": map[string]any{"type": "object", "properties": props}}}}
+}
+
+func operationID(o engine.Op, method, p string) string {
+	if o.OperationID != "" {
+		return o.OperationID
+	}
+	var b strings.Builder
+	b.WriteString(method)
+	for _, part := range strings.FieldsFunc(p, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) }) {
+		b.WriteString("_" + part)
+	}
+	return b.String()
+}
+
+func source(o engine.Op, r engine.MapEntry) string {
+	switch {
+	case o.Source != "":
+		return o.Source
+	case r.Coverage == "visited":
+		return "answered a GET"
+	default:
+		return "found"
+	}
 }
 
 // burpScope is a Burp Suite project options file whose target scope
