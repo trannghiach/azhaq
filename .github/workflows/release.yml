@@ -31,6 +31,7 @@ jobs:
       - uses: anchore/sbom-action/download-syft@v0
         with:
           syft-version: v1.54.0
+      - uses: sigstore/cosign-installer@v3
       - uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser

@@ -39,6 +39,15 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# The checksums are signed without a key: the certificate names this
+# repository's release workflow (sigstore, GitHub's OIDC token).
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args: ["sign-blob", "--bundle=${signature}", "${artifact}", "--yes"]
+    output: true
+
 sboms:
   - artifacts: archive
 
