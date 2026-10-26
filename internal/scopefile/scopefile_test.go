@@ -63,3 +63,15 @@ func TestBurpAndLines(t *testing.T) {
 		t.Errorf("lines: %+v %v", s, err)
 	}
 }
+
+func TestFreeTextEntryIsOneSkip(t *testing.T) {
+	var b builder
+	b.add("Any host verified to be owned by Tesla, such as shop.tesla.com", "other_web", true)
+	sc := b.scope()
+	if len(sc.Skipped) != 1 || !strings.HasPrefix(sc.Skipped[0], "Any host verified") {
+		t.Fatalf("skipped %q", sc.Skipped)
+	}
+	if len(sc.Targets) != 1 || sc.Targets[0] != "shop.tesla.com" {
+		t.Fatalf("the host named in the sentence is kept: %v", sc.Targets)
+	}
+}

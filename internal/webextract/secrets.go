@@ -77,7 +77,8 @@ func Secrets(script string) []Secret {
 	}
 	for _, m := range assigned.FindAllStringSubmatch(script, 64) {
 		name, v := m[1], m[2]
-		if seen[v] || notSecret(v) || entropy(v) < 3.2 || strings.Contains(v, "/") && !strings.ContainsAny(v, "+=") {
+		if seen[v] || notSecret(v) || entropy(v) < 3.2 || strings.Contains(v, "/") && !strings.ContainsAny(v, "+=") ||
+			notSecretName.MatchString(name) || oddChars(v) {
 			continue
 		}
 		add(Secret{Kind: "generic-secret", Severity: "medium", Name: name, Value: v})
@@ -102,6 +103,24 @@ var placeholderRE = regexp.MustCompile(`(?i)^(true|false|null|undefined|password
 
 func notSecret(v string) bool {
 	return placeholderRE.MatchString(v)
+}
+
+// notSecretName: names with "token" in them that hold a parser's tables
+// (Lezer's tokenData, tokenPrec), not a credential.
+var notSecretName = regexp.MustCompile(`(?i)token(data|prec|izers?|types?|s|ize|ized|ization|count|length|index)$`)
+
+// oddChars: keys and tokens are letters, digits and a few separators; a
+// value full of other punctuation is encoded data.
+func oddChars(v string) bool {
+	odd := 0
+	for _, r := range v {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', strings.ContainsRune("_-+/=.:@~", r):
+		default:
+			odd++
+		}
+	}
+	return odd*10 > len(v)
 }
 
 // entropy is the Shannon entropy of s in bits per character.

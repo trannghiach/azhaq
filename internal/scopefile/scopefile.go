@@ -131,8 +131,24 @@ func (b *builder) add(raw, kind string, in bool) {
 		b.skipped = append(b.skipped, raw+" ("+kind+")")
 		return
 	}
+	// An entry is a list of identifiers, or a sentence ("Any host
+	// verified to be owned by Tesla"): the words of a sentence are one
+	// skipped entry, not one each.
+	prose := false
 	for _, id := range strings.FieldsFunc(raw, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' }) {
-		b.one(strings.TrimSpace(id), in)
+		id = strings.TrimSpace(id)
+		if strings.ContainsAny(id, ".:/") {
+			b.one(id, in)
+		} else if id != "" {
+			prose = true
+		}
+	}
+	if prose {
+		text := strings.Join(strings.Fields(raw), " ")
+		if len(text) > 100 {
+			text = text[:100] + "…"
+		}
+		b.skipped = append(b.skipped, text)
 	}
 }
 

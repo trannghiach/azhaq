@@ -41,3 +41,12 @@ func TestSecretsInPlantedScript(t *testing.T) {
 		}
 	}
 }
+
+func TestSecretsSkipParserTables(t *testing.T) {
+	js := `const parser=LRParser.deserialize({version:14,tokenData:"(|~RaXY!WYZ!W]^!Wpq!W#O#P!]#Q#R#c#R#S!W$f$g!W#o#p!Wp~",tokenPrec:"a1b2c3d4e5f6g7"});` +
+		`const cfg={apiToken:"Zx81QpLm2Vt9Rr4Nc7Ks"};`
+	got := Secrets(js)
+	if len(got) != 1 || got[0].Value != "Zx81QpLm2Vt9Rr4Nc7Ks" {
+		t.Fatalf("%+v", got)
+	}
+}

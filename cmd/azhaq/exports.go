@@ -541,9 +541,16 @@ func htmlReport(g *graphView, w io.Writer) error {
 			api = append(api, r)
 		}
 	}
+	// A web service is a front page; the other pages are in the map.
+	var services []engine.ProbeRow
+	for _, p := range g.probe {
+		if isFront(p.URL) {
+			services = append(services, p)
+		}
+	}
 	return reportTmpl.Execute(w, map[string]any{
 		"Generated": time.Now().UTC().Format("2006-01-02 15:04 UTC"),
-		"Path":      g.path, "Stats": g.stats, "Probe": g.probe, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs), "Secrets": secretRows(g.obs),
+		"Path":      g.path, "Stats": g.stats, "Probe": services, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs), "Secrets": secretRows(g.obs),
 		"Map": engine.GroupTemplates(g.rows),
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -102,11 +103,10 @@ func (c *Collector) runDomain(ctx context.Context, seed types.Seed, emit func(ty
 	if status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable {
 		meta.Status = types.StatusDegraded
 	}
-	org := info.Registrant
-	if org == "" {
-		org = info.Registrar
-	}
-	if org != "" {
+	// The registrant owns the domain; the registrar only sold it
+	// (MarkMonitor, Amazon Registrar) and privacy services stand in for
+	// whoever hides behind them.
+	if org := info.Registrant; org != "" && !privacyService.MatchString(org) {
 		meta.NextHints = append(meta.NextHints, types.Seed{
 			Type: types.TypeOrganization,
 			Keys: map[string]string{"name": org},
@@ -114,6 +114,8 @@ func (c *Collector) runDomain(ctx context.Context, seed types.Seed, emit func(ty
 	}
 	return meta, nil
 }
+
+var privacyService = regexp.MustCompile(`(?i)redacted|privacy|proxy|withheld|not disclosed|data protected|whoisguard|contact privacy|perfect privacy|statutory masking`)
 
 func (c *Collector) runOrg(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	name := strings.TrimSpace(seed.Keys["name"])
