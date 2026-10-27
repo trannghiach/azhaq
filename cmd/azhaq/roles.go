@@ -41,7 +41,7 @@ func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" && r
 type roleRow struct {
 	URL       string            `json:"url"`
 	Method    string            `json:"method,omitempty"` // a write's: POST, PUT, PATCH, DELETE; reads have none
-	Status    map[string]int    `json:"status"` // 0: not asked in that role
+	Status    map[string]int    `json:"status"`           // 0: not asked in that role
 	Answers   map[string]answer `json:"answers"`
 	FoundBy   []string          `json:"found_by"`            // the roles whose own runs reached it, or whose answers held its identifier
 	From      string            `json:"template,omitempty"`  // the route it fills in, for an object URL
