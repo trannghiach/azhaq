@@ -16,6 +16,7 @@
 
 ### New
 
+- `roles -replay-writes post,put,patch[,delete]` asks each role's writes with every other role's session: its own from a HAR (`-har alice=alice.har`), and the PUT, PATCH (an empty object, which changes nothing) and DELETE its routes take on its objects; `[bob writes alice's object]` on Juice Shop's basket items. Opt-in, inside the scope you name; `-dry-writes` lists them without sending.
 - `run -stream` prints the names, URLs, answers and open ports as they are found, before the ranked map.
 - `dirs` prints and keeps each hit as it is found, so a stopped run keeps them; a drop-in run given `-db` resumes with `azhaq resume` (the workspace keeps its target list).
 - Forms with an empty or `#` action submit to their page; forms carry their encoding and file inputs, and `export -format openapi` holds every form (GET forms as query parameters, POST forms as urlencoded or multipart bodies) and the pages found with a query string.

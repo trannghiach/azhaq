@@ -23,12 +23,13 @@ type runSeen struct {
 	lists     map[string]map[string][]string // URL → field → values its answer held
 	objects   map[string][]listObject        // URL → the items of its answer that name their owner
 	templates map[string]bool
-	kept      map[string]bool // what ids and lists hold already
+	writes    map[string][]writeOp // route → the writes it takes, besides GET
+	kept      map[string]bool      // what ids and lists hold already
 }
 
 func newRunSeen() runSeen {
 	return runSeen{ids: map[string][]string{}, lists: map[string]map[string][]string{}, objects: map[string][]listObject{},
-		templates: map[string]bool{}, kept: map[string]bool{}}
+		templates: map[string]bool{}, writes: map[string][]writeOp{}, kept: map[string]bool{}}
 }
 
 // add keeps the values one answer held.

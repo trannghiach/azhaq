@@ -112,7 +112,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 
 ## roles
 
-One row per endpoint whose answer depends on the session (`-all`: every endpoint compared):
+One row per endpoint whose answer depends on the session (`-all`: every endpoint compared), and with `-replay-writes`, one per write asked (its `method` set):
 
 ```json
 {"url":"http://localhost:5000/books/v1/aliceBook","verdict":"reads another role's object",
@@ -167,6 +167,26 @@ A JSON Web Token a role sends as its credential (in `Authorization`, or a header
 A role given with `-role` sends those headers and nothing else, so behaviour an app ties to a cookie is not reached with a header alone: Juice Shop's `/rest/user/whoami` reads the `token` cookie, and answers `{"user":{}}` to an `Authorization` header. Give the cookie as one of the role's headers (`-role 'alice=Cookie: token=eyJ…'`, what `-cookie` sends in a run), or use `-role-login`, which carries the cookies and the token the login stored.
 
 With `-json`, stderr holds the summary only: the runs of the roles print nothing, and what they did not finish is in it (`failed`, `unreachable`, `skipped`, `notes`; a role's run stopped by a limit is `stopped`, exit 4). A role whose run could not be done (a failed sign-in) ends roles with a summary whose `notes` say why.
+
+
+### Writes (`-replay-writes`)
+
+`-replay-writes METHODS` (`post`, `put`, `patch`, `delete`, comma-separated) also asks each role's writes with every other role's session, after the reads. It needs `-allow` or `-scope` in the run options: writes change data on the target. The writes are:
+
+- the ones a role sent, from a HAR (`-har NAME=FILE`, as a browser's developer tools or Burp save it): its requests with those methods on the run's hosts, one each, with their bodies and `Content-Type`, `Accept` and `X-Requested-With`, never the session that sent them (cookies, `Authorization`, a CSRF token); a logout is never replayed;
+- the PUT, PATCH and DELETE that the routes the runs found take (from API descriptions and scripts), on each role's own objects (the same as the read replay's): PUT and PATCH with an empty JSON object, which asks for the write and changes nothing, DELETE with no body. A route whose write takes a form, and a POST to an object, are left to the HAR.
+
+A map write is first sent with its owner's session; when the owner is let, its object is read again, and if a value it held changed (timestamps aside) nobody else is asked (`the owner's own write was refused` or a note in `owner_by`). Then the anonymous roles, then the other signed-in roles. A DELETE goes to the others alone, the anonymous role first, and stops at the first that is let; its owner is then asked for the object (`afterwards its owner got 404 for it`). A write is let when it is answered 2xx and not with an error shaped as data. Every write counts against `-replay-max` (what the read replay left) and the run's `-max-requests`, at the run's `-rate`, and is sent without following a redirect.
+
+| Verdict | Listed | Meaning |
+| --- | --- | --- |
+| `anyone writes another role's object` | yes | the anonymous role was let |
+| `writes another role's object` | yes | a signed-in role other than the owner was let (`readers`) |
+| `would be sent (-dry-writes)` | yes | `-dry-writes`: nothing was sent |
+| `only its owner writes it` | `-all` | the others were refused |
+| `the owner's own write was refused` | `-all` | the owner was not let, or its empty write changed its object: nothing to compare |
+
+The row's `owner_by` says where the write came from (`alice.har`, `PUT /api/BasketItems/{id} with an empty body`).
 
 ## diff
 
