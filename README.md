@@ -53,13 +53,13 @@ $ azhaq run -url http://localhost:3000/ -db juice.db
   URL http://localhost:3000/b2b/v2/orders  target  hint  api  POST
       POST  body cid orderLines orderLinesData
   …
-azhaq run: 185 map rows (160 URLs, 71 api, 11 auth, 1 forbidden) · 205 requests · 5.2 s · db juice.db
+azhaq run: 181 map rows (156 URLs, 71 api, 11 auth, 1 forbidden) · 202 requests · 4.2 s · db juice.db
   - left alone, looks like a GET would change something: …/rest/saveLoginIp, …/rest/user/change-password, …
   next: azhaq query -db juice.db -role auth,forbidden   (what needs a session)
   next: azhaq export -db juice.db -format openapi > api.json   (for Burp, Postman, ZAP)
 ```
 
-That is OWASP Juice Shop: the routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, {tmpToken, totpToken})`), which string matching does not see. Each URL row says whether it was `visited`, only found (`hint`), answered with the page every unknown path gets (`catchall`, a single-page app's shell), failed (`error`), answered 404 (`gone`, often an archived URL), or was deliberately not requested (`skipped`), then its role: `app`, `auth` (401), `forbidden` (403), `api`, `page`, `script`. Pages that differ only by an ID fold into one template row (`/catalog/product?productId={n}  (18 urls)`); forms and the operations of a route are indented below it.
+That is OWASP Juice Shop: the routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, {tmpToken, totpToken})`), which string matching does not see. `azhaq show -db juice.db http://localhost:3000/rest/2fa/verify` says where each was found: `` main.js:6472:88  this.http.post(`${F$.hostServer}/rest/2fa/verify`,{tmpToken:…,totpToken:t}) ``. Each URL row says whether it was `visited`, only found (`hint`), answered with the page every unknown path gets (`catchall`, a single-page app's shell), failed (`error`), answered 404 (`gone`, often an archived URL), or was deliberately not requested (`skipped`), then its role: `app`, `auth` (401), `forbidden` (403), `api`, `page`, `script`. Pages that differ only by an ID fold into one template row (`/catalog/product?productId={n}  (18 urls)`); forms and the operations of a route are indented below it.
 
 What a default run sends to a target: a GET to each target, to the 32 built-in paths of each web service (`robots.txt`, sitemaps, `.well-known/*`, API description locations, `admin`, `backup`, `.git/HEAD`, …), to the routes its pages, scripts and API descriptions name (GETs only, parameterless ones only, none that look state-changing), and to up to 40 URL templates per domain from web archives. `azhaq plan` with the same flags prints this for your targets without sending anything: the collectors each target gets, the queries to third-party sources about them, counted (the subdomain sources, the archives, RDAP, keyed scan engines), and a bound on the requests to the targets. That bound is not a count: how many names resolve and answer is known only by asking, so the plan gives what each web service costs before its links are followed (about 34 requests: its page, the favicon, the built-in paths) and the cap that applies, `-max-requests` or `-daily-requests`.
 
@@ -217,26 +217,26 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-27, v0.6.2; the Wayback Machine and Common Crawl refuse the bench machine, and its security software removes naabu, so the port comparison runs on GitHub's network):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-27, v0.6.3; the Wayback Machine and Common Crawl refuse the bench machine, and its security software removes naabu, so the port comparison runs on GitHub's network; the archive row is from the v0.6.2 run, as OTX answered 504 on this one):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 549, in 18 s | 511, in 66 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 53 s | 3 in 70 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 555, in 37 s | 527, in 93 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 54 s | 3 in 69 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 561 live hosts | httpx | 397 answered; status, title and technologies agree on 387 of 388 shared (redirects out of the site compared by their own status: Azhaq does not report a third party's page as the host's); 103 s | 389 answered, 144 s |
+| Probing 576 live hosts | httpx | 410 answered; status, title and technologies agree on 399 of 402 shared (redirects out of the site compared by their own status: Azhaq does not report a third party's page as the host's); 107 s | 403 answered, 146 s |
 | Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
 | VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 14 s, 32/40 in 17 s | 6/77 in 8 s, 0/40 in 49 s |
+| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 17 s | 6/77 in 7 s, 0/40 in 44 s |
 | Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,104, including 2,335 of gau's 2,340 | 2,340 |
-| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 50 s | 36 hits, 4 false positives, 58 s |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 49 s | 36 hits, 4 false positives, 53 s |
 | Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
 | Screenshots, 4 front pages | gowitness | 4 | 3 |
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 184 URLs as one run each time; 211 requests over the capped run and its resumes, one run 205 | |
-| Memory, Juice Shop | katana | 93 MB | 61 MB |
+| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 180 URLs as one run each time; 207 requests over the capped run and its resumes, one run 202 | |
+| Memory, Juice Shop | katana | 97 MB | 59 MB |
 
 The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's), and one path of ffuf's 36.
 
