@@ -23,6 +23,10 @@ var stateVerbs = map[string]bool{
 	"block": true, "unblock": true, "invite": true, "transfer": true, "pay": true, "checkout": true, "confirm": true,
 }
 
+// needsInput are verbs that act on what the request says, not on their
+// own: a bare /exec/ segment, without a query, is a page that asks.
+var needsInput = map[string]bool{"exec": true, "execute": true}
+
 // actionKeys are query keys whose value names what the request does.
 var actionKeys = map[string]bool{"action": true, "cmd": true, "do": true, "op": true, "operation": true, "task": true, "mode": true}
 
@@ -37,7 +41,11 @@ func StateChanging(raw string) string {
 		return ""
 	}
 	for _, seg := range strings.Split(u.Path, "/") {
-		if w := verbOf(seg); w != "" {
+		w := verbOf(seg)
+		if needsInput[w] && u.RawQuery == "" && len(splitWords(seg)) == 1 {
+			continue // /vulnerabilities/exec/ is the form that asks what to run
+		}
+		if w != "" {
 			return w
 		}
 	}

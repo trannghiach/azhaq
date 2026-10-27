@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -45,10 +46,11 @@ type Collector struct {
 }
 
 type scan struct {
-	done chan struct{}
-	host string // the name the services were asked under
-	open []portscan.Open
-	err  error
+	done   chan struct{}
+	host   string // the name the services were asked under
+	open   []portscan.Open
+	silent []int
+	err    error
 }
 
 func New(pool *dnsr.Pool, ports []int, rate float64) *Collector {
@@ -131,7 +133,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if edge {
 			ports = cdnPorts
 		}
-		open, err := c.scanOnce(ctx, host, ip, ports)
+		open, silent, err := c.scanOnce(ctx, host, ip, ports)
 		if err != nil && ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, err
 		}
@@ -144,6 +146,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		row := map[string]any{"host": host, "ip": ip, "scanned": len(ports), "open": portsOf(open)}
 		if len(open) > 0 {
 			row["services"] = open
+		}
+		if len(silent) > 0 {
+			row["filtered"] = len(silent)
+			if len(silent) <= maxListed {
+				row["filtered_ports"] = silent
+			}
 		}
 		if edge {
 			row["cdn"] = name
@@ -183,28 +191,74 @@ const unroutedKey = "ipv6_not_scanned"
 // names had IPv6 addresses this machine could not scan.
 func Notes(obs []types.StoredObservation) []string {
 	names := map[string]bool{}
+	var silent []string // address: ports, where a few ports answered neither way, twice
 	for _, o := range obs {
 		if o.Collector != Name {
 			continue
 		}
 		var p struct {
 			Host     string   `json:"host"`
+			IP       string   `json:"ip"`
 			Unrouted []string `json:"ipv6_not_scanned"`
+			Filtered []int    `json:"filtered_ports"`
 		}
-		if json.Unmarshal(o.Payload, &p) == nil && len(p.Unrouted) > 0 {
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		if len(p.Unrouted) > 0 {
 			names[p.Host] = true
 		}
+		if len(p.Filtered) > 0 {
+			where := p.Host
+			if p.IP != "" && p.IP != p.Host {
+				where += " (" + p.IP + ")"
+			}
+			silent = append(silent, where+" "+portList(p.Filtered, 8))
+		}
 	}
+	var out []string
 	switch len(names) {
 	case 0:
-		return nil
 	case 1:
-		return []string{"IPv6 addresses of 1 name not scanned: no IPv6 route from this machine"}
+		out = append(out, "IPv6 addresses of 1 name not scanned: no IPv6 route from this machine")
+	default:
+		out = append(out, fmt.Sprintf("IPv6 addresses of %d names not scanned: no IPv6 route from this machine", len(names)))
 	}
-	return []string{fmt.Sprintf("IPv6 addresses of %d names not scanned: no IPv6 route from this machine", len(names))}
+	if len(silent) > 0 {
+		sort.Strings(silent)
+		more := ""
+		if len(silent) > 3 {
+			more = fmt.Sprintf(" and %d more addresses", len(silent)-3)
+			silent = silent[:3]
+		}
+		out = append(out, fmt.Sprintf("ports that neither accepted nor refused a connect, asked twice: %s%s; filtered, or the host drops connects: scan them again to be sure (rows: filtered_ports)",
+			strings.Join(silent, "; "), more))
+	}
+	return out
 }
 
-func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) ([]portscan.Open, error) {
+// portList is "80, 443" with at most n ports, then how many more.
+func portList(ports []int, n int) string {
+	var parts []string
+	for i, p := range ports {
+		if i == n {
+			parts = append(parts, fmt.Sprintf("+%d more", len(ports)-n))
+			break
+		}
+		parts = append(parts, strconv.Itoa(p))
+	}
+	if len(ports) == 1 {
+		return "port " + parts[0]
+	}
+	return "ports " + strings.Join(parts, ", ")
+}
+
+// maxListed: a row lists the ports that did not answer when there are
+// no more than this; past it, a firewall drops them and the count says
+// enough.
+const maxListed = 64
+
+func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) ([]portscan.Open, []int, error) {
 	c.mu.Lock()
 	s, ok := c.byIP[ip]
 	if !ok {
@@ -216,16 +270,18 @@ func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) 
 		select {
 		case <-s.done:
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, nil, ctx.Err()
 		}
 		if s.err != nil || s.host == host {
-			return s.open, s.err
+			return s.open, s.silent, s.err
 		}
-		return c.askAgain(ctx, host, ip, s.open)
+		open, err := c.askAgain(ctx, host, ip, s.open)
+		return open, s.silent, err
 	}
-	s.open, s.err = c.Scanner.Scan(ctx, host, ip, ports)
+	r, err := c.Scanner.ScanEach(ctx, host, ip, ports)
+	s.open, s.silent, s.err = r.Open, r.Silent, err
 	close(s.done)
-	return s.open, s.err
+	return s.open, s.silent, s.err
 }
 
 // askAgain is an address's open ports for another name on it: the

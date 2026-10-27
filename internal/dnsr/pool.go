@@ -6,6 +6,7 @@ package dnsr
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -31,7 +32,16 @@ const (
 	StatusNXDomain = "nxdomain" // the name does not exist
 	StatusReserved = "reserved" // special-use name (.test, .local, …); not queried
 	StatusFailed   = "failed"   // every resolver tried failed or timed out
+	// StatusBroken: every resolver asked answered SERVFAIL or REFUSED, on
+	// two passes. They answered: the name's own DNS is broken (a lame
+	// delegation, dead name servers), for everyone, which is no
+	// resolver's fault.
+	StatusBroken = "servfail"
 )
+
+// errBroken: every attempt got an answer, and each was SERVFAIL or
+// REFUSED.
+var errBroken = errors.New("SERVFAIL or REFUSED from every resolver asked")
 
 // Answer is what a name resolved to.
 type Answer struct {
@@ -173,7 +183,7 @@ func (p *Pool) ResolveMany(ctx context.Context, names []string, workers int) []A
 	var again []string
 	var at []int
 	for i, a := range out {
-		if a.Status == StatusFailed && ctx.Err() == nil {
+		if (a.Status == StatusFailed || a.Status == StatusBroken) && ctx.Err() == nil {
 			p.forget(a.Name)
 			again = append(again, names[i])
 			at = append(at, i)
@@ -226,6 +236,9 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 	m, err := p.Query(ctx, name, dns.TypeA)
 	if err != nil {
 		a.Status, a.Err = StatusFailed, err.Error()
+		if errors.Is(err, errBroken) {
+			a.Status = StatusBroken
+		}
 		return a
 	}
 	if m.Rcode == dns.RcodeNameError {
@@ -282,6 +295,7 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	q.RecursionDesired = true
 	var last error
+	refused := 0 // attempts answered SERVFAIL or REFUSED
 	for attempt := 0; attempt <= p.retries; attempt++ {
 		server := p.servers[int(p.next.Add(1)-1)%len(p.servers)]
 		if err := p.limit.Wait(ctx, server); err != nil {
@@ -293,10 +307,14 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 			continue
 		}
 		if in.Rcode == dns.RcodeServerFailure || in.Rcode == dns.RcodeRefused {
+			refused++
 			last = errors.New(server + ": " + dns.RcodeToString[in.Rcode])
 			continue
 		}
 		return in, nil
+	}
+	if refused == p.retries+1 && refused > 1 {
+		return nil, fmt.Errorf("%w (last %v)", errBroken, last)
 	}
 	return nil, last
 }

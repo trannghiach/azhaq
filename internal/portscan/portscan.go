@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/limit"
@@ -117,13 +118,48 @@ func (s *Scanner) init() {
 	})
 }
 
-// Scan connects to each port of ip once and returns the open ones. host
-// is the name the probes of silent ports ask for (the Host header, the
-// TLS server name); empty, ip.
+// Scan connects to each port of ip and returns the open ones.
 func (s *Scanner) Scan(ctx context.Context, host, ip string, ports []int) ([]Open, error) {
+	r, err := s.ScanEach(ctx, host, ip, ports)
+	return r.Open, err
+}
+
+// Report is what one address's scan found.
+type Report struct {
+	Open []Open
+	// Silent are the ports that neither accepted nor refused a connect
+	// (a timeout, an ICMP unreachable): filtered, or dropped on the way.
+	Silent []int
+}
+
+// ScanEach connects to each port of ip and says which are open and
+// which never answered. host is the name the probes of silent ports ask
+// for (the Host header, the TLS server name); empty, ip. A port that did
+// not answer is asked once more after the others, when few did not: a
+// loaded or lossy host drops a SYN now and then, while a firewall that
+// drops nearly everything would only double the scan.
+func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (Report, error) {
 	s.init()
+	var r Report
+	var err error
+	r.Open, r.Silent, err = s.pass(ctx, host, ip, ports)
+	if err == nil && len(r.Silent) > 0 && len(r.Silent) <= max(retryFloor, len(ports)/10) {
+		var again []Open
+		again, r.Silent, err = s.pass(ctx, host, ip, r.Silent)
+		r.Open = append(r.Open, again...)
+	}
+	sort.Slice(r.Open, func(i, j int) bool { return r.Open[i].Port < r.Open[j].Port })
+	sort.Ints(r.Silent)
+	return r, err
+}
+
+// retryFloor: up to this many silent ports are asked again whatever
+// share of the scan they are.
+const retryFloor = 64
+
+// pass connects once to each port, at the scanner's rate.
+func (s *Scanner) pass(ctx context.Context, host, ip string, ports []int) (open []Open, silent []int, err error) {
 	var mu sync.Mutex
-	var open []Open
 	sem := make(chan struct{}, s.Workers)
 	var wg sync.WaitGroup
 	var stop error
@@ -147,26 +183,40 @@ func (s *Scanner) Scan(ctx context.Context, host, ip string, ports []int) ([]Ope
 		go func(p int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if o, ok := s.probe(ctx, host, ip, p); ok {
-				mu.Lock()
+			o, state := s.probe(ctx, host, ip, p)
+			mu.Lock()
+			switch state {
+			case portOpen:
 				open = append(open, o)
-				mu.Unlock()
+			case portSilent:
+				silent = append(silent, p)
 			}
+			mu.Unlock()
 		}(p)
 	}
 	wg.Wait()
-	sort.Slice(open, func(i, j int) bool { return open[i].Port < open[j].Port })
 	if stop != nil {
-		return open, stop
+		return open, silent, stop
 	}
-	return open, ctx.Err()
+	return open, silent, ctx.Err()
 }
 
-func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, bool) {
+type portState int
+
+const (
+	portClosed portState = iota // refused: nothing listens
+	portOpen
+	portSilent // no answer either way
+)
+
+func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, portState) {
 	d := net.Dialer{Timeout: s.Timeout}
 	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
-		return Open{}, false
+		if errors.Is(err, syscall.ECONNREFUSED) || ctx.Err() != nil {
+			return Open{}, portClosed
+		}
+		return Open{}, portSilent
 	}
 	defer conn.Close()
 	o := Open{Port: port}
@@ -174,10 +224,16 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, b
 		_ = conn.SetReadDeadline(time.Now().Add(s.Banner))
 		buf := make([]byte, 256)
 		n, err := conn.Read(buf)
+		var ne net.Error
+		if n == 0 && errors.As(err, &ne) && ne.Timeout() && speaksFirst(port) {
+			// sshd, an FTP or mail server greets first, late when
+			// loaded: wait for it rather than ask it HTTP.
+			_ = conn.SetReadDeadline(time.Now().Add(s.Timeout + s.Banner))
+			n, err = conn.Read(buf)
+		}
 		o.Banner = printable(buf[:n])
 		// Still open after the wait, the service waits to be asked. One
 		// that closed the connection says nothing to anyone (tcpwrapped).
-		var ne net.Error
 		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) {
 			s.identify(ctx, &o, conn, host, ip)
 		}
@@ -185,7 +241,16 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, b
 	if o.Service == "" {
 		o.Service = guess(port, o.Banner)
 	}
-	return o, true
+	return o, portOpen
+}
+
+// speaksFirst: ports whose usual service greets before it is asked.
+var speaksFirst = func(port int) bool {
+	switch port {
+	case 21, 22, 23, 25, 110, 143, 587, 2222, 3306, 5900:
+		return true
+	}
+	return false
 }
 
 // rawData: ports that take whatever they are sent as a job (JetDirect

@@ -81,3 +81,15 @@ func TestIPv6NotScannedAndHTTPHint(t *testing.T) {
 		t.Errorf("notes %q", n)
 	}
 }
+
+func TestNotesSilentPorts(t *testing.T) {
+	row := func(host, ip string, silent ...int) types.StoredObservation {
+		raw, _ := json.Marshal(map[string]any{"host": host, "ip": ip, "scanned": 3, "open": []int{22}, "filtered": len(silent), "filtered_ports": silent})
+		return types.StoredObservation{Observation: types.Observation{Collector: Name, Payload: raw}}
+	}
+	got := Notes([]types.StoredObservation{row("scanme.nmap.org", "45.33.32.156", 80), row("10.0.0.5", "10.0.0.5", 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)})
+	want := "ports that neither accepted nor refused a connect, asked twice: 10.0.0.5 ports 1, 2, 3, 4, 5, 6, 7, 8, +2 more; scanme.nmap.org (45.33.32.156) port 80; filtered, or the host drops connects: scan them again to be sure (rows: filtered_ports)"
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("notes %q\nwant %q", got, want)
+	}
+}

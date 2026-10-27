@@ -119,6 +119,10 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 	case dnsr.StatusNXDomain:
 		payload["error"] = "nxdomain"
 		meta.Drop = true
+	case dnsr.StatusBroken:
+		// Resolvers answered, all alike: the name resolves for nobody.
+		payload["error"] = a.Err
+		meta.Drop = true
 	case dnsr.StatusNoData, dnsr.StatusCNAME:
 		meta.Drop = true
 	case dnsr.StatusOK:

@@ -242,7 +242,7 @@ func dnsResult(obs []types.StoredObservation) string {
 		switch {
 		case p.Wildcard:
 			return "wildcard"
-		case p.Result == "nxdomain" || p.Result == "nodata" || p.Result == "cname" || p.Error == "nxdomain":
+		case p.Result == "nxdomain" || p.Result == "nodata" || p.Result == "cname" || p.Result == "servfail" || p.Error == "nxdomain":
 			return "dead"
 		}
 	}

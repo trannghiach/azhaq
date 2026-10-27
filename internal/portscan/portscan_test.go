@@ -175,3 +175,53 @@ func TestHTTPAnswer(t *testing.T) {
 		t.Error("not HTTP taken for HTTP")
 	}
 }
+
+// A port that answers neither way is asked again after the others, and
+// stays silent; a refused one is closed and asked once.
+func TestSilentPortsAskedTwice(t *testing.T) {
+	closed, _ := net.Listen("tcp", "127.0.0.1:0")
+	closedPort := closed.Addr().(*net.TCPAddr).Port
+	closed.Close()
+	var taken atomic.Int32
+	s := &Scanner{Rate: 1000, Timeout: 200 * time.Millisecond, Banner: -1, Take: func() error { taken.Add(1); return nil }}
+	// TEST-NET-1 has no host: a timeout or an unreachable, never a refusal.
+	r, err := s.ScanEach(context.Background(), "", "192.0.2.1", []int{81})
+	if err != nil || len(r.Open) != 0 || !reflect.DeepEqual(r.Silent, []int{81}) || taken.Load() != 2 {
+		t.Fatalf("silent %+v err %v, %d connects", r, err, taken.Load())
+	}
+	taken.Store(0)
+	r, err = s.ScanEach(context.Background(), "", "127.0.0.1", []int{closedPort})
+	if err != nil || len(r.Open)+len(r.Silent) != 0 || taken.Load() != 1 {
+		t.Fatalf("closed %+v err %v, %d connects", r, err, taken.Load())
+	}
+}
+
+// sshd under load greets late: its banner is waited for, not taken for
+// a port to ask HTTP.
+func TestLateGreeting(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				time.Sleep(300 * time.Millisecond)
+				c.Write([]byte("SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13\r\n"))
+				time.Sleep(100 * time.Millisecond)
+				c.Close()
+			}()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	saved := speaksFirst
+	defer func() { speaksFirst = saved }()
+	speaksFirst = func(p int) bool { return p == port }
+	s := &Scanner{Rate: 1000, Timeout: 500 * time.Millisecond, Banner: 200 * time.Millisecond}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 || open[0].Service != "ssh" || open[0].Banner != "SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13" {
+		t.Fatalf("late greeting %+v err %v", open, err)
+	}
+}

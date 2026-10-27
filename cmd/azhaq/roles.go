@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -30,10 +31,11 @@ type role struct {
 	name       string
 	headers    []string
 	user, pass string
+	cmd        string      // prints its headers: run before its run and again before the replay
 	session    http.Header // what its requests carried, once its run signed in
 }
 
-func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" }
+func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" && r.cmd == "" }
 
 // roleRow is one endpoint across the sessions.
 type roleRow struct {
@@ -82,8 +84,9 @@ var verdictOrder = map[string]int{verdictAnyoneSecrets: 0, verdictCross: 1, verd
 //	azhaq roles -login https://app/login -role anon -role-login 'alice=a@x.test:pw' -role-login 'bob=b@x.test:pw' -- -url https://app/
 func cmdRoles(args []string) error {
 	fs := newFlags("roles")
-	var specs, logins, idSpecs stringsFlag
+	var specs, logins, cmds, idSpecs stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: …")
+	fs.Var(&cmds, "role-cmd", "NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left")
 	fs.Var(&idSpecs, "id", "[ROLE:]NAME=VALUE: also fill routes with this identifier. NAME is a path parameter (book_title), a JSON field holding such values (basket_id) or a route (/rest/basket/{id}); with ROLE, VALUE names ROLE's own object, and another role that reads it is listed")
 	loginURL := fs.String("login", "", "the login page for -role-login")
@@ -106,6 +109,9 @@ func cmdRoles(args []string) error {
 		return err
 	}
 	if roles, err = addLogins(roles, logins); err != nil {
+		return err
+	}
+	if roles, err = addCmds(roles, cmds); err != nil {
 		return err
 	}
 	if len(logins) > 0 && *loginURL == "" {
@@ -137,6 +143,14 @@ func cmdRoles(args []string) error {
 	rep.what = "endpoints listed"
 	rep.DB = *dir
 
+	stale, soon, expired := expiryNotes(roles, time.Now())
+	if !*asJSON {
+		for _, n := range append(stale, soon...) {
+			fmt.Fprintln(os.Stderr, "note: "+n)
+		}
+	}
+	rep.Notes = append(rep.Notes, soon...)
+
 	answers := map[string]map[string]answer{} // role → URL → answer
 	found := map[string][]string{}            // URL → roles whose run reached it
 	seen := map[string]runSeen{}              // role → the values its answers held
@@ -145,6 +159,12 @@ func cmdRoles(args []string) error {
 	signedIn := map[string]browser.Session{}  // role → what its Chrome login left
 	var scopeHosts []string
 	for i, r := range roles {
+		if r.cmd != "" {
+			if roles[i].headers, err = cmdHeaders(r); err != nil {
+				return rolesFailed(rep, *asJSON, err)
+			}
+			r = roles[i]
+		}
 		db := filepath.Join(*dir, r.name+".db")
 		args := append([]string{"-db", db, "-quiet"}, runArgs...)
 		for _, h := range r.headers {
@@ -197,6 +217,24 @@ func cmdRoles(args []string) error {
 				rep.Notes = append(rep.Notes, fmt.Sprintf("-id %s=%s: no GET route with path parameters the runs found takes it", g.name, g.value))
 			}
 		}
+		for i, r := range roles {
+			// A fresh token for the replay: the runs before it may have
+			// outlived the one each run started with.
+			if r.cmd == "" {
+				continue
+			}
+			lines, err := cmdHeaders(r)
+			if err != nil {
+				rep.Notes = append(rep.Notes, "replay: "+err.Error()+"; it sends the token the role's run started with")
+				continue
+			}
+			if roles[i].session == nil {
+				roles[i].session = http.Header{}
+			}
+			for k, v := range headerOf(lines) {
+				roles[i].session[k] = v
+			}
+		}
 		n, err := replayAll(roles, answers, found, rank, scopeHosts, runArgs, *replayMax)
 		rep.Requests += int64(n)
 		if err != nil {
@@ -206,10 +244,10 @@ func cmdRoles(args []string) error {
 
 	markRedirects(answers, *loginURL)
 	rows := roleRows(roles, answers, found, made)
-	for _, n := range deadRoles(roles, rows) {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("role %s was refused wherever a session matters: its session looks expired or wrong", n))
-		rep.warned = true
-	}
+	notes, warn, asked := sessionNotes(roles, rows, expired, hostSet(scopeHosts))
+	rep.Notes = append(rep.Notes, notes...)
+	rep.warned = rep.warned || warn
+	rep.Requests += int64(asked)
 	counts, hidden := map[string]int{}, map[string]int{}
 	public := map[string]bool{} // routes with an object anyone reads listed already: one says it
 	var shown []roleRow
@@ -767,72 +805,6 @@ func othersRead(roles []role, row roleRow) []string {
 	return out
 }
 
-// deadRoles are the signed-in roles whose sessions look expired or wrong:
-// refused wherever a session matters (on every endpoint the anonymous
-// role is refused and another signed-in role reads, or, with no other
-// signed-in role, every endpoint the anonymous role is refused), or
-// refused on every endpoint another role reads; and reading no "/me"
-// endpoint unlike the anonymous role.
-func deadRoles(roles []role, rows []roleRow) []string {
-	anon, signed := "", 0
-	for _, r := range roles {
-		switch {
-		case !r.anonymous():
-			signed++
-		case anon == "":
-			anon = r.name
-		}
-	}
-	var out []string
-	for _, x := range roles {
-		if x.anonymous() {
-			continue
-		}
-		gated, gatedRead, others, othersLet, me := 0, 0, 0, 0, false
-		for _, row := range rows {
-			a, ok := row.Answers[x.name]
-			if !ok {
-				continue
-			}
-			no := refusing(row)
-			otherSigned, otherAny := false, false
-			for _, r := range roles {
-				if b, ok := row.Answers[r.name]; ok && r.name != x.name && reads(b) {
-					otherAny = true
-					otherSigned = otherSigned || !r.anonymous()
-				}
-			}
-			mine := reads(a)
-			// Gated: the anonymous visitor was asked for a session (401, 403,
-			// a sign-in page), not told the page is missing, and somebody
-			// reads it or it is the only signed-in role's to read.
-			gate := false
-			if b, ok := row.Answers[anon]; ok && anon != "" && no[anon] {
-				gate = b.Status == 401 || b.Status == 403 || b.toLogin
-			}
-			if gate && (otherSigned || signed == 1) {
-				gated++
-				if mine {
-					gatedRead++
-				}
-			}
-			if otherAny {
-				others++
-				if !no[x.name] {
-					othersLet++
-				}
-			}
-			if b, ok := row.Answers[anon]; mine && meLike(row.URL) && len(a.Keys) > 0 && (!ok || !reads(b) || b.Hash != a.Hash) {
-				me = true // a JSON "/me" answer of its own
-			}
-		}
-		if !me && (gated > 0 && gatedRead == 0 || others > 0 && othersLet == 0) {
-			out = append(out, x.name)
-		}
-	}
-	return out
-}
-
 // alike: the same object: the same body, or the same fields around the
 // same identifier.
 func alike(a, b answer, id string) bool {
@@ -890,6 +862,55 @@ func addLogins(roles []role, specs []string) ([]role, error) {
 		roles = append(roles, role{name: name, user: user, pass: pass})
 	}
 	return roles, nil
+}
+
+// addCmds adds the roles whose headers a command prints: NAME=COMMAND.
+func addCmds(roles []role, specs []string) ([]role, error) {
+	for _, s := range specs {
+		name, cmd, _ := strings.Cut(s, "=")
+		name = strings.TrimSpace(name)
+		if name == "" || strings.TrimSpace(cmd) == "" || strings.ContainsAny(name, `/\ `) {
+			return nil, usagef("-role-cmd %q: want NAME=COMMAND", s)
+		}
+		for _, r := range roles {
+			if r.name == name {
+				return nil, usagef("-role-cmd %s: a role of that name is already given", name)
+			}
+		}
+		roles = append(roles, role{name: name, cmd: cmd})
+	}
+	return roles, nil
+}
+
+// cmdHeaders runs a -role-cmd role's command and reads the headers it
+// prints: Header: value lines, or one bare token, sent as a bearer
+// token.
+func cmdHeaders(r role) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	c := exec.CommandContext(ctx, "sh", "-c", r.cmd)
+	c.Stderr = os.Stderr
+	out, err := c.Output()
+	if err != nil {
+		return nil, fmt.Errorf("role %s: its -role-cmd failed: %w", r.name, err)
+	}
+	var lines []string
+	for _, l := range strings.Split(string(out), "\n") {
+		l = strings.TrimSpace(l)
+		switch {
+		case l == "":
+		case strings.Contains(l, ": "):
+			lines = append(lines, l)
+		case !strings.ContainsAny(l, " :") && len(lines) == 0:
+			lines = append(lines, "Authorization: Bearer "+l)
+		default:
+			return nil, fmt.Errorf("role %s: its -role-cmd printed a line that is neither Header: value nor a token", r.name)
+		}
+	}
+	if len(lines) == 0 {
+		return nil, fmt.Errorf("role %s: its -role-cmd printed no header", r.name)
+	}
+	return lines, nil
 }
 
 // readBodies reads the answers of a role's run again, through the

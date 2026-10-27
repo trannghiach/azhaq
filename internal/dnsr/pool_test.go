@@ -149,3 +149,23 @@ func TestManyRetriesFailedNames(t *testing.T) {
 		t.Fatalf("answers %+v", got)
 	}
 }
+
+// Every resolver answering SERVFAIL, on both passes, is the name's own
+// DNS broken: an answer, not a failure of the run. Silence stays a
+// failure.
+func TestBrokenNameIsNotAFailure(t *testing.T) {
+	servfail := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {
+		m := new(dns.Msg)
+		m.SetRcode(r, dns.RcodeServerFailure)
+		_ = w.WriteMsg(m)
+	})
+	p := New(Options{Resolvers: []string{servfail}, PerSecond: -1, Timeout: time.Second})
+	if got := p.ResolveMany(context.Background(), []string{"lame.example.org"}, 4); got[0].Status != StatusBroken || got[0].Live() {
+		t.Fatalf("lame delegation %+v", got[0])
+	}
+	silent := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {})
+	p = New(Options{Resolvers: []string{silent}, PerSecond: -1, Timeout: 100 * time.Millisecond})
+	if got := p.ResolveMany(context.Background(), []string{"www.example.org"}, 4); got[0].Status != StatusFailed {
+		t.Fatalf("no answer at all %+v", got[0])
+	}
+}

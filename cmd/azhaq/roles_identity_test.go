@@ -327,7 +327,7 @@ func TestRolesOwnObjectsWithoutIDs(t *testing.T) {
 	_, _, sum, err := rolesJSON(t, site.URL, "-role", "anon", "-role", "alice=Authorization: Bearer "+alice, "-role", "x=Authorization: Bearer garbage",
 		"--", "-url", site.URL+"/")
 	var exit exitErr
-	note := "role x was refused wherever a session matters: its session looks expired or wrong"
+	note := `role x was refused wherever a session matters (the site said "Invalid token."): its session looks expired or wrong; its rows show what a visitor gets`
 	if !errors.As(err, &exit) || exit.code != exitPartial || sum["exit"] != float64(exitPartial) || !slices.Contains(toStrings(sum["notes"]), note) {
 		t.Errorf("a dead session: %v, summary %v", err, sum)
 	}
