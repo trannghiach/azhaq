@@ -142,7 +142,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 	}
+	linked := map[string]bool{}
 	for _, link := range webextract.Links(body, base) {
+		linked[link] = true
 		if meta.EmitCount >= maxPerPage {
 			break
 		}
@@ -168,6 +170,40 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			meta.NextHints = append(meta.NextHints, types.Seed{
 				Type: types.TypeURL,
 				Keys: map[string]string{"url": link},
+			})
+		}
+	}
+	// Links the page's scripts render from Markdown in its text, and what
+	// it leaves to them, which the run's summary weighs for -browser.
+	md, un := webextract.ReadUnrendered(body, base)
+	if un.Any() {
+		payload, _ := json.Marshal(map[string]any{"url": raw, "unrendered": un})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "meta",
+			Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
+	for _, link := range md {
+		if meta.EmitCount >= maxPerPage {
+			break
+		}
+		if linked[link] || link == raw || !webextract.SameOrigin(raw, link) {
+			continue
+		}
+		payload, _ := json.Marshal(map[string]string{"url": link, "via": "markdown"})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "url",
+			Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+		if webextract.Hintable(link) {
+			meta.NextHints = append(meta.NextHints, types.Seed{
+				Type: types.TypeURL, Keys: map[string]string{"url": link},
 			})
 		}
 	}

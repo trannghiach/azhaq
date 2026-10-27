@@ -30,7 +30,11 @@ type MapEntry struct {
 	Body     []string // names scripts send in request bodies
 	Ops      []Op     // per method: what is sent, from API descriptions and scripts
 	Forms    []MapForm
+	Found    []webextract.Site // where scripts name the route, calls first
 }
+
+// maxFound caps the places a row lists for where scripts name it.
+const maxFound = 3
 
 // Op is one operation on a route: a method and the names it sends.
 type Op struct {
@@ -73,6 +77,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	}
 	apiOps := apiOperations(obs)
 	probes := pathProbes(obs)
+	finds := findings(obs)
 	out := make([]MapEntry, 0, len(ents))
 	for _, e := range ents {
 		rows := ownObs(e, byEnt[e.ID])
@@ -91,6 +96,17 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			if webextract.Templated(e.Key) {
 				m.Template = webextract.Template(e.Key)
 			}
+			f := finds[e.Key]
+			if webextract.VersionPrefix(e.Key) && f.stringsOnly() && (m.Coverage == "catchall" || m.Coverage == "gone") {
+				continue // /v3 in a script: a prefix routes are built on, and nothing answers at it
+			}
+			if f.scriptsOnly() && (m.Role == "page" || m.Role == "api") && m.Coverage == "gone" && len(apiOps[e.Key].methods) == 0 {
+				// Named in a script with no method to go by: a GET that
+				// answers 404 says nothing of a route scripts may POST to.
+				m.Coverage = "hint"
+				m.Proof = fmt.Sprintf("GET answers %d; found only in scripts, method unknown", m.Status)
+			}
+			m.Found = f.sites
 			if op, ok := apiOps[e.Key]; ok {
 				m.Methods = op.methods
 				m.Params = op.params
@@ -654,6 +670,79 @@ type apiOp struct {
 	params  []string
 	body    []string
 	ops     []Op
+}
+
+// finding is how a URL was found: named in a script's strings or in a
+// JSON document, called by a script, or anything else (a link, a form,
+// an archive, an API description, a wordlist, the browser); and where
+// scripts name it.
+type finding struct {
+	strs, calls, other bool
+	sites              []webextract.Site
+}
+
+// scriptsOnly: only scripts name or call it.
+func (f finding) scriptsOnly() bool { return (f.strs || f.calls) && !f.other }
+
+// stringsOnly: only strings name it, nothing calls it.
+func (f finding) stringsOnly() bool { return f.strs && !f.calls && !f.other }
+
+// findings indexes how each URL was found, with up to maxFound places
+// scripts name it, calls first.
+func findings(obs []types.StoredObservation) map[string]finding {
+	out := map[string]finding{}
+	strSites := map[string][]webextract.Site{}
+	for _, o := range obs {
+		if o.Kind != "url" {
+			continue
+		}
+		var p struct {
+			URL     string            `json:"url"`
+			Via     string            `json:"via"`
+			FoundIn []webextract.Site `json:"found_in"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" {
+			continue
+		}
+		u, err := normalize.URL(p.URL)
+		if err != nil {
+			continue
+		}
+		f := out[u]
+		switch {
+		case o.Collector == "azhaq-js" && p.Via == "js-call":
+			f.calls = true
+			f.sites = addSites(f.sites, p.FoundIn)
+		case o.Collector == "azhaq-js" && p.Via == "js", o.Collector == "azhaq-crawl" && p.Via == "json":
+			f.strs = true
+			strSites[u] = addSites(strSites[u], p.FoundIn)
+		default:
+			f.other = true
+		}
+		out[u] = f
+	}
+	for u, sites := range strSites {
+		f := out[u]
+		f.sites = addSites(f.sites, sites)
+		out[u] = f
+	}
+	return out
+}
+
+func addSites(xs, ys []webextract.Site) []webextract.Site {
+	for _, y := range ys {
+		dup := false
+		for _, x := range xs {
+			if x.Script == y.Script && x.Source == y.Source && x.Line == y.Line && x.Col == y.Col {
+				dup = true
+				break
+			}
+		}
+		if !dup && len(xs) < maxFound {
+			xs = append(xs, y)
+		}
+	}
+	return xs
 }
 
 // pathProbes indexes wordlist hits by the URL they probed. They are stored

@@ -49,6 +49,49 @@ func TestJunkURLPayloads(t *testing.T) {
 	}
 }
 
+func TestJunkURLDotSegments(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"http://ginandjuice.shop/..":     true, // an archive kept it as written
+		"http://a.test/a/./b":            true,
+		"http://a.test/a/%2e%2e/b":       true,
+		"http://a.test/.well-known/csaf": false,
+		"http://a.test/a/b.c/d":          false,
+		"http://a.test/..x/y":            false,
+	} {
+		if got := JunkURL(raw); got != want {
+			t.Errorf("JunkURL(%s) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
+func TestStringNoise(t *testing.T) {
+	for p, want := range map[string]bool{
+		// Cut out of a parser table or a minified bundle.
+		"/pQ": true, "/SQ": true, "/A": true, "/aB/c": true, "http://a.test/Xy": true,
+		// A package named after its owner.
+		"/juice-shop/juice-shop": true, "/lodash/lodash?x=1": true,
+		// Short routes, and anything with a longer segment.
+		"/v1": false, "/v3": false, "/api": false, "/me": false, "/id": false, "/go": false,
+		"/en/us": false, "/s/1": false, "/api/Q": false, "/Users": false, "/IO/stream": false,
+		"/admin/users": false, "/a/a": false, "/": false, "/api/api/v1": false,
+	} {
+		if got := StringNoise(p); got != want {
+			t.Errorf("StringNoise(%s) = %v, want %v", p, got, want)
+		}
+	}
+}
+
+func TestVersionPrefix(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"http://a.test/v3": true, "http://a.test/v1/": true, "http://a.test/api/v2": true, "http://a.test/V2.1": true,
+		"http://a.test/v3/users": false, "http://a.test/api": false, "http://a.test/vue": false, "http://a.test/docs/v2": false,
+	} {
+		if got := VersionPrefix(raw); got != want {
+			t.Errorf("VersionPrefix(%s) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
 func TestPayloadKeepsLegitimateURLs(t *testing.T) {
 	for _, raw := range []string{
 		"http://a.test/loader.js?onload=init",

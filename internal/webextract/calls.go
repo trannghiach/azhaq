@@ -15,11 +15,19 @@ import (
 // Paths keep the parts known only at run time as {name} placeholders:
 // `${this.host}/${e.id}` in a service whose host is …+`/api/Cards` is
 // /api/Cards/{id}.
+//
+// A request made inside a function that takes the URL as a parameter is
+// read where the function is called, one level deep:
+//
+//	async function logQuery(url,params){await fetch(url,{method:"post",…})}
+//	logQuery('/logger',config.params) → POST /logger
 type Call struct {
-	Method string
+	Method string   // "" when only a value known at run time says
 	Path   string   // starts with / (the app's origin), or an absolute URL
 	Query  []string // query parameter names
 	Body   []string // field names of an object literal body
+	At     int      // where the call starts in the script
+	End    int      // and where it ends
 }
 
 var (
@@ -27,6 +35,9 @@ var (
 	clientCall = regexp.MustCompile(`\.(get|post|put|patch|delete|head)\s*\(`)
 	fetchCall  = regexp.MustCompile(`(?:^|[^\w$.])fetch\s*\(`)
 	xhrOpen    = regexp.MustCompile(`\.open\s*\(\s*["'\x60](GET|POST|PUT|PATCH|DELETE|HEAD)["'\x60]\s*,`)
+	// ajaxCall: $.ajax({url,type,data}), axios({url,method,data}),
+	// axios.request(…), and their (url, settings) forms.
+	ajaxCall   = regexp.MustCompile(`(?:^|[^\w$.])(?:(?:\$|jQuery)\s*\.\s*ajax|axios(?:\s*\.\s*request)?)\s*\(`)
 	methodOpt  = regexp.MustCompile(`(?i)\bmethod\s*:\s*["'\x60](get|post|put|patch|delete|head)["'\x60]`)
 	identChain = regexp.MustCompile(`^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*$`)
 	// originName: a variable that holds a scheme and host, not a path.
@@ -54,9 +65,43 @@ var relPath = regexp.MustCompile(`^[\w~-][\w.~%{}@!$&'*+,;=:-]*(?:/[\w.~%{}@!$&'
 
 func calls(script string, relative bool) []Call {
 	var out []Call
-	add := func(c Call, ok bool) {
-		if ok && len(out) < maxCalls {
-			out = append(out, c)
+	var wraps []wrapper
+	partial := map[int][]int{} // wrapper → the calls read inside it
+	names := map[string]bool{} // function name → worth following
+	tries := 0
+	add := func(c Call, ok bool, at, end int) int {
+		if !ok || len(out) >= maxCalls {
+			return -1
+		}
+		c.At, c.End = at, end
+		out = append(out, c)
+		return len(out) - 1
+	}
+	// wrap remembers the function around a request when the request's URL
+	// ends with one of the function's parameters. direct is the call read
+	// from the request alone, if any: fetch(API+path) is POST /api/v2 for
+	// lack of the path.
+	wrap := func(pos int, url string, sh shape, direct int) {
+		if _, _, ok := urlParam(url); !ok || len(wraps) >= maxWrappers || tries >= maxWrapperTries {
+			return
+		}
+		tries++
+		w, ok := wrapperOf(script, pos, url, sh, names)
+		if !ok {
+			return
+		}
+		i := len(wraps)
+		for j, x := range wraps {
+			if x.name == w.name && x.dotted == w.dotted && x.urlArg == w.urlArg && x.method == w.method {
+				i = j // the helper's calls are read once per method it sends
+				break
+			}
+		}
+		if i == len(wraps) {
+			wraps = append(wraps, w)
+		}
+		if direct >= 0 {
+			partial[i] = append(partial[i], direct)
 		}
 	}
 	for _, m := range clientCall.FindAllStringSubmatchIndex(script, -1) {
@@ -65,6 +110,7 @@ func calls(script string, relative bool) []Call {
 		if len(args) == 0 {
 			continue
 		}
+		at, end := receiverStart(script, m[0]), closeParen(script, m[1]-1)+1
 		// An HTTP client may have a base URL of its own: only fetch and
 		// XMLHttpRequest resolve a relative path against the page.
 		c, ok := callOf(script, m[0], method, args[0], false)
@@ -87,13 +133,23 @@ func calls(script string, relative bool) []Call {
 				c.Query = append(c.Query, paramsOption(opts)...)
 			}
 		}
-		add(c, ok)
+		direct := add(c, ok, at, end)
+		sh := shape{method: method}
+		if len(args) > 1 {
+			switch method {
+			case "POST", "PUT", "PATCH":
+				sh.bodyEx = args[1]
+			}
+		}
+		wrap(m[0], args[0], sh, direct)
 	}
 	for _, m := range fetchCall.FindAllStringIndex(script, -1) {
 		args := callArgs(script, m[1]-1)
 		if len(args) == 0 {
 			continue
 		}
+		at := m[0] + strings.Index(script[m[0]:m[1]], "fetch")
+		end := closeParen(script, m[1]-1) + 1
 		method := "GET"
 		var body []string
 		if len(args) > 1 {
@@ -104,12 +160,74 @@ func calls(script string, relative bool) []Call {
 		}
 		c, ok := callOf(script, m[0], method, args[0], relative)
 		c.Body = body
-		add(c, ok)
+		direct := add(c, ok, at, end)
+		sh := shape{method: "GET"}
+		if len(args) > 1 {
+			sh = settingsShape(args[1], "body")
+		}
+		wrap(m[0], args[0], sh, direct)
 	}
 	for _, m := range xhrOpen.FindAllStringSubmatchIndex(script, -1) {
 		rest := topExpr(script[m[1]:])
+		at := receiverStart(script, m[0])
+		end := m[1] + len(rest)
+		if e := closeParen(script, strings.IndexByte(script[m[0]:], '(')+m[0]); e > 0 {
+			end = e + 1
+		}
 		c, ok := callOf(script, m[0], script[m[2]:m[3]], rest, relative)
-		add(c, ok)
+		wrap(m[0], rest, shape{method: script[m[2]:m[3]]}, add(c, ok, at, end))
+	}
+	var ajax [][]int
+	if strings.Contains(script, "ajax") || strings.Contains(script, "axios") {
+		ajax = ajaxCall.FindAllStringIndex(script, -1) // most bundles have neither
+	}
+	for _, m := range ajax {
+		args := callArgs(script, m[1]-1)
+		if len(args) == 0 {
+			continue
+		}
+		at := m[0]
+		if c := script[at]; c != '$' && c != 'j' && c != 'a' {
+			at++ // the character before the call
+		}
+		end := closeParen(script, m[1]-1) + 1
+		url, settings := strings.TrimSpace(args[0]), ""
+		if strings.HasPrefix(url, "{") {
+			url, settings = optionExpr(url, "url"), url
+		} else if len(args) > 1 {
+			settings = args[1]
+		}
+		if url == "" {
+			continue
+		}
+		sh := shape{method: "GET"}
+		if strings.TrimSpace(settings) != "" {
+			sh = settingsShape(settings, "data")
+		}
+		c, ok := callOf(script, m[0], sh.method, url, relative)
+		c.Body, c.Query = sh.body, append(c.Query, sh.query...)
+		wrap(m[0], url, sh, add(c, ok, at, end))
+	}
+	drop := map[int]bool{}
+	for i, w := range wraps {
+		found := w.calls(script, relative)
+		if len(found) > 0 {
+			for _, d := range partial[i] {
+				drop[d] = true // the callers say what the helper alone could not
+			}
+		}
+		for _, c := range found {
+			add(c, true, c.At, c.End)
+		}
+	}
+	if len(drop) > 0 {
+		kept := out[:0]
+		for i, c := range out {
+			if !drop[i] {
+				kept = append(kept, c)
+			}
+		}
+		out = kept
 	}
 	return out
 }
@@ -122,6 +240,11 @@ func callOf(script string, pos int, method, arg string, relative bool) (Call, bo
 	if !ok {
 		return Call{}, false
 	}
+	return callFrom(path, method, relative)
+}
+
+// callFrom is the call to a URL worked out from a script.
+func callFrom(path, method string, relative bool) (Call, bool) {
 	path, query := splitQuery(path)
 	if relative && relPath.MatchString(path) && !strings.HasPrefix(path, "{") {
 		return Call{Method: method, Path: path, Query: query}, true

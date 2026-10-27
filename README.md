@@ -183,8 +183,8 @@ Workers: a run started with `-serve ADDR` lends its tasks to `azhaq worker -serv
 | Collector | Collects |
 | --- | --- |
 | `azhaq-http` | status, redirect chain, title, technologies, favicon hash, length, words, lines, time, the address connected to, headers, cookie names, JSON field names; flags catch-all answers |
-| `azhaq-crawl` | same-origin links, forms (with script-driven ones), parameter names, links inside JSON answers |
-| `azhaq-js` | the requests scripts make (method, path, query names, body fields, worked out from literals, template literals and assigned variables), other routes and links in scripts, chunks and source maps, joined constants, GraphQL operation names, credentials |
+| `azhaq-crawl` | same-origin links, forms (with script-driven ones), parameter names, links inside JSON answers, links written in Markdown that the page renders in the browser |
+| `azhaq-js` | the requests scripts make (method, path, query names, body fields, worked out from literals, template literals and assigned variables, and through a helper that takes the URL), with the script, line and code each was found in, other routes and links in scripts, chunks and source maps, joined constants, GraphQL operation names, credentials |
 | `azhaq-openapi` | OpenAPI 3 and Swagger 2 documents (JSON, YAML, embedded in Swagger UI), each operation's parameters by location, body fields, security; a Swagger UI page's document even when its URL is built at run time; asks the parameterless GETs |
 | `azhaq-graphql` | GraphQL endpoints; with `-graphql`, the schema by introspection |
 | `azhaq-paths` | the built-in paths: robots.txt, sitemaps, API description locations, … |

@@ -235,13 +235,32 @@ func ScriptSrcs(body []byte, base *url.URL) []string {
 
 func InlineScripts(body []byte) []string {
 	var out []string
+	for _, s := range InlineScriptsAt(body) {
+		out = append(out, s.Text)
+	}
+	return out
+}
+
+// Inline is a script inside a page, and the line and column of the page
+// it starts at.
+type Inline struct {
+	Text      string
+	Line, Col int
+}
+
+// InlineScriptsAt is InlineScripts with where each script starts.
+func InlineScriptsAt(body []byte) []Inline {
+	var out []Inline
+	var loc *Locator
 	z := html.NewTokenizer(bytes.NewReader(body))
 	inScript := false
+	off := 0 // where the token starts: the raw tokens follow each other
 	for {
 		tt := z.Next()
 		if tt == html.ErrorToken {
 			break
 		}
+		n := len(z.Raw())
 		switch tt {
 		case html.StartTagToken:
 			tok := z.Token()
@@ -254,9 +273,14 @@ func InlineScripts(body []byte) []string {
 			}
 		case html.TextToken:
 			if inScript {
-				out = append(out, string(z.Text()))
+				if loc == nil {
+					loc = NewLocator(string(body))
+				}
+				line, col := loc.LineCol(off)
+				out = append(out, Inline{Text: string(z.Text()), Line: line, Col: col})
 			}
 		}
+		off += n
 	}
 	return out
 }

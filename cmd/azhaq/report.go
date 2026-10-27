@@ -283,6 +283,9 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Results = len(engine.GroupTemplates(rows))
 	rep.what = "map rows"
 	rep.Counts = counts
+	if hint := engine.BrowserHint(rows, obs); hint != "" {
+		rep.Next = append(rep.Next, hint)
+	}
 	if path == "" {
 		return
 	}
@@ -319,6 +322,7 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("body", r.Body, len(r.Body) > 0)
 	set("ops", r.Ops, len(r.Ops) > 0)
 	set("forms", r.Forms, len(r.Forms) > 0)
+	set("found_in", r.Found, len(r.Found) > 0)
 	set("template", r.Template, r.Template != "")
 	set("count", r.Count, r.Count > 1)
 	set("folded", r.Folded, r.Folded > 0)
