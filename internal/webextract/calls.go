@@ -80,7 +80,8 @@ func calls(script string, relative bool) []Call {
 	// wrap remembers the function around a request when the request's URL
 	// ends with one of the function's parameters. direct is the call read
 	// from the request alone, if any: fetch(API+path) is POST /api/v2 for
-	// lack of the path.
+	// lack of the path, while fetch("/api/accounts/"+id) is a route of its
+	// own, /api/accounts/{id}, whatever the callers pass.
 	wrap := func(pos int, url string, sh shape, direct int) {
 		if _, _, ok := urlParam(url); !ok || len(wraps) >= maxWrappers || tries >= maxWrapperTries {
 			return
@@ -92,15 +93,15 @@ func calls(script string, relative bool) []Call {
 		}
 		i := len(wraps)
 		for j, x := range wraps {
-			if x.name == w.name && x.dotted == w.dotted && x.urlArg == w.urlArg && x.method == w.method {
-				i = j // the helper's calls are read once per method it sends
+			if x.same(w) {
+				i = j // two requests alike in one helper: its calls are read once
 				break
 			}
 		}
 		if i == len(wraps) {
 			wraps = append(wraps, w)
 		}
-		if direct >= 0 {
+		if direct >= 0 && truncated(script, pos, url) {
 			partial[i] = append(partial[i], direct)
 		}
 	}
@@ -155,16 +156,19 @@ func calls(script string, relative bool) []Call {
 		if len(args) > 1 {
 			if mm := methodOpt.FindStringSubmatch(args[1]); mm != nil {
 				method = strings.ToUpper(mm[1])
+			} else if !strings.HasPrefix(strings.TrimSpace(args[1]), "{") {
+				method = "" // fetch(url, opts): the options say, at run time
 			}
 			body = bodyOption(args[1])
 		}
 		c, ok := callOf(script, m[0], method, args[0], relative)
 		c.Body = body
 		direct := add(c, ok, at, end)
-		sh := shape{method: "GET"}
+		sh := shape{method: "GET", bodyKey: "body"}
 		if len(args) > 1 {
 			sh = settingsShape(args[1], "body")
 		}
+		sh.pageRel = true
 		wrap(m[0], args[0], sh, direct)
 	}
 	for _, m := range xhrOpen.FindAllStringSubmatchIndex(script, -1) {
@@ -175,7 +179,7 @@ func calls(script string, relative bool) []Call {
 			end = e + 1
 		}
 		c, ok := callOf(script, m[0], script[m[2]:m[3]], rest, relative)
-		wrap(m[0], rest, shape{method: script[m[2]:m[3]]}, add(c, ok, at, end))
+		wrap(m[0], rest, shape{method: script[m[2]:m[3]], pageRel: true}, add(c, ok, at, end))
 	}
 	var ajax [][]int
 	if strings.Contains(script, "ajax") || strings.Contains(script, "axios") {
@@ -200,12 +204,19 @@ func calls(script string, relative bool) []Call {
 		if url == "" {
 			continue
 		}
-		sh := shape{method: "GET"}
+		sh := shape{method: "GET", bodyKey: "data"}
 		if strings.TrimSpace(settings) != "" {
 			sh = settingsShape(settings, "data")
 		}
+		// jQuery sends a GET's data as its query string; axios sends data
+		// as the body and params as the query.
+		sh.dataQuery = strings.Contains(script[m[0]:m[1]], "ajax")
+		sh.pageRel = true
 		c, ok := callOf(script, m[0], sh.method, url, relative)
 		c.Body, c.Query = sh.body, append(c.Query, sh.query...)
+		if sh.dataQuery && (c.Method == "GET" || c.Method == "HEAD") {
+			c.Query, c.Body = append(c.Query, c.Body...), nil
+		}
 		wrap(m[0], url, sh, add(c, ok, at, end))
 	}
 	drop := map[int]bool{}
@@ -230,6 +241,15 @@ func calls(script string, relative bool) []Call {
 		out = kept
 	}
 	return out
+}
+
+// truncated: the URL argument at pos evaluates to what comes before an
+// unknown part with no placeholder for it, "/api" for "/api"+path, not
+// "/api/accounts/{id}" for "/api/accounts/"+id.
+func truncated(script string, pos int, arg string) bool {
+	ev := evaluator{src: script}
+	v, ok := ev.eval(arg, pos, 0)
+	return ok && !strings.HasSuffix(v, "}")
 }
 
 // callOf evaluates the URL argument of a call at pos; relative allows a

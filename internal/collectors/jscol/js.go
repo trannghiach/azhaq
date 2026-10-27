@@ -103,9 +103,11 @@ type script struct {
 // an inline script's lines are the page's. A call is shown as written,
 // anything else with the code around it.
 func (s script) site(loc *webextract.Locator, start, end int, call bool) webextract.Site {
-	st := loc.Site(s.url.String(), start, end)
+	var st webextract.Site
 	if call {
 		st = loc.CallSite(s.url.String(), start, end)
+	} else {
+		st = loc.Site(s.url.String(), start, end)
 	}
 	if s.inline {
 		st.Inline = true
@@ -123,15 +125,19 @@ func (s script) site(loc *webextract.Locator, start, end int, call bool) webextr
 // sites keeps a few places per route.
 type sites map[string][]webextract.Site
 
-func (m sites) add(k string, st webextract.Site) {
+// add keeps where start..end of s names route k, until k has maxSites:
+// past that the place is not worked out at all.
+func (m sites) add(k string, s script, loc *webextract.Locator, start, end int, call bool) {
+	if len(m[k]) >= maxSites {
+		return
+	}
+	st := s.site(loc, start, end, call)
 	for _, x := range m[k] {
 		if x.Script == st.Script && x.Source == st.Source && x.Line == st.Line && x.Col == st.Col {
 			return
 		}
 	}
-	if len(m[k]) < maxSites {
-		m[k] = append(m[k], st)
-	}
+	m[k] = append(m[k], st)
 }
 
 // sourceMap is what a map says about the code behind a bundle.
@@ -215,7 +221,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		for _, r := range webextract.JSURLRefs(s.body, s.url) {
 			if webextract.SameOrigin(raw, r.URL) && r.URL != raw {
 				found = append(found, r.URL)
-				named.add(webextract.RouteKey(r.URL), s.site(loc, r.Start, r.End, false))
+				named.add(webextract.RouteKey(r.URL), s, loc, r.Start, r.End, false)
 			}
 		}
 		// Paths joined from constants are relative to the app's root,
@@ -227,7 +233,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			if link, err := normalize.URL(p); err == nil && webextract.SameOrigin(raw, link) && link != raw {
 				found = append(found, link)
-				named.add(webextract.RouteKey(link), s.site(loc, r.Start, r.End, false))
+				named.add(webextract.RouteKey(link), s, loc, r.Start, r.End, false)
 			}
 		}
 		var cs []webextract.Call
@@ -247,7 +253,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		for _, c := range cs {
 			if k, ok := callRoute(c, origin, raw); ok {
-				called.add(k, s.site(loc, c.At, c.End, true))
+				called.add(k, s, loc, c.At, c.End, true)
 			}
 		}
 		calls = append(calls, cs...)

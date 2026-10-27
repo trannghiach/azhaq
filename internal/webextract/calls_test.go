@@ -61,12 +61,12 @@ func TestCalls(t *testing.T) {
 
 func TestCallsFetchAndXHR(t *testing.T) {
 	js := `const API_BASE="/api/v2";fetch(API_BASE+"/orders",{method:"POST",body:JSON.stringify({sku:s,qty:n})});` +
-		`x.open("PUT","/api/profile/"+id);fetch("/health")`
+		`x.open("PUT","/api/profile/"+id);fetch("/health");fetch("/api/login",opts);fetch("/api/logout",Object.assign({},o,{method:"POST"}))`
 	var lines []string
 	for _, c := range MergeCalls(Calls(js)) {
 		lines = append(lines, c.Method+" "+c.Path+" "+strings.Join(c.Body, ","))
 	}
-	want := []string{"PUT /api/profile/{id} ", "POST /api/v2/orders qty,sku", "GET /health "}
+	want := []string{" /api/login ", "POST /api/logout ", "PUT /api/profile/{id} ", "POST /api/v2/orders qty,sku", "GET /health "}
 	if !reflect.DeepEqual(lines, want) {
 		t.Fatalf("%q", lines)
 	}
@@ -191,5 +191,139 @@ func TestPageCallsLeaveClientsWithABase(t *testing.T) {
 	got := PageCalls(`api.get("users/list"); fetch("httpStatus/check.jsp")`)
 	if len(got) != 1 || got[0].Path != "httpStatus/check.jsp" {
 		t.Fatalf("PageCalls = %+v", got)
+	}
+	// Through a helper, as without one: a client keeps its base.
+	got = PageCalls(`function loadList(p){ return api.get(p) } loadList("users/list");
+	function loadPage(p){ return fetch(p) } loadPage("status/check.jsp")`)
+	if lines := callLines(got); strings.Join(lines, "|") != "GET status/check.jsp" {
+		t.Fatalf("PageCalls through helpers = %q", lines)
+	}
+}
+
+func callLines(cs []Call) []string {
+	var lines []string
+	for _, c := range MergeCalls(cs) {
+		line := c.Method + " " + c.Path
+		if len(c.Body) > 0 {
+			line += " body " + strings.Join(c.Body, ",")
+		}
+		if len(c.Query) > 0 {
+			line += " query " + strings.Join(c.Query, ",")
+		}
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// Two helpers of one name cannot be told apart where they are called:
+// neither is followed, so no path gets the other's method or prefix.
+func TestCallsWrapperNamesDeclaredTwice(t *testing.T) {
+	for name, js := range map[string]string{
+		"options from the caller": `const usersApi = { request(path, opts) { return fetch("/api/users" + path, opts) } };
+const ordersApi = { request(path, opts) { return fetch("/api/orders" + path, opts) } };
+usersApi.request("/me");
+ordersApi.request("/42", {method: "DELETE"});`,
+		"methods of their own": `const usersApi = { loadAll(path) { return fetch("/api/users" + path) } };
+const ordersApi = { loadAll(path) { return fetch("/api/orders" + path, {method: "POST"}) } };
+usersApi.loadAll("/me");
+ordersApi.loadAll("/new");`,
+	} {
+		lines := callLines(Calls(js))
+		for _, l := range lines {
+			if strings.Contains(l, "/api/users/") || strings.Contains(l, "/api/orders/") {
+				t.Errorf("%s: %q", name, lines)
+				break
+			}
+		}
+	}
+}
+
+func TestCallsWrapperDefaults(t *testing.T) {
+	js := `async function apiCall(path, method = "POST", data = {}) {
+  const r = await fetch("/api" + path, {method, body: JSON.stringify(data)});
+  return r.json();
+}
+apiCall("/newsletter/subscribe");
+apiCall("/items", "GET");
+apiCall("/newsletter/unsubscribe", undefined, {email: e});
+function request(url, opts = {method: "PUT", body: {token: t}}) { return fetch(url, opts) }
+request("/api/feedback");
+request("/api/feedback/7", {method: "DELETE"});
+function send(url, method = DEFAULT_METHOD) { return fetch(url, {method}) }
+send("/api/opaque");
+function plain(url, method) { return fetch(url, {method}) }
+plain("/api/plain");`
+	want := []string{
+		"PUT /api/feedback body token",
+		"DELETE /api/feedback/7",
+		"GET /api/items",
+		"POST /api/newsletter/subscribe",
+		"POST /api/newsletter/unsubscribe body email", // undefined takes the default
+		" /api/opaque",                                // a default the script works out at run time
+		"GET /api/plain",                              // undefined: fetch's default
+	}
+	if lines := callLines(Calls(js)); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", lines, want)
+	}
+}
+
+// A helper's request is a route of its own when it has a placeholder for
+// the parameter: the callers' paths are more of it, not a replacement.
+func TestCallsWrapperKeepsTheTemplate(t *testing.T) {
+	js := `function getUser(id) { return fetch("/api/accounts/" + id) }
+class UserService { findUser(id) { return this.http.get("/api/users/" + id) } }
+getUser(user.id); getUser("me");
+svc.findUser(user.id); svc.findUser("me");`
+	want := []string{"GET /api/accounts/me", "GET /api/accounts/{id}", "GET /api/users/me", "GET /api/users/{id}"}
+	if lines := callLines(Calls(js)); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", lines, want)
+	}
+}
+
+func TestCallsWrapperReassignsItsURL(t *testing.T) {
+	// url = API_ROOT + url: the callers' paths go under the prefix.
+	js := `const API_ROOT = "/api/v1";
+async function request(url, options = {}) {
+  url = API_ROOT + url;
+  const res = await fetch(url, options);
+  return res.json();
+}
+request("/users");
+request("/users/7", {method: "DELETE"});`
+	want := []string{"GET /api/v1/users", "DELETE /api/v1/users/7"}
+	if lines := callLines(Calls(js)); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", lines, want)
+	}
+	// Anything else done to it: the callers' paths are not what is sent.
+	for _, js := range []string{
+		`function load(url) { url = url.trim(); return fetch(url, {method: "POST"}) } load("/x/one")`,
+		`function load(url) { url += "/all"; return fetch(url, {method: "POST"}) } load("/x/one")`,
+		`function load(url) { url = "/a" + url; url = "/b" + url; return fetch(url, {method: "POST"}) } load("/x/one")`,
+	} {
+		for _, l := range callLines(Calls(js)) {
+			if strings.Contains(l, "/x/one") {
+				t.Errorf("%s: %s", js, l)
+			}
+		}
+	}
+}
+
+func TestCallsJQueryData(t *testing.T) {
+	js := `$.ajax({url: "/search", data: {q: term, page: 2}});
+$.ajax({url: "/login", type: "POST", data: {user: u, pass: p}});
+function find(url, data) { return $.ajax({url: url, data: data}) }
+find("/lookup", {name: n});
+axios({url: "/api/report", data: {range: r}});`
+	want := []string{"GET /api/report body range", "POST /login body pass,user", "GET /lookup query name", "GET /search query page,q"}
+	if lines := callLines(Calls(js)); strings.Join(lines, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", lines, want)
+	}
+}
+
+func TestOriginOnlyShortTerms(t *testing.T) {
+	for _, ex := range []string{"`", "`+x", "a+`"} {
+		if originOnly(ex) {
+			t.Errorf("originOnly(%q)", ex)
+		}
 	}
 }

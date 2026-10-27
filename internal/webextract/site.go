@@ -1,6 +1,7 @@
 package webextract
 
 import (
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,22 +82,27 @@ func (l *Locator) Snippet(start, end int) string {
 	if end-start >= MaxSnippet {
 		return l.Span(start, end)
 	}
-	lineStart := strings.LastIndexByte(src[:start], '\n') + 1
-	lineEnd := len(src)
-	if i := strings.IndexByte(src[end:], '\n'); i >= 0 {
+	// The line, as far as a snippet reaches: a bundle is one line of
+	// megabytes, and a script names thousands of routes.
+	lineStart := max(0, start-MaxSnippet)
+	if i := strings.LastIndexByte(src[lineStart:start], '\n'); i >= 0 {
+		lineStart += i + 1
+	}
+	lineEnd := min(len(src), end+MaxSnippet)
+	if i := strings.IndexByte(src[end:lineEnd], '\n'); i >= 0 {
 		lineEnd = end + i
 	}
 	room := MaxSnippet - (end - start)
 	from := max(lineStart, start-room/2)
 	to := min(lineEnd, end+(room-(start-from)))
 	from = max(lineStart, to-MaxSnippet) // the line ended: give the room to what comes before
-	for from < start && from > lineStart && isIdentByte(src[from-1]) && isIdentByte(src[from]) {
+	for from < start && from > 0 && isIdentByte(src[from-1]) && isIdentByte(src[from]) {
 		from++
 	}
-	for to > end && to < lineEnd && isIdentByte(src[to-1]) && isIdentByte(src[to]) {
+	for to > end && to < len(src) && isIdentByte(src[to-1]) && isIdentByte(src[to]) {
 		to--
 	}
-	return tidy(src[runeStart(src, from):runeStart(src, to)])
+	return redact(tidy(src[runeStart(src, from):runeStart(src, to)]))
 }
 
 // Span is the code from start to end as written, a call say, cut with
@@ -104,9 +110,62 @@ func (l *Locator) Snippet(start, end int) string {
 func (l *Locator) Span(start, end int) string {
 	start, end = l.clamp(start, end)
 	if end-start > MaxSnippet {
-		return tidy(l.src[start:runeStart(l.src, start+MaxSnippet-1)]) + "…"
+		return redact(tidy(l.src[start:runeStart(l.src, start+MaxSnippet-1)])) + "…"
 	}
-	return tidy(l.src[start:end])
+	return redact(tidy(l.src[start:end]))
+}
+
+var (
+	// credential shapes a snippet must not carry out of a signed-in
+	// page's inline script: JWTs, bearer tokens, secrets set to literals
+	// or in a query string, long hex and base64 runs.
+	jwtShape    = regexp.MustCompile(`eyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]*`)
+	bearerShape = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[\w.~+/=-]{8,}`)
+	secretSet   = regexp.MustCompile("(?i)((?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|csrf)[\\w-]*[\"']?\\s*[:=]\\s*[\"'`])[^\"'`\\s${}()]{4,}([\"'`])")
+	secretQuery = regexp.MustCompile("(?i)([?&](?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|key|sig)=)[^&\"'`\\s]{4,}")
+	longRun     = regexp.MustCompile(`[A-Za-z0-9+/_=-]{24,}`)
+	hexRun      = regexp.MustCompile(`^[0-9a-fA-F]{32,}$`)
+)
+
+// redact blanks the values of credential shapes in a snippet.
+func redact(s string) string {
+	s = jwtShape.ReplaceAllString(s, "[redacted]")
+	s = bearerShape.ReplaceAllString(s, "$1 [redacted]")
+	s = secretSet.ReplaceAllString(s, "$1[redacted]$2")
+	s = secretQuery.ReplaceAllString(s, "$1[redacted]")
+	return longRun.ReplaceAllStringFunc(s, func(r string) string {
+		// Piece by piece, so a route's path keeps its words.
+		pieces := strings.Split(r, "/")
+		for i, p := range pieces {
+			if keyLike(strings.TrimRight(p, "=")) {
+				pieces[i] = "[redacted]"
+			}
+		}
+		return strings.Join(pieces, "/")
+	})
+}
+
+// keyLike: a long hex number, or 24 letters and digits of both cases at
+// least: a key or a token, not a name.
+func keyLike(p string) bool {
+	if hexRun.MatchString(p) {
+		return strings.ContainsAny(p, "0123456789")
+	}
+	if len(p) < 24 {
+		return false
+	}
+	var lower, upper, digit bool
+	for i := 0; i < len(p); i++ {
+		switch c := p[i]; {
+		case c >= 'a' && c <= 'z':
+			lower = true
+		case c >= 'A' && c <= 'Z':
+			upper = true
+		case c >= '0' && c <= '9':
+			digit = true
+		}
+	}
+	return lower && upper && digit
 }
 
 func (l *Locator) clamp(start, end int) (int, int) {
