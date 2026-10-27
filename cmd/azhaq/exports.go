@@ -367,9 +367,18 @@ func (s *spec) addRoute(r engine.MapEntry) {
 			item["post"] = graphqlOperation(r, p, pathParams, sc, gql)
 		}
 	}
+	guessed := false
 	if len(ops) == 0 {
 		methods := r.Methods
-		if len(methods) == 0 {
+		switch {
+		case len(methods) > 0:
+		case r.Coverage == "skipped" && r.Role == "api" && u.RawQuery == "":
+			// An API route whose name says it changes something
+			// (/user/change-email), its method unknown: described as the
+			// POST it most likely is, and said to be a guess, never as a
+			// GET a tool would send.
+			methods, guessed = []string{"POST"}, true
+		default:
 			methods = []string{"GET"}
 		}
 		for _, m := range methods {
@@ -436,6 +445,9 @@ func (s *spec) addRoute(r engine.MapEntry) {
 		x := map[string]any{"source": source(o, r)}
 		if r.Coverage != "" {
 			x["coverage"] = r.Coverage
+		}
+		if guessed {
+			x["method"] = "guessed from the route's name; no caller said it"
 		}
 		if r.Status != 0 {
 			x["status"] = r.Status

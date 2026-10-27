@@ -217,7 +217,7 @@ A web page's answer is compared by status and title, and a JSON listing's also b
 | `graphml` | The graph for Gephi, yEd or Cytoscape. |
 | `secrets` | Credentials found in scripts: severity, kind, value, script, tab-separated. |
 
-**openapi** is a valid OpenAPI document whatever went into it: every operationId is unique (a served description's keep theirs; a repeat, such as `/blog` and `/blog/` both `get_blog`, gets `_2`, `_3` in path order), templates that differ only by their parameter names are one path (the served description's, else the first), every `{name}` in a path is a declared path parameter, a parameter is listed once, and component names OpenAPI does not allow are renamed with their references. A GraphQL endpoint is one `POST` taking `{"query","operationName","variables"}`, not a made-up REST mapping; its operations are in `x-azhaq-graphql`:
+**openapi** is a valid OpenAPI document whatever went into it: every operationId is unique (a served description's keep theirs; a repeat, such as `/blog` and `/blog/` both `get_blog`, gets `_2`, `_3` in path order), templates that differ only by their parameter names are one path (the served description's, else the first), every `{name}` in a path is a declared path parameter, a parameter is listed once, and component names OpenAPI does not allow are renamed with their references. A GraphQL endpoint is one `POST` taking `{"query","operationName","variables"}`, not a made-up REST mapping; its operations are in `x-azhaq-graphql`: An API route left alone for its name (`/user/change-email`) whose callers do not say the method is described as a POST, with `x-azhaq.method` saying it is a guess; never as a GET.
 
 ```json
 "x-azhaq-graphql":{"operations":[
