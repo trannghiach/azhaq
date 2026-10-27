@@ -59,6 +59,21 @@ func URL(raw string) (string, error) {
 	return out, nil
 }
 
+// ClientURL is URL for a view a single-page app's router draws: a hash
+// route (#/administration, #!/admin) keeps its fragment, the only part
+// that tells it from the app's front page. Any other fragment goes.
+func ClientURL(raw string) (string, error) {
+	base, frag, _ := strings.Cut(strings.TrimSpace(raw), "#")
+	n, err := URL(base)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(frag, "/") || strings.HasPrefix(frag, "!/") {
+		n += "#" + frag
+	}
+	return n, nil
+}
+
 func Hostname(h string) string {
 	h = strings.TrimSpace(strings.ToLower(h))
 	return strings.TrimSuffix(h, ".")
