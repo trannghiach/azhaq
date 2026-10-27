@@ -659,14 +659,21 @@ func followable(raw, next string) bool {
 		return true
 	}
 	a, b := hostOf(raw), hostOf(next)
-	if a == "" || b == "" || a == b {
+	if a == "" || b == "" {
 		return true
 	}
-	if net.ParseIP(a) != nil || net.ParseIP(b) != nil {
-		return false
+	return Site(a) == Site(b)
+}
+
+// Site is what a run without a scope keeps to from a host: its
+// registrable domain, or the host itself (an address, a name without one).
+// Chrome is held to the sites of the pages it is pointed at the same way.
+func Site(host string) string {
+	host = strings.ToLower(host)
+	if d := normalize.RegistrableDomain(host); d != "" {
+		return d
 	}
-	da, db := normalize.RegistrableDomain(a), normalize.RegistrableDomain(b)
-	return da != "" && da == db
+	return host
 }
 
 func hostOf(raw string) string {

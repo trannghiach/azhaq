@@ -1,6 +1,7 @@
 // Package browser drives a Chrome already installed on the machine
 // (headless, through the DevTools protocol): screenshots, and pages whose
-// content only exists once their scripts run. Nothing is downloaded.
+// content only exists once their scripts run. Nothing is downloaded, and
+// Chrome reaches only what the run may (scope.go).
 package browser
 
 import (
@@ -14,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
@@ -58,8 +60,18 @@ type Browser struct {
 	root   context.Context
 	sem    chan struct{}
 
+	guard *guard
+
 	mu      sync.Mutex
-	session map[string]string // sessionStorage a login left, for every tab
+	session map[string]string    // sessionStorage a login left, for every tab
+	sites   map[string]bool      // without a scope: the sites of the pages Chrome was pointed at
+	paid    map[cdp.FrameID]bool // tabs whose page their caller counted
+
+	refMu    sync.Mutex
+	held     map[refusal]bool // refused, not yet claimed by their tab
+	listed   map[string]bool  // refused URLs handed out to be listed
+	refused  int              // requests refused for where they went
+	unlisted bool             // more URLs were refused than are listed
 }
 
 func (b *Browser) start() error {
@@ -79,12 +91,21 @@ func (b *Browser) start() error {
 			b.Timeout = 30 * time.Second
 		}
 		b.sem = make(chan struct{}, b.Tabs)
+		if b.guard, err = newGuard(b.allowedHost); err != nil {
+			b.err = fmt.Errorf("starting Chrome: %w", err)
+			return
+		}
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.ExecPath(path),
 			chromedp.WindowSize(b.Width, b.Height),
 			chromedp.Flag("ignore-certificate-errors", true),
 			chromedp.Flag("disable-extensions", true),
 			chromedp.Flag("mute-audio", true),
+			// Every connection, loopback ones too, through the guard; and
+			// no WebRTC packet outside it.
+			chromedp.ProxyServer("socks5://"+b.guard.addr()),
+			chromedp.Flag("proxy-bypass-list", "<-loopback>"),
+			chromedp.Flag("force-webrtc-ip-handling-policy", "disable_non_proxied_udp"),
 		)
 		// The sandbox stays on: the pages are the targets'. Where the system
 		// refuses it (AppArmor on recent Ubuntu, some containers), the user
@@ -104,6 +125,12 @@ func (b *Browser) start() error {
 			}
 			return
 		}
+		// No page opens before every request is held to the scope.
+		if err := b.intercept(root); err != nil {
+			b.err = fmt.Errorf("starting Chrome: holding its requests to the scope: %w", err)
+			b.cancel()
+			return
+		}
 		b.root = root
 	})
 	return b.err
@@ -114,6 +141,9 @@ func (b *Browser) Close() {
 	if b.cancel != nil {
 		b.cancel()
 	}
+	if b.guard != nil {
+		b.guard.close()
+	}
 }
 
 // Page is what loading a URL gave.
@@ -122,7 +152,10 @@ type Page struct {
 	Title    string
 	PNG      []byte
 	HTML     string
-	Requests []string // every URL the page asked for while loading
+	Requests []string // every URL the page asked for while loading, sent or not
+	Blocked  []string // URLs it asked for outside the scope, to list (Reason); not sent
+	Left     string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
+	Capped   bool     // the request budget refused some of its requests
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -138,11 +171,14 @@ func (b *Browser) sessionScript() string {
 }
 
 // Load opens rawURL in a new tab, waits for the network to settle, and
-// returns the page; shot adds a screenshot of the viewport.
+// returns the page; shot adds a screenshot of the viewport. The caller has
+// counted the page itself against the budget (fetch.Spend); every other
+// request Chrome sends for it is counted here.
 func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, error) {
 	if err := b.start(); err != nil {
 		return Page{}, err
 	}
+	b.visit(rawURL)
 	select {
 	case b.sem <- struct{}{}:
 	case <-ctx.Done():
@@ -156,9 +192,11 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
 
-	// The page's requests, from the moment the tab opens.
+	// The page's requests, from the moment the tab opens, and the frames
+	// they came from: what Chrome refused for those is this page's.
 	var mu sync.Mutex
 	var reqs []string
+	frames := map[cdp.FrameID]bool{}
 	events := chromedp.Events(tab, network.RequestWillBeSent)
 	go func() {
 		for ev, err := range events {
@@ -167,6 +205,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 			}
 			mu.Lock()
 			reqs = append(reqs, ev.Request.URL)
+			frames[ev.FrameID] = true
 			mu.Unlock()
 		}
 	}()
@@ -174,6 +213,10 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	if _, err := chromedp.Call(tab, network.Enable, network.EnableParams{}); err != nil {
 		return p, err
 	}
+	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
+	b.sockets(tab, main)
+	b.prepay(main, true)
+	defer b.prepay(main, false)
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {
 			return p, err
@@ -205,6 +248,15 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)
+	frames[main] = true
+	mine := b.claim(frames)
 	mu.Unlock()
+	p.Blocked = b.list(mine)
+	for _, r := range mine {
+		p.Capped = p.Capped || r.budget
+		if r.frame == main && r.doc && !r.budget && p.Left == "" {
+			p.Left = r.url
+		}
+	}
 	return p, err
 }

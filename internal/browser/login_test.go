@@ -9,7 +9,44 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/chromedp/cdproto/cdp"
+
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 )
+
+// A failed sign-in names the host outside the scope it needed: where the
+// page went, or else a frame or a call it was refused; not a script or an
+// image.
+func TestOutside(t *testing.T) {
+	defer fetch.Reset()
+	const main = cdp.FrameID("MAIN")
+	failed := ErrLoginFailed.Error()
+	fetch.Allow = func(h string) bool { return h == "app.example.com" }
+	for _, c := range []struct {
+		rs   []refusal
+		want string
+	}{
+		{nil, failed},
+		{[]refusal{{host: "sso.example.net", frame: main, doc: true}}, "the sign-in went to sso.example.net, outside the scope: add it with -allow sso.example.net"},
+		{[]refusal{{host: "www.youtube.com", frame: "VIDEO", doc: true}}, failed + "; Chrome was not let reach www.youtube.com for it (outside the scope: add it with -allow www.youtube.com, if the sign-in needs it)"},
+		{[]refusal{{host: "cdn.example.net", frame: main}, {host: "auth.example.net", frame: main, sends: true}}, failed + "; Chrome was not let reach auth.example.net for it (outside the scope: add it with -allow auth.example.net, if the sign-in needs it)"},
+		{[]refusal{{host: "cdn.example.net", frame: main}}, failed},
+	} {
+		if err := outside("https://app.example.com/login", main, c.rs, ErrLoginFailed); err.Error() != c.want {
+			t.Errorf("%+v:\n got %s\nwant %s", c.rs, err, c.want)
+		}
+	}
+	if err := outside("https://app.example.com/login", main, []refusal{{budget: true}}, ErrLoginFailed); !errors.Is(err, neterr.ErrBudget) {
+		t.Errorf("budget: %v", err)
+	}
+	fetch.Allow = nil
+	want := "the sign-in went to sso.example.net, outside the site of app.example.com: name both with -allow example.com -allow sso.example.net"
+	if err := outside("https://app.example.com/login", main, []refusal{{host: "sso.example.net", frame: main, doc: true}}, ErrLoginFailed); err.Error() != want {
+		t.Errorf("no scope: %v", err)
+	}
+}
 
 func TestStoredToken(t *testing.T) {
 	jwt := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2ln"

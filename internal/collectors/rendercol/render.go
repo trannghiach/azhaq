@@ -15,6 +15,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
@@ -82,11 +83,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	c.count[u.Host]++
 	c.mu.Unlock()
 
-	if err := fetch.Spend(ctx); err != nil {
+	undo := func() {
 		c.mu.Lock()
 		delete(c.done, key)
 		c.count[u.Host]--
 		c.mu.Unlock()
+	}
+	if err := fetch.Spend(ctx); err != nil {
+		undo()
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}
 	load := raw
@@ -103,7 +107,23 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			c.mu.Unlock()
 		}
 	}
-	fetch.Count(max(0, len(p.Requests)-1)) // what the page fetched besides itself
+	if p.Capped {
+		// The budget refused some of what the page asked for: rendered
+		// again after azhaq resume.
+		undo()
+		return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
+	}
+	meta := types.RunMeta{Status: types.StatusOK}
+	if len(p.Blocked) > 0 {
+		payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
+	if p.Left != "" {
+		return meta, nil // redirected outside the scope: Chrome's error page, nothing of the target's
+	}
 	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
@@ -128,7 +148,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 	}
-	meta := types.RunMeta{Status: types.StatusOK}
 	for link, how := range seen {
 		role := webextract.ClassifyURL(link)
 		if role == "asset" || link == raw {

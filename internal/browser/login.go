@@ -12,8 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
+
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
 // Session is what signing in left in the browser.
@@ -24,6 +28,7 @@ type Session struct {
 	From    string   // where the token was, as storage.key
 	Storage []string // what localStorage and sessionStorage held: storage.key, value, storage.key, value…
 	Answers [][]byte // the JSON answers to the requests submitting the form sent (the login's own answer)
+	Blocked []string // URLs the sign-in asked for outside the scope, to list (Reason); not sent
 }
 
 // OnLogin, when set, is told of every session a login left: azhaq roles
@@ -113,10 +118,11 @@ var jwtRE = regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Z
 // pass, submits it, and returns the session the site set: its cookies, and
 // a JSON Web Token the page stored, if any. The browser keeps the session,
 // so pages it renders afterwards are signed in.
-func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Session, error) {
+func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Session, err error) {
 	if err := b.start(); err != nil {
 		return Session{}, err
 	}
+	b.visit(loginURL)
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
 	tab, cancelT := context.WithTimeout(tab, 90*time.Second)
@@ -128,13 +134,42 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 	if err := chromedp.Do(tab); err != nil {
 		return Session{}, err
 	}
+	// What Chrome refused for the sign-in's frames: a sign-in that went to
+	// an identity provider outside the scope fails, and says so.
+	var framesMu sync.Mutex
+	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
+	frames := map[cdp.FrameID]bool{main: true}
+	all := chromedp.Events(tab, network.RequestWillBeSent)
+	go func() {
+		for ev, err := range all {
+			if err != nil {
+				return
+			}
+			framesMu.Lock()
+			frames[ev.FrameID] = true
+			framesMu.Unlock()
+		}
+	}()
+	b.sockets(tab, main)
+	var mine []refusal
+	refused := func() []refusal {
+		framesMu.Lock()
+		mine = append(mine, b.claim(frames)...)
+		framesMu.Unlock()
+		return mine
+	}
+	defer func() {
+		if err != nil {
+			err = outside(loginURL, main, refused(), err)
+		}
+	}()
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {
 			return Session{}, err
 		}
 	}
 	nav, cancelNav := context.WithTimeout(tab, 20*time.Second)
-	err := chromedp.Do(nav, chromedp.Navigate(loginURL))
+	err = chromedp.Do(nav, chromedp.Navigate(loginURL))
 	cancelNav()
 	if errors.Is(err, context.DeadlineExceeded) && tab.Err() == nil {
 		err = nil
@@ -227,6 +262,7 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 	if s.URL == "" {
 		s.URL, _ = chromedp.Run(tab, chromedp.Location())
 	}
+	s.Blocked = b.list(refused())
 	jar, err := chromedp.Call(tab, network.GetCookies, network.GetCookiesParams{URLs: []string{loginURL, s.URL}})
 	if err != nil {
 		return s, err
@@ -268,6 +304,38 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 	}
 	b.mu.Unlock()
 	return s, nil
+}
+
+// outside explains a sign-in that failed where Chrome was refused. The
+// page going to a host outside the scope (an identity provider) is the
+// cause; a frame from there, or a call the page sent there, may be. The
+// budget running out is said as such.
+func outside(loginURL string, main cdp.FrameID, rs []refusal, err error) error {
+	var went, other string
+	for _, r := range rs {
+		switch {
+		case r.budget:
+			return fmt.Errorf("%w (Chrome was refused requests while signing in)", neterr.ErrBudget)
+		case r.doc && r.frame == main && went == "":
+			went = r.host
+		case (r.doc || r.sends) && other == "":
+			other = r.host
+		}
+	}
+	at := hostOf(loginURL)
+	fix := func(host string) string {
+		if fetch.Allow == nil {
+			return fmt.Sprintf("outside the site of %s: name both with -allow %s -allow %s", at, fetch.Site(at), host)
+		}
+		return "outside the scope: add it with -allow " + host
+	}
+	switch {
+	case went != "":
+		return fmt.Errorf("the sign-in went to %s, %s", went, fix(went))
+	case other != "":
+		return fmt.Errorf("%w; Chrome was not let reach %s for it (%s, if the sign-in needs it)", err, other, fix(other))
+	}
+	return err
 }
 
 // storedToken picks a JSON Web Token out of storage entries (key, value,
