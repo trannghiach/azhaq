@@ -127,11 +127,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	base, _ := url.Parse(raw)
-	if p.URL != "" && load == raw {
+	// Links and forms are the document's, where Chrome ended up: on a hash
+	// route (/#/basket) the app's front page, not the route's path.
+	base, _ := url.Parse(load)
+	if p.URL != "" {
 		if f, err := url.Parse(p.URL); err == nil {
 			base = f
 		}
+	}
+	if base != nil {
+		base.Fragment = ""
 	}
 	seen := map[string]string{} // URL → how it was seen
 	for _, r := range p.Requests {

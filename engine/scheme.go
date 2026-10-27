@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
@@ -20,8 +21,9 @@ import (
 // A run given https://host/ finds http://host/… URLs in archives and in
 // links: most often the same site, mapped twice at twice the cost. One
 // request to http://host/ decides. When it redirects to https on the same
-// host, serves the same front page, or nothing answers on port 80, the
-// http URLs are the https site's and are mapped as https. Otherwise
+// host, serves the same front page (and, behind a redirect, the same page
+// at the end of it), or nothing listens on port 80, the http URLs are the
+// https site's and are mapped as https. Otherwise
 // http://host/ is a service of its own, and its URLs stay as they are.
 // The other names of the target's domain (www., the apex) are asked the
 // same way: a site that serves https on one serves it on the others.
@@ -218,22 +220,87 @@ func foldedHTTP(key, coverage string, secured map[string]bool) bool {
 }
 
 // sameSite asks http://host/ once. A redirect to https on the same host,
-// the https front page again, or no answer at all make its URLs the https
-// site's; a request not sent (the budget, the scope) decides nothing, and
-// the URLs stay as they are.
+// the https front page again, or nothing listening on port 80 make its
+// URLs the https site's. A request not sent (the budget, the scope)
+// decides nothing, and the URLs stay as they are; so does an answer that
+// is slow or not HTTP: something listens there, maybe a service of its
+// own.
 func sameSite(ctx context.Context, c *http.Client, host string) bool {
 	plain, _, err := fetch.Do(ctx, c, "http://"+host+"/")
-	if err != nil {
-		return ctx.Err() == nil && !errors.Is(err, neterr.ErrBudget) && !errors.Is(err, neterr.ErrOutOfScope) && !errors.Is(err, neterr.ErrEndsSession)
+	if err != nil && dialTimeout(err) && ctx.Err() == nil {
+		// One connect timed out may be the network; two are a port that
+		// drops them. The first error is cached under the other key.
+		plain, _, err = fetch.Do(ctx, c, "http://"+host)
 	}
-	if plain.Status >= 300 && plain.Status < 400 && plain.Header != nil {
-		if to, err := url.Parse("http://" + host + "/"); err == nil {
-			if next, err := to.Parse(plain.Header.Get("Location")); err == nil && next.Scheme == "https" &&
-				strings.EqualFold(next.Hostname(), to.Hostname()) && (next.Port() == "" || next.Port() == "443") {
-				return true
-			}
-		}
+	if err != nil {
+		return ctx.Err() == nil && nothingListens(err)
+	}
+	redirect := plain.Status >= 300 && plain.Status < 400
+	if redirect && toHTTPS(plain, host) {
+		return true
 	}
 	secure, _, err := fetch.Do(ctx, c, "https://"+host+"/")
-	return err == nil && fetch.SamePage(plain, secure)
+	if err != nil || !fetch.SamePage(plain, secure) {
+		return false
+	}
+	if redirect {
+		// Both send the visitor to /login: two applications do too, each
+		// to its own. The pages the chains end on decide.
+		return fetch.SamePage(landing(plain), landing(secure))
+	}
+	return true
+}
+
+// toHTTPS: a hop of the chain sends to https on the same host, on the
+// default port.
+func toHTTPS(res fetch.Result, host string) bool {
+	h, err := url.Parse("http://" + host + "/")
+	if err != nil {
+		return false
+	}
+	for _, hop := range res.Hops {
+		from, err := url.Parse(hop.URL)
+		if err != nil || hop.Location == "" {
+			continue
+		}
+		if next, err := from.Parse(hop.Location); err == nil && next.Scheme == "https" &&
+			strings.EqualFold(next.Hostname(), h.Hostname()) && (next.Port() == "" || next.Port() == "443") {
+			return true
+		}
+	}
+	return false
+}
+
+// landing is the answer at the end of res's redirect chain.
+func landing(res fetch.Result) fetch.Result {
+	status := res.Status
+	if n := len(res.Hops); n > 0 {
+		status = res.Hops[n-1].Status
+	}
+	return fetch.Result{RequestURL: res.URL, Status: status, URL: res.URL, Header: res.FinalHeader, Body: res.Body}
+}
+
+// nothingListens: no connection was made. The port refused it, no route
+// leads there, the name has no address, or the connects timed out (a
+// filter that drops them). A timeout once connected, a reset or an answer
+// that is not HTTP come from something that listens.
+func nothingListens(err error) bool {
+	if errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrOutOfScope) || errors.Is(err, neterr.ErrEndsSession) {
+		return false
+	}
+	if neterr.UnknownHost(err) || dialTimeout(err) {
+		return true
+	}
+	for _, no := range []error{syscall.ECONNREFUSED, syscall.EHOSTUNREACH, syscall.ENETUNREACH, syscall.EHOSTDOWN} {
+		if errors.Is(err, no) {
+			return true
+		}
+	}
+	return false
+}
+
+// dialTimeout: the connect timed out, not the wait for an answer.
+func dialTimeout(err error) bool {
+	var op *net.OpError
+	return errors.As(err, &op) && op.Op == "dial" && op.Timeout()
 }

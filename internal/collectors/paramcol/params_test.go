@@ -7,7 +7,9 @@ import (
 	"html"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
@@ -150,6 +152,77 @@ func TestPageAnsweringEveryNameIsNoted(t *testing.T) {
 	}
 	if n := got["requests"].(float64); n > 100 {
 		t.Errorf("%v requests before giving up on the page", n)
+	}
+}
+
+// A short wordlist (names taken from the target's own scripts) on a page
+// that reads most of them: every name it reads is a parameter, also when
+// nearly every name tried alone is one.
+func TestShortListOfRealNames(t *testing.T) {
+	for _, reads := range [][]string{
+		{"q", "page", "sort", "order", "limit", "category", "brand", "color"},
+		strings.Fields("q page sort order limit category brand color size price min max from to tag type status lang view mode"),
+	} {
+		fetch.Reset()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body := "<html><body>products"
+			for i, n := range reads {
+				if r.URL.Query().Get(n) != "" {
+					body += strings.Repeat(fmt.Sprintf(" <li>%s</li>", n), 10+i) // each changes the page
+				}
+			}
+			fmt.Fprint(w, body+"</body></html>")
+		}))
+		words := append(slices.Clone(reads), "utm_source", "fbclid")
+		got := runOn(t, New(srv.Client(), Options{Words: words, Rate: 10000}), srv.URL+"/products")
+		srv.Close()
+		var names []string
+		for _, n := range got["params"].([]any) {
+			names = append(names, n.(string))
+		}
+		if want := slices.Sorted(slices.Values(reads)); !slices.Equal(names, want) || got["note"] != nil {
+			t.Errorf("found %v, want %v", got, want)
+		}
+	}
+}
+
+// The page starts refusing every request partway (a rate limit): the
+// group that floods is dropped, the names found before it stay.
+func TestFloodKeepsEarlierGroups(t *testing.T) {
+	fetch.Reset()
+	var mu sync.Mutex
+	limited := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.URL.Query().Has("flood0") {
+			limited = true
+		}
+		if limited {
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		body := "<html><body>catalog"
+		if r.URL.Query().Get("category") != "" {
+			body += strings.Repeat(" <li>product</li>", 20)
+		}
+		fmt.Fprint(w, body+"</body></html>")
+	}))
+	defer srv.Close()
+	words := []string{"category"}
+	for i := 0; i < 9; i++ {
+		words = append(words, fmt.Sprintf("name%d", i))
+	}
+	for i := 0; i < 20; i++ {
+		words = append(words, fmt.Sprintf("flood%d", i))
+	}
+	got := runOn(t, New(srv.Client(), Options{Words: words, Chunk: 10, Rate: 10000}), srv.URL+"/catalog")
+	why, _ := got["why"].(map[string]any)
+	if len(why) != 1 || why["category"] != "size" {
+		t.Errorf("found %v", got)
+	}
+	if note, _ := got["note"].(string); !strings.Contains(note, "answers names it does not read") || !strings.Contains(note, "not searched further") {
+		t.Errorf("note %q", note)
 	}
 }
 

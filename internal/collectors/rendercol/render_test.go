@@ -109,3 +109,47 @@ func TestRenderHeldToScope(t *testing.T) {
 		t.Errorf("%d requests counted, %d sent", n, served)
 	}
 }
+
+// An app that routes after a #: /basket is rendered as /#/basket, whose
+// document is the front page. A form there with no action submits to /,
+// not to /basket.
+func TestRenderHashRouteForm(t *testing.T) {
+	if _, err := browser.Find(); err != nil {
+		t.Skip(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><script>if (!location.hash) location.hash = '#/';</script><form method="post"><input name="q"></form></body></html>`)
+	}))
+	defer srv.Close()
+
+	fetch.Reset()
+	defer fetch.Reset()
+	b := &browser.Browser{}
+	defer b.Close()
+	if err := b.Start(); errors.Is(err, browser.ErrNoSandbox) {
+		t.Skip(err)
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	c := &Collector{Browser: b}
+	var actions []string
+	for _, path := range []string{"/", "/basket"} {
+		actions = nil
+		seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + path}}
+		if _, err := c.Run(ctx, seed, func(ob types.Observation) error {
+			var f struct{ Action string }
+			if ob.Kind == "form" && json.Unmarshal(ob.Payload, &f) == nil {
+				actions = append(actions, f.Action)
+			}
+			return nil
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !slices.Equal(actions, []string{srv.URL + "/"}) {
+		t.Errorf("the form on /#/basket submits to %q, want %s/", actions, srv.URL)
+	}
+}

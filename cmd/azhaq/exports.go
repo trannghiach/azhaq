@@ -392,6 +392,12 @@ func (s *spec) addRoute(r engine.MapEntry) {
 		if !slices.Contains(opMethods, m) {
 			continue
 		}
+		if r.Coverage == "skipped" && (m == "get" || m == "head") {
+			// Left alone because a GET there changes something
+			// (/setup.php?action=reset): a tool importing the description
+			// would send it, nor are its names the route's.
+			continue
+		}
 		if have, ok := item[m].(map[string]any); ok {
 			// Another URL of the route (/item?id=3 after /item): the
 			// names it was seen with are the route's too.
@@ -581,9 +587,14 @@ func unknownBody(content map[string]any) bool {
 }
 
 // takesQuery: a page found or requested with a query string of its own
-// (a link to /item?id=3), which is a GET that takes those names.
+// (a link to /item?id=3), which is a GET that takes those names. Not a
+// link the run left alone because a GET there changes something.
 func takesQuery(r engine.MapEntry) bool {
-	if len(r.Params) == 0 || r.Coverage == "gone" || r.Coverage == "catchall" {
+	switch r.Coverage {
+	case "gone", "catchall", "skipped":
+		return false
+	}
+	if len(r.Params) == 0 {
 		return false
 	}
 	switch r.Role {
