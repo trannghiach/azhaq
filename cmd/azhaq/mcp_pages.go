@@ -255,11 +255,14 @@ func refsIn(v any, fn func(string)) {
 	switch v := v.(type) {
 	case map[string]any:
 		for k, x := range v {
-			switch s, isStr := x.(string); {
-			case k == "$ref" && isStr:
+			if s, ok := x.(string); ok && k == "$ref" {
 				fn(s)
-			case k == "mapping":
-				m, _ := x.(map[string]any)
+				continue
+			}
+			// A discriminator's mapping names schemas; a property
+			// called mapping is a schema like any other.
+			if d, ok := x.(map[string]any); ok && k == "discriminator" {
+				m, _ := d["mapping"].(map[string]any)
 				for _, y := range m {
 					if s, ok := y.(string); ok && strings.HasPrefix(s, "#") {
 						fn(s)
@@ -267,9 +270,8 @@ func refsIn(v any, fn func(string)) {
 						fn("#/components/schemas/" + s)
 					}
 				}
-			default:
-				refsIn(x, fn)
 			}
+			refsIn(x, fn)
 		}
 	case []any:
 		for _, x := range v {
@@ -476,8 +478,10 @@ func sdlName(block []string) string {
 	return ""
 }
 
-// burpUnits pages a Burp project options file by its scope entries, the
-// included then the excluded, each page an options file of its own.
+// burpUnits pages a Burp project options file by its included scope
+// entries, each page an options file of its own that carries every
+// excluded entry: a page without them would put denied hosts in scope
+// under a broader include.
 func burpUnits(raw []byte) (*exportUnits, error) {
 	doc, err := readJSON(raw)
 	if err != nil {
@@ -490,28 +494,18 @@ func burpUnits(raw []byte) (*exportUnits, error) {
 	}
 	inc, _ := sc["include"].([]any)
 	exc, _ := sc["exclude"].([]any)
-	var names []string
-	for _, lists := range []struct {
-		word string
-		list []any
-	}{{"include", inc}, {"exclude", exc}} {
-		for _, e := range lists.list {
-			m, _ := e.(map[string]any)
-			h, _ := m["host"].(string)
-			names = append(names, lists.word+" "+h)
-		}
+	if len(inc) == 0 {
+		return &exportUnits{unit: "scope", names: []string{"the scope"}, page: func(lo, hi int) []byte { return compactJSON(doc) }}, nil
 	}
-	return &exportUnits{unit: "scope entries", names: names, page: func(lo, hi int) []byte {
-		var i, x []any
-		for k := lo; k < hi; k++ {
-			if k < len(inc) {
-				i = append(i, inc[k])
-			} else {
-				x = append(x, exc[k-len(inc)])
-			}
-		}
+	var names []string
+	for _, e := range inc {
+		m, _ := e.(map[string]any)
+		h, _ := m["host"].(string)
+		names = append(names, "include "+h)
+	}
+	return &exportUnits{unit: "included scope entries", names: names, page: func(lo, hi int) []byte {
 		s := maps.Clone(sc)
-		s["include"], s["exclude"] = orEmpty(i), orEmpty(x)
+		s["include"], s["exclude"] = orEmpty(inc[lo:hi]), orEmpty(exc)
 		t := maps.Clone(target)
 		t["scope"] = s
 		pg := maps.Clone(doc)

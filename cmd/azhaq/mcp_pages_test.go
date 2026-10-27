@@ -223,10 +223,12 @@ func TestExportPagesBurp(t *testing.T) {
 	}
 	raw, _ := json.MarshalIndent(burpScopeDoc(inc, exc), "", "  ")
 	u, err := splitExport("burp", raw)
-	if err != nil || len(u.names) != 320 || u.names[300] != `exclude ^admin0\.example\.com$` {
-		t.Fatalf("%v %v", err, u.names)
+	// Every page carries every exclude: a page without them would put
+	// the denied hosts in scope under a broader include.
+	if err != nil || len(u.names) != 300 || u.names[299] != `include ^(.*\.)?app299\.example\.com$` {
+		t.Fatalf("%v %d units", err, len(u.names))
 	}
-	n := 0
+	n, pages := 0, 0
 	for i, page := range pageAll(t, u, maxInline) {
 		var doc struct {
 			Target struct {
@@ -239,10 +241,14 @@ func TestExportPagesBurp(t *testing.T) {
 		if err := json.Unmarshal(page, &doc); err != nil || !doc.Target.Scope.Advanced || doc.Target.Scope.Include == nil || doc.Target.Scope.Exclude == nil {
 			t.Fatalf("page %d: %v %.200s", i, err, page)
 		}
-		n += len(doc.Target.Scope.Include) + len(doc.Target.Scope.Exclude)
+		if len(doc.Target.Scope.Exclude) != 20 {
+			t.Errorf("page %d holds %d excludes", i, len(doc.Target.Scope.Exclude))
+		}
+		n += len(doc.Target.Scope.Include)
+		pages++
 	}
-	if n != 320 {
-		t.Errorf("the pages hold %d entries", n)
+	if n != 300 || pages < 2 {
+		t.Errorf("%d pages hold %d includes", pages, n)
 	}
 }
 
@@ -378,5 +384,20 @@ func TestExportPartWhole(t *testing.T) {
 	head, body, _ := strings.Cut(exportPart("/x/w.json", "openapi", []byte(big), 0), "\n")
 	if !strings.Contains(head, "paged by lines") || !strings.Contains(head, "this page holds lines 0 to") || len(body) > maxInline {
 		t.Errorf("%s", head)
+	}
+}
+
+// A property called mapping is a schema like any other; only a
+// discriminator's mapping names schemas.
+func TestRefsInMappingProperty(t *testing.T) {
+	doc := map[string]any{
+		"properties":    map[string]any{"mapping": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/components/schemas/Rule"}}},
+		"discriminator": map[string]any{"propertyName": "kind", "mapping": map[string]any{"a": "#/components/schemas/A", "b": "B"}},
+	}
+	var got []string
+	refsIn(doc, func(s string) { got = append(got, s) })
+	slices.Sort(got)
+	if want := []string{"#/components/schemas/A", "#/components/schemas/B", "#/components/schemas/Rule"}; !slices.Equal(got, want) {
+		t.Errorf("refs %q, want %q", got, want)
 	}
 }

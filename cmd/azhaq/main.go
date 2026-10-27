@@ -568,18 +568,6 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	collectors.Register(cat, opts)
-	if out.plan {
-		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
-		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon}
-		if *daily > 0 && (send.max == 0 || *daily < send.max) {
-			// Less what today's runs in the workspace spent: a plan reads
-			// no database.
-			send.max, send.by = *daily, "-daily-requests, less what today's runs spent"
-		}
-		plan := buildPlan(cat, seeds, budgets, paths, limitsOf(budgets, *maxRequests, *rateFlag, *timeout, *daily), send, rep)
-		rep.Results, rep.what = len(plan.Targets), "targets"
-		return printPlan(plan, *jsonOut)
-	}
 	if *probe {
 		budgets.MaxDepth = 1 // the listed targets only: no CNAME or redirect targets
 		for _, n := range cat.Names() {
@@ -587,6 +575,18 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 				budgets.Skip[n] = true
 			}
 		}
+	}
+	if out.plan {
+		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
+		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon}
+		if *daily > 0 && (send.max == 0 || *daily < send.max) {
+			// A plan reads no database: what today's runs spent is not
+			// taken off.
+			send.max, send.by = *daily, "-daily-requests; what today's runs spent is not counted"
+		}
+		plan := buildPlan(cat, seeds, budgets, paths, limitsOf(budgets, *maxRequests, *rateFlag, *timeout, *daily), send, rep)
+		rep.Results, rep.what = len(plan.Targets), "targets"
+		return printPlan(plan, *jsonOut)
 	}
 	if *workerOf != "" {
 		return runWorker(cat, *workerOf, *workerToken, budgets.Parallel)

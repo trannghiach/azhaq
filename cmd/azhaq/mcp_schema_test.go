@@ -228,3 +228,32 @@ func roundTrip(v any) any {
 	_ = json.Unmarshal(raw, &out)
 	return out
 }
+
+// Every field a map row can carry is one azhaq_query's fields may name.
+func TestQueryColumnsMatchRows(t *testing.T) {
+	src, err := os.ReadFile("report.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(src)
+	body = body[strings.Index(body, "func mapRowJSON"):]
+	body = body[:strings.Index(body, "\n}\n")]
+	found := regexp.MustCompile(`(?:set\(|")(\w+)"(?:, |: )`).FindAllStringSubmatch(body, -1)
+	if len(found) < 15 {
+		t.Fatalf("read %d fields of mapRowJSON", len(found))
+	}
+	for _, m := range found {
+		if !slices.Contains(queryColumns, m[1]) {
+			t.Errorf("a row's %q is not among azhaq_query's fields", m[1])
+		}
+	}
+}
+
+func TestNumClamps(t *testing.T) {
+	if n := num(map[string]any{"offset": float64(1 << 31)}, "offset", 0); n != 1<<30 {
+		t.Errorf("a huge offset is %d", n)
+	}
+	if n := num(map[string]any{"limit": 2.5}, "limit", 100); n != 100 {
+		t.Errorf("a fraction is %d", n)
+	}
+}

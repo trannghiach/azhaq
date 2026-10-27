@@ -61,6 +61,12 @@ func TestPlanRequests(t *testing.T) {
 		t.Errorf("passive %+v", r)
 	}
 
+	// -probe asks the names and their front pages, nothing more.
+	r = planJSON(t, "-domain", "example.com", "-providers", none, "-probe").Requests
+	if r.Total != 0 || r.PerService != 2 {
+		t.Errorf("-probe %+v", r)
+	}
+
 	// A URL's own host is resolved, not enumerated: no source is asked
 	// about an address.
 	r = planJSON(t, "-url", "http://127.0.0.1:3001/", "-providers", none).Requests

@@ -113,7 +113,7 @@ func lineFacts(raw []byte, m map[string]any, exported map[string][2]string) ([]F
 		target := str("matched-at")
 		payload := map[string]any{"url": target, "template": str("template-id"), "name": info["name"], "severity": info["severity"]}
 		return []Fact{observation(urlOrHost(target), "nuclei", "finding", payload)}, FormatNuclei, nil
-	case has("request") && has("timestamp"):
+	case isObject(m["request"]) && has("timestamp"): // httpx -irr writes request as a string
 		return katanaFacts(m), FormatKatana, nil
 	case has("url") && (has("status_code") || has("webserver") || has("tech")):
 		return httpxFacts(m), FormatHTTPX, nil
@@ -331,7 +331,18 @@ func ffufFacts(r map[string]any, method string) []Fact {
 	if err != nil {
 		return nil
 	}
+	// -X FUZZ: the method is the result's input for that keyword.
+	if in, ok := r["input"].(map[string]any); ok {
+		if v := text(in[method]); v != "" {
+			method = v
+		}
+	}
 	if method = strings.ToUpper(method); method != "" && method != "GET" {
+		st, _ := r["status"].(float64)
+		switch int(st) {
+		case 404, 405, 501:
+			return nil // the route does not take it: ffuf matches these by default
+		}
 		row := map[string]any{"url": u, "via": "ffuf", "methods": []string{method}, "ops": []any{map[string]any{"method": method}}}
 		return []Fact{observation(urlSeed(u), "ffuf", "url", row)}
 	}
@@ -514,4 +525,9 @@ func clip(s string) string {
 		return s[:80] + "…"
 	}
 	return s
+}
+
+func isObject(v any) bool {
+	_, ok := v.(map[string]any)
+	return ok
 }

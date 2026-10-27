@@ -170,8 +170,21 @@ func TestReadAnyFFUFFields(t *testing.T) {
 	if err != nil || formats[FormatFFUF] != 1 || len(facts) != 1 || facts[0].ObsKind != "application" {
 		t.Fatalf("ffuf -json %v %v %v", facts, formats, err)
 	}
-	post := `{"commandline":"ffuf -X POST","results":[{"status":405,"url":"https://shop.example.com/api/x"}],"config":{"method":"POST"}}`
-	if facts, _, _ := ReadAny([]byte(post)); len(facts) != 1 || facts[0].ObsKind != "url" || !strings.Contains(string(facts[0].Payload), `"methods":["POST"]`) {
-		t.Errorf("ffuf -X POST %+v", facts)
+	post := `{"commandline":"ffuf -X POST","results":[{"status":200,"url":"https://shop.example.com/api/x"},{"status":405,"url":"https://shop.example.com/api/y"},{"status":404,"url":"https://shop.example.com/api/z"}],"config":{"method":"POST"}}`
+	if facts, _, _ := ReadAny([]byte(post)); len(facts) != 1 || facts[0].ObsKind != "url" || !strings.Contains(string(facts[0].Payload), `"methods":["POST"]`) || !strings.Contains(string(facts[0].Payload), "/api/x") {
+		t.Errorf("ffuf -X POST: only the route that took it %+v", facts)
+	}
+	fuzz := `{"commandline":"ffuf -X FUZZ","results":[{"input":{"FUZZ":"PUT"},"status":201,"url":"https://shop.example.com/api/x"}],"config":{"method":"FUZZ"}}`
+	if facts, _, _ := ReadAny([]byte(fuzz)); len(facts) != 1 || !strings.Contains(string(facts[0].Payload), `"methods":["PUT"]`) {
+		t.Errorf("ffuf -X FUZZ: the method is the input %+v", facts)
+	}
+}
+
+// httpx -irr writes the request as a string: still httpx, not katana.
+func TestReadAnyHTTPXWithRequest(t *testing.T) {
+	line := `{"timestamp":"2026-10-27T10:00:00Z","url":"https://www.example.com","host":"www.example.com","status_code":200,"request":"GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n","response":"HTTP/1.1 200 OK\r\n\r\n"}`
+	facts, formats, err := ReadAny([]byte(line + "\n"))
+	if err != nil || formats[FormatHTTPX] != 1 || len(facts) == 0 {
+		t.Fatalf("httpx -irr %v %v %v", facts, formats, err)
 	}
 }

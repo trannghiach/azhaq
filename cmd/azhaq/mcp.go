@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -508,8 +509,8 @@ func strList(a map[string]any, k string) []string {
 // num is a positive whole-number argument, at most 1<<30; anything else
 // (absent, negative, a fraction, 1e19) is def.
 func num(a map[string]any, k string, def int) int {
-	if v, ok := a[k].(float64); ok && v > 0 && v <= 1<<30 && v == float64(int(v)) {
-		return int(v)
+	if v, ok := a[k].(float64); ok && v > 0 && v == math.Trunc(v) {
+		return int(min(v, 1<<30)) // past the end of anything: an offset beyond it is past its end, not the start
 	}
 	return def
 }
