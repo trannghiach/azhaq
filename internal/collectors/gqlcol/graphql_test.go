@@ -196,3 +196,22 @@ func TestSchemaFromSuggestions(t *testing.T) {
 		}
 	}
 }
+
+// An endpoint that runs a query sent with GET says so: {__typename}.
+func TestGETQueries(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("query") == "{__typename}" {
+			w.Write([]byte(`{"data":{"__typename":"Query"}}`))
+			return
+		}
+		w.WriteHeader(400)
+		w.Write([]byte(`{"errors":[{"message":"Must provide query string."}]}`))
+	}))
+	defer srv.Close()
+	got, _ := run(t, New(srv.Client()), srv.URL+"/graphql")
+	if got["get_queries"] != true {
+		t.Errorf("row %v", got)
+	}
+}

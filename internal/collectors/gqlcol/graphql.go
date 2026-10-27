@@ -83,9 +83,30 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	row := map[string]any{"url": raw, "role": "graphql", "status": res.Status}
 	if ide := ideName(res.Body); ide != "" {
 		row["ide"] = ide
+	} else if answersGET(ctx, c.Client, raw) {
+		// It runs queries sent with GET: they can be asked as any GET is,
+		// by every session, with no POST.
+		row["get_queries"] = true
 	}
 	return one(emit, raw, "graphql", row)
 }
+
+// answersGET asks the endpoint {__typename} with GET, the cheapest query
+// there is, which changes nothing: a server that answers it runs queries
+// sent with GET.
+func answersGET(ctx context.Context, client *http.Client, raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	q := u.Query()
+	q.Set("query", "{__typename}")
+	u.RawQuery = q.Encode()
+	res, _, err := fetch.Do(ctx, client, u.String())
+	return err == nil && res.Status == http.StatusOK && typename.Match(res.Body)
+}
+
+var typename = regexp.MustCompile(`"data"\s*:\s*\{\s*"__typename"\s*:\s*"`)
 
 func ideName(body []byte) string {
 	b := bytes.ToLower(body)
