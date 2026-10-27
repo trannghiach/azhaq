@@ -105,7 +105,7 @@ func (b *Browser) start() error {
 			// no WebRTC packet outside it.
 			chromedp.ProxyServer("socks5://"+b.guard.addr()),
 			chromedp.Flag("proxy-bypass-list", "<-loopback>"),
-			chromedp.Flag("force-webrtc-ip-handling-policy", "disable_non_proxied_udp"),
+			chromedp.Flag("webrtc-ip-handling-policy", "disable_non_proxied_udp"),
 		)
 		// The sandbox stays on: the pages are the targets'. Where the system
 		// refuses it (AppArmor on recent Ubuntu, some containers), the user
