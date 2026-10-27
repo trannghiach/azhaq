@@ -104,7 +104,9 @@ type route struct {
 	template string
 	param    string   // the first parameter, without braces
 	parent   string   // the route up to that parameter: the list its objects come from
+	nouns    []string // the kind of object it names, folded, plural and singular: basketitems, basketitem
 	names    []string // field names (folded) that hold values of param and say so
+	short    string   // the one of names a session keeps it under: bid for a basket
 }
 
 // genericParams say only that the parameter is an identifier.
@@ -126,25 +128,123 @@ func newRoute(t string) (route, bool) {
 			r.parent = u
 		}
 		path := strings.Trim(p.Path, "/")
-		seg = norm(path[strings.LastIndex(path, "/")+1:])
+		seg = path[strings.LastIndex(path, "/")+1:]
 	}
 	n := norm(r.param)
 	if !genericParams[n] {
 		r.names = append(r.names, n)
 	}
-	if seg != "" && !versionSeg.MatchString(seg) {
-		// /rest/basket/{id}: BasketId; /api/Addresss/{id}: AddressId.
-		for _, s := range []string{seg, strings.TrimSuffix(seg, "s"), strings.TrimSuffix(seg, "ies") + "y"} {
-			if len(s) > 1 && !slices.Contains(r.names, s+n) {
-				r.names = append(r.names, s+n)
+	if seg != "" && !versionSeg.MatchString(norm(seg)) {
+		// /rest/basket/{id}: BasketId; /api/Addresss/{id}: AddressId; and
+		// the short name a session keeps it under: bid for a basket, not
+		// for a BasketItem.
+		var fields []string
+		r.nouns, fields, r.short = nounFields(seg, n)
+		for _, f := range fields {
+			if !slices.Contains(r.names, f) {
+				r.names = append(r.names, f)
 			}
-		}
-		// The short name a session keeps it under: bid for a basket.
-		if n == "id" && len(seg) > 2 && !slices.Contains(r.names, seg[:1]+n) {
-			r.names = append(r.names, seg[:1]+n)
 		}
 	}
 	return r, true
+}
+
+// nounFields reads the kind of object a path segment (BasketItems,
+// basket) or a reference field's stem (Basket of BasketId) names: its
+// folded forms, plural and singular (basketitems, basketitem), the
+// fields that hold identifiers of such objects under the name n
+// (basketitemid), and the short one, of the initials of its words (biid:
+// bid is a basket's).
+func nounFields(s, n string) (nouns, fields []string, short string) {
+	ws := words(s)
+	if len(ws) == 0 {
+		return nil, nil, ""
+	}
+	f := strings.Join(ws, "")
+	nouns = []string{f}
+	add := func(x string) {
+		if len(x) > 1 && !slices.Contains(nouns, x) {
+			nouns = append(nouns, x)
+		}
+	}
+	switch {
+	case strings.HasSuffix(f, "ies"):
+		add(strings.TrimSuffix(f, "ies") + "y")
+	case strings.HasSuffix(f, "s"):
+		add(strings.TrimSuffix(f, "s")) // users, Addresss
+		for _, x := range []string{"sses", "xes", "ches", "shes"} {
+			if strings.HasSuffix(f, x) {
+				add(strings.TrimSuffix(f, "es")) // addresses
+			}
+		}
+	}
+	for _, x := range nouns {
+		fields = append(fields, x+n)
+	}
+	if n == "id" && len(f) > 2 {
+		for _, w := range ws {
+			short += w[:1]
+		}
+		short += n
+		fields = append(fields, short)
+	}
+	return nouns, fields, short
+}
+
+// noun is the route's kind of object, singular.
+func (r route) noun() string {
+	if len(r.nouns) == 0 {
+		return ""
+	}
+	return r.nouns[len(r.nouns)-1]
+}
+
+// apart drops the short name of a route whose noun, read as one word,
+// runs on from another route's (basketitems from basket, all in lower
+// case): bid is the basket's.
+func (r *route) apart(nouns map[string]bool) {
+	if len(r.short) != len("bid") {
+		return // BasketItems: biid already
+	}
+	for m := range nouns {
+		if r.short != "" && len(m) > 2 && len(m) < len(r.noun()) && strings.HasPrefix(r.noun(), m) {
+			r.names = slices.DeleteFunc(r.names, func(n string) bool { return n == r.short })
+			r.short = ""
+		}
+	}
+}
+
+// about: a list at u holds objects of the route's kind: its own list, or
+// one whose last segment names the same kind (/api/me/books for
+// /books/v1/{book_title}).
+func (r route) about(u string) bool {
+	if u == r.parent {
+		return true
+	}
+	p, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+	path := strings.Trim(p.Path, "/")
+	seg := path[strings.LastIndex(path, "/")+1:]
+	if seg == "" || versionSeg.MatchString(norm(seg)) {
+		return false
+	}
+	nouns, _, _ := nounFields(seg, "")
+	return slices.ContainsFunc(nouns, func(n string) bool { return slices.Contains(r.nouns, n) })
+}
+
+// path is the route without its scheme and host.
+func (r route) path() string {
+	return pathOf(r.template)
+}
+
+// pathOf is a URL without its scheme and host.
+func pathOf(u string) string {
+	if p, err := url.Parse(u); err == nil && p.Path != "" {
+		return p.Path
+	}
+	return u
 }
 
 // takes: the folded field name holds values of the route's parameter.
@@ -220,6 +320,7 @@ type instance struct {
 	value    string   // the identifier filled in
 	holders  []string // the roles whose answers held it
 	owner    string   // the role whose own object it is, when that is known
+	by       string   // what says it is the owner's
 	given    bool     // given with -id
 	rank     int      // replay order: given, a role's own, then the rest
 }
@@ -236,10 +337,12 @@ const (
 // same answers give the same URLs.
 //
 // A value is a role's own when who the role is says so (an identifier its
-// session holds, or a list item whose owner field names the role), when
-// its list (/api/Addresss for /api/Addresss/{id}) held it and the same
-// list read by another role did not, or when a field named after the
-// parameter held it and no other role's answers held it anywhere.
+// session holds under a name of the route's kind, or a list item of that
+// kind whose fields name the role), when its list (/api/Addresss for
+// /api/Addresss/{id}) held it and the same list read by another role did
+// not, or when a field named after the parameter held it and no other
+// role's answers held it anywhere. Each says why in the instance's by;
+// settleOwners lets the object's answer have the last word.
 func instances(roles []role, templates map[string]bool, seen map[string]runSeen, answers map[string]map[string]answer, given []givenID, who map[string]identity) map[string]instance {
 	out := map[string]instance{}
 	add := func(u string, in instance) {
@@ -287,11 +390,17 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 		}
 		return false
 	}
+	var routes []route
+	nouns := map[string]bool{}
 	for _, t := range sortedKeys(templates) {
-		rt, ok := newRoute(t)
-		if !ok {
-			continue
+		if rt, ok := newRoute(t); ok {
+			routes = append(routes, rt)
+			nouns[rt.noun()] = true
 		}
+	}
+	for _, rt := range routes {
+		t := rt.template
+		rt.apart(nouns)
 		for i := range given {
 			g := &given[i]
 			if !rt.wants(g.name) {
@@ -306,6 +415,7 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 				in := instance{template: t, value: g.value, owner: g.role, given: true}
 				if g.role != "" {
 					in.holders = []string{g.role}
+					in.by = "given with -id " + g.role + ":" + g.name + "=" + g.value
 				}
 				add(u, in)
 			}
@@ -314,19 +424,24 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 		shared := map[string][]string{}
 		for _, r := range roles {
 			var sure, own []string
-			for v, owner := range known {
-				if owner == r.name {
+			by := map[string]string{}
+			for v, c := range known {
+				if c.owner == r.name {
 					sure = append(sure, v)
+					by[v] = c.by
 				}
 			}
 			for v, from := range rt.candidates(seen[r.name]) {
-				if owner := known[v]; owner != "" {
+				if known[v].owner != "" {
 					continue // whose it is, who the roles are tells
 				}
 				switch {
-				case from&fromList != 0 && othersList(r.name, rt.parent) && !elsewhere(r.name, v, rt.parent),
-					from&fromNamed != 0 && !elsewhere(r.name, v, ""):
+				case from&fromList != 0 && othersList(r.name, rt.parent) && !elsewhere(r.name, v, rt.parent):
 					own = append(own, v)
+					by[v] = "in " + r.name + "'s " + pathOf(rt.parent) + " and not the other roles'"
+				case from&fromNamed != 0 && !elsewhere(r.name, v, ""):
+					own = append(own, v)
+					by[v] = "in " + r.name + "'s answers alone"
 				default:
 					shared[v] = append(shared[v], r.name)
 				}
@@ -337,7 +452,7 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 			own = append(sure, own...)
 			for _, v := range own[:min(len(own), perOwner)] {
 				if u, ok := rt.fill(v, seen[r.name].ids); ok {
-					add(u, instance{template: t, value: v, holders: []string{r.name}, owner: r.name, rank: 1})
+					add(u, instance{template: t, value: v, holders: []string{r.name}, owner: r.name, by: by[v], rank: 1})
 				}
 			}
 		}

@@ -135,8 +135,14 @@ func TestRoleIdentity(t *testing.T) {
 		own: map[string][]string{"userid": {"37", "alice"}, "email": {"a@x.test"}, "bid": {"18"}}}
 	sortIdentity(id)
 	sortIdentity(want)
-	if !reflect.DeepEqual(id, want) {
+	if !reflect.DeepEqual(id.who, want.who) || !reflect.DeepEqual(id.own, want.own) {
 		t.Errorf("from the tokens %+v\nwant %+v", id, want)
+	}
+	if s := id.source("alice", "bid", "18"); s != "bid claim of alice's token" {
+		t.Errorf("source %q", s)
+	}
+	if s := id.source("alice", "userid", "37"); s != "data.id claim of alice's token" {
+		t.Errorf("source %q", s)
 	}
 
 	// What a Chrome login left: its answer and the browser's storage.
@@ -150,8 +156,14 @@ func TestRoleIdentity(t *testing.T) {
 		own: map[string][]string{"bid": {"19"}, "userid": {"5"}, "username": {"bob"}, "cartid": {"3"}, "email": {"b@x.test"}}}
 	sortIdentity(id)
 	sortIdentity(want)
-	if !reflect.DeepEqual(id, want) {
+	if !reflect.DeepEqual(id.who, want.who) || !reflect.DeepEqual(id.own, want.own) {
 		t.Errorf("from the login %+v\nwant %+v", id, want)
+	}
+	if s := id.source("bob", "bid", "19"); s != "authentication.bid in bob's login answer" {
+		t.Errorf("source %q", s)
+	}
+	if s := id.source("bob", "cartid", "3"); s != "cart.id in bob's localStorage" {
+		t.Errorf("source %q", s)
 	}
 
 	// A "/me" answer the anonymous role does not get; a list of users is
@@ -397,5 +409,211 @@ func TestRolesOnACookieApp(t *testing.T) {
 	}
 	if a := rows["/app/admin/usersapi"].Answers["alice"]; a.Length == 0 || a.Hash == "" || rows["/app/home"].Answers["anon"].Location != "/login" {
 		t.Errorf("answers %+v", rows["/app/admin/usersapi"].Answers)
+	}
+}
+
+// TestRoleRouteKinds: a field names identifiers of a route's objects by
+// the route's noun, singular or plural, in any case: bid is a basket's,
+// not a BasketItem's.
+func TestRoleRouteKinds(t *testing.T) {
+	for tmpl, want := range map[string]map[string]bool{
+		"http://h/rest/basket/{id}":       {"bid": true, "basketid": true, "basketitemid": false, "userid": false},
+		"http://h/api/BasketItems/{id}":   {"bid": false, "basketid": false, "basketitemid": true, "basketitemsid": true, "biid": true},
+		"http://h/api/Users/{id}":         {"userid": true, "uid": true, "usersid": true, "bid": false},
+		"http://h/api/Addresss/{id}":      {"addressid": true, "aid": true},
+		"http://h/api/addresses/{id}":     {"addressid": true},
+		"http://h/api/categories/{id}":    {"categoryid": true},
+		"http://h/books/v1/{book_title}":  {"booktitle": true, "bid": false},
+		"http://h/api/basketitems/{id}":   {"basketitemid": true, "bid": false}, // apart from /rest/basket/{id}
+		"http://h/api/orders/{order_id}":  {"orderid": true, "oid": false},
+		"http://h/api/users/{id}/profile": {"userid": true},
+	} {
+		rt, ok := newRoute(tmpl)
+		if !ok {
+			t.Fatalf("%s: no route", tmpl)
+		}
+		rt.apart(map[string]bool{"basket": true, "basketitem": true, "user": true})
+		for f, w := range want {
+			if rt.takes(f) != w {
+				t.Errorf("%s takes %s: %v", tmpl, f, !w)
+			}
+		}
+	}
+}
+
+// juiceSeen is what each role of a Juice Shop like app saw: everyone
+// reads every basket item; alice's session holds basket 8, bob's 9.
+func juiceSeen(roles []role) (map[string]runSeen, map[string]map[string]answer, map[string]identity) {
+	items := []byte(`{"status":"success","data":[{"id":5,"BasketId":3,"ProductId":1},{"id":8,"BasketId":5,"ProductId":4},
+		{"id":9,"BasketId":9,"ProductId":2},{"id":10,"BasketId":8,"ProductId":6}]}`)
+	seen := map[string]runSeen{}
+	answers := map[string]map[string]answer{}
+	for _, r := range roles {
+		a, f := readAnswer(200, items, "application/json")
+		answers[r.name] = map[string]answer{"http://h/api/BasketItems": a}
+		s := newRunSeen()
+		s.add("http://h/api/BasketItems", f.ids)
+		s.objects["http://h/api/BasketItems"] = f.objects
+		seen[r.name] = s
+	}
+	who := map[string]identity{}
+	for name, claims := range map[string]string{"alice": `{"data":{"id":27,"email":"alice@x.test"},"bid":8}`,
+		"bob": `{"data":{"id":28,"email":"bob@x.test"},"bid":9}`} {
+		id := newIdentity()
+		id.learnHeaders(http.Header{"Authorization": {"Bearer " + jwt(claims)}})
+		who[name] = id
+	}
+	return seen, answers, who
+}
+
+// TestRoleOwnersByKind: an identifier is a role's own only for objects of
+// its kind: alice's basket 8 is /rest/basket/8, not /api/BasketItems/8,
+// which is basket 5's; a basket item of her basket is hers, its product
+// is not.
+func TestRoleOwnersByKind(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}}, {name: "bob", headers: []string{"B: 1"}}}
+	seen, answers, who := juiceSeen(roles)
+	templates := map[string]bool{"http://h/rest/basket/{id}": true, "http://h/api/BasketItems/{id}": true,
+		"http://h/api/Products/{id}": true, "http://h/api/Users/{id}": true}
+	got := instances(roles, templates, seen, answers, nil, who)
+	for u, want := range map[string]string{
+		"http://h/rest/basket/8":      "alice: bid claim of alice's token → /rest/basket/{id}",
+		"http://h/rest/basket/9":      "bob: bid claim of bob's token → /rest/basket/{id}",
+		"http://h/api/BasketItems/10": "alice: item of /api/BasketItems: BasketId 8 is alice's basket (bid claim of alice's token)",
+		"http://h/api/BasketItems/9":  "bob: item of /api/BasketItems: BasketId 9 is bob's basket (bid claim of bob's token)",
+		"http://h/api/BasketItems/8":  ": ",
+		"http://h/api/BasketItems/5":  ": ",
+		"http://h/api/Products/4":     ": ",
+		"http://h/api/Products/6":     ": ",
+		"http://h/api/Users/27":       "alice: data.id claim of alice's token → /api/Users/{id}",
+		"http://h/api/Users/28":       "bob: data.id claim of bob's token → /api/Users/{id}",
+		"http://h/rest/basket/3":      ": ",
+		"http://h/rest/basket/5":      ": ",
+	} {
+		in, ok := got[u]
+		if !ok {
+			t.Errorf("%s not tried", u)
+			continue
+		}
+		if s := in.owner + ": " + in.by; s != want {
+			t.Errorf("%s: %q, want %q", u, s, want)
+		}
+	}
+}
+
+// TestRoleSettleOwners: what an object's answer says of whose it is
+// overrules the identifier that filled its route.
+func TestRoleSettleOwners(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}}, {name: "bob", headers: []string{"B: 1"}}}
+	_, _, who := juiceSeen(roles)
+	js := func(body string) answer { return answerOf(200, []byte(body), "application/json") }
+	item := func(id, basket int) answer {
+		return js(fmt.Sprintf(`{"status":"success","data":{"id":%d,"BasketId":%d,"ProductId":4,"quantity":2}}`, id, basket))
+	}
+	answers := map[string]map[string]answer{"anon": {}, "alice": {}, "bob": {}}
+	set := func(u string, a answer) {
+		answers["anon"][u] = answer{Status: 401}
+		answers["alice"][u], answers["bob"][u] = a, a
+	}
+	set("http://h/api/BasketItems/8", item(8, 5))   // basket 5: no role's
+	set("http://h/api/BasketItems/11", item(11, 9)) // bob's basket
+	set("http://h/api/BasketItems/12", item(12, 8)) // alice's basket, tried as no one's
+	set("http://h/rest/basket/8", js(`{"status":"success","data":{"id":8,"UserId":27,"Products":[]}}`))
+	set("http://h/api/Users/28", js(`{"status":"success","data":{"id":28,"email":"bob@x.test","role":"customer"}}`))
+	set("http://h/api/Users/1", js(`{"status":"success","data":{"id":1,"email":"admin@x.test"}}`))
+	set("http://h/x/7", js(`{"id":7,"owner":"carol"}`)) // a name: it cannot tell carol is not alice
+	made := map[string]instance{
+		"http://h/api/BasketItems/8":  {owner: "alice", by: "bid claim of alice's token → /api/BasketItems/{id}"},
+		"http://h/api/BasketItems/11": {owner: "alice", by: "bid claim of alice's token → /api/BasketItems/{id}"},
+		"http://h/api/BasketItems/12": {},
+		"http://h/rest/basket/8":      {owner: "alice", by: "bid claim of alice's token → /rest/basket/{id}"},
+		"http://h/api/Users/28":       {owner: "bob", by: "data.id claim of bob's token → /api/Users/{id}"},
+		"http://h/api/Users/1":        {owner: "alice", given: true, by: "given with -id alice:id=1"},
+		"http://h/x/7":                {owner: "alice", by: "in alice's answers alone"},
+	}
+	settleOwners(roles, made, answers, who)
+	for u, want := range map[string]string{
+		"http://h/api/BasketItems/8":  ": ",
+		"http://h/api/BasketItems/11": "bob: the answer's BasketId 9 is bob's basket (bid claim of bob's token)",
+		"http://h/api/BasketItems/12": "alice: the answer's BasketId 8 is alice's basket (bid claim of alice's token)",
+		"http://h/rest/basket/8":      "alice: bid claim of alice's token → /rest/basket/{id}; the answer's UserId 27 names alice (data.id claim of alice's token)",
+		"http://h/api/Users/28":       "bob: data.id claim of bob's token → /api/Users/{id}; the answer's email bob@x.test names bob (data.email claim of bob's token)",
+		"http://h/api/Users/1":        "alice: given with -id alice:id=1",
+		"http://h/x/7":                "alice: in alice's answers alone",
+	} {
+		if s := made[u].owner + ": " + made[u].by; s != want {
+			t.Errorf("%s: %q, want %q", u, s, want)
+		}
+	}
+	if s := shortBy(made["http://h/rest/basket/8"].by); s != "bid claim of alice's token; the answer's UserId 27 names alice" {
+		t.Errorf("as the text table says it: %q", s)
+	}
+}
+
+// TestRolesBasketKinds runs roles on a Juice Shop like app: the bid claim
+// of a session names its basket (/rest/basket/8), not the basket item
+// numbered 8, which belongs to basket 5; a basket item is its basket's
+// owner's.
+func TestRolesBasketKinds(t *testing.T) {
+	alice := jwt(`{"status":"success","data":{"id":27,"email":"alice@x.test"},"bid":8}`)
+	bob := jwt(`{"status":"success","data":{"id":28,"email":"bob@x.test"},"bid":9}`)
+	users := map[string]bool{alice: true, bob: true}
+	baskets := map[string]int{"3": 1, "5": 2, "8": 27, "9": 28} // basket → UserId
+	items := map[string]string{"5": `{"id":5,"BasketId":3,"ProductId":1}`, "8": `{"id":8,"BasketId":5,"ProductId":4}`,
+		"9": `{"id":9,"BasketId":9,"ProductId":2}`, "10": `{"id":10,"BasketId":8,"ProductId":6}`}
+	spec := `{"openapi":"3.0.0","info":{"title":"shop","version":"1"},"paths":{"/api/BasketItems":{"get":{}},
+		"/api/BasketItems/{id}":{"get":{"parameters":[{"name":"id","in":"path","required":true}]}},
+		"/rest/basket/{id}":{"get":{"parameters":[{"name":"id","in":"path","required":true}]}}}}`
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		p := r.URL.Path
+		switch {
+		case p == "/":
+			fmt.Fprint(w, `{"name":"shop"}`)
+		case p == "/openapi.json":
+			fmt.Fprint(w, spec)
+		case !users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]:
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":"No Authorization header was found"}`)
+		case p == "/api/BasketItems":
+			var all []string
+			for _, k := range []string{"5", "8", "9", "10"} {
+				all = append(all, items[k])
+			}
+			fmt.Fprintf(w, `{"status":"success","data":[%s]}`, strings.Join(all, ","))
+		case strings.HasPrefix(p, "/api/BasketItems/") && items[strings.TrimPrefix(p, "/api/BasketItems/")] != "":
+			fmt.Fprintf(w, `{"status":"success","data":%s}`, items[strings.TrimPrefix(p, "/api/BasketItems/")])
+		case strings.HasPrefix(p, "/rest/basket/") && baskets[strings.TrimPrefix(p, "/rest/basket/")] != 0:
+			id := strings.TrimPrefix(p, "/rest/basket/")
+			fmt.Fprintf(w, `{"status":"success","data":{"id":%s,"UserId":%d,"Products":[]}}`, id, baskets[id])
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":"not found"}`)
+		}
+	}))
+	defer site.Close()
+	got, rows, _, err := rolesJSON(t, site.URL, "-role", "anon", "-role", "alice=Authorization: Bearer "+alice, "-role", "bob=Authorization: Bearer "+bob,
+		"--", "-url", site.URL+"/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{
+		"/rest/basket/8":      verdictCross + " [bob] of alice",
+		"/rest/basket/9":      verdictCross + " [alice] of bob",
+		"/api/BasketItems/10": verdictCross + " [bob] of alice",
+		"/api/BasketItems/9":  verdictCross + " [alice] of bob",
+		"/api/BasketItems/8":  verdictObject,
+	} {
+		if got[p] != want {
+			t.Errorf("%s: %q, want %q", p, got[p], want)
+		}
+	}
+	for p, want := range map[string]string{
+		"/rest/basket/8":      "bid claim of alice's token → /rest/basket/{id}; the answer's UserId 27 names alice (data.id claim of alice's token)",
+		"/api/BasketItems/10": "item of /api/BasketItems: BasketId 8 is alice's basket (bid claim of alice's token); the answer's BasketId 8 is alice's basket (bid claim of alice's token)",
+	} {
+		if rows[p].OwnerBy != want {
+			t.Errorf("%s: owner_by %q, want %q", p, rows[p].OwnerBy, want)
+		}
 	}
 }
