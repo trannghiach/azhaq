@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Chrome is held to the scope: every request a page, frame or worker makes is intercepted, and one to a host outside the scope (without one, outside the site) is refused before it leaves, WebSockets included; refused URLs are listed as skips (`outside the scope (Chrome)`), and Chrome's requests count against `-max-requests`. A sign-in that goes to an identity provider outside the scope says so (`add it with -allow`). This covers `-browser`, `-login`, `roles -role-login` and `shots`.
+- Chrome is held to the scope: every request a page, frame or worker makes is intercepted, and one to a host outside the scope (without one, outside the site) is refused before it leaves, WebSockets included; refused URLs are listed as skips (`outside the scope (Chrome)`), and Chrome's requests count against `-max-requests`. A sign-in that goes to an identity provider outside the scope says so (`add it with -allow`). This covers `-browser`, `-login`, `roles -role-login` and `shots`. Windows a page opens are closed, Chrome's requests keep to `-rate`, WebRTC sends nothing past the guard, and the local relay Chrome connects through serves Chrome alone.
 - `azhaq mcp` does not start without `-allow` or `-scope`, unless `-unlocked` says so.
 - `params` checks every signal against a control of random names and values: a page that echoes its query string (Juice Shop's error page) no longer reports every name in the wordlist; a page that answers names it does not read is noted and not searched.
 - `roles` claims "reads another role's object" only for an identifier of that kind of object (Juice Shop's `bid` is a basket's, not a basket item's), lets the object's own answer decide (an owner or reference field that names another role clears the claim), and says why in `owner_by`.
@@ -12,6 +12,7 @@
 - A query value that switches something (`?phpids=on`, `=off`, `=enable`, …) is left alone like a state-changing name.
 - An `http://` URL of a site the run was given as `https://` (from an archive, a link) is mapped as https when the http front page redirects there or serves the same page: the budget is not spent twice.
 - A link's query names belong to the link's row, not to the page that holds it.
+- Links and forms honour `<base href>`; an export never lists a URL left alone as state-changing as an operation.
 
 ### New
 
