@@ -6,6 +6,20 @@ It is built to be driven by scripts and assistants as much as by people: every c
 
 It maps and does not attack: no payloads, no vulnerability checks. Requests are GETs, except Chrome signing in when you give it an account, and GraphQL introspection with `-graphql`. Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
 
+## At a glance
+
+| You want | Run | In place of |
+| --- | --- | --- |
+| One web app or API mapped: pages, the routes its JavaScript calls with methods and body fields, API descriptions, forms | `azhaq run -url https://app/ -db app.db` (`-browser` for an app its scripts draw) | katana + jsluice, reading bundles by hand |
+| Who may read what across sessions: IDOR/BOLA, data only some roles should see | `azhaq roles -role anon -role 'alice=Authorization: Bearer …' -role 'bob=…' -- -url https://app/` | Autorize, diffing Burp histories |
+| A program's attack surface, within its scope | `azhaq run -scope hackerone -program NAME -db prog.db` | a script around the tools below |
+| Subdomains, resolved | `azhaq subs -d example.com -live` | subfinder \| dnsx |
+| Web services probed | `azhaq probe -l hosts.txt -json` | httpx |
+| Paths, parameters, ports, archived URLs | `azhaq dirs`, `azhaq params`, `azhaq ports`, `azhaq urls` | ffuf -ac, arjun, naabu, gau |
+| What changed since the last run | `azhaq watch -db prog.db -- RUN FLAGS` | cron and diff |
+| An assistant doing the recon, inside a scope and a budget | `azhaq mcp -allow example.com -max-requests 5000` | |
+| What a run would send, before it sends anything | `azhaq plan` with the run's flags | |
+
 ## Install
 
 Download a binary for Linux, macOS or Windows from the [releases](https://github.com/trannghiach/azhaq/releases) (checksums and SBOMs alongside), or:
