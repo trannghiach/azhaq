@@ -51,9 +51,52 @@ func cmdResume(args []string) error {
 	if !wantsJSON(rest) {
 		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks known and not done\n", id, db, left)
 	}
+	runArgs, err = listFromWorkspace(db, id, runArgs)
+	if err != nil {
+		return err
+	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)
 	return cmdRun(all)
+}
+
+// listFromWorkspace points the stored run's -list at the copy the
+// workspace keeps when the file cannot be read again: stdin, or the
+// temporary list a command such as dirs or probe wrote and removed.
+func listFromWorkspace(db, id string, args []string) ([]string, error) {
+	out := append([]string(nil), args...)
+	for i := 0; i < len(out); i++ {
+		name, val, inline := strings.Cut(strings.TrimLeft(out[i], "-"), "=")
+		if name != "list" || !strings.HasPrefix(out[i], "-") {
+			continue
+		}
+		at := i
+		if !inline {
+			if i+1 >= len(out) {
+				break
+			}
+			at, val = i+1, out[i+1]
+		}
+		if _, err := os.Stat(val); val != "-" && err == nil {
+			continue
+		}
+		st, err := store.OpenExisting(db)
+		if err != nil {
+			return nil, err
+		}
+		kept := st.GetMeta("list:" + id)
+		st.Close()
+		if kept == "" {
+			return nil, fmt.Errorf("the run's target list %s is gone and %s keeps no copy of it: give it again with -list FILE", val, db)
+		}
+		storedList = strings.Split(kept, "\n")
+		if inline {
+			out[i] = "-list=@run"
+		} else {
+			out[at] = "@run"
+		}
+	}
+	return out, nil
 }
 
 // keptArgs are the run options stored for azhaq resume: everything but the
@@ -86,6 +129,18 @@ func keptArgs(args []string) []string {
 				continue
 			}
 			out = append(out, "-header="+val)
+			continue
+		case "list":
+			if !inline && takesValue {
+				val = args[i+1]
+				i++
+			}
+			if val != "-" {
+				if abs, err := filepath.Abs(val); err == nil {
+					val = abs
+				}
+			}
+			out = append(out, "-list="+val)
 			continue
 		case "scope":
 			if !inline && takesValue {

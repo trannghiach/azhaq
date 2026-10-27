@@ -17,7 +17,7 @@ azhaq mcp -allow example.com -deny admin.example.com -max-requests 5000
 | `-rate` | requests per second to targets in every call |
 | `-dir` | where the workspaces (databases) go; default `azhaq-mcp` |
 
-Without `-allow` or `-scope` the server is unlocked: any target a tool is given may be touched, and port scans are refused.
+Without `-allow` or `-scope` the server does not start (exit 2), unless `-unlocked` says so: then any target a tool is given may be touched, and port scans are refused.
 
 ## Adding it to a client
 

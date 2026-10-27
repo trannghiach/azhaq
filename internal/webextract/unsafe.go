@@ -42,10 +42,13 @@ func StateChanging(raw string) string {
 		}
 	}
 	for k, vs := range u.Query() {
-		if !actionKeys[strings.ToLower(k)] {
-			continue
-		}
 		for _, v := range vs {
+			if toggles[strings.ToLower(v)] {
+				return k + "=" + v // DVWA's security.php?phpids=on turns a filter on
+			}
+			if !actionKeys[strings.ToLower(k)] {
+				continue
+			}
 			if w := verbOf(v); w != "" {
 				return w
 			}
@@ -53,6 +56,11 @@ func StateChanging(raw string) string {
 	}
 	return ""
 }
+
+// toggles are query values that switch something: whatever the key, the
+// request sets it.
+var toggles = map[string]bool{"on": true, "off": true, "enable": true, "disable": true, "enabled": true, "disabled": true,
+	"activate": true, "deactivate": true}
 
 // verbOf is the state-changing verb a path segment starts with:
 // saveLoginIp, reset-password, log_out.

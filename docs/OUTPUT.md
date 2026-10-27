@@ -22,7 +22,7 @@ Every command follows the same contract, so a script or an assistant can read an
 
 A run keeps the answers it got in its workspace until nothing is left to resume, so `azhaq resume` does not ask again what the run already asked: the requests of a run stopped and resumed add up to about those of one uninterrupted run (Juice Shop: 211 against 205 with `-max-requests 50`; a 4,750-word path sweep: 4,812 against 4,801). A port scan the budget cut short scans that address again. A command run without `-db` uses a temporary database and cannot be resumed.
 
-Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count, except a source that failed while other sources answered for the same domain: it is listed with `"partial": true` and does not make the exit code 3 (sources fail all the time; an exit code that is always 3 says nothing). `-fail-on-errors` counts every failure. A name answered SERVFAIL on every attempt, by two resolvers or more, on two passes, is not a failure: the resolvers answered alike, and the name's own DNS is broken (a lame delegation) for everyone; it is dead, with `result` `servfail`. Resolvers that time out or answer REFUSED (refusing this machine), or SERVFAIL from one resolver alone, are a failure.
+Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count, except a source that failed while other sources answered for the same domain: it is listed with `"partial": true` and does not make the exit code 3 (sources fail all the time; an exit code that is always 3 says nothing). crt.sh is never partial: it holds the most names of any certificate log, and the others do not make up for it. `-fail-on-errors` counts every failure. A name answered SERVFAIL on every attempt, by two resolvers or more, on two passes, is not a failure: the resolvers answered alike, and the name's own DNS is broken (a lame delegation) for everyone; it is dead, with `result` `servfail`. Resolvers that time out or answer REFUSED (refusing this machine), or SERVFAIL from one resolver alone, are a failure.
 
 ## The summary
 
@@ -108,7 +108,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | `asn` | `as_number`, `as_name`, `prefix`. |
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
 
-`probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found.
+`probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind`, `key`, `collector` and `detail`).
 
 ## roles
 

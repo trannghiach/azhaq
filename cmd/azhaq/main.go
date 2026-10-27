@@ -178,6 +178,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	pathsFile := fs.String("paths", "", "extra path wordlist (one path per line)")
 	quiet := fs.Bool("quiet", false, "print no map, only the summary (on stderr)")
 	jsonOut := fs.Bool("json", false, "print the map as JSON lines, and the summary as one JSON object on stderr")
+	stream := fs.Bool("stream", false, "also print each name, service, URL and open port as it is found (found lines, before the ranked map)")
 	verbose := fs.Bool("v", false, "print a line for every finished task, not only failures")
 	timeout := fs.Duration("timeout", 0, "stop after this long and keep what was found; azhaq resume continues (0: no limit)")
 	showObs := fs.Bool("obs", false, "also print the observation log")
@@ -242,6 +243,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	var client *http.Client
 	var seeds []types.Seed
+	var listLines []string // kept in the workspace, for azhaq resume
 	if *demo {
 		if *url != "" || *org != "" || *cloud != "" || *in != "" {
 			fmt.Fprintln(os.Stderr, "azhaq: -demo ignores -url/-org/-cloud/-in")
@@ -257,11 +259,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return err
 		}
 		if *list != "" {
-			more, err := loadList(*list)
+			more, lines, err := loadList(*list)
 			if err != nil {
 				return err
 			}
 			seeds = append(seeds, more...)
+			listLines = lines
 		}
 		for _, a := range asns {
 			n, ok := asncol.NormalizeASN(a)
@@ -447,6 +450,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if err := st.SetRunArgs(keptArgs(args)); err != nil {
 			return err
 		}
+		if listLines != nil {
+			if err := st.SetMeta("list:"+st.RunID(), strings.Join(listLines, "\n")); err != nil {
+				return err
+			}
+		}
 		if !rules.Empty() {
 			// The scope as resolved now: a program's scope changes, and the
 			// export of this run describes this run's.
@@ -590,6 +598,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if *workerOf != "" {
 		return runWorker(cat, *workerOf, *workerToken, budgets.Parallel)
+	}
+	if *stream && observer == nil {
+		observer = streamFound(*jsonOut)
+		defer func() { observer = nil }()
 	}
 	eng := &engine.Engine{Cat: cat, Store: st, Observe: observer}
 	if *serve != "" {
@@ -846,7 +858,7 @@ func cmdIngest(args []string) error {
 	if err != nil {
 		return err
 	}
-	facts, formats, err := connector.ReadAny(raw)
+	facts, formats, skipped, err := connector.ReadLines(raw)
 	if err != nil {
 		return usagef("%s: %v", *in, err)
 	}
@@ -889,6 +901,9 @@ func cmdIngest(args []string) error {
 	rep := newReport("ingest")
 	rep.what = "facts"
 	rep.Results, rep.Counts, rep.DB = len(facts), formats, path
+	if n := formats["skipped"]; n > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%s not read and skipped: %s", plural(n, "line"), strings.Join(skipped, "; ")))
+	}
 	rep.Next = []string{"azhaq query -db " + path, "azhaq export -db " + path + " -format names | azhaq dns -db " + path + "   (resolve the names taken in without addresses)"}
 	return rep.finish(*asJSON, false)
 }
@@ -1318,27 +1333,36 @@ func loadSeeds(url, org, cloud, path string) ([]types.Seed, error) {
 // loadList reads targets the way httpx does: a URL is fetched as given, a
 // bare host is probed over HTTPS then HTTP, and host:port or an IP address
 // becomes a URL that falls back to plain HTTP.
-func loadList(path string) ([]types.Seed, error) {
+// loadList reads a -list file, or stdin for "-"; a list azhaq resume
+// can no longer read (stdin, a temporary file gone) it takes from the
+// workspace, which keeps it as "@run".
+func loadList(path string) ([]types.Seed, []string, error) {
 	var lines []string
 	var err error
-	if path == "-" {
+	switch {
+	case path == "-":
 		lines, err = readLines(os.Stdin)
-	} else {
+	case strings.HasPrefix(path, "@"):
+		lines = storedList
+	default:
 		lines, err = loadLines(path)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var seeds []types.Seed
 	for i, line := range lines {
 		s, err := listSeed(line)
 		if err != nil {
-			return nil, fmt.Errorf("%s:%d: %w", path, i+1, err)
+			return nil, nil, fmt.Errorf("%s:%d: %w", path, i+1, err)
 		}
 		seeds = append(seeds, s)
 	}
-	return seeds, nil
+	return seeds, lines, nil
 }
+
+// storedList is the target list azhaq resume took from the workspace.
+var storedList []string
 
 func listSeed(line string) (types.Seed, error) {
 	if strings.Contains(line, "://") {

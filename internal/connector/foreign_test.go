@@ -188,3 +188,20 @@ func TestReadAnyHTTPXWithRequest(t *testing.T) {
 		t.Fatalf("httpx -irr %v %v %v", facts, formats, err)
 	}
 }
+
+// One record shape ingest does not know does not lose the rest; katana's
+// request-only records (headless, no answer) are URLs.
+func TestReadLinesSkips(t *testing.T) {
+	in := `{"request":{"endpoint":"http://a.test/x","method":"GET"}}
+{"what":"no idea"}
+not a url at all
+{"timestamp":"2026-10-27T10:00:00Z","request":{"method":"GET","endpoint":"http://a.test/y"},"response":{"status_code":200}}
+`
+	facts, formats, skipped, err := ReadLines([]byte(in))
+	if err != nil || formats[FormatKatana] != 2 || formats["skipped"] != 2 || len(skipped) != 2 || !strings.HasPrefix(skipped[0], "line 2: ") || len(facts) < 2 {
+		t.Fatalf("facts %d formats %v skipped %q err %v", len(facts), formats, skipped, err)
+	}
+	if _, _, _, err := ReadLines([]byte("{\"what\":1}\nnot a url\n")); err == nil {
+		t.Error("a file with nothing readable ingested")
+	}
+}

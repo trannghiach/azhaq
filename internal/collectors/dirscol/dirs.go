@@ -115,17 +115,36 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var all []hit
 	var skipped []string // guesses not sent: nobody saw them exist, so they are no URLs of the map
 	requests, filtered := 0, 0
-	for len(queue) > 0 && ctx.Err() == nil {
+	// Each hit is kept as it is found, as ffuf prints it: a run stopped by
+	// Ctrl-C or the budget keeps what it found so far.
+	var emitErr error
+	found := func(h hit) {
+		row := map[string]any{"url": h.URL, "via": "dirs", "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines}
+		if h.Location != "" {
+			row["location"] = h.Location
+		}
+		raw, _ := json.Marshal(row)
+		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "url", Payload: raw, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
+			if emitErr == nil {
+				emitErr = err
+			}
+			return
+		}
+		meta.EmitCount++
+		meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": h.URL}})
+	}
+	for len(queue) > 0 && ctx.Err() == nil && emitErr == nil {
 		d := queue[0]
 		queue = queue[1:]
 		if _, done := c.swept.LoadOrStore(d.url, true); done {
 			continue
 		}
-		hits, n, f, held, spent := c.sweep(ctx, d.url)
+		hits, n, f, held, spent := c.sweep(ctx, d.url, found)
 		if spent {
-			// The sweep is redone whole by azhaq resume.
+			// The sweep is redone whole by azhaq resume; what it found is
+			// kept, and found again.
 			c.swept.Delete(d.url)
-			return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
+			return types.RunMeta{Status: types.StatusCapped, EmitCount: meta.EmitCount, NextHints: meta.NextHints}, neterr.ErrBudget
 		}
 		requests += n
 		filtered += f
@@ -137,8 +156,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 	}
+	if emitErr != nil {
+		return meta, emitErr
+	}
 	if ctx.Err() != nil {
-		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+		return types.RunMeta{Status: types.StatusCancelled, EmitCount: meta.EmitCount, NextHints: meta.NextHints}, ctx.Err()
 	}
 	summary, _ := json.Marshal(map[string]any{
 		"base": base, "words": len(c.Opts.Words), "extensions": c.Opts.Extensions, "requests": requests,
@@ -154,18 +176,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return meta, err
 		}
 		meta.EmitCount++
-	}
-	for _, h := range all {
-		row := map[string]any{"url": h.URL, "via": "dirs", "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines}
-		if h.Location != "" {
-			row["location"] = h.Location
-		}
-		raw, _ := json.Marshal(row)
-		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "url", Payload: raw, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
-			return meta, err
-		}
-		meta.EmitCount++
-		meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": h.URL}})
 	}
 	return meta, nil
 }
@@ -192,10 +202,11 @@ func schemeHost(raw string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// sweep guesses every word (and word.ext) under dir; held lists the URLs
-// not sent because, with a session, a GET there could change something;
-// spent says the request budget ran out before it was through.
-func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ int, held []string, spent bool) {
+// sweep guesses every word (and word.ext) under dir, handing each hit to
+// found as it comes (one at a time); held lists the URLs not sent
+// because, with a session, a GET there could change something; spent
+// says the request budget ran out before it was through.
+func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ []hit, _ int, _ int, held []string, spent bool) {
 	cal := c.calibrate(ctx, dir)
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
@@ -249,7 +260,9 @@ func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ in
 				filtered++
 				return
 			}
-			hits = append(hits, hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location})
+			h := hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location}
+			hits = append(hits, h)
+			found(h)
 		}(t)
 	}
 	wg.Wait()
