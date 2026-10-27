@@ -2,6 +2,7 @@ package webextract
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,32 @@ func TestFormsAndGenerator(t *testing.T) {
 	fs := Forms(html, base)
 	if len(fs) != 1 || fs[0].Method != "POST" || fs[0].ID != "signin" || fs[0].Name != "login" || !contains(fs[0].Fields, "user") {
 		t.Fatalf("forms %+v", fs)
+	}
+}
+
+func TestFormSubmittingToItsPage(t *testing.T) {
+	// DVWA's forms: action="#" and no action submit to the page itself,
+	// its query kept, its fragment dropped.
+	base, _ := url.Parse("http://dvwa.test/vulnerabilities/sqli/?id=1&Submit=Submit#top")
+	page := []byte(`<form action="#" method="GET"><input type="text" name="id"><input type="submit" name="Submit"></form>
+<form enctype="multipart/form-data" method="POST"><input type="hidden" name="MAX_FILE_SIZE"><input name="uploaded" type="FILE"><input type="submit" name="Upload"></form>
+<form action="" method="post" enctype="bogus"><input name="security"></form>
+<form action="/login.php" method="post"><input name="username"></form>`)
+	fs := Forms(page, base)
+	if len(fs) != 4 {
+		t.Fatalf("forms %+v", fs)
+	}
+	self := "http://dvwa.test/vulnerabilities/sqli/?id=1&Submit=Submit"
+	for i, want := range []Form{
+		{Method: "GET", Action: self},
+		{Method: "POST", Action: self, Enctype: "multipart/form-data", Files: []string{"uploaded"}},
+		{Method: "POST", Action: self, Enctype: "application/x-www-form-urlencoded"},
+		{Method: "POST", Action: "http://dvwa.test/login.php", Enctype: "application/x-www-form-urlencoded"},
+	} {
+		f := fs[i]
+		if f.Method != want.Method || f.Action != want.Action || f.Enctype != want.Enctype || strings.Join(f.Files, ",") != strings.Join(want.Files, ",") {
+			t.Errorf("form %d: %+v, want %+v", i, f, want)
+		}
 	}
 }
 

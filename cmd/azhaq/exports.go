@@ -163,8 +163,9 @@ var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 // says where it came from and how the route answered a GET.
 func openAPI(g *graphView, origin string) (map[string]any, error) {
 	byOrigin := map[string][]engine.MapEntry{}
+	queried := map[string][]engine.MapEntry{}
 	for _, r := range g.rows {
-		if r.Entity.Type != types.TypeURL || !(isAPI(r) || len(r.Forms) > 0) {
+		if r.Entity.Type != types.TypeURL {
 			continue
 		}
 		u, err := url.Parse(r.Entity.Key)
@@ -172,7 +173,12 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 			continue
 		}
 		o := u.Scheme + "://" + u.Host
-		byOrigin[o] = append(byOrigin[o], r)
+		switch {
+		case isAPI(r) || len(r.Forms) > 0:
+			byOrigin[o] = append(byOrigin[o], r)
+		case takesQuery(r):
+			queried[o] = append(queried[o], r)
+		}
 	}
 	if origin == "" {
 		for o, rs := range byOrigin {
@@ -182,7 +188,7 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 		}
 	}
 	origin = strings.TrimSuffix(origin, "/")
-	rows := byOrigin[origin]
+	rows := slices.Concat(byOrigin[origin], queried[origin])
 	if len(rows) == 0 {
 		return nil, fmt.Errorf("no API routes found%s", map[bool]string{true: " on " + origin}[origin != ""])
 	}
@@ -383,7 +389,15 @@ func (s *spec) addRoute(r engine.MapEntry) {
 	}
 	for _, o := range ops {
 		m := strings.ToLower(o.Method)
-		if _, ok := item[m]; ok || !slices.Contains(opMethods, m) {
+		if !slices.Contains(opMethods, m) {
+			continue
+		}
+		if have, ok := item[m].(map[string]any); ok {
+			// Another URL of the route (/item?id=3 after /item): the
+			// names it was seen with are the route's too.
+			if ours(have) {
+				addQuery(have, o.Query)
+			}
 			continue
 		}
 		params := pathParameters(pathParams)
@@ -439,7 +453,11 @@ func pathParameters(names []string) []any {
 	return out
 }
 
-// addForm adds the operation an HTML form submits.
+// addForm adds what an HTML form submits: a GET form's fields as query
+// parameters, a POST form's as its request body, urlencoded or multipart
+// as its enctype says, a file input as binary. An operation the export
+// made for the route already (it answered a GET, scripts call it) takes
+// the fields it lacks; a served description's is left as it is.
 func (s *spec) addForm(origin string, f engine.MapForm) {
 	u, err := url.Parse(f.Action)
 	if err != nil || u.Scheme+"://"+u.Host != origin {
@@ -457,31 +475,122 @@ func (s *spec) addForm(origin string, f engine.MapForm) {
 	if item == nil {
 		item = map[string]any{}
 	}
-	if _, ok := item[method]; ok {
+	op, _ := item[method].(map[string]any)
+	switch {
+	case op == nil:
+		op = map[string]any{
+			"operationId": operationID(engine.Op{}, method, p),
+			"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
+			"x-azhaq":     map[string]any{"source": "form"},
+		}
+		if params := pathParameters(pathParams); len(params) > 0 {
+			op["parameters"] = params
+		}
+		item[method] = op
+		s.paths[p] = item
+	case !ours(op):
 		return
 	}
-	op := map[string]any{
-		"operationId": operationID(engine.Op{}, method, p),
-		"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
-		"x-azhaq":     map[string]any{"source": "form"},
-	}
-	params := pathParameters(pathParams)
 	if method == "get" {
-		seen := map[string]bool{}
-		for _, n := range f.Fields {
-			if n != "" && !seen[n] {
-				seen[n] = true
-				params = append(params, map[string]any{"name": n, "in": "query", "schema": map[string]any{"type": "string"}})
-			}
+		// The fields replace the action's query.
+		addQuery(op, f.Fields)
+		return
+	}
+	addQuery(op, slices.Sorted(maps.Keys(u.Query())))
+	addFormBody(op, f)
+}
+
+// ours: an operation the export made, not a served description's, so
+// what else was seen of the route may be added to it.
+func ours(op map[string]any) bool {
+	x, _ := op["x-azhaq"].(map[string]any)
+	return x != nil && x["source"] != "served description"
+}
+
+// addQuery adds the query parameters op does not list yet.
+func addQuery(op map[string]any, names []string) {
+	params, _ := op["parameters"].([]any)
+	have := map[string]bool{}
+	for _, x := range params {
+		if m, ok := x.(map[string]any); ok && m["in"] == "query" {
+			n, _ := m["name"].(string)
+			have[n] = true
 		}
-	} else {
-		op["requestBody"] = requestBody(f.Fields, "application/x-www-form-urlencoded")
+	}
+	for _, n := range names {
+		if n == "" || have[n] {
+			continue
+		}
+		have[n] = true
+		params = append(params, map[string]any{"name": n, "in": "query", "schema": map[string]any{"type": "string"}})
 	}
 	if len(params) > 0 {
 		op["parameters"] = params
 	}
-	item[method] = op
-	s.paths[p] = item
+}
+
+// addFormBody gives op the body a POST form sends, or adds the form's
+// fields to the one op has in the same encoding. A body whose fields were
+// not known (a script's POST) becomes the form's.
+func addFormBody(op map[string]any, f engine.MapForm) {
+	media := f.Enctype
+	if media == "" {
+		media = "application/x-www-form-urlencoded"
+	}
+	props := map[string]any{}
+	for _, n := range f.Fields {
+		if n == "" {
+			continue
+		}
+		props[n] = map[string]any{"type": "string"}
+		if slices.Contains(f.Files, n) {
+			props[n] = map[string]any{"type": "string", "format": "binary"}
+		}
+	}
+	body := map[string]any{"schema": map[string]any{"type": "object", "properties": props}}
+	rb, _ := op["requestBody"].(map[string]any)
+	content, _ := rb["content"].(map[string]any)
+	if len(content) == 0 || unknownBody(content) {
+		op["requestBody"] = map[string]any{"content": map[string]any{media: body}}
+		return
+	}
+	mt, _ := content[media].(map[string]any)
+	sc, _ := mt["schema"].(map[string]any)
+	have, _ := sc["properties"].(map[string]any)
+	if have == nil {
+		content[media] = body
+		return
+	}
+	for n, v := range props {
+		if _, ok := have[n]; !ok {
+			have[n] = v
+		}
+	}
+}
+
+// unknownBody: the body requestBody(nil, "") stands for, sent with fields
+// not known.
+func unknownBody(content map[string]any) bool {
+	if len(content) != 1 {
+		return false
+	}
+	mt, _ := content["application/json"].(map[string]any)
+	sc, _ := mt["schema"].(map[string]any)
+	props, _ := sc["properties"].(map[string]any)
+	return mt != nil && len(props) == 0
+}
+
+// takesQuery: a page found or requested with a query string of its own
+// (a link to /item?id=3), which is a GET that takes those names.
+func takesQuery(r engine.MapEntry) bool {
+	if len(r.Params) == 0 || r.Coverage == "gone" || r.Coverage == "catchall" {
+		return false
+	}
+	switch r.Role {
+	case "asset", "script", "sourcemap":
+		return false
+	}
+	return true
 }
 
 // graphqlOperation is the POST a GraphQL endpoint takes: a query and its

@@ -51,11 +51,14 @@ type Op struct {
 	Source      string   `json:"source,omitempty"` // js-call, openapi
 }
 
-// MapForm is a form on a page: where it submits and the fields it sends.
+// MapForm is a form on a page: where it submits and the fields it sends,
+// and for a POST how it encodes them and which fields are files.
 type MapForm struct {
-	Method string   `json:"method"`
-	Action string   `json:"action"`
-	Fields []string `json:"fields,omitempty"`
+	Method  string   `json:"method"`
+	Action  string   `json:"action"`
+	Enctype string   `json:"enctype,omitempty"`
+	Fields  []string `json:"fields,omitempty"`
+	Files   []string `json:"files,omitempty"`
 }
 
 // BuildMap ranks seed host, live apps, auth-gated, APIs, then fan-out.
@@ -78,6 +81,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	apiOps := apiOperations(obs)
 	probes := pathProbes(obs)
 	finds := findings(obs)
+	secured := securedHosts(obs)
 	out := make([]MapEntry, 0, len(ents))
 	for _, e := range ents {
 		rows := ownObs(e, byEnt[e.ID])
@@ -92,6 +96,9 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			Proof:    proofOf(e, rows),
 		}
 		if e.Type == types.TypeURL {
+			if foldedHTTP(e.Key, m.Coverage, secured) {
+				continue // its https URL is the row
+			}
 			m.Status, m.Title = answerOf(rows)
 			if webextract.Templated(e.Key) {
 				m.Template = webextract.Template(e.Key)
@@ -139,7 +146,14 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 					m.Body = addName(m.Body, n)
 				}
 			}
-			m.Forms, m.Params = pageForms(byEnt[e.ID], m.Params)
+			m.Forms = pageForms(byEnt[e.ID])
+			// The URL's own query names; those in the links on a page
+			// are the links' rows'.
+			if u, err := url.Parse(e.Key); err == nil {
+				for _, k := range queryNames(u.RawQuery) {
+					m.Params = addName(m.Params, k)
+				}
+			}
 		}
 		out = append(out, m)
 	}
@@ -561,6 +575,9 @@ func (m MapEntry) Details() []string {
 			action = "/"
 		}
 		line := "form " + f.Method + " " + action
+		if f.Enctype == "multipart/form-data" {
+			line += " multipart"
+		}
 		if len(f.Fields) > 0 {
 			line += "  " + strings.Join(f.Fields, " ")
 		}
@@ -813,11 +830,9 @@ func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 }
 
 // pageForms collects the forms found on a page (crawled, rendered, or
-// taken in from katana) and adds the page's other parameter names (query
-// strings in its links) to params.
-func pageForms(obs []types.StoredObservation, params []string) ([]MapForm, []string) {
+// taken in from katana).
+func pageForms(obs []types.StoredObservation) []MapForm {
 	var forms []MapForm
-	inForm := map[string]bool{}
 	for _, o := range obs {
 		if o.Kind != "form" {
 			continue
@@ -827,27 +842,20 @@ func pageForms(obs []types.StoredObservation, params []string) ([]MapForm, []str
 			continue
 		}
 		forms = addForm(forms, f)
-		for _, n := range f.Fields {
-			inForm[n] = true
+	}
+	return forms
+}
+
+// queryNames are the names in a raw query, in their order, once each.
+func queryNames(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, "&") {
+		k, _, _ := strings.Cut(part, "=")
+		if n, err := url.QueryUnescape(k); err == nil && n != "" {
+			out = addName(out, n)
 		}
 	}
-	for _, o := range obs {
-		if o.Collector != "azhaq-crawl" || o.Kind != "param" {
-			continue
-		}
-		var p struct {
-			Params []string `json:"params"`
-		}
-		if json.Unmarshal(o.Payload, &p) != nil {
-			continue
-		}
-		for _, n := range p.Params {
-			if !inForm[n] {
-				params = addName(params, n)
-			}
-		}
-	}
-	return forms, params
+	return out
 }
 
 func hasGET(methods []string) bool {

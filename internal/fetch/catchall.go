@@ -172,7 +172,31 @@ func requestTarget(u *url.URL) string {
 }
 
 func fingerprintOf(res Result, origin, target string) fingerprint {
-	strip := func(s string) string { return stripEcho(s, origin, target) }
+	return fingerprintBy(res, origin, func(s string) string { return stripEcho(s, origin, target) })
+}
+
+// SamePage says whether two answers, of two origins, are the same page
+// as a catch-all check compares them, once each answer's links to its own
+// origin are taken out: one site served over http and https.
+func SamePage(a, b Result) bool {
+	if a.Status == 0 || b.Status == 0 {
+		return false
+	}
+	return ownPage(a).matches(ownPage(b))
+}
+
+func ownPage(res Result) fingerprint {
+	origin := ""
+	if u, err := url.Parse(res.RequestURL); err == nil {
+		origin = u.Scheme + "://" + u.Host
+	}
+	escaped := strings.ReplaceAll(origin, "/", `\/`) // in JSON strings
+	return fingerprintBy(res, origin, func(s string) string {
+		return strings.ReplaceAll(strings.ReplaceAll(s, origin, ""), escaped, "")
+	})
+}
+
+func fingerprintBy(res Result, origin string, strip func(string) string) fingerprint {
 	fp := fingerprint{status: res.Status}
 	if res.Header != nil {
 		fp.location = strip(strings.TrimPrefix(res.Header.Get("Location"), origin))

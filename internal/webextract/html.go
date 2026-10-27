@@ -25,9 +25,14 @@ var skipExt = map[string]bool{
 type Form struct {
 	Method string
 	Action string
-	ID     string
-	Name   string
-	Fields []string
+	// Enctype is how a POST form encodes its fields, lower case:
+	// application/x-www-form-urlencoded unless it says multipart/form-data
+	// or text/plain. Empty for GET.
+	Enctype string
+	ID      string
+	Name    string
+	Fields  []string
+	Files   []string // the fields that are file inputs
 }
 
 // Forms returns <form> elements and script-driven forms: any element with a
@@ -49,18 +54,14 @@ func Forms(body []byte, base *url.URL) []Form {
 		if method == "" {
 			method = "GET"
 		}
-		if action == "" {
-			action = base.Path
-		}
-		act := ""
-		if u, ok := resolve(base, action); ok {
-			act = u
-		}
 		cur = &Form{
 			Method: method,
-			Action: act,
+			Action: formAction(base, action),
 			ID:     attr(tok.Attr, "id"),
 			Name:   attr(tok.Attr, "name"),
+		}
+		if method == "POST" {
+			cur.Enctype = enctype(attr(tok.Attr, "enctype"))
 		}
 		curTag, depth = strings.ToLower(tok.Data), 1
 	}
@@ -101,12 +102,41 @@ func Forms(body []byte, base *url.URL) []Form {
 				continue
 			}
 			cur.Fields = append(cur.Fields, name)
+			if tag == "input" && strings.EqualFold(attr(tok.Attr, "type"), "file") {
+				cur.Files = append(cur.Files, name)
+			}
 		}
 	}
 	if cur != nil {
 		out = append(out, *cur)
 	}
 	return out
+}
+
+// formAction is where a form submits. An empty action, or a fragment
+// alone (action="#"), is the page's own URL with its query, as browsers
+// take it; the fragment is never sent.
+func formAction(base *url.URL, action string) string {
+	action = strings.TrimSpace(action)
+	if action == "" || strings.HasPrefix(action, "#") {
+		u, err := normalize.URL(base.String())
+		if err != nil {
+			return ""
+		}
+		return u
+	}
+	u, _ := resolve(base, action)
+	return u
+}
+
+// enctype is a POST form's encoding as browsers read the attribute: an
+// unknown value is the default.
+func enctype(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case "multipart/form-data", "text/plain":
+		return v
+	}
+	return "application/x-www-form-urlencoded"
 }
 
 func nameIn(xs []string, n string) bool {
@@ -137,34 +167,6 @@ func Generator(body []byte) string {
 		}
 		return strings.TrimSpace(attr(tok.Attr, "content"))
 	}
-}
-
-func ParamNames(body []byte, base *url.URL) []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		out = append(out, name)
-	}
-	for _, link := range Links(body, base) {
-		u, err := url.Parse(link)
-		if err != nil {
-			continue
-		}
-		for k := range u.Query() {
-			add(k)
-		}
-	}
-	for _, f := range Forms(body, base) {
-		for _, name := range f.Fields {
-			add(name)
-		}
-	}
-	return out
 }
 
 func Links(body []byte, base *url.URL) []string {
