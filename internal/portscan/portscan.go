@@ -78,6 +78,9 @@ type Scanner struct {
 	Workers int           // connects in flight; 0 means 100
 	Timeout time.Duration // per connect; 0 means 1.5 s
 	Banner  time.Duration // how long to wait for a service to speak; 0 means 1.5 s; <0 skips
+	// Take, when set, is asked before each connect; an error stops the
+	// scan and is returned (the run's request budget is spent).
+	Take func() error
 
 	once    sync.Once
 	limiter *limit.Limiter
@@ -108,9 +111,15 @@ func (s *Scanner) Scan(ctx context.Context, ip string, ports []int) ([]Open, err
 	var open []Open
 	sem := make(chan struct{}, s.Workers)
 	var wg sync.WaitGroup
+	var stop error
 	for _, p := range ports {
 		if err := s.limiter.Wait(ctx, ""); err != nil {
 			break
+		}
+		if s.Take != nil {
+			if stop = s.Take(); stop != nil {
+				break
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -132,6 +141,9 @@ func (s *Scanner) Scan(ctx context.Context, ip string, ports []int) ([]Open, err
 	}
 	wg.Wait()
 	sort.Slice(open, func(i, j int) bool { return open[i].Port < open[j].Port })
+	if stop != nil {
+		return open, stop
+	}
 	return open, ctx.Err()
 }
 

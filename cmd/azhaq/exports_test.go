@@ -1,11 +1,19 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/gqlschema"
+	"github.com/trannghiach/azhaq/internal/scopefile"
+	"github.com/trannghiach/azhaq/scope"
+	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -95,4 +103,342 @@ func sortStrings(xs []string) []string {
 		}
 	}
 	return xs
+}
+
+func urlRow(key string, ops ...engine.Op) engine.MapEntry {
+	return engine.MapEntry{Entity: types.Entity{Type: types.TypeURL, Key: key}, Role: "api", Coverage: "visited", Status: 200, Ops: ops}
+}
+
+// operations lists "METHOD path operationId" for every operation.
+func operations(t *testing.T, doc map[string]any) []string {
+	t.Helper()
+	var out []string
+	for p, v := range doc["paths"].(map[string]any) {
+		for m, op := range v.(map[string]any) {
+			if o, ok := op.(map[string]any); ok && slices.Contains(opMethods, m) {
+				id, _ := o["operationId"].(string)
+				out = append(out, m+" "+p+" "+id)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// /blog and /blog/ are two paths with one operationId; every operationId
+// must be unique, deterministically, and a served description's keep theirs.
+func TestOpenAPIUniqueOperationIDs(t *testing.T) {
+	spec := `{"base":"https://app.test/","document":{"openapi":"3.0.1","info":{"title":"Blog"},
+		"paths":{"/posts":{"get":{"operationId":"get_blog","responses":{"200":{"description":"ok"}}}}}}}`
+	g := &graphView{path: "x.db",
+		obs: []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-openapi", Kind: "api", Payload: json.RawMessage(spec)}}},
+		rows: []engine.MapEntry{
+			urlRow("https://app.test/blog", engine.Op{Method: "GET"}),
+			urlRow("https://app.test/blog/", engine.Op{Method: "GET"}),
+			urlRow("https://app.test/blog/2", engine.Op{Method: "GET"}),
+			urlRow("https://app.test/api/items", engine.Op{Method: "GET", OperationID: "listItems"}, engine.Op{Method: "POST", OperationID: "listItems"}),
+		}}
+	var first []string
+	for range 5 {
+		doc, err := openAPI(g, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := operations(t, doc)
+		ids := map[string]string{}
+		for _, o := range got {
+			f := strings.Fields(o)
+			if prev, ok := ids[f[2]]; ok {
+				t.Fatalf("operationId %s on %s and %s", f[2], prev, o)
+			}
+			ids[f[2]] = o
+		}
+		if first == nil {
+			first = got
+		} else if !slices.Equal(first, got) {
+			t.Fatalf("not deterministic:\n%v\n%v", first, got)
+		}
+	}
+	want := []string{
+		"get /api/items listItems", "get /blog get_blog_3", "get /blog/ get_blog_4", "get /blog/2 get_blog_2",
+		"get /posts get_blog", "post /api/items listItems_2",
+	}
+	if !slices.Equal(first, want) {
+		t.Errorf("operations %q", first)
+	}
+}
+
+// Templates that differ only by their parameter names are one path, and
+// every {name} of a path is a parameter of each of its operations, forms
+// included.
+func TestOpenAPIPathTemplates(t *testing.T) {
+	spec := `{"base":"https://app.test/","document":{"openapi":"3.0.1","info":{"title":"Shop"},
+		"paths":{"/users/{username}":{"parameters":[{"name":"username","in":"path","required":true,"schema":{"type":"string"}}],
+			"get":{"responses":{"200":{"description":"ok"}}}}}}}`
+	g := &graphView{path: "x.db",
+		obs: []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-openapi", Kind: "api", Payload: json.RawMessage(spec)}}},
+		rows: []engine.MapEntry{
+			urlRow("https://app.test/users/{n}", engine.Op{Method: "DELETE"}),
+			urlRow("https://app.test/orders/{id}", engine.Op{Method: "GET", Query: []string{"q", "q", ""}}),
+			urlRow("https://app.test/orders/{n}", engine.Op{Method: "PUT"}),
+			{Entity: types.Entity{Type: types.TypeURL, Key: "https://app.test/shop"}, Role: "page",
+				Forms: []engine.MapForm{{Method: "POST", Action: "https://app.test/product/{n}/review", Fields: []string{"text"}}}},
+		}}
+	doc, err := openAPI(g, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := doc["paths"].(map[string]any)
+	for _, p := range []string{"/users/{id}", "/orders/{n}"} {
+		if paths[p] != nil {
+			t.Errorf("%s kept beside a path of its shape", p)
+		}
+	}
+	params := func(p, m string) []string {
+		op, ok := paths[p].(map[string]any)[m].(map[string]any)
+		if !ok {
+			t.Fatalf("no %s %s in %v", m, p, paths[p])
+		}
+		var out []string
+		for _, x := range op["parameters"].([]any) {
+			out = append(out, x.(map[string]any)["in"].(string)+" "+x.(map[string]any)["name"].(string))
+		}
+		return out
+	}
+	if got := params("/users/{username}", "delete"); !slices.Equal(got, []string{"path username"}) {
+		t.Errorf("delete /users/{username}: %v", got)
+	}
+	if got := params("/orders/{id}", "get"); !slices.Equal(got, []string{"path id", "query q"}) {
+		t.Errorf("get /orders/{id}: %v", got)
+	}
+	if got := params("/orders/{id}", "put"); !slices.Equal(got, []string{"path id"}) {
+		t.Errorf("put /orders/{id}: %v", got)
+	}
+	if got := params("/product/{id}/review", "post"); !slices.Equal(got, []string{"path id"}) {
+		t.Errorf("form: %v", got)
+	}
+}
+
+// Component names OpenAPI does not allow are renamed with their
+// references.
+func TestOpenAPIComponentNames(t *testing.T) {
+	spec := `{"base":"https://app.test/","document":{"openapi":"3.0.1","info":{"title":"Shop"},
+		"paths":{"/me":{"get":{"responses":{"200":{"description":"ok","content":{"application/json":{"schema":{"$ref":"#/components/schemas/User Info"}}}}}}}},
+		"components":{"schemas":{"User Info":{"type":"object"},"Ok.Name-1":{"type":"string"}}}}}`
+	g := &graphView{path: "x.db",
+		obs:  []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-openapi", Kind: "api", Payload: json.RawMessage(spec)}}},
+		rows: []engine.MapEntry{urlRow("https://app.test/me", engine.Op{Method: "GET"})}}
+	doc, err := openAPI(g, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _ := json.Marshal(doc)
+	if strings.Contains(string(raw), "User Info") || !strings.Contains(string(raw), `"$ref":"#/components/schemas/User_Info"`) || !strings.Contains(string(raw), `"Ok.Name-1"`) {
+		t.Errorf("components %s", raw)
+	}
+}
+
+func schemaGraph(t *testing.T, urls ...string) *graphView {
+	t.Helper()
+	answer, err := os.ReadFile("../../internal/gqlschema/testdata/introspection.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, _, _ := gqlschema.Read(answer)
+	g := &graphView{path: "x.db"}
+	for _, u := range urls {
+		payload := `{"introspection":true,"url":"` + u + `","role":"graphql","status":200,"schema":` + string(raw) + `}`
+		g.obs = append(g.obs, types.StoredObservation{Observation: types.Observation{Collector: "azhaq-graphql-schema", Kind: "graphql", Payload: json.RawMessage(payload)}})
+		g.rows = append(g.rows, urlRow(u, engine.Op{Method: "POST", Body: []string{"query", "variables"}, Source: "js-call"},
+			engine.Op{Method: "POST", Summary: "query users", OperationID: "users", Source: "graphql"}))
+	}
+	return g
+}
+
+// A GraphQL endpoint is one POST whose x-azhaq-graphql lists the schema's
+// operations with their arguments; no REST mapping is made up.
+func TestOpenAPIGraphQL(t *testing.T) {
+	doc, err := openAPI(schemaGraph(t, "https://api.test/graphql"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := operations(t, doc); !slices.Equal(got, []string{"post /graphql post_graphql"}) {
+		t.Fatalf("operations %v", got)
+	}
+	post := doc["paths"].(map[string]any)["/graphql"].(map[string]any)["post"].(map[string]any)
+	raw, _ := json.Marshal(post)
+	var op struct {
+		Summary string
+		Body    struct {
+			Content map[string]struct {
+				Schema struct{ Required []string }
+			}
+		} `json:"requestBody"`
+		X struct {
+			Operations []struct {
+				Type, Name, Returns string
+				Arguments           []struct{ Name, Type, Default string }
+			}
+		} `json:"x-azhaq-graphql"`
+	}
+	if err := json.Unmarshal(raw, &op); err != nil {
+		t.Fatal(err)
+	}
+	if op.Summary != "GraphQL endpoint: 5 queries, 2 mutations, 1 subscription" || !slices.Equal(op.Body.Content["application/json"].Schema.Required, []string{"query"}) {
+		t.Errorf("operation %s", raw)
+	}
+	if len(op.X.Operations) != 8 {
+		t.Fatalf("x-azhaq-graphql %s", raw)
+	}
+	users := op.X.Operations[4]
+	if users.Type != "query" || users.Name != "users" || users.Returns != "[User!]!" || len(users.Arguments) != 3 ||
+		users.Arguments[0].Name != "limit" || users.Arguments[0].Type != "Int" || users.Arguments[0].Default != "10" {
+		t.Errorf("users %+v", users)
+	}
+}
+
+// -format graphql writes the introspection result tools read; several
+// endpoints are keyed by URL, and -origin picks one. -format sdl writes
+// the schema language.
+func TestGraphQLExport(t *testing.T) {
+	var one bytes.Buffer
+	if err := graphqlExport(schemaGraph(t, "https://api.test/graphql"), "graphql", "", &one); err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Data struct {
+			Schema struct {
+				QueryType struct{ Name string }
+				Types     []any
+			} `json:"__schema"`
+		}
+	}
+	if err := json.Unmarshal(one.Bytes(), &doc); err != nil || doc.Data.Schema.QueryType.Name != "Root" || len(doc.Data.Schema.Types) == 0 {
+		t.Errorf("introspection result %v %.200s", err, one.String())
+	}
+
+	two := schemaGraph(t, "https://api.test/graphql", "https://api.test/v2/graphql")
+	var keyed bytes.Buffer
+	if err := graphqlExport(two, "graphql", "", &keyed); err != nil {
+		t.Fatal(err)
+	}
+	var byURL map[string]struct {
+		Data map[string]json.RawMessage
+	}
+	if err := json.Unmarshal(keyed.Bytes(), &byURL); err != nil || len(byURL) != 2 || byURL["https://api.test/v2/graphql"].Data["__schema"] == nil {
+		t.Errorf("keyed by endpoint: %v %.200s", err, keyed.String())
+	}
+	var picked bytes.Buffer
+	if err := graphqlExport(two, "graphql", "https://api.test/v2/graphql", &picked); err != nil || !strings.HasPrefix(picked.String(), "{\n  \"data\"") {
+		t.Errorf("-origin URL: %v %.80s", err, picked.String())
+	}
+
+	var sdl bytes.Buffer
+	if err := graphqlExport(schemaGraph(t, "https://api.test/graphql"), "sdl", "", &sdl); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := os.ReadFile("../../internal/gqlschema/testdata/introspection.sdl")
+	if !strings.HasPrefix(sdl.String(), "# https://api.test/graphql\n") || !strings.HasSuffix(sdl.String(), string(want)) {
+		t.Errorf("sdl:\n%s", sdl.String())
+	}
+
+	if err := graphqlExport(&graphView{path: "x.db"}, "sdl", "", &sdl); err == nil || !strings.Contains(err.Error(), "-graphql") {
+		t.Errorf("no schema: %v", err)
+	}
+}
+
+// The Burp scope is the run's: its scope file's and -allow's rules
+// included, its deny rules excluded; a run without one lists its hosts.
+func TestBurpScopeFromRun(t *testing.T) {
+	dir := t.TempDir()
+	scopeFile := filepath.Join(dir, "scope.txt")
+	if err := os.WriteFile(scopeFile, []byte("*.example.com\napi.example.org\n10.0.0.0/24\n!admin.example.com\n!192.0.2.7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db := filepath.Join(dir, "x.db")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.BeginRun("r1", 2, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetRunArgs(keptArgs([]string{"-scope", scopeFile, "-allow", "127.0.0.1", "-deny==old.example.com", "-graphql"})); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+
+	var out bytes.Buffer
+	if err := exportAs(db, "burp", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	var f struct {
+		Target struct {
+			Scope struct {
+				Advanced         bool `json:"advanced_mode"`
+				Include, Exclude []struct {
+					Enabled        bool
+					Protocol, Host string
+				}
+			}
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &f); err != nil {
+		t.Fatal(err)
+	}
+	hosts := func(es []struct {
+		Enabled        bool
+		Protocol, Host string
+	}) []string {
+		var out []string
+		for _, e := range es {
+			if !e.Enabled || e.Protocol != "any" {
+				t.Errorf("entry %+v", e)
+			}
+			out = append(out, e.Host)
+		}
+		return out
+	}
+	inc, exc := hosts(f.Target.Scope.Include), hosts(f.Target.Scope.Exclude)
+	if want := []string{`^127\.0\.0\.1$`, `^(.*\.)?example\.com$`, `10.0.0.0/24`, `^api\.example\.org$`}; !f.Target.Scope.Advanced || !slices.Equal(inc, want) {
+		t.Errorf("include %q", inc)
+	}
+	if want := []string{`^old\.example\.com$`, `^192\.0\.2\.7$`, `^admin\.example\.com$`}; !slices.Equal(exc, want) {
+		t.Errorf("exclude %q", exc)
+	}
+	// Azhaq reads the file back as the same scope.
+	sc, err := scopefile.Parse(out.Bytes(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(sc.Allow, " ") != "*.example.com 10.0.0.0/24 127.0.0.1 =api.example.org" || strings.Join(sc.Deny, " ") != "192.0.2.7 =admin.example.com =old.example.com" {
+		t.Errorf("read back: allow %v deny %v", sc.Allow, sc.Deny)
+	}
+
+	g := &graphView{probe: []engine.ProbeRow{{URL: "https://app.test/"}, {URL: "http://app.test:8080/x"}}}
+	none := burpScope(g, runRulesOrEmpty(t, nil))["target"].(map[string]any)["scope"].(map[string]any)
+	if inc := none["include"].([]map[string]any); len(inc) != 2 || inc[1]["port"] != "^8080$" || len(none["exclude"].([]map[string]any)) != 0 {
+		t.Errorf("observed hosts %v", none)
+	}
+}
+
+func runRulesOrEmpty(t *testing.T, args []string) scope.Rules {
+	t.Helper()
+	r, err := runRules(args, func(string, string) (scopefile.Scope, error) {
+		t.Fatal("no -scope to load")
+		return scopefile.Scope{}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+// A scope file is stored by its full path, a platform by its name.
+func TestKeptArgsScopePath(t *testing.T) {
+	got := keptArgs([]string{"-scope", "scope.csv", "-program", "x", "-scope=hackerone"})
+	abs, _ := filepath.Abs("scope.csv")
+	if !slices.Equal(got, []string{"-scope=" + abs, "-program", "x", "-scope=hackerone"}) {
+		t.Errorf("kept %q", got)
+	}
 }

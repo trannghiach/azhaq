@@ -63,7 +63,8 @@ func cmdWatch(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	for {
-		if _, err := runEmbedded(append(append([]string(nil), runArgs...), "-db", *db, "-quiet")); err != nil {
+		rep, err := runEmbeddedAs(append(append([]string(nil), runArgs...), "-db", *db, "-quiet"), *jsonOut)
+		if err != nil {
 			return err
 		}
 		ch, err := diffRuns(*db)
@@ -92,7 +93,9 @@ func cmdWatch(args []string) error {
 			}
 		}
 		if *every <= 0 {
-			return nil
+			// The run's exit code: 3 when something failed, 4 when a
+			// limit stopped it, whatever changed.
+			return rep.err()
 		}
 		select {
 		case <-ctx.Done():

@@ -3,7 +3,7 @@
 Every command follows the same contract, so a script or an assistant can read any of them the same way.
 
 - **stdout** carries results only: one per line, or one JSON object per line with `-json`.
-- **stderr** carries progress, failures as they happen (the first three of each kind), and a **summary** at the end. With `-json` the summary is one JSON object with `"type":"summary"`. With `-silent` the summary is printed only when something failed or was cut short.
+- **stderr** carries progress, failures as they happen (the first three of each kind), and a **summary** at the end. With `-json` every stderr line is JSON and the summary is one object with `"type":"summary"`. With `-silent` the summary is printed only when something failed or was cut short.
 - The **exit code** says whether the work is complete.
 
 `azhaq help -json` lists every command and flag with its type and default.
@@ -17,6 +17,10 @@ Every command follows the same contract, so a script or an assistant can read an
 | 2 | Usage: bad flags or input. Nothing was sent. | `azhaq help COMMAND`. |
 | 3 | Finished, but some sources or requests failed. The results are usable. | The summary lists each failure, whether it is worth retrying, and its targets. |
 | 4 | Stopped by a limit (`-max-requests`, `-timeout`, `-daily-requests`, `-max-items`) with work left. | `azhaq resume -db FILE` continues where it stopped. |
+
+`watch` exits with the code of its run (one run, without `-every`).
+
+A run keeps the answers it got in its workspace until nothing is left to resume, so `azhaq resume` does not ask again what the run already asked: the requests of a run stopped and resumed add up to about those of one uninterrupted run (Juice Shop: 211 against 205 with `-max-requests 50`; a 4,750-word path sweep: 4,812 against 4,801). A port scan the budget cut short scans that address again. A command run without `-db` uses a temporary database and cannot be resumed.
 
 Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count. `run -fail-on-errors` counts every failure.
 
@@ -39,10 +43,10 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
 | `complete`, `exit` | As in the table above. |
 | `results` | What the command printed on stdout: names, web services, map rows. |
 | `counts` | A breakdown of the results, per command. |
-| `requests` | Requests sent to targets (not to third-party sources). |
+| `requests` | Requests sent to targets, port connects included (not those to third-party sources). |
 | `db` | The database the results are in (absent when it was temporary). |
 | `unreachable` | Targets you gave that never answered. |
-| `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. `retryable` is true for timeouts, dropped connections, 429 and 5xx. `source` names a third-party source (crtsh, wayback). |
+| `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. `retryable` is true for timeouts, dropped connections, 429 and 5xx. `source` names a third-party source (crtsh, wayback). `targets` names up to 100; `azhaq query -db FILE -failed` lists every failed target, the list to retry. |
 | `skipped` | Targets and requests Azhaq chose not to touch, with the reason: outside the scope, would end the session, a scope entry a run cannot use. |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
 | `notes` | Caps that were hit and other things worth knowing that are not failures. |
@@ -61,17 +65,19 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | --- | --- |
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
-| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `gone`: answered 404 or 410 (found in an archive or a link, not there now). `hint`: found (in a script, an API description, an archive) but not requested, or called by scripts only with POST or PUT. `skipped`: found, not requested because its name says a GET would change something. `capped`: left when a limit was hit. |
+| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `gone`: answered 404 or 410 (found in an archive or a link, not there now). `hint`: found (in a script, an API description, an archive) but not requested, or called by scripts only with POST or PUT (a GET that answers 404, 405 or the catch-all page says nothing about such a route). `skipped`: found, not requested because its name says a GET would change something. `capped`: left when a limit was hit. |
 | `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`. |
-| `role` (names) | `live` (resolves; one of your targets), `sibling` (resolves; found on the way), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
-| `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `source` (`js-call`, `openapi`). |
+| `role` (names) | `live` (resolves; a host you gave, or a name under a domain you gave), `sibling` (resolves; found on the way, under another domain), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
+| `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `summary`, `operation_id`, `source` (`js-call`, `openapi`, `graphql`). |
 | `body` | the body field names of all its operations. |
 | `status`, `title` | The URL's own answer (the first hop of a redirect). |
 | `methods`, `params` | From API descriptions, call sites in scripts, forms and links. |
 | `forms` | `{"method","action","fields"}` for each form on the page. |
-| `template`, `count` | Pages that differ only by an ID are folded: `/product?id={n}` with the number of URLs folded. |
+| `template`, `count` | Pages that differ only by an ID are folded: `/product?id={n}` with the number of URLs folded. A query value that names a page (`index.jsp?content=about.htm`, `view=grid`) is not an ID: each is a page of its own. Three URLs of a template are requested (`-per-template N` changes it). |
 
-The text map prints the same rows, one per line, with forms and parameters indented below.
+A GraphQL endpoint whose schema was read with `-graphql` has one op per query, mutation and subscription: `method` `POST`, `summary` its signature (`mutation login(username: String, password: String): Login`), `operation_id` the field name, `body` the argument names, `source` `graphql`.
+
+The text map prints the same rows, one per line, with forms and parameters indented below, and a GraphQL endpoint's operations by their signatures (the first 50; the rest are in `-json` and the exports).
 
 ## Drop-in commands
 
@@ -79,12 +85,12 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 
 | Command | Fields |
 | --- | --- |
-| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them); with `-live`, `a`. |
+| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`); with `-live`, `a`. |
 | `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. |
-| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code`, `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url`, `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. |
+| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code` (the first answer: a redirect stays 302, as httpx prints it), `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url` and `final_status_code` (where a redirect inside the scope ended; title and tech describe that page), `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. |
 | `crawl` | `url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`). |
 | `urls` | `url`. |
-| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`. |
+| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it. |
 | `dirs` | `url`, `status`, `length`, `words`, `lines`, `redirectlocation`. |
 | `params` | `url`, `method`, `params`, and `why` (what changed in the answer for each name). |
 | `asn` | `as_number`, `as_name`, `prefix`. |
@@ -97,17 +103,82 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 One row per endpoint whose answer depends on the session (`-all`: every endpoint compared):
 
 ```json
-{"url":"http://localhost:5000/books/v1/bookTitle55","verdict":"every signed-in role reads the same object",
- "template":"http://localhost:5000/books/v1/{book_title}","found_by":["name1","admin"],
- "status":{"anon":401,"name1":200,"admin":200},
- "answers":{"anon":{"status":401,"length":95,"hash":"…"},"name1":{"status":200,"length":83,"hash":"9f…","keys":["book_title","owner","secret"]},"admin":{…}}}
+{"url":"http://localhost:5000/books/v1/aliceBook","verdict":"reads another role's object",
+ "template":"http://localhost:5000/books/v1/{book_title}","found_by":["alice"],"owner":"alice","readers":["bob","admin"],
+ "sensitive":["secret"],"status":{"anon":401,"alice":200,"bob":200,"admin":200},
+ "answers":{"anon":{"status":401,"length":95,"hash":"…","error":true},
+            "alice":{"status":200,"length":79,"hash":"9f…","keys":["book_title","owner","secret"],"sensitive":["secret"]},"bob":{…},"admin":{…}}}
 ```
 
-`status` has 0 for a role that was never asked. `template` is set on an object URL made by filling a route's path parameters with values the roles' answers held. Verdicts: `every signed-in role reads the same object`, `anyone reads the same object, signed in or not`, `same answer for a session that did not find it`, `signed-in only`, `some roles refused`, `different fields per role`, `status differs`, and, with `-all`, `different data per role`, `same for every role`, `no role reads it`. The summary counts each verdict.
+| Field | Meaning |
+| --- | --- |
+| `status` | Each role's status; 0 for a role that was never asked. |
+| `answers` | Each role's answer: `status`, `length`, `hash` of the body, `keys` (a JSON answer's field paths, nested: `data.user.email`, `data[].id`), `error` (a JSON answer shaped like an error, such as `{"status":"error"}`), `sensitive` (its fields that hold passwords, secrets, keys, tokens, card numbers). |
+| `found_by` | The roles whose own runs reached the URL, or, for an object URL, whose answers held its identifier. |
+| `template` | The route an object URL fills: its path parameters filled with identifiers the roles' answers held, or given with `-id`. |
+| `owner` | The role whose own object it is: given with `-id ROLE:…`, or an identifier only that role's answers held (in the route's own list, such as `/api/Addresss` for `/api/Addresss/{id}`, while the same list read by another role did not; or in a field named after the parameter, and nowhere in the other roles' answers). |
+| `readers` | For the verdicts that say who reads it: those roles. |
+| `sensitive` | For the verdicts about sensitive fields, and on object rows: the fields. |
+
+A role reads an endpoint when it gets a 2xx answer that is not an error; any 4xx, and an error answered with a 2xx status, is a refusal. Verdicts, worst first, as `-json` gives them (the text table names the roles and fields, as in brackets):
+
+| Verdict | Meaning |
+| --- | --- |
+| `anyone reads sensitive fields` | The anonymous role reads passwords, secrets, keys or card numbers, at any depth of the JSON, or a token another session reads too, even when every role gets the same answer (`[anyone reads sensitive fields: password]`). |
+| `reads another role's object` | A role reads the owner's object as the owner does (the same body, or the same fields around the same identifier) (`[bob, admin read alice's object]`). An owner inferred from the answers whose object the anonymous role reads alike is public instead. |
+| `every signed-in role reads the same object` | An object URL every signed-in role reads alike, owner unknown. |
+| `roles read the same sensitive fields` | Several roles read the same values of sensitive fields: no session's own (`[alice, bob read the same sensitive fields: deluxeToken]`). A token only its own session gets is not listed. |
+| `same answer for a session that did not find it` | A role that never reached the URL gets the answer the role that found it got. |
+| `signed-in only` | The anonymous role is refused, every signed-in role reads it. |
+| `only one role reads it` | Every other role is refused (`[only admin reads it]`). |
+| `some roles refused` | Some signed-in roles read it, others are refused. |
+| `different fields per role` | Every role reads it with the same status, with different nested fields. Fields under a list one role has empty are data, not fields. |
+| `anyone reads the same object, signed in or not` | An object URL the anonymous role reads as the others do. |
+| `status differs` | Anything else (redirects, 5xx). |
+
+With `-all` also: `different data per role`, `same for every role`, `no role reads it`, `not answered`. The summary counts each verdict.
+
+`-id [ROLE:]NAME=VALUE` (repeatable) fills routes with an identifier of your own: NAME is a path parameter (`book_title`), a JSON field that holds such values (`basket_id` and `BasketId` fill `/rest/basket/{id}`), or a route (`/rest/basket/{id}`). With ROLE, VALUE names that role's own object, so another role reading it is `reads another role's object`; without, it is tried like an identifier the answers held. Each route is also filled with up to 3 of each role's own identifiers and 3 others, in order (numbers by value); the replay asks objects given with `-id` first, then the roles' own objects, then what the runs reached, then other objects, and takes a URL only while `-replay-max` holds every role's request for it.
+
+With `-json`, stderr holds the summary only: the runs of the roles print nothing, and what they did not finish is in it (`failed`, `unreachable`, `skipped`, `notes`; a role's run stopped by a limit is `stopped`, exit 4). A role whose run could not be done (a failed sign-in) ends roles with a summary whose `notes` say why.
+
+## diff
+
+`diff -jsonl` prints `added` and `removed` rows, `not_seen_again` rows and a `summary`. `removed` is what answered in the older run (a name that resolved, a page with a status, a host with open ports) and is gone from the newer. `not_seen_again` is what the older run only heard of (from a subdomain source, an archive, a link) and never checked: sources answer differently from day to day and fail, so its absence says little. The summary names the `failed_sources` of the newer run.
 
 ## query, show, plan, ingest
 
-- `query -json` prints map rows (as `run -json`), or only the `-fields` asked for. The summary says how many rows matched when `-limit` cut them.
-- `show -json` prints one object: `row` (the map row), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`).
+- `query -json` prints map rows (as `run -json`), or only the `-fields` asked for; every row that matches, unless `-limit` says otherwise (the summary then says how many matched). `query -failed` prints every failed target instead: `target`, `collector`, `source`, `error`, `retryable`.
+- `show -json` prints one object: `row` (the map row), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`); for a hostname, `services`: its front pages with `coverage`, `status`, `title`, and the `error` of one that failed. A GraphQL endpoint read with `-graphql` has an `azhaq-graphql-schema` observation whose payload holds `queries`, `mutations`, `subscriptions` and `types` (names) and `schema`, the introspection's whole `__schema` object (past 8 MB without its descriptions; past that left out, with its size in `schema_bytes`). A server that refuses the full introspection query for its depth is asked for the names only, and `schema` is absent.
 - `plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`.
 - `ingest` prints only its summary: `results` is the facts read, `counts` the lines read per format.
+
+## export
+
+`azhaq export -db FILE -format F` writes the newest run of a workspace in one format on stdout.
+
+| Format | Output |
+| --- | --- |
+| `jsonl` | Everything: one object per map row (`"kind":"entity"`), observation and edge. |
+| `urls`, `hosts`, `names`, `targets` | One per line: every URL; names that resolve; every name; web services (front pages), for `nuclei -l` and `httpx`. |
+| `openapi` | OpenAPI 3 JSON of one origin (`-origin`, default the one with the most API routes): the description the target serves, as it is, plus the routes scripts call, forms and what answered. `x-azhaq` on each operation: `source`, `coverage`, `status`, `needs_credentials`. |
+| `graphql` | The introspection result of each GraphQL endpoint read with `-graphql`, as InQL, Burp, Postman, graphql-voyager and clairvoyance read it. |
+| `sdl` | The same schemas in the GraphQL schema language. |
+| `burp` | Burp Suite project options with the run's target scope. |
+| `html` | One self-contained page: web services, names, screenshots, secrets, API routes, the map. |
+| `graphml` | The graph for Gephi, yEd or Cytoscape. |
+| `secrets` | Credentials found in scripts: severity, kind, value, script, tab-separated. |
+
+**openapi** is a valid OpenAPI document whatever went into it: every operationId is unique (a served description's keep theirs; a repeat, such as `/blog` and `/blog/` both `get_blog`, gets `_2`, `_3` in path order), templates that differ only by their parameter names are one path (the served description's, else the first), every `{name}` in a path is a declared path parameter, a parameter is listed once, and component names OpenAPI does not allow are renamed with their references. A GraphQL endpoint is one `POST` taking `{"query","operationName","variables"}`, not a made-up REST mapping; its operations are in `x-azhaq-graphql`:
+
+```json
+"x-azhaq-graphql":{"operations":[
+  {"type":"query","name":"pastes","arguments":[{"name":"public","type":"Boolean"},{"name":"limit","type":"Int"}],"returns":"[PasteObject]"},
+  {"type":"mutation","name":"createPaste","arguments":[{"name":"burn","type":"Boolean","default":"false"}],"returns":"CreatePaste"}]}
+```
+
+`type` is `query`, `mutation` or `subscription`; `default` is a GraphQL literal; `deprecated` is set on deprecated fields. A schema kept by names only gives `type` and `name`.
+
+**graphql** prints `{"data":{"__schema":{…}}}`, the server's answer to the standard introspection query. With several endpoints it prints one object keyed by endpoint URL, `{"https://app/graphql":{"data":{"__schema":…}},…}`; `-origin` keeps the endpoints of one origin, or the one at a URL (`-origin https://app/graphql`), to get a file a tool loads as it is. **sdl** prints each endpoint's schema under a `# URL` comment: types, interfaces, unions, enums, input objects, custom scalars and directives with descriptions, defaults and `@deprecated`, without the built-in scalars and directives; a `schema { … }` block when the root types are not simply `Query`, `Mutation` and `Subscription`. Concatenated schemas of several endpoints are not one schema: pick one with `-origin`.
+
+**burp** writes `{"target":{"scope":{"advanced_mode":true,"include":[…],"exclude":[…]}}}`. When the run had a scope, `include` holds its allow rules (`-scope` and `-allow`) and `exclude` its deny rules (the program's out-of-scope entries and `-deny`), each for any protocol, port and path: a domain is `{"enabled":true,"protocol":"any","host":"^(.*\\.)?example\\.com$"}` (it and its subdomains), one host `^api\\.example\\.com$`, an address `^192\\.0\\.2\\.7$`, a range as Burp takes it (`10.0.0.0/24`). The scope is read back from the run's options: a scope file again (stored by its full path), and a platform's program (`-scope hackerone -program x`) as it stands now, from bounty-targets-data. A run without allow rules, or whose scope file is gone (a note on stderr says so), includes every web service it found: `{"enabled":true,"protocol":"https","host":"^app\\.example\\.com$","port":"^443$","file":"^/.*"}`. `azhaq run -scope` reads the file back.

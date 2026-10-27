@@ -6,10 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -20,8 +23,9 @@ const schema = `{"data":{"__schema":{"queryType":{"name":"Query"},"mutationType"
 {"name":"__Type","kind":"OBJECT","fields":[]},{"name":"String","kind":"SCALAR","fields":null}]}}}`
 
 // server is a GraphQL endpoint at /graphql (graphql-express style) and an
-// ordinary JSON API at /api/graphql-docs.
-func server(t *testing.T) (*httptest.Server, *int) {
+// ordinary JSON API at /v1/graphql. The full introspection query is
+// answered with full; anything else asking for __schema with schema.
+func server(t *testing.T, full string) (*httptest.Server, *int) {
 	posts := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -33,6 +37,10 @@ func server(t *testing.T) (*httptest.Server, *int) {
 			body, _ := io.ReadAll(r.Body)
 			if !strings.Contains(string(body), "__schema") {
 				http.Error(w, "bad", http.StatusBadRequest)
+				return
+			}
+			if strings.Contains(string(body), "IntrospectionQuery") {
+				_, _ = w.Write([]byte(full))
 				return
 			}
 			_, _ = w.Write([]byte(schema))
@@ -62,7 +70,7 @@ func run(t *testing.T, c interface {
 
 func TestDetect(t *testing.T) {
 	fetch.Reset()
-	srv, posts := server(t)
+	srv, posts := server(t, schema)
 	c := New(srv.Client())
 	got, meta := run(t, c, srv.URL+"/graphql")
 	if got["role"] != "graphql" || meta.Drop {
@@ -80,17 +88,57 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+// The whole schema is kept: types, fields, arguments and their types.
 func TestIntrospection(t *testing.T) {
 	fetch.Reset()
-	srv, posts := server(t)
+	full, err := os.ReadFile("../../gqlschema/testdata/introspection.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, posts := server(t, string(full))
 	got, _ := run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
 	if *posts != 1 {
 		t.Fatalf("posts %d", *posts)
 	}
 	q, _ := got["queries"].([]any)
 	m, _ := got["mutations"].([]any)
-	ty, _ := got["types"].([]any)
-	if len(q) != 2 || q[0] != "me" || len(m) != 1 || m[0] != "deleteUser" || len(ty) != 1 || ty[0] != "User" {
-		t.Errorf("schema %v", got)
+	if len(q) != 5 || q[0] != "node" || len(m) != 2 || m[0] != "deleteUser" {
+		t.Errorf("summary %v %v", q, m)
+	}
+	raw, _ := json.Marshal(got["schema"])
+	sc, err := gqlschema.Parse(raw)
+	if err != nil {
+		t.Fatalf("no schema kept: %v", err)
+	}
+	var sigs []string
+	for _, o := range sc.Operations() {
+		sigs = append(sigs, o.Kind+" "+o.Signature())
+	}
+	if !slices.Contains(sigs, "mutation login(username: String!, password: String!): Token") {
+		t.Errorf("operations %v", sigs)
+	}
+	if !strings.Contains(sc.SDL(), "input Filter {") {
+		t.Error("input objects lost")
+	}
+}
+
+// A server that refuses the full query for its depth is asked for the
+// names; one with introspection off is asked once.
+func TestIntrospectionRefused(t *testing.T) {
+	fetch.Reset()
+	srv, posts := server(t, `{"errors":[{"message":"'IntrospectionQuery' exceeds maximum operation depth of 6"}]}`)
+	got, _ := run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
+	if *posts != 2 {
+		t.Fatalf("posts %d", *posts)
+	}
+	if q, _ := got["queries"].([]any); len(q) != 2 || got["schema"] != nil {
+		t.Errorf("names only: %v", got)
+	}
+
+	fetch.Reset()
+	srv, posts = server(t, `{"errors":[{"message":"GraphQL introspection is not allowed, but the query contained __schema or __type"}]}`)
+	got, _ = run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
+	if *posts != 1 || got != nil {
+		t.Errorf("introspection off: %d posts, %v", *posts, got)
 	}
 }

@@ -40,7 +40,19 @@ const maxCalls = 4000
 
 // Calls returns the requests script makes through an HTTP client, fetch
 // or XMLHttpRequest whose URL it can work out.
-func Calls(script string) []Call {
+func Calls(script string) []Call { return calls(script, false) }
+
+// PageCalls is Calls for a script inline in a page: a path without a
+// leading slash given to fetch or XMLHttpRequest (xhr.open("GET",
+// "util/status.jsp?host=" + h)) is relative to the page, and is kept as
+// written for the caller to resolve.
+func PageCalls(script string) []Call { return calls(script, true) }
+
+// relPath: a page-relative path that names a resource (a directory or a
+// file with an extension), not a bare word.
+var relPath = regexp.MustCompile(`^[\w~-][\w.~%{}@!$&'*+,;=:-]*(?:/[\w.~%{}@!$&'*+,;=:-]*)+$|^[\w~-][\w~-]*\.(?:jsp|jspx|php|asp|aspx|ashx|do|action|cgi|pl|json|xml|html?)$`)
+
+func calls(script string, relative bool) []Call {
 	var out []Call
 	add := func(c Call, ok bool) {
 		if ok && len(out) < maxCalls {
@@ -53,7 +65,9 @@ func Calls(script string) []Call {
 		if len(args) == 0 {
 			continue
 		}
-		c, ok := callOf(script, m[0], method, args[0])
+		// An HTTP client may have a base URL of its own: only fetch and
+		// XMLHttpRequest resolve a relative path against the page.
+		c, ok := callOf(script, m[0], method, args[0], false)
 		if ok && len(args) > 1 {
 			opts := strings.TrimSpace(args[1])
 			switch method {
@@ -88,26 +102,30 @@ func Calls(script string) []Call {
 			}
 			body = bodyOption(args[1])
 		}
-		c, ok := callOf(script, m[0], method, args[0])
+		c, ok := callOf(script, m[0], method, args[0], relative)
 		c.Body = body
 		add(c, ok)
 	}
 	for _, m := range xhrOpen.FindAllStringSubmatchIndex(script, -1) {
 		rest := topExpr(script[m[1]:])
-		c, ok := callOf(script, m[0], script[m[2]:m[3]], rest)
+		c, ok := callOf(script, m[0], script[m[2]:m[3]], rest, relative)
 		add(c, ok)
 	}
 	return out
 }
 
-// callOf evaluates the URL argument of a call at pos.
-func callOf(script string, pos int, method, arg string) (Call, bool) {
+// callOf evaluates the URL argument of a call at pos; relative allows a
+// page-relative path.
+func callOf(script string, pos int, method, arg string, relative bool) (Call, bool) {
 	ev := evaluator{src: script}
 	path, ok := ev.eval(arg, pos, 0)
 	if !ok {
 		return Call{}, false
 	}
 	path, query := splitQuery(path)
+	if relative && relPath.MatchString(path) && !strings.HasPrefix(path, "{") {
+		return Call{Method: method, Path: path, Query: query}, true
+	}
 	if !pathChars.MatchString(path) || path == "/" && len(query) == 0 || strings.Contains(path, "//{") {
 		return Call{}, false
 	}

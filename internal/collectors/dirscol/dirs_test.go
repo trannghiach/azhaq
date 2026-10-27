@@ -44,9 +44,11 @@ func sweepOf(t *testing.T, c *Collector, base string) ([]string, map[string]any)
 	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": base}}, func(o types.Observation) error {
 		var m map[string]any
 		_ = json.Unmarshal(o.Payload, &m)
-		if o.Kind == "dirs" {
+		switch o.Kind {
+		case "dirs":
 			summary = m
-		} else {
+		case "skipped": // guesses held back, listed in the summary
+		default:
 			got = append(got, strings.TrimPrefix(m["url"].(string), strings.TrimSuffix(base, "/")))
 		}
 		return nil

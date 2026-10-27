@@ -77,6 +77,21 @@ func WatchBudget(ctx context.Context) (_ context.Context, refused func() bool, u
 	return context.WithValue(ctx, refusedKey{}, w), w.refused.Load, func() int { return int(w.used.Load()) }
 }
 
+// Take accounts for one connection to a target that is not an HTTP
+// request (a port scan's connect): it counts against the budget, which
+// may refuse it with neterr.ErrBudget, and is paced by its caller.
+func Take() error {
+	for {
+		n := sent.Load()
+		if MaxRequests > 0 && n >= MaxRequests {
+			return neterr.ErrBudget
+		}
+		if sent.CompareAndSwap(n, n+1) {
+			return nil
+		}
+	}
+}
+
 // Count accounts for requests already sent without asking (the
 // subresources a page loaded in Chrome fetched): they count against the
 // budget, which may then be spent.

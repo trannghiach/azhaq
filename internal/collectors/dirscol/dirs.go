@@ -7,8 +7,6 @@ package dirscol
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -36,8 +35,12 @@ type Options struct {
 	Extensions []string // "php" also tries word.php
 	Depth      int      // directory levels to descend; 1 is the start only
 	Threads    int      // requests in flight per service
-	Rate       float64  // requests per second per host
+	Rate       float64  // requests per second per host; 0: no limit
 	Match      []int    // statuses reported; default ffuf's
+	// AllGets also sends, with a session, the words that read like an
+	// action (delete, reset, logout…); by default they are listed, not
+	// requested.
+	AllGets bool
 }
 
 // DefaultMatch is ffuf's default -mc.
@@ -59,7 +62,7 @@ func New(client *http.Client, o Options) *Collector {
 		o.Threads = 20
 	}
 	if o.Rate <= 0 {
-		o.Rate = 100
+		o.Rate = 1e6 // no pace but the threads', as ffuf
 	}
 	if len(o.Match) == 0 {
 		o.Match = DefaultMatch
@@ -110,6 +113,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	meta := types.RunMeta{Status: types.StatusOK}
 	queue := []dirLevel{{url: base, depth: 1}}
 	var all []hit
+	var skipped []string // guesses not sent: nobody saw them exist, so they are no URLs of the map
 	requests, filtered := 0, 0
 	for len(queue) > 0 && ctx.Err() == nil {
 		d := queue[0]
@@ -117,7 +121,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if _, done := c.swept.LoadOrStore(d.url, true); done {
 			continue
 		}
-		hits, n, f, spent := c.sweep(ctx, d.url)
+		hits, n, f, held, spent := c.sweep(ctx, d.url)
 		if spent {
 			// The sweep is redone whole by azhaq resume.
 			c.swept.Delete(d.url)
@@ -126,6 +130,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		requests += n
 		filtered += f
 		all = append(all, hits...)
+		skipped = append(skipped, held...)
 		for _, h := range hits {
 			if d.depth < c.Opts.Depth && isDir(h) {
 				queue = append(queue, dirLevel{url: strings.TrimSuffix(h.URL, "/") + "/", depth: d.depth + 1})
@@ -143,6 +148,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return meta, err
 	}
 	meta.EmitCount++
+	if len(skipped) > 0 {
+		raw, _ := json.Marshal(map[string]any{"skipped": "with a session, a GET there could change something", "urls": skipped})
+		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "skipped", Payload: raw, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
 	for _, h := range all {
 		row := map[string]any{"url": h.URL, "via": "dirs", "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines}
 		if h.Location != "" {
@@ -180,19 +192,28 @@ func schemeHost(raw string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// sweep guesses every word (and word.ext) under dir; spent says the
-// request budget ran out before it was through.
-func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ int, spent bool) {
+// sweep guesses every word (and word.ext) under dir; held lists the URLs
+// not sent because, with a session, a GET there could change something;
+// spent says the request budget ran out before it was through.
+func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ int, held []string, spent bool) {
 	cal := c.calibrate(ctx, dir)
+	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
 	for _, w := range c.Opts.Words {
 		w = strings.TrimPrefix(strings.TrimSpace(w), "/")
 		if w == "" || strings.HasPrefix(w, "#") {
 			continue
 		}
-		targets = append(targets, w)
+		words := []string{w}
 		for _, ext := range c.Opts.Extensions {
-			targets = append(targets, w+"."+strings.TrimPrefix(ext, "."))
+			words = append(words, w+"."+strings.TrimPrefix(ext, "."))
+		}
+		for _, t := range words {
+			if careful && (webextract.StateChanging(dir+escapeWord(t)) != "" || fetch.EndsSession(dir+escapeWord(t))) {
+				held = append(held, dir+escapeWord(t))
+				continue
+			}
+			targets = append(targets, t)
 		}
 	}
 	var mu sync.Mutex
@@ -232,7 +253,7 @@ func (c *Collector) sweep(ctx context.Context, dir string) (_ []hit, _ int, _ in
 		}(t)
 	}
 	wg.Wait()
-	return hits, len(targets), filtered, out.Load()
+	return hits, len(targets), filtered, held, out.Load()
 }
 
 func escapeWord(w string) string {
@@ -262,6 +283,25 @@ func (c *Collector) get(ctx context.Context, target string) (response, error) {
 	if fetch.EndsSession(target) {
 		return response{}, neterr.ErrEndsSession
 	}
+	// A guess the run made before it was stopped is not sent again.
+	if fetch.Memos != nil {
+		if raw, ok := fetch.Memos.Recall("dirs " + target); ok {
+			var r response
+			if json.Unmarshal(raw, &r) == nil {
+				return r, nil
+			}
+		}
+	}
+	r, err := c.send(ctx, target)
+	if err == nil && fetch.Memos != nil {
+		if raw, err := json.Marshal(r); err == nil {
+			fetch.Memos.Remember("dirs "+target, raw)
+		}
+	}
+	return r, err
+}
+
+func (c *Collector) send(ctx context.Context, target string) (response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return response{}, err
@@ -345,11 +385,7 @@ func abs(x int) int {
 	return x
 }
 
-func randWord() string {
-	var b [6]byte
-	_, _ = rand.Read(b[:])
-	return "azhaq" + hex.EncodeToString(b[:])
-}
+func randWord() string { return fetch.RandomName() }
 
 // ParseStatuses reads "200,301-302" into a list.
 func ParseStatuses(spec string) ([]int, error) {

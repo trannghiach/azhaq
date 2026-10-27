@@ -42,6 +42,13 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{db: db}
+	// A new database gives back the pages freed when a run's kept answers
+	// are dropped (DropResponses); the mode can only be set before the
+	// first table.
+	var tables int
+	if db.QueryRow(`SELECT COUNT(*) FROM sqlite_master`).Scan(&tables) == nil && tables == 0 {
+		_, _ = db.Exec(`PRAGMA auto_vacuum = INCREMENTAL`)
+	}
 	if err := s.migrate(); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -115,6 +122,19 @@ CREATE TABLE IF NOT EXISTS spend (
   day TEXT NOT NULL,
   requests INTEGER NOT NULL,
   PRIMARY KEY (program, day)
+);
+CREATE TABLE IF NOT EXISTS claims (
+  run_id TEXT NOT NULL,
+  key TEXT NOT NULL,
+  owner TEXT NOT NULL,
+  PRIMARY KEY (run_id, key)
+);
+CREATE TABLE IF NOT EXISTS responses (
+  run_id TEXT NOT NULL,
+  url TEXT NOT NULL,
+  meta TEXT NOT NULL,
+  body BLOB,
+  PRIMARY KEY (run_id, url)
 );
 CREATE TABLE IF NOT EXISTS run_edges (
   run_id TEXT NOT NULL,

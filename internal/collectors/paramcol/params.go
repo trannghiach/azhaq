@@ -37,6 +37,9 @@ type Options struct {
 	Chunk   int     // names per request; default 250, as arjun
 	PerHost int     // pages searched per host; default 20
 	Rate    float64 // requests per second per host; default 20
+	// AllGets also sends, with a session, names that read like an action
+	// (delete, reset…); by default they are left out.
+	AllGets bool
 }
 
 type Collector struct {
@@ -119,8 +122,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	var words []string
 	seen := map[string]bool{}
+	careful := fetch.HasSession() && !c.Opts.AllGets
 	for _, w := range c.Opts.Words {
 		w = strings.TrimSpace(w)
+		if careful && webextract.StateChanging("/?action="+url.QueryEscape(w)) != "" {
+			continue // with a session, a name like delete or logout is not sent
+		}
 		if w != "" && !known[w] && !seen[w] {
 			seen[w] = true
 			words = append(words, w)

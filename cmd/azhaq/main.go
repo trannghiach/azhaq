@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -68,6 +69,14 @@ func main() {
 			if ee.msg != "" {
 				fmt.Fprintf(os.Stderr, "azhaq: %s\n", ee.msg)
 			}
+		case wantsJSON(os.Args[1:]):
+			// The caller reads stderr as JSON: the error is a summary too.
+			cmd := ""
+			if len(os.Args) > 1 {
+				cmd = os.Args[1]
+			}
+			raw, _ := json.Marshal(map[string]any{"type": "summary", "command": cmd, "version": version, "complete": false, "exit": exitCode(err), "error": err.Error()})
+			fmt.Fprintf(os.Stderr, "%s\n", raw)
 		default:
 			fmt.Fprintf(os.Stderr, "azhaq: %v\n", err)
 			var ue usageErr
@@ -79,6 +88,20 @@ func main() {
 		}
 	}
 	os.Exit(exitCode(err))
+}
+
+// wantsJSON says whether a command line asks for JSON output.
+func wantsJSON(args []string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		switch strings.TrimLeft(a, "-") {
+		case "json", "jsonl", "json=true", "jsonl=true":
+			return strings.HasPrefix(a, "-")
+		}
+	}
+	return false
 }
 
 func run(args []string) error {
@@ -113,7 +136,9 @@ func cmdRun(args []string) error {
 
 // runOut is how a run prints its map: text, JSON lines, or not at all.
 // embedded: a command built on run owns stdout.
-type runOut struct{ json, quiet, embedded, plan bool }
+// runOut is how a run prints; scratch says its database is temporary,
+// so nothing is kept for azhaq resume.
+type runOut struct{ json, quiet, embedded, plan, scratch bool }
 
 // observer, when set, sees every observation of the next run as it is
 // stored: the drop-in commands print their results as they come.
@@ -121,7 +146,7 @@ var observer func(types.Entity, types.Observation)
 
 // mapTarget runs the engine as azhaq run does and fills rep; run and the
 // commands built on it print rep.
-func mapTarget(args []string, rep *report, out *runOut) error {
+func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs := newFlags("run")
 	url := fs.String("url", "", "seed URL")
 	org := fs.String("org", "", "seed Organization name")
@@ -161,6 +186,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
 	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
+	perTmpl := fs.Int("per-template", 0, "URLs of one template (/product?id={n}) to request; the rest are listed (default 3)")
 	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
 	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
 	resumeRun := fs.String("resume-run", "", "internal: continue this run of -db (azhaq resume sets it)")
@@ -186,7 +212,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
 	dirsThreads := fs.Int("dirs-threads", 20, "path guesses in flight per service")
-	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host")
+	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
 	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active: needs -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
 	paramsRate := fs.Float64("params-rate", 20, "parameter requests per second per host")
@@ -251,6 +277,13 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 			}
 			seeds = append(seeds, types.Seed{Type: types.TypePrefix, Keys: map[string]string{"prefix": pf.Masked().String()}})
 		}
+		for _, d := range domains {
+			h := normalize.Hostname(d)
+			if h == "" || strings.ContainsAny(h, "/: ") {
+				return usagef("-domain wants a bare domain such as example.com, got %q", d)
+			}
+			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
+		}
 		if *scopeSpec != "" {
 			sc, err := loadScope(*scopeSpec, *program)
 			if err != nil {
@@ -260,7 +293,13 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 			if err != nil {
 				return err
 			}
-			seeds = append(seeds, more...)
+			if len(seeds) == 0 {
+				seeds = append(seeds, more...)
+			} else {
+				// Targets were given: the program's scope filters them,
+				// it adds none of its own.
+				rep.Notes = append(rep.Notes, fmt.Sprintf("-scope %s filters the %d targets given; without targets it maps the program's own (%d)", sc.Program, len(seeds), len(more)))
+			}
 			allow = append(allow, sc.Allow...)
 			deny = append(deny, sc.Deny...)
 			if !*quiet && !*jsonOut {
@@ -271,13 +310,6 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 				rep.Skipped = append(rep.Skipped, engine.Skip{Target: e, Reason: "a scope entry a run cannot use"})
 			}
 		}
-		for _, d := range domains {
-			h := normalize.Hostname(d)
-			if h == "" || strings.ContainsAny(h, "/: ") {
-				return usagef("-domain wants a bare domain such as example.com, got %q", d)
-			}
-			seeds = append(seeds, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": h}})
-		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" {
 			return usagef("need a target: -url, -domain, -list, -scope, -asn, -cidr, -org, -cloud, -in, -facts, -exec or -demo")
 		}
@@ -286,8 +318,36 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		}
 	}
 
+	// Everything that can make this a usage error is checked before a
+	// database is created.
+	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
+	if !rules.Empty() {
+		// What the scope excludes is never touched, even when it was given
+		// as a target: it is listed in the summary instead.
+		kept := seeds[:0]
+		for _, s := range seeds {
+			if rules.AllowsSeed(s) {
+				kept = append(kept, s)
+			} else {
+				rep.Skipped = append(rep.Skipped, engine.Skip{Target: s.Key(), Reason: "outside the scope"})
+			}
+		}
+		seeds = kept
+		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
+			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
+		}
+	}
+	if (*bruteFile != "" || *permute || *graphql || *portsSpec != "" || *dirsFile != "" || *paramsFile != "") && len(allow) == 0 {
+		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN or -scope")
+	}
+	ports, err := parsePorts(*webPorts)
+	if err != nil {
+		return usageErr{err}
+	}
+
 	input := store.SeedsKey(normalizeSeeds(seeds))
-	path, remember := resolveDB(*dbPath)
+	var path string
+	var remember bool
 	if out.plan {
 		// A plan writes nothing: its database is a scratch one.
 		dir, err := os.MkdirTemp("", "azhaq-plan-")
@@ -295,7 +355,20 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 			return err
 		}
 		defer os.RemoveAll(dir)
-		path, remember = filepath.Join(dir, "plan.db"), false
+		path = filepath.Join(dir, "plan.db")
+	} else {
+		path, remember = resolveDB(*dbPath)
+		if remember {
+			// A run refused for its options leaves no database behind.
+			defer func() {
+				var u usageErr
+				if errors.As(runErr, &u) {
+					for _, f := range []string{path, path + "-wal", path + "-shm"} {
+						_ = os.Remove(f)
+					}
+				}
+			}()
+		}
 	}
 	prevDB := ""
 	if remember {
@@ -320,23 +393,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	budgets.FailOnCapped = *failCapped
 	budgets.Passive = *passive
 	budgets.AllGets = *allGets
-	budgets.Scope = scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
-	if !budgets.Scope.Empty() {
-		// What the scope excludes is never touched, even when it was given
-		// as a target: it is listed in the summary instead.
-		kept := seeds[:0]
-		for _, s := range seeds {
-			if budgets.Scope.AllowsSeed(s) {
-				kept = append(kept, s)
-			} else {
-				rep.Skipped = append(rep.Skipped, engine.Skip{Target: s.Key(), Reason: "outside the scope"})
-			}
-		}
-		seeds = kept
-		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
-			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
-		}
-	}
+	budgets.Scope = rules
 	if *depth == 0 {
 		budgets.MaxDepth = 1
 	} else {
@@ -345,6 +402,7 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	if *maxItems > 0 {
 		budgets.MaxItems = *maxItems
 	}
+	budgets.PerTemplate = *perTmpl
 	if *maxNames > 0 {
 		budgets.MaxNames = *maxNames
 	}
@@ -354,10 +412,6 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	budgets.Skip = map[string]bool{}
 	for _, name := range splitList(*skip) {
 		budgets.Skip[name] = true
-	}
-	ports, err := parsePorts(*webPorts)
-	if err != nil {
-		return err
 	}
 	budgets.Active = map[string]bool{}
 	if *bruteFile != "" {
@@ -381,9 +435,6 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	if !budgets.Scope.Empty() {
 		fetch.Allow = budgets.Scope.Allows
 	}
-	if len(budgets.Active) > 0 && len(allow) == 0 {
-		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN or -scope")
-	}
 	doneBefore := 0
 	if *resumeRun != "" {
 		st.UseRun(*resumeRun)
@@ -396,6 +447,20 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		if err := st.SetRunArgs(keptArgs(args)); err != nil {
 			return err
 		}
+		if !rules.Empty() {
+			// The scope as resolved now: a program's scope changes, and the
+			// export of this run describes this run's.
+			raw, _ := json.Marshal(rules)
+			_ = st.SetMeta("scope:"+st.RunID(), string(raw))
+		}
+	}
+	// The catch-all checks of a resumed run ask for the same names as
+	// before, so their kept answers serve.
+	if *resumeRun != "" {
+		fetch.SetProbeToken(st.GetMeta("probe:" + *resumeRun))
+	} else {
+		_ = st.SetMeta("probe:"+st.RunID(), fetch.ProbeToken())
+		_ = st.DropResponses(st.RunID())
 	}
 	fetch.SetRate(*rateFlag)
 	fetch.MaxRequests = *maxRequests
@@ -454,14 +519,14 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		if err != nil {
 			return err
 		}
-		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate}
+		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate, AllGets: *allGets}
 	}
 	if *dirsFile != "" {
 		words, err := loadLines(*dirsFile)
 		if err != nil {
 			return err
 		}
-		opts.Dirs = dirscol.Options{Words: words, Extensions: splitList(*dirsExt), Depth: *dirsDepth, Threads: *dirsThreads, Rate: *dirsRate}
+		opts.Dirs = dirscol.Options{Words: words, Extensions: splitList(*dirsExt), Depth: *dirsDepth, Threads: *dirsThreads, Rate: *dirsRate, AllGets: *allGets}
 		if *dirsMatch != "" {
 			if opts.Dirs.Match, err = dirscol.ParseStatuses(*dirsMatch); err != nil {
 				return fmt.Errorf("-dirs-mc: %w", err)
@@ -548,15 +613,18 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		defer cancel()
 	}
 	ctx = timing.With(ctx, log)
+	// Under -json, stderr holds JSON only: failures and limits are in the
+	// summary, not printed as they happen.
+	hushed := (*quiet || *jsonOut) && !*verbose
 	switch {
-	case *quiet && !*verbose:
+	case hushed:
 		ctx = engine.WithQuiet(ctx)
 	case *verbose:
 		ctx = engine.WithVerbose(ctx)
 	default:
 		ctx = engine.WithProgress(ctx)
 	}
-	stopTicker := progressTicker(ctx, st, *quiet && !*verbose)
+	stopTicker := progressTicker(ctx, st, hushed)
 	defer stopTicker()
 
 	t0 := time.Now()
@@ -600,9 +668,14 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 	if err := st.SaveSeeds(engine.ExpandSeeds(seeds)); err != nil {
 		return err
 	}
-	runErr := eng.RunLocal(ctx, seeds, budgets)
-	if runErr != nil && !errors.Is(runErr, context.Canceled) && !errors.Is(runErr, context.DeadlineExceeded) {
-		return runErr
+	stopKeep := func() {}
+	if !out.scratch {
+		stopKeep = engine.KeepResponses(st, *resumeRun != "")
+	}
+	localErr := eng.RunLocal(ctx, seeds, budgets)
+	stopKeep()
+	if localErr != nil && !errors.Is(localErr, context.Canceled) && !errors.Is(localErr, context.DeadlineExceeded) {
+		return localErr
 	}
 	stopTicker()
 	ents, _ := st.Entities()
@@ -659,8 +732,12 @@ func mapTarget(args []string, rep *report, out *runOut) error {
 		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
 		}
-	} else if *failCapped && stats.Capped {
-		rep.Stopped = fmt.Sprintf("-depth %d reached with hints left", stats.Depth)
+	} else {
+		// Nothing left to resume: the kept answers have served.
+		_ = st.DropResponses("")
+		if *failCapped && stats.Capped {
+			rep.Stopped = fmt.Sprintf("-depth %d reached with hints left", stats.Depth)
+		}
 	}
 	if *failErrs {
 		for i := range rep.Failed {
@@ -945,6 +1022,20 @@ func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) erro
 	}
 	oldIn, newIn := old.Input(), neu.Input()
 	differ := oldIn != "" && newIn != "" && oldIn != newIn
+	// A name or URL the old run only heard of (from a source, an archive,
+	// a link) and never checked is not "removed" when the new run does not
+	// hear of it again: sources answer differently from one day to the
+	// next, and fail. Removed is what answered before.
+	oldFacts := factsByEntity(old)
+	var removed, unseen []types.Entity
+	for _, e := range d.Removed {
+		if f := oldFacts[e.ID]; len(f.ips) > 0 || f.status != 0 || f.ports != nil || e.Type != types.TypeHostname && e.Type != types.TypeURL {
+			removed = append(removed, e)
+		} else {
+			unseen = append(unseen, e)
+		}
+	}
+	failed := failedSources(neu)
 	if opts.JSONL {
 		enc := json.NewEncoder(os.Stdout)
 		for _, e := range d.Added {
@@ -952,8 +1043,13 @@ func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) erro
 				return err
 			}
 		}
-		for _, e := range d.Removed {
+		for _, e := range removed {
 			if err := enc.Encode(map[string]any{"kind": "removed", "type": e.Type, "key": e.Key}); err != nil {
+				return err
+			}
+		}
+		for _, e := range unseen {
+			if err := enc.Encode(map[string]any{"kind": "not_seen_again", "type": e.Type, "key": e.Key}); err != nil {
 				return err
 			}
 		}
@@ -965,10 +1061,14 @@ func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) erro
 			}
 		}
 		sum := map[string]any{
-			"kind":         "summary",
-			"added":        len(d.Added),
-			"removed":      len(d.Removed),
-			"observations": len(d.NewObs),
+			"kind":           "summary",
+			"added":          len(d.Added),
+			"removed":        len(removed),
+			"not_seen_again": len(unseen),
+			"observations":   len(d.NewObs),
+		}
+		if len(failed) > 0 {
+			sum["failed_sources"] = failed
 		}
 		if differ {
 			sum["seeds_differ"] = true
@@ -988,7 +1088,7 @@ func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) erro
 	for _, e := range d.Added {
 		fmt.Printf("  + %s %s\n", e.Type, e.Key)
 	}
-	for _, e := range d.Removed {
+	for _, e := range removed {
 		fmt.Printf("  - %s %s\n", e.Type, e.Key)
 	}
 	if !opts.Quiet {
@@ -996,8 +1096,31 @@ func printDiffStores(old, neu *store.Store, oldLabel string, opts diffOpts) erro
 			fmt.Printf("  + %s %s %s\n", o.Collector, o.Kind, compact(o.Payload))
 		}
 	}
-	fmt.Printf("added=%d removed=%d observations=%d\n", len(d.Added), len(d.Removed), len(d.NewObs))
+	if len(unseen) > 0 {
+		line := fmt.Sprintf("  ? %d names and URLs the last run heard of and never checked were not heard of again", len(unseen))
+		if len(failed) > 0 {
+			line += " (sources that failed this run: " + strings.Join(failed, ", ") + ")"
+		}
+		fmt.Println(line + "; -jsonl lists them")
+	}
+	fmt.Printf("added=%d removed=%d not_seen_again=%d observations=%d\n", len(d.Added), len(removed), len(unseen), len(d.NewObs))
 	return nil
+}
+
+// failedSources names the third-party sources that failed in a run.
+func failedSources(st *store.Store) []string {
+	ents, _ := st.Entities()
+	obs, _ := st.Observations()
+	seen := map[string]bool{}
+	var out []string
+	for _, f := range engine.Failures(ents, obs) {
+		if f.Source != "" && !seen[f.Source] {
+			seen[f.Source] = true
+			out = append(out, f.Source)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func newRunID() string {
@@ -1013,8 +1136,8 @@ func newRunID() string {
 func cmdExport(args []string) error {
 	fs := newFlags("export")
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
-	format := fs.String("format", "jsonl", "jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, burp (scope), html, graphml, secrets")
-	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes)")
+	format := fs.String("format", "jsonl", "jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, graphql (introspection JSON), sdl (GraphQL schema), burp (the run's scope), html, graphml, secrets")
+	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes); graphql, sdl: the endpoints of an origin, or one endpoint's URL")
 	if err := parse(fs, args); err != nil {
 		return err
 	}

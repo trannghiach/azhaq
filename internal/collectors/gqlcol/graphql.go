@@ -1,12 +1,15 @@
 // Package gqlcol recognises GraphQL endpoints and, behind -graphql, reads
 // their schema through introspection. Recognising one takes a plain GET;
-// introspection is a POST, so it is an active technique.
+// introspection is a POST, so it is an active technique. The schema is
+// kept whole (types, fields, arguments, input objects, enums) for the map
+// and the graphql, sdl and openapi exports.
 package gqlcol
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
@@ -93,7 +97,8 @@ func ideName(body []byte) string {
 	return ""
 }
 
-// Schema reads a GraphQL schema with one introspection query. Active
+// Schema reads a GraphQL schema with the standard introspection query, and
+// with a shorter one when the server refuses that for its depth. Active
 // (-graphql): it POSTs to the target.
 type Schema struct {
 	Client *http.Client
@@ -113,18 +118,73 @@ func (s *Schema) Outputs() []string { return []string{"graphql"} }
 
 func (s *Schema) Skip(seed types.Seed) bool { return !looksGraphQL(seed.Keys["url"]) }
 
-// introspection asks for the operation fields and type names only.
-const introspection = `query AzhaqSchema { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind fields { name } } } }`
+// short asks for the operation fields and type names only: what is read
+// from a server that refuses the full query for its depth.
+const short = `query AzhaqSchema { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name kind fields { name } } } }`
+
+// maxSchema bounds the schema kept in the observation; a larger one loses
+// its descriptions, then is not kept (its operation names still are).
+const maxSchema = 8 << 20
+
+// introOff: what a server says when introspection is turned off.
+var introOff = regexp.MustCompile(`(?i)introspection[^"]{0,60}(disabled|not allowed|forbidden|blocked|not permitted|turned off)|(not allowed|disabled)[^"]{0,40}introspection`)
+
+// introspectionOff says whether an answer refuses introspection itself.
+func introspectionOff(data []byte) bool { return introOff.Match(data) }
 
 func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	raw, err := normalize.URL(seed.Keys["url"])
 	if err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	body, _ := json.Marshal(map[string]string{"query": introspection})
+	status, data, err := s.post(ctx, raw, gqlschema.Query)
+	if err != nil {
+		return failed(err)
+	}
+	full, sc, ok := gqlschema.Read(data)
+	if !ok && !introspectionOff(data) {
+		// Refused for its depth or cost, cut short, blocked for its size or
+		// one of its fields: the names are still worth a second ask. A
+		// server that turned introspection off is not asked again.
+		if status, data, err = s.post(ctx, raw, short); err != nil {
+			return failed(err)
+		}
+		_, sc, ok = gqlschema.Read(data)
+		full = nil
+	}
+	if !ok {
+		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	row := summary(sc)
+	if full != nil {
+		if kept, fits := gqlschema.Bound(full, maxSchema); fits {
+			row["schema"] = kept
+		} else {
+			row["schema_bytes"] = len(full)
+		}
+	}
+	row["url"], row["role"], row["status"] = raw, "graphql", status
+	return one(emit, raw, "graphql", row)
+}
+
+// failed is what a query that got no answer leaves: capped by the request
+// budget, nothing for a host that does not resolve, else an error.
+func failed(err error) (types.RunMeta, error) {
+	switch {
+	case errors.Is(err, neterr.ErrBudget):
+		return types.RunMeta{Status: types.StatusCapped}, err
+	case neterr.Quiet(err):
+		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
+}
+
+// post sends one GraphQL query and reads the answer.
+func (s *Schema) post(ctx context.Context, raw, query string) (int, []byte, error) {
+	body, _ := json.Marshal(map[string]string{"query": query})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, raw, bytes.NewReader(body))
 	if err != nil {
-		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
+		return 0, nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -137,52 +197,25 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 		req.Header.Set("User-Agent", fetch.UserAgent)
 	}
 	if err := fetch.Spend(ctx); err != nil {
-		return types.RunMeta{Status: types.StatusCapped}, err
+		return 0, nil, err
 	}
 	resp, err := s.Client.Do(req)
 	if err != nil {
-		if neterr.Quiet(err) {
-			return types.RunMeta{Status: types.StatusOK}, nil
-		}
-		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, fetch.MaxScriptBody))
-	row, ok := readSchema(data)
-	if !ok {
-		return types.RunMeta{Status: types.StatusOK}, nil
-	}
-	row["url"], row["role"], row["status"] = raw, "graphql", resp.StatusCode
-	return one(emit, raw, "graphql", row)
+	return resp.StatusCode, data, nil
 }
 
-// readSchema summarises an introspection answer: the fields of the query,
-// mutation and subscription types and the names of the other object types.
-func readSchema(data []byte) (map[string]any, bool) {
-	var r struct {
-		Data struct {
-			Schema struct {
-				QueryType, MutationType, SubscriptionType *struct{ Name string }
-				Types                                     []struct {
-					Name, Kind string
-					Fields     []struct{ Name string }
-				}
-			} `json:"__schema"`
-		}
-	}
-	if json.Unmarshal(data, &r) != nil || len(r.Data.Schema.Types) == 0 {
-		return nil, false
-	}
-	sc := r.Data.Schema
+// summary lists the fields of the query, mutation and subscription types
+// and the names of the other object types.
+func summary(sc *gqlschema.Schema) map[string]any {
 	root := map[string]string{}
-	if sc.QueryType != nil {
-		root[sc.QueryType.Name] = "queries"
-	}
-	if sc.MutationType != nil {
-		root[sc.MutationType.Name] = "mutations"
-	}
-	if sc.SubscriptionType != nil {
-		root[sc.SubscriptionType.Name] = "subscriptions"
+	for key, t := range map[string]*gqlschema.Named{"queries": sc.QueryType, "mutations": sc.MutationType, "subscriptions": sc.SubscriptionType} {
+		if t != nil {
+			root[t.Name] = key
+		}
 	}
 	row := map[string]any{"introspection": true}
 	var objects []string
@@ -204,7 +237,7 @@ func readSchema(data []byte) (map[string]any, bool) {
 	}
 	sort.Strings(objects)
 	row["types"] = objects
-	return row, true
+	return row
 }
 
 func one(emit func(types.Observation) error, source, kind string, row map[string]any) (types.RunMeta, error) {

@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"maps"
+	"net"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -16,7 +19,11 @@ import (
 
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
+	"github.com/trannghiach/azhaq/internal/gqlschema"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/scopefile"
 	"github.com/trannghiach/azhaq/internal/webextract"
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -29,6 +36,8 @@ type graphView struct {
 	obs   []types.StoredObservation
 	probe []engine.ProbeRow
 	live  map[string]map[string]any
+	args  []string     // the options the run was started with
+	rules *scope.Rules // the run's scope as resolved when it started, if it had one
 }
 
 func readGraph(path string) (*graphView, error) {
@@ -53,7 +62,13 @@ func readGraph(path string) (*graphView, error) {
 	seeds, _ := st.LoadSeeds()
 	leftover, _ := st.LoadLeftover()
 	stats, _ := st.Stats()
-	g := &graphView{path: path, stats: stats, obs: obs, live: liveNames(st)}
+	g := &graphView{path: path, stats: stats, obs: obs, live: liveNames(st), args: st.RunArgs()}
+	if raw := st.GetMeta("scope:" + st.RunID()); raw != "" {
+		var r scope.Rules
+		if json.Unmarshal([]byte(raw), &r) == nil {
+			g.rules = &r
+		}
+	}
 	g.rows = engine.BuildMap(ents, engine.ScopeSeeds(seeds, ents, edges), obs, leftover, stats.Capped)
 	g.probe = engine.ProbeRows(obs)
 	return g, nil
@@ -111,10 +126,19 @@ func exportAs(path, format, origin string, w io.Writer) error {
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(doc)
+	case "graphql", "sdl":
+		return graphqlExport(g, format, origin, w)
 	case "burp":
+		var rules scope.Rules
+		var err error
+		if g.rules != nil {
+			rules = *g.rules
+		} else if rules, err = runRules(g.args, loadScope); err != nil {
+			fmt.Fprintf(os.Stderr, "azhaq export: the run's scope: %v; listing the hosts it mapped instead\n", err)
+		}
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
-		return enc.Encode(burpScope(g))
+		return enc.Encode(burpScope(g, rules))
 	case "html":
 		return htmlReport(g, w)
 	case "graphml":
@@ -124,7 +148,7 @@ func exportAs(path, format, origin string, w io.Writer) error {
 			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", s.Severity, s.Kind, s.Value, s.Where)
 		}
 	default:
-		return usagef("unknown -format %q (jsonl, urls, hosts, names, targets, openapi, burp, html, graphml, secrets)", format)
+		return usagef("unknown -format %q (jsonl, urls, hosts, names, targets, openapi, graphql, sdl, burp, html, graphml, secrets)", format)
 	}
 	return nil
 }
@@ -167,21 +191,61 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 		"info":    map[string]any{"title": "Routes mapped on " + origin, "version": version, "description": "Mapped by azhaq " + version + " from " + g.path + ": the target's own API description where it serves one, plus what its scripts call and its pages link to. Seen, not a contract."},
 		"servers": []any{map[string]any{"url": origin}},
 	}
-	paths := map[string]any{}
-	doc["paths"] = paths
+	s := &spec{paths: map[string]any{}, shapes: map[string]string{}, graphql: map[string]gqlEndpoint{}}
+	for _, ep := range graphqlEndpoints(g.obs) {
+		s.graphql[ep.URL] = ep
+	}
+	doc["paths"] = s.paths
 	for _, d := range served(g.obs, origin) {
-		mergeDoc(doc, paths, d)
+		mergeDoc(doc, s.paths, d)
+	}
+	for _, p := range slices.Sorted(maps.Keys(s.paths)) {
+		if shape := placeholder.ReplaceAllString(p, "{}"); s.shapes[shape] == "" {
+			s.shapes[shape] = p
+		}
 	}
 	for _, r := range rows {
-		addRoute(paths, r)
+		s.addRoute(r)
 	}
 	for _, r := range rows {
 		for _, f := range r.Forms {
-			addForm(paths, origin, f)
+			s.addForm(origin, f)
 		}
 	}
+	tidy(doc)
 	return doc, nil
 }
+
+// spec is the paths of a description being built. OpenAPI forbids two
+// templates that differ only by their parameter names (/users/{id} and
+// /users/{name}), so a route goes under the first path of its shape.
+type spec struct {
+	paths   map[string]any
+	shapes  map[string]string // the path with {} for each parameter → the path
+	graphql map[string]gqlEndpoint
+}
+
+// path is the key a URL path goes under, and its parameter names.
+func (s *spec) path(raw string) (string, []string) {
+	p, names := openAPIPath(raw)
+	shape := placeholder.ReplaceAllString(p, "{}")
+	if k, ok := s.shapes[shape]; ok {
+		return k, templateNames(k)
+	}
+	s.shapes[shape] = p
+	return p, names
+}
+
+func templateNames(p string) []string {
+	var out []string
+	for _, ph := range placeholder.FindAllString(p, -1) {
+		out = append(out, strings.Trim(ph, "{}"))
+	}
+	return out
+}
+
+// opMethods are the keys of a path item that are operations.
+var opMethods = []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"}
 
 // servedDoc is an OpenAPI 3 document the target serves, with the path
 // its operations live under.
@@ -257,7 +321,7 @@ func mergeDoc(doc, paths map[string]any, d servedDoc) {
 		}
 		for m, op := range item {
 			if _, ok := dst[m]; !ok {
-				if opm, ok := op.(map[string]any); ok {
+				if opm, ok := op.(map[string]any); ok && slices.Contains(opMethods, m) {
 					opm["x-azhaq"] = map[string]any{"source": "served description"}
 				}
 				dst[m] = op
@@ -266,18 +330,37 @@ func mergeDoc(doc, paths map[string]any, d servedDoc) {
 	}
 }
 
-// addRoute adds a mapped route's operations that the path item lacks.
-func addRoute(paths map[string]any, r engine.MapEntry) {
+// addRoute adds a mapped route's operations that the path item lacks. A
+// GraphQL endpoint's operations are one POST (see graphqlOperation).
+func (s *spec) addRoute(r engine.MapEntry) {
 	u, err := url.Parse(r.Entity.Key)
 	if err != nil {
 		return
 	}
-	p, pathParams := openAPIPath(u.Path)
-	item, _ := paths[p].(map[string]any)
+	p, pathParams := s.path(u.Path)
+	item, _ := s.paths[p].(map[string]any)
 	if item == nil {
 		item = map[string]any{}
 	}
-	ops := r.Ops
+	var ops, gql []engine.Op
+	for _, o := range r.Ops {
+		if o.Source == "graphql" {
+			gql = append(gql, o)
+		} else {
+			ops = append(ops, o)
+		}
+	}
+	if ep, ok := s.graphql[r.Entity.Key]; ok || len(gql) > 0 {
+		var sc *gqlschema.Schema
+		if ok {
+			sc = ep.Schema
+		}
+		if post, ok := item["post"].(map[string]any); ok {
+			post["x-azhaq-graphql"] = graphqlExtension(sc, gql)
+		} else {
+			item["post"] = graphqlOperation(r, p, pathParams, sc, gql)
+		}
+	}
 	if len(ops) == 0 {
 		methods := r.Methods
 		if len(methods) == 0 {
@@ -300,22 +383,20 @@ func addRoute(paths map[string]any, r engine.MapEntry) {
 	}
 	for _, o := range ops {
 		m := strings.ToLower(o.Method)
-		if _, ok := item[m]; ok || m == "" {
+		if _, ok := item[m]; ok || !slices.Contains(opMethods, m) {
 			continue
 		}
-		var params []any
-		for _, n := range pathParams {
-			params = append(params, map[string]any{"name": n, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
-		}
-		for where, names := range map[string][]string{"query": o.Query, "header": o.Header, "cookie": o.Cookie} {
-			for _, n := range names {
+		params := pathParameters(pathParams)
+		seen := map[string]bool{}
+		for _, where := range []string{"query", "header", "cookie"} {
+			for _, n := range map[string][]string{"query": o.Query, "header": o.Header, "cookie": o.Cookie}[where] {
+				if n == "" || seen[where+" "+n] {
+					continue
+				}
+				seen[where+" "+n] = true
 				params = append(params, map[string]any{"name": n, "in": where, "schema": map[string]any{"type": "string"}})
 			}
 		}
-		sort.SliceStable(params, func(i, j int) bool {
-			a, b := params[i].(map[string]any), params[j].(map[string]any)
-			return a["in"].(string) > b["in"].(string) // path, query, header, cookie
-		})
 		op := map[string]any{
 			"operationId": operationID(o, m, p),
 			"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
@@ -346,12 +427,20 @@ func addRoute(paths map[string]any, r engine.MapEntry) {
 		item[m] = op
 	}
 	if len(item) > 0 {
-		paths[p] = item
+		s.paths[p] = item
 	}
 }
 
+func pathParameters(names []string) []any {
+	var out []any
+	for _, n := range names {
+		out = append(out, map[string]any{"name": n, "in": "path", "required": true, "schema": map[string]any{"type": "string"}})
+	}
+	return out
+}
+
 // addForm adds the operation an HTML form submits.
-func addForm(paths map[string]any, origin string, f engine.MapForm) {
+func (s *spec) addForm(origin string, f engine.MapForm) {
 	u, err := url.Parse(f.Action)
 	if err != nil || u.Scheme+"://"+u.Host != origin {
 		return
@@ -360,8 +449,11 @@ func addForm(paths map[string]any, origin string, f engine.MapForm) {
 	if method == "" {
 		method = "get"
 	}
-	p, _ := openAPIPath(u.Path)
-	item, _ := paths[p].(map[string]any)
+	if !slices.Contains(opMethods, method) {
+		return
+	}
+	p, pathParams := s.path(u.Path)
+	item, _ := s.paths[p].(map[string]any)
 	if item == nil {
 		item = map[string]any{}
 	}
@@ -373,19 +465,107 @@ func addForm(paths map[string]any, origin string, f engine.MapForm) {
 		"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
 		"x-azhaq":     map[string]any{"source": "form"},
 	}
+	params := pathParameters(pathParams)
 	if method == "get" {
-		var params []any
+		seen := map[string]bool{}
 		for _, n := range f.Fields {
-			params = append(params, map[string]any{"name": n, "in": "query", "schema": map[string]any{"type": "string"}})
-		}
-		if len(params) > 0 {
-			op["parameters"] = params
+			if n != "" && !seen[n] {
+				seen[n] = true
+				params = append(params, map[string]any{"name": n, "in": "query", "schema": map[string]any{"type": "string"}})
+			}
 		}
 	} else {
 		op["requestBody"] = requestBody(f.Fields, "application/x-www-form-urlencoded")
 	}
+	if len(params) > 0 {
+		op["parameters"] = params
+	}
 	item[method] = op
-	paths[p] = item
+	s.paths[p] = item
+}
+
+// graphqlOperation is the POST a GraphQL endpoint takes: a query and its
+// variables, with the schema's operations in x-azhaq-graphql.
+func graphqlOperation(r engine.MapEntry, p string, pathParams []string, sc *gqlschema.Schema, ops []engine.Op) map[string]any {
+	ext := graphqlExtension(sc, ops)
+	count := map[string]int{}
+	for _, o := range ext["operations"].([]map[string]any) {
+		count[o["type"].(string)]++
+	}
+	var parts []string
+	for _, k := range []string{"query", "mutation", "subscription"} {
+		if n := count[k]; n > 0 {
+			parts = append(parts, plural(n, k))
+		}
+	}
+	summary := "GraphQL endpoint"
+	if len(parts) > 0 {
+		summary += ": " + strings.Join(parts, ", ")
+	}
+	x := map[string]any{"source": "graphql"}
+	if r.Coverage != "" {
+		x["coverage"] = r.Coverage
+	}
+	if r.Status != 0 {
+		x["status"] = r.Status
+	}
+	op := map[string]any{
+		"operationId": operationID(engine.Op{}, "post", p),
+		"summary":     summary,
+		"description": "A GraphQL endpoint, not REST: one POST takes every operation. x-azhaq-graphql lists them; the whole schema is in azhaq export -format graphql (introspection JSON) and -format sdl.",
+		"requestBody": map[string]any{"required": true, "content": map[string]any{"application/json": map[string]any{"schema": map[string]any{
+			"type": "object", "required": []any{"query"},
+			"properties": map[string]any{"query": map[string]any{"type": "string"}, "operationName": map[string]any{"type": "string"}, "variables": map[string]any{"type": "object"}},
+		}}}},
+		"responses":       map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
+		"x-azhaq":         x,
+		"x-azhaq-graphql": ext,
+	}
+	if params := pathParameters(pathParams); len(params) > 0 {
+		op["parameters"] = params
+	}
+	return op
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	if word == "query" {
+		return fmt.Sprintf("%d queries", n)
+	}
+	return fmt.Sprintf("%d %ss", n, word)
+}
+
+// graphqlExtension lists a GraphQL endpoint's operations: their type
+// (query, mutation, subscription), name, arguments with their types and
+// what they return; by name only when the schema was not kept whole.
+func graphqlExtension(sc *gqlschema.Schema, ops []engine.Op) map[string]any {
+	list := []map[string]any{}
+	if sc != nil {
+		for _, o := range sc.Operations() {
+			e := map[string]any{"type": o.Kind, "name": o.Name, "returns": o.Type.String()}
+			args := []map[string]any{}
+			for _, a := range o.Args {
+				arg := map[string]any{"name": a.Name, "type": a.Type.String()}
+				if a.DefaultValue != nil {
+					arg["default"] = *a.DefaultValue
+				}
+				args = append(args, arg)
+			}
+			e["arguments"] = args
+			if o.Deprecated {
+				e["deprecated"] = true
+			}
+			list = append(list, e)
+		}
+		return map[string]any{"operations": list}
+	}
+	for _, o := range ops {
+		kind, _, _ := strings.Cut(o.Summary, " ")
+		list = append(list, map[string]any{"type": kind, "name": o.OperationID})
+	}
+	return map[string]any{"operations": list}
 }
 
 // openAPIPath turns a mapped path into an OpenAPI one: every placeholder
@@ -446,12 +626,225 @@ func source(o engine.Op, r engine.MapEntry) string {
 	}
 }
 
-// burpScope is a Burp Suite project options file whose target scope
-// includes every host with a web service in the graph.
-func burpScope(g *graphView) map[string]any {
+// tidy makes the description valid whatever went into it: every {name} in
+// a path is a path parameter of each of its operations, a parameter is
+// listed once, operationIds are unique, and component names are ones
+// OpenAPI allows.
+func tidy(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	keys := slices.Sorted(maps.Keys(paths))
+	var ops []map[string]any
+	for _, p := range keys {
+		item, _ := paths[p].(map[string]any)
+		shared := paramKeys(doc, item["parameters"])
+		for _, m := range opMethods {
+			op, ok := item[m].(map[string]any)
+			if !ok {
+				continue
+			}
+			ops = append(ops, op)
+			params, _ := op["parameters"].([]any)
+			var kept []any
+			have := map[string]bool{}
+			for _, x := range params {
+				k := paramKey(doc, x)
+				if k != "" && have[k] {
+					continue
+				}
+				have[k] = true
+				kept = append(kept, x)
+			}
+			for _, n := range templateNames(p) {
+				if !have["path "+n] && !shared["path "+n] {
+					have["path "+n] = true
+					kept = append(kept, pathParameters([]string{n})...)
+				}
+			}
+			if len(kept) > 0 {
+				op["parameters"] = kept
+			}
+		}
+	}
+	uniqueOperationIDs(ops)
+	tidyComponents(doc)
+}
+
+// paramKey is "in name" of a parameter, through its $ref.
+func paramKey(doc map[string]any, x any) string {
+	p, _ := x.(map[string]any)
+	if ref, ok := p["$ref"].(string); ok {
+		name, found := strings.CutPrefix(ref, "#/components/parameters/")
+		comps, _ := doc["components"].(map[string]any)
+		params, _ := comps["parameters"].(map[string]any)
+		if p, _ = params[name].(map[string]any); !found || p == nil {
+			return ""
+		}
+	}
+	in, _ := p["in"].(string)
+	name, _ := p["name"].(string)
+	if in == "" {
+		return ""
+	}
+	return in + " " + name
+}
+
+func paramKeys(doc map[string]any, list any) map[string]bool {
+	out := map[string]bool{}
+	xs, _ := list.([]any)
+	for _, x := range xs {
+		if k := paramKey(doc, x); k != "" {
+			out[k] = true
+		}
+	}
+	return out
+}
+
+// uniqueOperationIDs renames repeated operationIds (/blog and /blog/ are
+// both get_blog): a served description's operations keep theirs, then the
+// first in path order does, and the others get _2, _3….
+func uniqueOperationIDs(ops []map[string]any) {
+	servedFirst := func(op map[string]any) bool {
+		x, _ := op["x-azhaq"].(map[string]any)
+		return x["source"] == "served description"
+	}
+	sort.SliceStable(ops, func(i, j int) bool { return servedFirst(ops[i]) && !servedFirst(ops[j]) })
+	taken := map[string]bool{}
+	for _, op := range ops {
+		if id, _ := op["operationId"].(string); id != "" {
+			taken[id] = true
+		}
+	}
+	kept := map[string]bool{}
+	for _, op := range ops {
+		id, _ := op["operationId"].(string)
+		if id == "" {
+			continue
+		}
+		if !kept[id] {
+			kept[id] = true
+			continue
+		}
+		for n := 2; ; n++ {
+			if c := fmt.Sprintf("%s_%d", id, n); !taken[c] {
+				taken[c], kept[c] = true, true
+				op["operationId"] = c
+				break
+			}
+		}
+	}
+}
+
+var componentName = regexp.MustCompile(`^[a-zA-Z0-9.\-_]+$`)
+
+// tidyComponents renames components whose names OpenAPI does not allow
+// (letters, digits, '.', '-' and '_'), and the references to them.
+func tidyComponents(doc map[string]any) {
+	comps, _ := doc["components"].(map[string]any)
+	renamed := map[string]string{}
+	for _, kind := range slices.Sorted(maps.Keys(comps)) {
+		set, _ := comps[kind].(map[string]any)
+		for _, name := range slices.Sorted(maps.Keys(set)) {
+			if componentName.MatchString(name) {
+				continue
+			}
+			fixed := strings.Map(func(r rune) rune {
+				if r < 128 && componentName.MatchString(string(r)) {
+					return r
+				}
+				return '_'
+			}, name)
+			for set[fixed] != nil {
+				fixed += "_"
+			}
+			set[fixed] = set[name]
+			delete(set, name)
+			renamed["#/components/"+kind+"/"+name] = "#/components/" + kind + "/" + fixed
+			// A reference may escape the name as a JSON pointer does.
+			renamed["#/components/"+kind+"/"+strings.ReplaceAll(strings.ReplaceAll(name, "~", "~0"), "/", "~1")] = "#/components/" + kind + "/" + fixed
+		}
+	}
+	if len(renamed) > 0 {
+		renameRefs(doc, renamed)
+	}
+}
+
+func renameRefs(v any, renamed map[string]string) {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, y := range x {
+			if s, ok := y.(string); ok && k == "$ref" {
+				if to, ok := renamed[s]; ok {
+					x[k] = to
+				}
+				continue
+			}
+			renameRefs(y, renamed)
+		}
+	case []any:
+		for _, y := range x {
+			renameRefs(y, renamed)
+		}
+	}
+}
+
+// burpScope is a Burp Suite project options file whose target scope is
+// the run's: the rules of its -scope and -allow included, its deny rules
+// excluded, each for any protocol, port and path. A run without allow
+// rules includes every host with a web service in the graph.
+func burpScope(g *graphView, rules scope.Rules) map[string]any {
+	include := burpEntries(rules.Allow)
+	if len(rules.Allow) == 0 {
+		include = observedHosts(g)
+	}
+	return map[string]any{"target": map[string]any{"scope": map[string]any{
+		"advanced_mode": true, "include": include, "exclude": burpEntries(rules.Deny),
+	}}}
+}
+
+// burpEntries turns scope rules into Burp's advanced scope entries: a
+// domain matches itself and its subdomains, =host that host, an address
+// itself; a range is given as Burp takes one (10.0.0.0/24).
+func burpEntries(rules []string) []map[string]any {
+	out := []map[string]any{}
+	seen := map[string]bool{}
+	for _, r := range rules {
+		r = strings.TrimSpace(r)
+		var host string
+		switch {
+		case strings.Contains(r, "/"):
+			_, n, err := net.ParseCIDR(r)
+			if err != nil {
+				continue
+			}
+			if ones, bits := n.Mask.Size(); ones == bits {
+				host = "^" + regexp.QuoteMeta(n.IP.String()) + "$"
+			} else {
+				host = n.String()
+			}
+		case strings.HasPrefix(r, "="):
+			host = "^" + regexp.QuoteMeta(normalize.Hostname(r[1:])) + "$"
+		default:
+			h := normalize.Hostname(strings.TrimPrefix(r, "*."))
+			if net.ParseIP(h) != nil {
+				host = "^" + regexp.QuoteMeta(h) + "$"
+			} else {
+				host = `^(.*\.)?` + regexp.QuoteMeta(h) + "$"
+			}
+		}
+		if host == "" || host == "^$" || host == `^(.*\.)?$` || seen[host] {
+			continue
+		}
+		seen[host] = true
+		out = append(out, map[string]any{"enabled": true, "protocol": "any", "host": host})
+	}
+	return out
+}
+
+// observedHosts are Burp scope entries for every web service in the graph.
+func observedHosts(g *graphView) []map[string]any {
 	type key struct{ proto, host, port string }
 	seen := map[key]bool{}
-	var include []map[string]any
+	include := []map[string]any{}
 	for _, r := range g.probe {
 		u, err := url.Parse(r.URL)
 		if err != nil {
@@ -470,9 +863,54 @@ func burpScope(g *graphView) map[string]any {
 			"enabled": true, "protocol": u.Scheme, "host": "^" + regexp.QuoteMeta(u.Hostname()) + "$", "port": "^" + port + "$", "file": "^/.*",
 		})
 	}
-	return map[string]any{"target": map[string]any{"scope": map[string]any{
-		"advanced_mode": true, "include": include, "exclude": []any{},
-	}}}
+	return include
+}
+
+// runRules are the scope rules a run was started with, read back from its
+// stored options: its -allow and -deny, and the rules of its -scope, which
+// load reads (the file again, or the program's current scope from its
+// platform).
+func runRules(args []string, load func(spec, program string) (scopefile.Scope, error)) (scope.Rules, error) {
+	var r scope.Rules
+	spec, program := "", ""
+	for i := 0; i < len(args); i++ {
+		if !strings.HasPrefix(args[i], "-") {
+			continue
+		}
+		name, val, inline := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		switch name {
+		case "allow", "deny", "scope", "program":
+		default:
+			continue
+		}
+		if !inline {
+			if i+1 >= len(args) {
+				break
+			}
+			i++
+			val = args[i]
+		}
+		switch name {
+		case "allow":
+			r.Allow = append(r.Allow, val)
+		case "deny":
+			r.Deny = append(r.Deny, val)
+		case "scope":
+			spec = val
+		case "program":
+			program = val
+		}
+	}
+	if spec == "" {
+		return r, nil
+	}
+	sc, err := load(spec, program)
+	if err != nil {
+		return scope.Rules{}, fmt.Errorf("-scope %s: %w", spec, err)
+	}
+	r.Allow = append(r.Allow, sc.Allow...)
+	r.Deny = append(r.Deny, sc.Deny...)
+	return r, nil
 }
 
 var reportTmpl = template.Must(template.New("report").Funcs(template.FuncMap{

@@ -4,7 +4,7 @@ Azhaq is a reconnaissance engine for security research, written in Go. Point it 
 
 It is built to be driven by scripts and assistants as much as by people: every command prints its results on stdout, a summary of what failed, what was skipped and why on stderr, and an exit code that says whether the work is complete. `azhaq mcp` serves it to MCP clients with the scope and the request budget locked.
 
-It maps and does not attack: no payloads, no vulnerability checks. Requests are GETs, except Chrome signing in when you give it an account, and GraphQL introspection with `-graphql`. Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`) are listed, not requested.
+It maps and does not attack: no payloads, no vulnerability checks. Requests are GETs, except Chrome signing in when you give it an account, and GraphQL introspection with `-graphql`. Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
 
 ## Install
 
@@ -19,7 +19,7 @@ The checksums file is signed with [sigstore](https://www.sigstore.dev/) by the r
 
 ```
 cosign verify-blob --bundle checksums.txt.sigstore.json checksums.txt \
-  --certificate-identity-regexp '^https://github.com/trannghiach/azhaq/' --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  --certificate-identity-regexp '^https://github\.com/trannghiach/azhaq/\.github/workflows/release\.yml@refs/tags/v' --certificate-oidc-issuer https://token.actions.githubusercontent.com
 sha256sum --ignore-missing -c checksums.txt
 ```
 
@@ -54,7 +54,7 @@ Requests carry a current browser's User-Agent, as httpx and katana do: CDN bot m
 ## What every command prints
 
 - **stdout**: results only, one per line, or one JSON object per line with `-json`.
-- **stderr**: failures as they happen (three per kind), a progress line every 30 s on long runs, and a summary at the end: what came out, what failed (collector, source, error, whether it is worth retrying, the first targets), targets that never answered, what was left alone and why, the limit that stopped the work and the command that resumes it. With `-json` the summary is one JSON object with `"type":"summary"`.
+- **stderr**: failures as they happen (three per kind), a progress line every 30 s on long runs, and a summary at the end: what came out, what failed (collector, source, error, whether it is worth retrying, up to 100 targets; `azhaq query -failed` lists every one), targets that never answered, what was left alone and why, the limit that stopped the work and the command that resumes it. With `-json` the summary is one JSON object with `"type":"summary"`, and nothing else is printed on stderr.
 - **exit code**: 0 complete, 1 error, 2 usage (nothing was sent), 3 finished with failures (the results are usable; the summary says what failed), 4 stopped by a limit (`azhaq resume -db FILE` continues).
 
 ```
@@ -86,23 +86,23 @@ The OpenAPI export starts from the description the target serves, unchanged, and
 
 ## Access control: comparing sessions
 
-`azhaq roles` maps the same target once per session, then asks every endpoint any session reached with every other session, fills path parameters with identifiers the sessions' own answers held, and compares the answers by status, length, body and JSON fields.
+`azhaq roles` maps the same target once per session, then asks every endpoint any session reached with every other session, fills path parameters with identifiers the sessions' own answers held (each role's own objects first), and compares the answers by status, length, body and nested JSON fields. A 4xx, or an error answered with 200, is a refusal.
 
 ```
-$ azhaq roles -role anon -role "name1=Authorization: Bearer $T1" -role "admin=Authorization: Bearer $T2" -- -url http://localhost:5000/
-roles  anon · name1 · admin  (13 endpoints compared, 7 listed; databases in azhaq-roles-…)
-  401 → 200:83 → 200:83  http://localhost:5000/books/v1/bookTitle55  [every signed-in role reads the same object] from …/books/v1/{book_title}
-  200:48 → 200:48 → 200:48  http://localhost:5000/users/v1/name1  [anyone reads the same object, signed in or not] from …/users/v1/{username}
+$ azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Authorization: Bearer $TB" \
+    -id 'alice:book_title=aliceBook' -- -url http://localhost:5000/
+  401 → 200:79 → 200:79  http://localhost:5000/books/v1/aliceBook  [bob reads alice's object] from …/books/v1/{book_title} · sensitive: secret
+  200:1.1k ×3  http://localhost:5000/users/v1/_debug  [anyone reads sensitive fields: password]
   401 → 200:95 → 200:94  http://localhost:5000/me  [signed-in only]
 ```
 
-That is VAmPI: every user can read every book's secret. Roles are anonymous, carry headers (`-role 'user=Cookie: sid=…'`), or sign in with Chrome on a login page (`-login URL -role-login 'alice=alice@x.test:PASSWORD'`). The verdicts, worst first: an object every signed-in role reads alike, an object anyone reads, the same answer for a session that never found the URL, signed-in only, some roles refused, different fields per role, status differs. `-all` also lists endpoints that answer everyone alike or with each role's own data; `-json` gives each row with every role's answer. The replay sends GETs only, never to state-changing names, within `-replay-max` requests.
+That is VAmPI: bob reads alice's book and its secret, and anyone reads every user's password. Roles are anonymous, carry headers (`-role 'user=Cookie: sid=…'`), or sign in with Chrome on a login page (`-login URL -role-login 'alice=alice@x.test:PASSWORD'`). The verdicts, worst first: anyone reads sensitive fields (passwords, secrets, keys, card numbers, a token several sessions share), a role reads another role's object, an object every signed-in role reads alike, roles read the same sensitive fields, the same answer for a session that never found the URL, signed-in only, only one role reads it, some roles refused, different fields per role, an object anyone reads, status differs. Whose object it is comes from the answers (an identifier only that role's list holds) or from `-id ROLE:NAME=VALUE`. `-all` also lists endpoints that answer everyone alike or with each role's own data; `-json` gives each row with every role's answer and nothing but the summary on stderr. The replay sends GETs only, never to state-changing names, within `-replay-max` requests.
 
 Signing in opens the page in Chrome, fills the user name and password the way typing would, submits, and keeps the cookies and a JSON Web Token the page stores in `localStorage` or `sessionStorage`. Logins that need more (one-time codes, SSO) take `-header` or `-cookie`. A run with a session never requests a URL that looks like a logout.
 
 ## A bug bounty program
 
-`-scope` takes a program's scope and makes it the run's: wildcards are enumerated as domains, hosts and URLs probed as given, out-of-scope entries excluded, and no request goes to a host outside it, not even a redirect target. Targets you give that the scope excludes are skipped and listed. It reads HackerOne's scope CSV, a Burp project options file, plain lines (`*.example.com`, `app.example.org:8443`, `10.0.0.0/24`, `!excluded.example.com`), or the current scope of any public program on HackerOne, Bugcrowd, Intigriti or YesWeHack, from [bounty-targets-data](https://github.com/arkadiyt/bounty-targets-data). Every command that sends requests takes `-scope`, `-allow` and `-deny`.
+`-scope` takes a program's scope and makes it the run's: wildcards are enumerated as domains, hosts and URLs probed as given, out-of-scope entries excluded, and no request goes to a host outside it, not even a redirect target. Targets you give that the scope excludes are skipped and listed. It reads HackerOne's scope CSV, a Burp project options file, plain lines (`*.example.com`, `app.example.org:8443`, `10.0.0.0/24`, `!excluded.example.com`), or the current scope of any public program on HackerOne, Bugcrowd, Intigriti or YesWeHack, from [bounty-targets-data](https://github.com/arkadiyt/bounty-targets-data). Every command that sends requests to targets (`run`, `plan`, `probe`, `crawl`, `ports`, `dirs`, `params`, `shots`, and the runs inside `roles` and `watch`, after `--`) takes `-scope`, `-allow` and `-deny`. Given with targets of your own (`probe -l hosts.txt -scope hackerone -program x`), the scope filters them; it adds the program's own targets only when you give none.
 
 ```
 azhaq scope -scope bugcrowd -program tesla                       # what a run would take, exclude and skip
@@ -110,7 +110,7 @@ azhaq plan  -scope bugcrowd -program tesla -max-requests 5000    # what it would
 azhaq run   -scope bugcrowd -program tesla -db tesla.db -rate 5 -max-requests 5000
 ```
 
-Budgets: `-rate 10` paces requests to targets, `-max-requests 5000` stops a run after that many, `-timeout 20m` stops it after that long, and `-daily-requests 20000 -program NAME` spreads a day's allowance over the runs in a workspace. Work a limit stops is not lost: `azhaq resume -db FILE` continues where it stopped, and so it does after Ctrl-C or a crash.
+Budgets: `-rate 10` paces requests to targets, `-max-requests 5000` stops a run after that many (port connects count too), `-timeout 20m` stops it after that long, and `-daily-requests 20000 -program NAME` spreads a day's allowance over the runs in a workspace. Work a limit stops is not lost: `azhaq resume -db FILE` continues where it stopped, and so it does after Ctrl-C or a crash. A run keeps the answers it got in its workspace until it is complete, so a resumed run does not ask again: Juice Shop capped at 50 requests and resumed until done sent 211 requests in all, one uninterrupted run 205. A port scan the budget cut short scans that address again.
 
 ## Watching a target
 
@@ -129,6 +129,7 @@ Each step of the usual chain has a command that reads targets from flags, a file
 
 ```
 azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json      # subfinder | dnsx | httpx
+azhaq subs -d example.com -w words.txt -permute -live                          # + puredns bruteforce, alterx | dnsx
 azhaq crawl  -u https://app.example.com/ -json                                 # katana + jsluice
 azhaq urls   -d example.com -silent                                            # gau
 azhaq ports  -host scanme.nmap.org -p top-1000 -json                           # naabu (connect scan)
@@ -138,7 +139,7 @@ azhaq asn    -a AS64500                                                        #
 azhaq shots  -l hosts.txt -dir screenshots                                     # gowitness
 ```
 
-`probe` writes httpx's fields with httpx's meanings: `host` is the name, `host_ip` the address the request connected to, `a` and `aaaa` the addresses the name resolved to. `subs -json` gives each name with the `source` and all the `sources` that gave it. `-db FILE` keeps any of them in a workspace for `query`, `show` and `export`.
+`probe` writes httpx's fields with httpx's meanings: `host` is the name, `host_ip` the address the request connected to, `a` and `aaaa` the addresses the name resolved to, `status_code` the first answer (a 302 stays 302). Where a redirect stays in scope it is followed, and `final_url` and `final_status_code` say where it ended; the title and technologies are the final page's. `subs -json` gives each name with the `source` and all the `sources` that gave it (`dns-brute` and `permute` for names `-w` and `-permute` found by resolving guesses). subdomain.center is out of the default sources: it answers 500 random names, different on each call. `-db FILE` keeps any of them in a workspace for `query`, `show` and `export`.
 
 What other tools found joins a workspace with `azhaq ingest`: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report, Azhaq's own export, or plain lists of URLs, hosts and addresses.
 
@@ -202,28 +203,28 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-26, v0.6.0; archives and ports also on GitHub's network, since the Wayback Machine and Common Crawl refuse the bench machine and its security software removes naabu):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-27, v0.6.1; the Wayback Machine and Common Crawl refuse the bench machine, and its security software removes naabu, so the port comparison runs on GitHub's network):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 537, in 35 s | 508, in 57 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 37 s | 3 in 72 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 516, in 48 s | 509, in 94 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 29 s | 3 in 75 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 551 live hosts | httpx | 406 answered; status, title and technologies agree on all 396 shared; 100 s | 396 answered, 142 s |
+| Probing 530 live hosts | httpx | 384 answered; status, title and technologies agree on all 376 shared; 94 s | 376 answered, 135 s |
 | Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
 | VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 18 s | 6/77 in 7 s, 0/40 in 54 s |
-| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,103, including 2,333 of gau's 2,339 | 2,339 |
-| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 54 s | 36 hits, 4 false positives, 60 s |
-| Parameters, 5 pages | arjun | 5, including arjun's 2, in 115 s | 2 in 29 s |
+| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 18 s | 6/77 in 7 s, 0/40 in 44 s |
+| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,104, including 2,335 of gau's 2,340 | 2,340 |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 54 s | 36 hits, 4 false positives, 59 s |
+| Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
 | Screenshots, 4 front pages | gowitness | 4 | 3 |
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 184 URLs as one run each time | |
-| Memory, Juice Shop | katana | 86 MB | 58 MB |
+| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 184 URLs as one run each time; 211 requests over the capped run and its resumes, one run 205 | |
+| Memory, Juice Shop | katana | 97 MB | 59 MB |
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (4× arjun's), memory (above katana's), and one path of ffuf's 36.
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's), and one path of ffuf's 36.
 
 [bench/README.md](bench/README.md) has what is measured, every table and the caveats.
 

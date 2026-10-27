@@ -167,6 +167,20 @@ func (s *Store) SetRunArgs(args []string) error {
 	return err
 }
 
+// RunArgs are the options the current run was started with (see
+// SetRunArgs); nil when none were recorded.
+func (s *Store) RunArgs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var raw sql.NullString
+	if s.db.QueryRow(`SELECT args FROM runs WHERE id = ?`, s.runID).Scan(&raw) != nil || !raw.Valid {
+		return nil
+	}
+	var args []string
+	_ = json.Unmarshal([]byte(raw.String), &args)
+	return args
+}
+
 // Resumable is the latest run with tasks not done, its options, and how
 // many tasks are left; ok is false when every run finished.
 func (s *Store) Resumable() (id string, args []string, left int, ok bool, err error) {
@@ -188,4 +202,20 @@ FROM runs r WHERE left > 0 ORDER BY r.started DESC LIMIT 1`).Scan(&id, &raw, &le
 		}
 	}
 	return id, args, left, true, nil
+}
+
+// Claim records owner for key in the current run unless the run has an
+// owner for it already, and returns the owner (see catalog.Claim).
+func (s *Store) Claim(key, owner string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.runID == "" {
+		return owner
+	}
+	if _, err := s.db.Exec(`INSERT OR IGNORE INTO claims (run_id, key, owner) VALUES (?, ?, ?)`, s.runID, key, owner); err != nil {
+		return owner
+	}
+	got := owner
+	_ = s.db.QueryRow(`SELECT owner FROM claims WHERE run_id = ? AND key = ?`, s.runID, key).Scan(&got)
+	return got
 }

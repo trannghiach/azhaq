@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -36,42 +33,44 @@ type role struct {
 
 func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" }
 
-// answer is how an endpoint answered one session.
-type answer struct {
-	Status int      `json:"status"`
-	Length int      `json:"length"`
-	Hash   string   `json:"hash,omitempty"`
-	Keys   []string `json:"keys,omitempty"` // a JSON answer's top-level fields
-	Title  string   `json:"title,omitempty"`
-}
-
 // roleRow is one endpoint across the sessions.
 type roleRow struct {
-	URL     string            `json:"url"`
-	Status  map[string]int    `json:"status"` // 0: not asked in that role
-	Answers map[string]answer `json:"answers"`
-	FoundBy []string          `json:"found_by"`           // the roles whose own runs reached it
-	From    string            `json:"template,omitempty"` // the route it fills in, for an object URL made from a role's answers
-	Verdict string            `json:"verdict"`
+	URL       string            `json:"url"`
+	Status    map[string]int    `json:"status"` // 0: not asked in that role
+	Answers   map[string]answer `json:"answers"`
+	FoundBy   []string          `json:"found_by"`            // the roles whose own runs reached it, or whose answers held its identifier
+	From      string            `json:"template,omitempty"`  // the route it fills in, for an object URL
+	Owner     string            `json:"owner,omitempty"`     // the role whose own object it is: given with -id, or held by that role's answers alone
+	Readers   []string          `json:"readers,omitempty"`   // the roles the verdict says read it
+	Sensitive []string          `json:"sensitive,omitempty"` // the sensitive fields the verdict is about
+	Verdict   string            `json:"verdict"`
+
+	given bool   // Owner was given with -id
+	value string // the identifier filled into the route
 }
 
 // Verdicts, in the order rows are listed.
 const (
-	verdictObject     = "every signed-in role reads the same object"
-	verdictPublicObj  = "anyone reads the same object, signed in or not"
-	verdictShared     = "same answer for a session that did not find it"
-	verdictSignedIn   = "signed-in only"
-	verdictRoleGated  = "some roles refused"
-	verdictFields     = "different fields per role"
-	verdictStatus     = "status differs"
-	verdictData       = "different data per role"
-	verdictSame       = "same for every role"
-	verdictNone       = "no role reads it"
-	verdictUnanswered = "not answered"
+	verdictAnyoneSecrets = "anyone reads sensitive fields"
+	verdictCross         = "reads another role's object"
+	verdictObject        = "every signed-in role reads the same object"
+	verdictSecrets       = "roles read the same sensitive fields"
+	verdictShared        = "same answer for a session that did not find it"
+	verdictSignedIn      = "signed-in only"
+	verdictOnly          = "only one role reads it"
+	verdictRoleGated     = "some roles refused"
+	verdictFields        = "different fields per role"
+	verdictPublicObj     = "anyone reads the same object, signed in or not"
+	verdictStatus        = "status differs"
+	verdictData          = "different data per role"
+	verdictSame          = "same for every role"
+	verdictNone          = "no role reads it"
+	verdictUnanswered    = "not answered"
 )
 
-var verdictOrder = map[string]int{verdictObject: 0, verdictShared: 1, verdictSignedIn: 2, verdictRoleGated: 3, verdictFields: 4,
-	verdictPublicObj: 5, verdictStatus: 6, verdictData: 7, verdictSame: 8, verdictNone: 9, verdictUnanswered: 10}
+var verdictOrder = map[string]int{verdictAnyoneSecrets: 0, verdictCross: 1, verdictObject: 2, verdictSecrets: 3, verdictShared: 4,
+	verdictSignedIn: 5, verdictOnly: 6, verdictRoleGated: 7, verdictFields: 8, verdictPublicObj: 9, verdictStatus: 10,
+	verdictData: 11, verdictSame: 12, verdictNone: 13, verdictUnanswered: 14}
 
 // cmdRoles maps the same target once per session, then asks every
 // endpoint any session reached with every other session, and lists the
@@ -81,14 +80,15 @@ var verdictOrder = map[string]int{verdictObject: 0, verdictShared: 1, verdictSig
 //	azhaq roles -login https://app/login -role anon -role-login 'alice=a@x.test:pw' -role-login 'bob=b@x.test:pw' -- -url https://app/
 func cmdRoles(args []string) error {
 	fs := newFlags("roles")
-	var specs, logins stringsFlag
+	var specs, logins, idSpecs stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous)")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome")
+	fs.Var(&idSpecs, "id", "[ROLE:]NAME=VALUE: also fill routes with this identifier. NAME is a path parameter (book_title), a JSON field holding such values (basket_id) or a route (/rest/basket/{id}); with ROLE, VALUE names ROLE's own object, and another role that reads it is listed")
 	loginURL := fs.String("login", "", "the login page for -role-login")
 	dir := fs.String("dir", "", "directory for one database per role (default: azhaq-roles-<time>)")
 	jsonl := fs.Bool("jsonl", false, "one JSON object per endpoint (same as -json)")
-	asJSON := fs.Bool("json", false, "one JSON object per endpoint, and the summary as JSON on stderr")
-	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session (GETs that change nothing only)")
+	asJSON := fs.Bool("json", false, "one JSON object per endpoint, and only the summary, as JSON, on stderr")
+	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session, and each role's objects with the others (GETs that change nothing only)")
 	replayMax := fs.Int("replay-max", 2000, "requests the replay may send, over all roles")
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
 	if err := parse(fs, args); err != nil {
@@ -112,6 +112,10 @@ func cmdRoles(args []string) error {
 	if len(roles) < 2 {
 		return usagef("need at least two -role, for example -role anon -role 'user=Cookie: session=…'")
 	}
+	given, err := parseIDs(idSpecs, roles)
+	if err != nil {
+		return err
+	}
 	if len(runArgs) == 0 {
 		return usagef("give the run options after --, for example -- -url https://app.example.com/")
 	}
@@ -133,9 +137,9 @@ func cmdRoles(args []string) error {
 
 	answers := map[string]map[string]answer{} // role → URL → answer
 	found := map[string][]string{}            // URL → roles whose run reached it
-	ids := map[string]map[string][]string{}   // role → field → values its answers held
+	seen := map[string]runSeen{}              // role → the values its answers held
 	templates := map[string]bool{}            // GET routes with path parameters
-	made := map[string]string{}               // object URL → the template it fills
+	made := map[string]instance{}             // object URL → the route it fills and whose object it is
 	var scopeHosts []string
 	for i, r := range roles {
 		db := filepath.Join(*dir, r.name+".db")
@@ -146,20 +150,23 @@ func cmdRoles(args []string) error {
 		if r.user != "" {
 			args = append(args, "-login", *loginURL, "-login-user", r.user, "-login-pass", r.pass)
 		}
-		fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
-		sub, err := runEmbedded(args)
+		if !*asJSON {
+			fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
+		}
+		sub, err := quietly(*asJSON, func() (*report, error) { return runEmbedded(args) })
 		if err != nil {
-			return fmt.Errorf("role %s: %w", r.name, err)
+			return rolesFailed(rep, *asJSON, fmt.Errorf("role %s: %w", r.name, err))
 		}
 		roles[i].session = fetch.Extra.Clone()
-		rep.Requests += sub.Requests
-		rep.Failed = append(rep.Failed, sub.Failed...)
-		got, hosts, seen, err := endpointAnswers(db)
+		got, raw, hosts, s, err := endpointAnswers(db)
 		if err != nil {
 			return err
 		}
-		answers[r.name], ids[r.name] = got, seen.ids
-		for t := range seen.templates {
+		readBodies(got, raw, s, hostSet(hosts))
+		rep.Requests += fetch.Sent() // the run's requests, and any the cache could not answer
+		absorb(rep, r.name, sub)
+		answers[r.name], seen[r.name] = got, s
+		for t := range s.templates {
 			templates[t] = true
 		}
 		for u := range got {
@@ -168,15 +175,23 @@ func cmdRoles(args []string) error {
 		scopeHosts = append(scopeHosts, hosts...)
 	}
 	if *replay {
-		// /books/v1/{book_title} with the titles each role's answers held:
-		// whose objects can the others read?
-		for u, inst := range instances(templates, ids) {
-			if _, ok := found[u]; !ok {
-				found[u] = inst.owners
-				made[u] = inst.template
+		// /books/v1/{book_title} with the titles each role's answers held
+		// and those given with -id: whose objects can the others read?
+		rank := map[string]int{}
+		for u, in := range instances(roles, templates, seen, answers, given) {
+			if _, ok := found[u]; ok {
+				rank[u] = min(in.rank, 2)
+			} else {
+				found[u], rank[u] = in.holders, in.rank
+			}
+			made[u] = in
+		}
+		for _, g := range given {
+			if !g.used {
+				rep.Notes = append(rep.Notes, fmt.Sprintf("-id %s=%s: no GET route with path parameters the runs found takes it", g.name, g.value))
 			}
 		}
-		n, err := replayAll(roles, answers, found, scopeHosts, runArgs, *replayMax)
+		n, err := replayAll(roles, answers, found, rank, scopeHosts, runArgs, *replayMax)
 		rep.Requests += int64(n)
 		if err != nil {
 			rep.Notes = append(rep.Notes, "replay: "+err.Error())
@@ -206,10 +221,72 @@ func cmdRoles(args []string) error {
 	return rep.finish(false, false)
 }
 
+// quietly runs f with stderr going nowhere when on: under -json, stderr
+// carries the summary of roles and nothing else.
+func quietly(on bool, f func() (*report, error)) (*report, error) {
+	if !on {
+		return f()
+	}
+	null, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		return f()
+	}
+	saved := os.Stderr
+	os.Stderr = null
+	defer func() { os.Stderr = saved; null.Close() }()
+	return f()
+}
+
+// absorb adds to the summary of roles what a role's run did not finish:
+// its failures, targets that did not answer, what it left alone, its
+// notes, and the limit that stopped it.
+func absorb(rep *report, name string, sub *report) {
+	rep.Failed = append(rep.Failed, sub.Failed...)
+	for _, u := range sub.Unreachable {
+		if !slices.Contains(rep.Unreachable, u) {
+			rep.Unreachable = append(rep.Unreachable, u)
+		}
+	}
+	for _, s := range sub.Skipped {
+		if !slices.Contains(rep.Skipped, s) {
+			rep.Skipped = append(rep.Skipped, s)
+		}
+	}
+	for _, n := range sub.Notes {
+		if !slices.Contains(rep.Notes, n) {
+			rep.Notes = append(rep.Notes, n)
+		}
+	}
+	if sub.Stopped != "" {
+		// Its map is incomplete, and so is the comparison.
+		stop := fmt.Sprintf("role %s: %s", name, sub.Stopped)
+		if rep.Stopped == "" {
+			rep.Stopped = stop
+		} else {
+			rep.Notes = append(rep.Notes, stop)
+		}
+	}
+}
+
+// rolesFailed ends roles when a role's run could not be done (a sign-in
+// that failed): under -json, as a summary that says so.
+func rolesFailed(rep *report, asJSON bool, err error) error {
+	if !asJSON {
+		return err
+	}
+	rep.settle()
+	rep.Exit, rep.Complete = exitCode(err), false
+	rep.Notes = append(rep.Notes, err.Error())
+	raw, _ := json.Marshal(rep)
+	fmt.Fprintf(os.Stderr, "%s\n", raw)
+	return exitErr{code: rep.Exit}
+}
+
 // listed: the verdicts worth a reader's time by default.
 func listed(v string) bool {
 	switch v {
-	case verdictObject, verdictPublicObj, verdictShared, verdictSignedIn, verdictRoleGated, verdictFields, verdictStatus:
+	case verdictAnyoneSecrets, verdictCross, verdictObject, verdictSecrets, verdictShared, verdictSignedIn, verdictOnly,
+		verdictRoleGated, verdictFields, verdictPublicObj, verdictStatus:
 		return true
 	}
 	return false
@@ -228,21 +305,46 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 			switch {
 			case !ok || a.Status == 0:
 				cells[i] = "-"
+			case a.Error && ok2xx(a.Status):
+				cells[i] = fmt.Sprintf("%d:err", a.Status) // a refusal answered as success
 			case a.Status >= 200 && a.Status < 300:
 				cells[i] = fmt.Sprintf("%d:%s", a.Status, size(a.Length))
 			default:
 				cells[i] = strconv.Itoa(a.Status)
 			}
 		}
-		line := fmt.Sprintf("  %s  %s  [%s]", strings.Join(cells, " → "), row.URL, row.Verdict)
+		line := fmt.Sprintf("  %s  %s  [%s]", strings.Join(cells, " → "), row.URL, row.label())
 		switch row.Verdict {
 		case verdictShared:
 			line += " found by " + strings.Join(row.FoundBy, ", ")
-		case verdictObject, verdictPublicObj:
-			line += " from " + row.From
+		case verdictCross, verdictObject, verdictPublicObj, verdictOnly:
+			if row.From != "" {
+				line += " from " + row.From
+			}
+		}
+		if len(row.Sensitive) > 0 && row.Verdict != verdictAnyoneSecrets && row.Verdict != verdictSecrets {
+			line += " · sensitive: " + strings.Join(row.Sensitive, ", ")
 		}
 		fmt.Println(line)
 	}
+}
+
+// label is the verdict as the text table says it, with who and what.
+func (row roleRow) label() string {
+	who := strings.Join(row.Readers, ", ")
+	switch {
+	case row.Verdict == verdictAnyoneSecrets:
+		return row.Verdict + ": " + strings.Join(row.Sensitive, ", ")
+	case row.Verdict == verdictSecrets && len(row.Readers) > 0:
+		return who + " read the same sensitive fields: " + strings.Join(row.Sensitive, ", ")
+	case row.Verdict == verdictCross && len(row.Readers) == 1:
+		return who + " reads " + row.Owner + "'s object"
+	case row.Verdict == verdictCross && len(row.Readers) > 1:
+		return who + " read " + row.Owner + "'s object"
+	case row.Verdict == verdictOnly && len(row.Readers) == 1:
+		return "only " + who + " reads it"
+	}
+	return row.Verdict
 }
 
 func size(n int) string {
@@ -256,21 +358,52 @@ func size(n int) string {
 	}
 }
 
-// replayAll asks each URL some role reached with every role that did not
-// reach it, through that role's session. Only GETs that change nothing,
-// on the run's own hosts, are sent.
-func replayAll(roles []role, answers map[string]map[string]answer, found map[string][]string, hosts, runArgs []string, budget int) (int, error) {
-	own := map[string]bool{}
-	for _, h := range hosts {
-		own[h] = true
+// replayAll asks each URL some role reached, and each object URL made
+// from the roles' answers, with every role that has no answer for it,
+// through that role's session. Only GETs that change nothing, on the
+// run's own hosts, are sent. URLs go by rank (objects given with -id,
+// the roles' own objects, what the runs reached, other objects), then
+// name, and one is taken only while the budget holds every role's
+// request for it.
+func replayAll(roles []role, answers map[string]map[string]answer, found map[string][]string, rank map[string]int, hosts, runArgs []string, budget int) (int, error) {
+	own := hostSet(hosts)
+	rankOf := func(u string) int {
+		if r, ok := rank[u]; ok {
+			return r
+		}
+		return 2
+	}
+	need := func(u string) int {
+		n := 0
+		for _, r := range roles {
+			if _, ok := answers[r.name][u]; !ok {
+				n++
+			}
+		}
+		return n
 	}
 	var urls []string
 	for u := range found {
-		if replayable(u, own) {
+		if replayable(u, own) && need(u) > 0 {
 			urls = append(urls, u)
 		}
 	}
-	sort.Strings(urls)
+	sort.Slice(urls, func(i, j int) bool {
+		if a, b := rankOf(urls[i]), rankOf(urls[j]); a != b {
+			return a < b
+		}
+		return urls[i] < urls[j]
+	})
+	var stopped error
+	total := 0
+	for i, u := range urls {
+		if total+need(u) > budget {
+			stopped = fmt.Errorf("stopped after -replay-max %d requests; %d URLs were not asked of every role", budget, len(urls)-i)
+			urls = urls[:i]
+			break
+		}
+		total += need(u)
+	}
 	rate := 0.0
 	if fs := flagsOf("run"); fs != nil && fs.Parse(runArgs) == nil {
 		rate, _ = strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64)
@@ -288,10 +421,8 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 			if _, ok := answers[r.name][u]; ok {
 				continue
 			}
-			if sent >= budget {
-				return sent, fmt.Errorf("stopped after -replay-max %d requests", budget)
-			}
 			if ctx.Err() != nil {
+				fetch.Reset()
 				return sent, ctx.Err()
 			}
 			res, _, err := fetch.Do(ctx, client, u)
@@ -299,11 +430,27 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 			if err != nil {
 				continue
 			}
-			answers[r.name][u] = answerOf(res.Status, res.Body, res.Header.Get("Content-Type"))
+			answers[r.name][u] = answerOf(res.Status, res.Body, contentType(res))
 		}
 	}
 	fetch.Reset()
-	return sent, nil
+	return sent, stopped
+}
+
+// contentType is the type of the body a fetch kept: the last hop's.
+func contentType(res fetch.Result) string {
+	if res.FinalHeader != nil {
+		return res.FinalHeader.Get("Content-Type")
+	}
+	return res.Header.Get("Content-Type")
+}
+
+func hostSet(hosts []string) map[string]bool {
+	own := map[string]bool{}
+	for _, h := range hosts {
+		own[h] = true
+	}
+	return own
 }
 
 // replayable: a page or API route on the run's hosts, asked with GET and
@@ -321,13 +468,18 @@ func replayable(u string, own map[string]bool) bool {
 
 // roleRows puts each endpoint's answers side by side and says what the
 // difference means.
-func roleRows(roles []role, answers map[string]map[string]answer, found map[string][]string, made map[string]string) []roleRow {
+func roleRows(roles []role, answers map[string]map[string]answer, found map[string][]string, made map[string]instance) []roleRow {
 	var rows []roleRow
 	for u, by := range found {
 		if c := webextract.ClassifyURL(u); c == "asset" || c == "script" {
 			continue // the same file for everyone, by design
 		}
-		row := roleRow{URL: u, Status: map[string]int{}, Answers: map[string]answer{}, FoundBy: by, From: made[u]}
+		in := made[u]
+		if by == nil {
+			by = []string{}
+		}
+		row := roleRow{URL: u, Status: map[string]int{}, Answers: map[string]answer{}, FoundBy: by,
+			From: in.template, Owner: in.owner, given: in.given, value: in.value}
 		for _, r := range roles {
 			a := answers[r.name][u]
 			row.Status[r.name] = a.Status
@@ -335,7 +487,7 @@ func roleRows(roles []role, answers map[string]map[string]answer, found map[stri
 				row.Answers[r.name] = a
 			}
 		}
-		row.Verdict = verdict(roles, row)
+		row.Verdict = verdict(roles, &row)
 		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
@@ -349,7 +501,11 @@ func roleRows(roles []role, answers map[string]map[string]answer, found map[stri
 
 func ok2xx(s int) bool { return s >= 200 && s < 300 }
 
-func verdict(roles []role, row roleRow) string {
+// verdict says what the difference between the answers means, and fills
+// the row's readers and sensitive fields when the verdict names them. A
+// role reads an endpoint when it gets a 2xx answer that is not an error;
+// any 4xx, and an error answered as 2xx, is a refusal.
+func verdict(roles []role, row *roleRow) string {
 	if len(row.Answers) < 2 {
 		return verdictUnanswered
 	}
@@ -357,89 +513,176 @@ func verdict(roles []role, row roleRow) string {
 	for _, n := range row.FoundBy {
 		found[n] = true
 	}
-	var anonOK, anonNo, stranger bool
-	signedOK, signedNo := 0, 0
+	var readers, refusers []string
+	var anonReads, anonRefused, stranger bool
+	signedReads, signedRefused := 0, 0
 	statuses := map[int]bool{}
 	hashes := map[string]bool{}
-	shapes := map[string]bool{}
 	for _, r := range roles {
 		a, ok := row.Answers[r.name]
 		if !ok {
 			continue
 		}
 		statuses[a.Status] = true
-		if ok2xx(a.Status) {
+		switch {
+		case reads(a):
+			readers = append(readers, r.name)
 			hashes[a.Hash] = true
-			shapes[strings.Join(a.Keys, ",")] = true
 			if !found[r.name] {
 				stranger = true // it reads what it never reached itself
 			}
-		}
-		denied := a.Status == 401 || a.Status == 403
-		switch {
-		case r.anonymous() && ok2xx(a.Status):
-			anonOK = true
-		case r.anonymous() && denied:
-			anonNo = true
-		case ok2xx(a.Status):
-			signedOK++
-		case denied || a.Status == 404:
-			signedNo++
+			if r.anonymous() {
+				anonReads = true
+			} else {
+				signedReads++
+			}
+		case refused(a):
+			refusers = append(refusers, r.name)
+			if r.anonymous() {
+				anonRefused = true
+			} else {
+				signedRefused++
+			}
 		}
 	}
-	same := len(hashes) == 1
+	if len(readers) == 0 {
+		return verdictNone
+	}
 	for _, r := range roles {
 		if r.anonymous() && found[r.name] {
 			stranger = false // the anonymous visitor reached it: no one's private data
 		}
 	}
+	if len(row.FoundBy) == 0 {
+		stranger = false // an identifier given with -id: nobody found it
+	}
+	same := len(hashes) == 1
+	anyone, shared, holders := exposed(roles, *row, readers)
+	if len(anyone) > 0 {
+		// Passwords, keys and other people's tokens, to a visitor who
+		// never signed in, even when everyone gets the same answer.
+		row.Sensitive = anyone
+		return verdictAnyoneSecrets
+	}
+	if row.Owner != "" {
+		if rs := othersRead(roles, *row); len(rs) > 0 {
+			row.Readers, row.Sensitive = rs, shared
+			return verdictCross
+		}
+	}
 	switch {
-	case signedOK == 0 && !anonOK:
-		return verdictNone
-	case row.From != "" && same && anonOK && signedNo == 0:
+	case row.From != "" && same && anonReads && signedRefused == 0:
 		return verdictPublicObj
-	case row.From != "" && same && signedOK > 1 && signedNo == 0:
+	case row.From != "" && same && signedReads > 1 && signedRefused == 0:
 		// An object named in one answer (a book, a basket, a user) that
 		// every signed-in role reads alike: worth a look for whose it is.
+		row.Sensitive = shared
 		return verdictObject
+	case len(shared) > 0:
+		// The same secret values for several sessions: not their own.
+		row.Sensitive, row.Readers = shared, holders
+		return verdictSecrets
 	case same && stranger && !public(row.URL):
 		// A role that never reached the URL gets the answer the role
 		// that found it got: another user's basket, an order.
 		return verdictShared
-	case len(statuses) == 1 && same:
+	}
+	allRead := len(readers) == len(row.Answers)
+	switch {
+	case allRead && same:
 		return verdictSame
-	case len(statuses) == 1:
-		if len(shapes) > 1 {
-			return verdictFields
+	case allRead && len(statuses) == 1:
+		for _, n := range readers[1:] {
+			if fieldsDiffer(row.Answers[readers[0]], row.Answers[n]) {
+				return verdictFields
+			}
 		}
 		return verdictData
-	case anonNo && signedOK > 0 && signedNo == 0:
+	case anonRefused && signedReads > 0 && signedRefused == 0:
 		return verdictSignedIn
-	case signedOK > 0 && signedNo > 0:
+	case len(readers) == 1 && len(refusers) == len(row.Answers)-1:
+		row.Readers = readers
+		return verdictOnly
+	case signedReads > 0 && signedRefused > 0:
 		return verdictRoleGated
 	}
 	return verdictStatus
+}
+
+// exposed sorts the sensitive values the readers got: the fields the
+// anonymous visitor reads (a token only when another session reads the
+// same value, else it is the visitor's own), and the fields more than
+// one session reads with the same value (no session's own), with the
+// roles that read them.
+func exposed(roles []role, row roleRow, readers []string) (anyone, shared, holders []string) {
+	count := map[string]int{}
+	for _, n := range readers {
+		sums := map[string]bool{}
+		for _, s := range row.Answers[n].secrets {
+			sums[s.sum] = true
+		}
+		for s := range sums {
+			count[s]++
+		}
+	}
+	for _, r := range roles {
+		if !slices.Contains(readers, r.name) {
+			continue
+		}
+		for _, s := range row.Answers[r.name].secrets {
+			if r.anonymous() && (!s.token || count[s.sum] > 1) && !slices.Contains(anyone, s.field) {
+				anyone = append(anyone, s.field)
+			}
+			if count[s.sum] > 1 {
+				if !slices.Contains(shared, s.field) {
+					shared = append(shared, s.field)
+				}
+				if !slices.Contains(holders, r.name) {
+					holders = append(holders, r.name)
+				}
+			}
+		}
+	}
+	sort.Strings(anyone)
+	sort.Strings(shared)
+	return anyone, shared, holders
+}
+
+// othersRead are the roles besides the owner that read the owner's
+// object as the owner does. An object the owner was not given for, which
+// the anonymous visitor reads alike, is public rather than the owner's.
+func othersRead(roles []role, row roleRow) []string {
+	oa, ok := row.Answers[row.Owner]
+	if !ok || !reads(oa) {
+		return nil
+	}
+	var out []string
+	for _, r := range roles {
+		a, ok := row.Answers[r.name]
+		if r.name == row.Owner || !ok || !reads(a) || !alike(a, oa, row.value) {
+			continue
+		}
+		if r.anonymous() && !row.given {
+			return nil
+		}
+		out = append(out, r.name)
+	}
+	return out
+}
+
+// alike: the same object: the same body, or the same fields around the
+// same identifier.
+func alike(a, b answer, id string) bool {
+	if a.Hash == b.Hash {
+		return true
+	}
+	return id != "" && len(a.Keys) > 0 && !fieldsDiffer(a, b) && a.held[id] && b.held[id]
 }
 
 // public: a front page or a static document every visitor gets.
 func public(u string) bool {
 	p, err := url.Parse(u)
 	return err == nil && (p.Path == "" || p.Path == "/")
-}
-
-func firstKey(m map[int]bool) int {
-	for k := range m {
-		return k
-	}
-	return 0
-}
-
-// answerOf summarizes a response the way roles compares them.
-func answerOf(status int, body []byte, contentType string) answer {
-	sum := sha256.Sum256(body)
-	a := answer{Status: status, Length: len(body), Hash: hex.EncodeToString(sum[:8])}
-	a.Keys = httpcol.JSONKeys(body, contentType)
-	return a
 }
 
 func parseRoles(specs []string) ([]role, error) {
@@ -486,85 +729,55 @@ func addLogins(roles []role, specs []string) ([]role, error) {
 	return roles, nil
 }
 
-// instances fills each template's path parameters with values the roles'
-// answers held for a field of that name (a few per role): the URL of an
-// object and the role it belongs to.
-type instance struct {
-	template string
-	owners   []string
-}
-
-func instances(templates map[string]bool, ids map[string]map[string][]string) map[string]instance {
-	out := map[string]instance{}
-	for t := range templates {
-		names := placeholder.FindAllString(t, -1)
-		for owner, pool := range ids {
-			n := 0
-			for _, v := range valuesFor(strings.Trim(names[0], "{}"), pool) {
-				if n == 3 {
-					break
-				}
-				u := strings.Replace(t, names[0], url.PathEscape(v), 1)
-				filled := true
-				for _, ph := range names[1:] {
-					vs := valuesFor(strings.Trim(ph, "{}"), pool)
-					if len(vs) == 0 {
-						filled = false
-						break
-					}
-					u = strings.Replace(u, ph, url.PathEscape(vs[0]), 1)
-				}
-				if filled {
-					in := out[u]
-					in.template, in.owners = t, append(in.owners, owner)
-					out[u] = in
-					n++
-				}
-			}
+// readBodies reads the JSON answers of a role's run again, from the
+// process cache the run just filled, so nothing is sent unless the cache
+// lost one: their nested fields, error shape, sensitive fields and the
+// identifiers they hold. An answer that is not the one the run stored is
+// left as stored.
+func readBodies(got map[string]answer, raw map[string]string, seen runSeen, own map[string]bool) {
+	ctx := context.Background()
+	client := fetch.Client(nil)
+	urls := make([]string, 0, len(got))
+	for u := range got {
+		urls = append(urls, u)
+	}
+	sort.Strings(urls)
+	for _, u := range urls {
+		a := got[u]
+		if !ok2xx(a.Status) || len(a.Keys) == 0 || !replayable(u, own) {
+			continue
 		}
-	}
-	return out
-}
-
-// valuesFor finds values for a path parameter: a field of the same name,
-// else for an id-like name, the id fields.
-func valuesFor(name string, pool map[string][]string) []string {
-	if vs := pool[name]; len(vs) > 0 {
-		return vs
-	}
-	for k, vs := range pool {
-		if strings.EqualFold(k, name) {
-			return vs
+		res, _, err := fetch.Do(ctx, client, raw[u])
+		if err != nil || res.Status != a.Status {
+			continue
 		}
+		b, f := readAnswer(res.Status, res.Body, contentType(res))
+		if f == nil || b.Hash != a.Hash {
+			continue
+		}
+		b.Length, b.Title = a.Length, a.Title
+		got[u] = b
+		seen.add(u, f.ids)
 	}
-	if l := strings.ToLower(name); l == "id" || strings.HasSuffix(l, "id") || strings.HasSuffix(l, "_id") {
-		return pool["id"]
-	}
-	return nil
-}
-
-// runSeen is what one role's run saw besides answers: identifier values
-// in JSON answers and GET routes with path parameters.
-type runSeen struct {
-	ids       map[string][]string
-	templates map[string]bool
 }
 
 // endpointAnswers is how each URL answered in one role's run (the first
-// real answer, catch-all answers left out), the hosts the run was pointed
-// at, and what it saw that the replay can fill templates with.
-func endpointAnswers(db string) (map[string]answer, []string, runSeen, error) {
-	seen := runSeen{ids: map[string][]string{}, templates: map[string]bool{}}
+// real answer, catch-all answers left out) with the URL as the run asked
+// for it, the hosts the run was pointed at, and what it saw that the
+// replay can fill templates with.
+func endpointAnswers(db string) (map[string]answer, map[string]string, []string, runSeen, error) {
+	seen := newRunSeen()
 	st, err := store.Open(db)
 	if err != nil {
-		return nil, nil, seen, err
+		return nil, nil, nil, seen, err
 	}
 	defer st.Close()
 	obs, err := st.Observations()
 	if err != nil {
-		return nil, nil, seen, err
+		return nil, nil, nil, seen, err
 	}
 	out := map[string]answer{}
+	raw := map[string]string{}
 	for _, o := range obs {
 		var q struct {
 			URL     string              `json:"url"`
@@ -572,12 +785,8 @@ func endpointAnswers(db string) (map[string]answer, []string, runSeen, error) {
 			IDs     map[string][]string `json:"json_ids"`
 		}
 		if json.Unmarshal(o.Payload, &q) == nil {
-			for k, vs := range q.IDs {
-				for _, v := range vs {
-					if len(seen.ids[k]) < 10 && !slices.Contains(seen.ids[k], v) {
-						seen.ids[k] = append(seen.ids[k], v)
-					}
-				}
+			if u, err := normalize.URL(q.URL); err == nil {
+				seen.add(u, q.IDs)
 			}
 			if o.Kind == "url" && strings.Contains(q.URL, "{") && slices.ContainsFunc(q.Methods, func(m string) bool { return strings.EqualFold(m, "GET") }) {
 				if u, err := normalize.URL(q.URL); err == nil {
@@ -608,7 +817,8 @@ func endpointAnswers(db string) (map[string]answer, []string, runSeen, error) {
 			continue
 		}
 		if _, ok := out[u]; !ok {
-			out[u] = answer{Status: p.Status, Length: p.Length, Hash: p.Hash, Keys: p.Keys, Title: p.Title}
+			out[u] = storedAnswer(p.Status, p.Length, p.Hash, p.Keys, p.Title)
+			raw[u] = p.URL
 		}
 	}
 	seeds, _ := st.LoadSeeds()
@@ -622,5 +832,5 @@ func endpointAnswers(db string) (map[string]answer, []string, runSeen, error) {
 			hosts = append(hosts, s.Key())
 		}
 	}
-	return out, hosts, seen, nil
+	return out, raw, hosts, seen, nil
 }

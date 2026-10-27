@@ -5,6 +5,7 @@ package portcol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"strconv"
 	"sync"
@@ -13,7 +14,9 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
@@ -43,7 +46,7 @@ type scan struct {
 }
 
 func New(pool *dnsr.Pool, ports []int, rate float64) *Collector {
-	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate}, byIP: map[string]*scan{}, maxIP: 2}
+	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate, Take: fetch.Take}, byIP: map[string]*scan{}, maxIP: 2}
 }
 
 func (c *Collector) Name() string { return Name }
@@ -63,26 +66,54 @@ func (c *Collector) Outputs() []string { return []string{"ports"} }
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	host := normalize.Hostname(seed.Key())
 	var ips []string
+	// A name behind a CDN or WAF answers on the provider's shared edges:
+	// only their web ports are the target's. Any of its addresses or its
+	// CNAME says so for all of them (CloudFront's IPv6 ranges read as
+	// plain AWS).
+	edgeName := ""
 	if ip := net.ParseIP(host); ip != nil {
 		ips = []string{ip.String()}
 	} else if c.Pool != nil {
-		for _, ip := range c.Pool.Resolve(ctx, host).IPs() {
-			if net.ParseIP(ip).To4() != nil && len(ips) < c.maxIP {
+		answer := c.Pool.ResolveBoth(ctx, host)
+		if name, kind := fingerprint.NetworkByName(answer.CNAME...); name != "" && kind != "cloud" {
+			edgeName = name
+		}
+		// Both families: a service may listen on one only (naabu -iv 4,6).
+		// IPv6 only where this machine can reach it.
+		v4, v6 := 0, 0
+		for _, ip := range answer.IPs() {
+			switch {
+			case net.ParseIP(ip).To4() != nil && v4 < c.maxIP:
+				v4++
+				ips = append(ips, ip)
+			case net.ParseIP(ip).To4() == nil && v6 < c.maxIP && fetch.IPv6Routable():
+				v6++
 				ips = append(ips, ip)
 			}
+		}
+	}
+	for _, ip := range ips {
+		if name, kind := fingerprint.Network(net.ParseIP(ip)); name != "" && kind != "cloud" && edgeName == "" {
+			edgeName = name
 		}
 	}
 	meta := types.RunMeta{Status: types.StatusOK}
 	for _, ip := range ips {
 		ports := c.Ports
-		name, kind := fingerprint.Network(net.ParseIP(ip))
-		edge := name != "" && kind != "cloud"
+		name := edgeName
+		edge := name != ""
 		if edge {
 			ports = cdnPorts
 		}
 		open, err := c.scanOnce(ctx, ip, ports)
 		if err != nil && ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, err
+		}
+		if errors.Is(err, neterr.ErrBudget) {
+			// Each connect counts against -max-requests: azhaq resume
+			// scans the address again.
+			c.forget(ip)
+			return types.RunMeta{Status: types.StatusCapped}, err
 		}
 		row := map[string]any{"host": host, "ip": ip, "scanned": len(ports), "open": portsOf(open)}
 		if len(open) > 0 {
@@ -131,6 +162,13 @@ func (c *Collector) scanOnce(ctx context.Context, ip string, ports []int) ([]por
 	s.open, s.err = c.Scanner.Scan(ctx, ip, ports)
 	close(s.done)
 	return s.open, s.err
+}
+
+// forget drops an address's scan so a resumed run scans it again.
+func (c *Collector) forget(ip string) {
+	c.mu.Lock()
+	delete(c.byIP, ip)
+	c.mu.Unlock()
 }
 
 func portsOf(open []portscan.Open) []int {

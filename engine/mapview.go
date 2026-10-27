@@ -83,7 +83,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			Entity:   e,
 			Scope:    scopeLabel(e, hosts, domains, ips),
 			Coverage: coverageOf(e, rows, left, runCapped),
-			Role:     roleOf(e, rows, hosts),
+			Role:     roleOf(e, rows, hosts, domains),
 			Proof:    proofOf(e, rows),
 		}
 		if e.Type == types.TypeURL {
@@ -102,9 +102,19 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 					m.Coverage, m.Status, m.Title = "hint", 0, ""
 					m.Proof = "GET answers like an unknown path"
 				}
+				if m.Coverage == "gone" && len(op.methods) > 0 && !hasGET(op.methods) {
+					// A route only written to: no GET handler is not "not
+					// there".
+					m.Coverage = "hint"
+					m.Proof = fmt.Sprintf("GET answers %d; called with %s", m.Status, strings.Join(op.methods, ", "))
+				}
 				if m.Role == "page" && len(op.methods) > 0 {
 					m.Role = "api"
 				}
+			}
+			if gql := graphqlOps(byEnt[e.ID]); len(gql) > 0 {
+				m.Ops = append(m.Ops, gql...)
+				m.Methods = addName(m.Methods, "POST")
 			}
 			m.Forms, m.Params = pageForms(byEnt[e.ID], m.Params)
 		}
@@ -290,7 +300,7 @@ func fetched(obs []types.StoredObservation) bool {
 	return false
 }
 
-func roleOf(e types.Entity, obs []types.StoredObservation, hosts map[string]bool) string {
+func roleOf(e types.Entity, obs []types.StoredObservation, hosts, domains map[string]bool) string {
 	switch e.Type {
 	case types.TypeHostname:
 		if r := dnsResult(obs); r != "" {
@@ -299,8 +309,8 @@ func roleOf(e types.Entity, obs []types.StoredObservation, hosts map[string]bool
 		if !resolved(obs) {
 			return "unresolved" // a name from a source or a list, not looked up
 		}
-		if hosts[e.Key] {
-			return "live"
+		if hosts[e.Key] || under(e.Key, domains) {
+			return "live" // one of your targets: a host you gave, or a name of a domain you gave
 		}
 		return "sibling"
 	case types.TypeDomain:
@@ -412,6 +422,21 @@ func statusOf(raw json.RawMessage) int {
 	}
 }
 
+// under says whether host is one of domains or a name below one.
+func under(host string, domains map[string]bool) bool {
+	for h := host; h != ""; {
+		if domains[h] {
+			return true
+		}
+		_, rest, ok := strings.Cut(h, ".")
+		if !ok {
+			return false
+		}
+		h = rest
+	}
+	return false
+}
+
 func mapRank(m MapEntry, hosts, domains, ips map[string]bool) int {
 	e := m.Entity
 	switch e.Type {
@@ -499,7 +524,8 @@ func (m MapEntry) Line() string {
 	return b.String()
 }
 
-// Details are the indented lines under a row: forms and parameter names.
+// Details are the indented lines under a row: forms, operations (a
+// GraphQL endpoint's as their signatures) and parameter names.
 func (m MapEntry) Details() []string {
 	var out []string
 	origin := ""
@@ -518,7 +544,14 @@ func (m MapEntry) Details() []string {
 		out = append(out, line)
 	}
 	seen := map[string]bool{}
+	gql := 0
 	for _, op := range m.Ops {
+		if op.Source == "graphql" {
+			if gql++; gql <= maxGraphQLLines {
+				out = append(out, op.Summary)
+			}
+			continue
+		}
 		line := op.Method
 		if len(op.Query) > 0 {
 			line += "  ?" + strings.Join(op.Query, " ")
@@ -531,6 +564,9 @@ func (m MapEntry) Details() []string {
 		}
 		seen[line] = true
 		out = append(out, line)
+	}
+	if gql > maxGraphQLLines {
+		out = append(out, fmt.Sprintf("… %d more GraphQL operations (azhaq export -format sdl)", gql-maxGraphQLLines))
 	}
 	if len(m.Params) > 0 && len(m.Ops) == 0 {
 		out = append(out, "params "+strings.Join(m.Params, " "))

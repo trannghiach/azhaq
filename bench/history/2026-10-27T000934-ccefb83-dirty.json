@@ -1,0 +1,1241 @@
+{
+  "date": "2026-10-26T23:46:02Z",
+  "commit": "ccefb83-dirty",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "apps": [
+    {
+      "name": "juice-shop",
+      "url": "http://127.0.0.1:3101/",
+      "azhaq": {
+        "routes": 157,
+        "truth": 70,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 5.511120454,
+        "rss_mb": 96.859375
+      },
+      "katana": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 13.313866454,
+        "rss_mb": 59.171875
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 1.607853593,
+        "rss_mb": 180.05078125
+      },
+      "katana_jsluice": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 14.921720046999999,
+        "rss_mb": 180.05078125
+      },
+      "ffuf": {
+        "words": 32,
+        "azhaq_hits": 3,
+        "ffuf_hits": 3,
+        "shared": 3,
+        "azhaq_shell": 0,
+        "ffuf_shell": 0,
+        "seconds": 0.229700785
+      },
+      "roles": {
+        "rows": 35,
+        "expected": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "seconds": 11.667968288,
+        "chrome_rows": 37,
+        "chrome_found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "chrome_seconds": 14.88382622
+      },
+      "browser": {
+        "azhaq": {
+          "routes": 176,
+          "truth": 70,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 12.662426074999999,
+          "rss_mb": 98.6640625
+        },
+        "katana": {
+          "routes": 30,
+          "truth": 6,
+          "truth_of": 77,
+          "shell": 4,
+          "seconds": 6.861654587,
+          "rss_mb": 57.3359375
+        },
+        "limit_seconds": 300
+      }
+    },
+    {
+      "name": "vampi",
+      "url": "http://127.0.0.1:5102/",
+      "azhaq": {
+        "routes": 14,
+        "truth": 12,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0.653594851,
+        "rss_mb": 72.1875
+      },
+      "katana": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.879850505,
+        "rss_mb": 35.609375
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "katana_jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.879850505,
+        "rss_mb": 35.609375
+      }
+    },
+    {
+      "name": "ginandjuice.shop",
+      "url": "https://ginandjuice.shop/",
+      "azhaq": {
+        "routes": 14,
+        "truth": 3,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 22.345031172,
+        "rss_mb": 104.7734375
+      },
+      "katana": {
+        "routes": 13,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 16.109388555,
+        "rss_mb": 66.12890625
+      },
+      "jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0.345517596,
+        "rss_mb": 47.33203125
+      },
+      "katana_jsluice": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 16.454906151,
+        "rss_mb": 66.12890625
+      }
+    },
+    {
+      "name": "crapi",
+      "url": "http://127.0.0.1:8888/",
+      "azhaq": {
+        "routes": 85,
+        "truth": 32,
+        "truth_of": 40,
+        "shell": 0,
+        "seconds": 4.54249501,
+        "rss_mb": 102.06640625
+      },
+      "katana": {
+        "routes": 4,
+        "truth_of": 40,
+        "shell": 1,
+        "seconds": 13.000987931,
+        "rss_mb": 59.31640625
+      },
+      "jsluice": {
+        "routes": 21,
+        "truth_of": 40,
+        "shell": 0,
+        "seconds": 0.949618796,
+        "rss_mb": 132.94921875
+      },
+      "katana_jsluice": {
+        "routes": 25,
+        "truth_of": 40,
+        "shell": 1,
+        "seconds": 13.950606726999998,
+        "rss_mb": 132.94921875
+      },
+      "browser": {
+        "azhaq": {
+          "routes": 86,
+          "truth": 32,
+          "truth_of": 40,
+          "shell": 0,
+          "seconds": 17.932256716,
+          "rss_mb": 113.20703125
+        },
+        "katana": {
+          "routes": 5,
+          "truth_of": 40,
+          "shell": 1,
+          "seconds": 44.186160489,
+          "rss_mb": 58.3984375
+        },
+        "limit_seconds": 300
+      }
+    }
+  ],
+  "domains": [
+    {
+      "domain": "hackerone.com",
+      "azhaq_names": 125,
+      "subfinder_names": 524,
+      "live": 13,
+      "azhaq_live": 13,
+      "subfinder_live": 12,
+      "shared_live": 12,
+      "azhaq_seconds": 25.920856246,
+      "azhaq_subs_seconds": 25.767842163,
+      "subfinder_seconds": 31.420285781,
+      "gau_seconds": 5.990024716,
+      "ct": "7 answered (crtname 31, crtsh 15, anubis 15), 0 failed",
+      "azhaq_urls": 2980,
+      "gau_urls": 1620,
+      "gau_shared": 1620,
+      "archives": "arquivo 9780, commoncrawl error, otx 1619, urlscan 33, wayback error"
+    },
+    {
+      "domain": "tesla.com",
+      "azhaq_names": 1406,
+      "subfinder_names": 1799,
+      "live": 506,
+      "azhaq_live": 496,
+      "subfinder_live": 491,
+      "shared_live": 481,
+      "azhaq_seconds": 21.301806656,
+      "azhaq_subs_seconds": 21.089801273,
+      "subfinder_seconds": 30.977051752,
+      "gau_seconds": 32.798086789,
+      "ct": "7 answered (crtname 1346, anubis 703, crtsh 538), 0 failed",
+      "azhaq_urls": 3983,
+      "gau_urls": 655,
+      "gau_shared": 653,
+      "archives": "arquivo 9898, commoncrawl error, otx 657, urlscan 77, wayback error"
+    },
+    {
+      "domain": "vulnweb.com",
+      "azhaq_names": 32,
+      "subfinder_names": 519,
+      "live": 7,
+      "azhaq_live": 7,
+      "subfinder_live": 6,
+      "shared_live": 6,
+      "azhaq_seconds": 18.382740841,
+      "azhaq_subs_seconds": 0.987743407,
+      "subfinder_seconds": 31.403694978,
+      "gau_seconds": 1.752121361,
+      "ct": "6 answered (crtname 18, anubis 14, scanmalware 1), 1 failed",
+      "azhaq_urls": 141,
+      "gau_urls": 65,
+      "gau_shared": 62,
+      "archives": "arquivo 340, commoncrawl error, otx 66, urlscan 31, wayback error"
+    }
+  ],
+  "brute": {
+    "domain": "vulnweb.com",
+    "words": 5000,
+    "azhaq_found": 3,
+    "dnsx_found": 3,
+    "shared": 3,
+    "azhaq_seconds": 29.435668448,
+    "dnsx_seconds": 75.093603339,
+    "wildcard_words": 50,
+    "wildcard_real": 3,
+    "wildcard_azhaq": 3,
+    "wildcard_fake": 0,
+    "wildcard_dnsx_unfiltered": 50,
+    "permute_azhaq": 0,
+    "permute_alterx": 0,
+    "permute_shared": 0
+  },
+  "probe": {
+    "hosts": 530,
+    "azhaq_answered": 384,
+    "httpx_answered": 376,
+    "shared": 376,
+    "status_agree": 376,
+    "title_agree": 376,
+    "tech_agree": 376,
+    "all_agree": 376,
+    "favicon_both": 51,
+    "favicon_agree": 43,
+    "cdn_httpx": 49,
+    "cdn_agree": 47,
+    "azhaq_seconds": 94.431037507,
+    "httpx_seconds": 135.008714082
+  },
+  "dropin": {
+    "crawl_known": 70,
+    "crawl_of": 77,
+    "probe_rows": 2,
+    "probe_fields": true,
+    "openapi_vampi": 12,
+    "openapi_crapi": 32,
+    "subs_live": 6,
+    "subfinder_live": 6,
+    "subs_shared": 6,
+    "urls": 194,
+    "targets": 2,
+    "html_ok": true,
+    "html_bytes": 7137
+  },
+  "ports": {
+    "hosts": [
+      "scanme.nmap.org",
+      "127.0.0.1"
+    ],
+    "azhaq_open": 12,
+    "naabu_open": 0,
+    "shared": 0,
+    "azhaq_seconds": 13.068318772,
+    "naabu_seconds": 0.0004944610000000001,
+    "azhaq_only": [
+      "127.0.0.1:8443",
+      "127.0.0.1:8800",
+      "scanme.nmap.org:22",
+      "scanme.nmap.org:80",
+      "scanme.nmap.org:9929",
+      "127.0.0.1:4444",
+      "127.0.0.1:5002",
+      "127.0.0.1:5102",
+      "127.0.0.1:8888",
+      "127.0.0.1:22",
+      "127.0.0.1:631",
+      "127.0.0.1:3001"
+    ]
+  },
+  "dirs": {
+    "words": 4750,
+    "apps": [
+      "http://127.0.0.1:3101/",
+      "http://127.0.0.1:5102/",
+      "http://127.0.0.1:8888/"
+    ],
+    "azhaq_hits": 35,
+    "ffuf_hits": 36,
+    "shared": 35,
+    "azhaq_false": 4,
+    "ffuf_false": 4,
+    "azhaq_seconds": 53.871771466,
+    "ffuf_seconds": 58.514697141999996,
+    "ffuf_only": [
+      "http://127.0.0.1:8888/index.html"
+    ]
+  },
+  "params": {
+    "pages": [
+      "http://127.0.0.1:3101/rest/products/search",
+      "http://127.0.0.1:3101/rest/user/whoami",
+      "http://127.0.0.1:5102/users/v1",
+      "https://ginandjuice.shop/catalog",
+      "https://ginandjuice.shop/blog/"
+    ],
+    "words": 6453,
+    "azhaq": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback",
+      "https://ginandjuice.shop/blog search",
+      "https://ginandjuice.shop/catalog category",
+      "https://ginandjuice.shop/catalog searchTerm"
+    ],
+    "arjun": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback"
+    ],
+    "shared": 2,
+    "azhaq_seconds": 120.124006732,
+    "arjun_seconds": 29.54071022
+  },
+  "scope": {
+    "trap_requests": 0,
+    "in_scope_found": 5,
+    "watch_runs": 3
+  },
+  "network": {
+    "asn": "AS394161",
+    "azhaq_prefixes": 102,
+    "radb_routes": 39,
+    "shared": 31,
+    "cidr": "45.33.32.128/25",
+    "azhaq_ptr": 36,
+    "dnsx_ptr": 36,
+    "shared_ptr": 36
+  },
+  "shots": {
+    "targets": 4,
+    "azhaq": 4,
+    "gowitness": 3,
+    "azhaq_seconds": 35.87783928,
+    "gowitness_seconds": 33.975696992
+  },
+  "secrets": {
+    "azhaq": 12,
+    "jsluice": 4,
+    "shared": 4
+  },
+  "tenants": {
+    "expected": 6,
+    "matched": 6,
+    "signed_in_logouts": 0,
+    "seconds": 7.319562047
+  },
+  "scale": {
+    "urls": 184,
+    "one_received": 205,
+    "budget": 100,
+    "processes": 3,
+    "most_received": 100,
+    "all_received": 211,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 1.8131760496666667,
+    "killed_same": true,
+    "worker_tasks": 239,
+    "workers_same": true,
+    "workers_seconds": 6.826509235,
+    "one_seconds": 5.439528149
+  },
+  "checks": [
+    {
+      "name": "juice-shop: ≥ 90% of the server routes its frontend calls",
+      "pass": true,
+      "detail": "azhaq 70/77, katana 1/77, jsluice 0/77"
+    },
+    {
+      "name": "juice-shop: no catch-all page reported as visited",
+      "pass": true,
+      "detail": "0 visited URLs return the SPA index"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user",
+      "pass": true,
+      "detail": "35 endpoints differ; 401 → 200 on 2/2 of /api/Users, /rest/user/authentication-details"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user, signed in with Chrome",
+      "pass": true,
+      "detail": "37 endpoints differ; 401 → 200 on 2/2 (with a token: 35 endpoints) "
+    },
+    {
+      "name": "juice-shop: -browser finds the known routes katana -headless finds",
+      "pass": true,
+      "detail": "azhaq -browser 70/77 in 13s, katana -headless 6/77 in 7s"
+    },
+    {
+      "name": "identical runs diff empty",
+      "pass": true,
+      "detail": "added=0 removed=0 observations=0"
+    },
+    {
+      "name": "vampi: paths from /openapi.json",
+      "pass": true,
+      "detail": "azhaq 12/12, katana 1/12"
+    },
+    {
+      "name": "diff across different seeds is labelled",
+      "pass": true,
+      "detail": "seeds_differ=true"
+    },
+    {
+      "name": "ginandjuice: page scripts parsed",
+      "pass": true,
+      "detail": "4/4 page scripts, 3/3 routes only in page scripts or script-driven forms"
+    },
+    {
+      "name": "ginandjuice: product and blog pages are one template each",
+      "pass": true,
+      "detail": "map lines: product 1, blog post 1"
+    },
+    {
+      "name": "crapi: routes joined from constants ≥ 30/40",
+      "pass": true,
+      "detail": "azhaq 32/40, katana ∪ jsluice 0/40"
+    },
+    {
+      "name": "crapi: -browser finds the known routes katana -headless finds",
+      "pass": true,
+      "detail": "azhaq -browser 32/40 in 18s, katana -headless 0/40 in 44s"
+    },
+    {
+      "name": "known routes ≥ katana ∪ jsluice on every app",
+      "pass": true,
+      "detail": "juice-shop 70/77 vs 1, vampi 12/12 vs 1, ginandjuice.shop 3/3 vs 2, crapi 32/40 vs 0"
+    },
+    {
+      "name": "no catch-all page reported as visited on any app",
+      "pass": true,
+      "detail": "4 apps"
+    },
+    {
+      "name": "drop-in: azhaq crawl finds Juice Shop's known routes",
+      "pass": true,
+      "detail": "70/77"
+    },
+    {
+      "name": "drop-in: azhaq probe reads stdin and writes httpx's JSON fields",
+      "pass": true,
+      "detail": "2 of 2 local apps, fields true"
+    },
+    {
+      "name": "export: OpenAPI of VAmPI holds every path of its own description",
+      "pass": true,
+      "detail": "12/12"
+    },
+    {
+      "name": "export: OpenAPI of crAPI holds ≥ 30 of its 40 paths",
+      "pass": true,
+      "detail": "32/40"
+    },
+    {
+      "name": "drop-in: azhaq subs -live ≥ 95% of subfinder | dnsx",
+      "pass": true,
+      "detail": "azhaq 6, subfinder|dnsx 6, shared 6 (vulnweb.com)"
+    },
+    {
+      "name": "export: targets and HTML report",
+      "pass": true,
+      "detail": "targets 2 of 2, HTML 7137 bytes with its sections true, urls 194"
+    },
+    {
+      "name": "dirs: ≥ 95% of ffuf -ac's hits, same wordlist and rate",
+      "pass": true,
+      "detail": "azhaq 35, ffuf 36, shared 35 (4750 words, 3 apps)"
+    },
+    {
+      "name": "dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 4, ffuf 4"
+    },
+    {
+      "name": "scope: no request leaves the program's scope",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped"
+    },
+    {
+      "name": "watch: an unchanged app reports no change",
+      "pass": true,
+      "detail": "3 runs, 0 reported changes []"
+    },
+    {
+      "name": "secrets: everything jsluice finds in the planted script, and more",
+      "pass": true,
+      "detail": "azhaq 12 values, jsluice 4, shared 4"
+    },
+    {
+      "name": "roles: anon → member → owner on a multi-tenant app, signed in with Chrome",
+      "pass": true,
+      "detail": "6/6 rows as expected; wrong []; extra []; signed-in logouts 0 "
+    },
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps what one run maps",
+      "pass": true,
+      "detail": "3 processes of at most 100 requests (Juice Shop received at most 100 from one); 184 URLs, one run 184, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "211 requests over 3 processes, one run 205"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps what one run maps",
+      "pass": true,
+      "detail": "killed after 1.8s; 184 URLs, one run 184"
+    },
+    {
+      "name": "scale: a run shared with two workers maps what one run maps",
+      "pass": true,
+      "detail": "184 URLs, one run 184; the workers ran 239 tasks"
+    },
+    {
+      "name": "screenshots: ≥ 95% of gowitness's",
+      "pass": true,
+      "detail": "azhaq 4 in 36s, gowitness 3 in 34s, 4 targets, 4 tabs each"
+    },
+    {
+      "name": "params: ≥ 95% of arjun's parameters on the bench pages",
+      "pass": true,
+      "detail": "azhaq 5, arjun 2, shared 2 (5 pages, 6453 names)"
+    },
+    {
+      "name": "subdomain sources and archives: no silent zeros",
+      "pass": true,
+      "detail": "every empty result is a failure flagged as error or degraded, or a zero every source answered"
+    },
+    {
+      "name": "subdomains: live names ≥ 95% of subfinder's",
+      "pass": true,
+      "detail": "azhaq 516, subfinder 509 (all domains, no API keys)"
+    },
+    {
+      "name": "subdomains: within 2× subfinder's time",
+      "pass": true,
+      "detail": "azhaq 48s to its subdomain results, subfinder 94s (the whole azhaq run, archives included, 66s; subfinder + gau 134s)"
+    },
+    {
+      "name": "historical URLs: ≥ 95% of gau's",
+      "pass": true,
+      "detail": "azhaq has 2335 of gau's 2340 (azhaq 7104 in all; static assets left out on both sides)"
+    },
+    {
+      "name": "dns-brute: ≥ 95% of dnsx with the same words and resolvers",
+      "pass": true,
+      "detail": "azhaq 3, dnsx 3, shared 3 (5000 words on vulnweb.com)"
+    },
+    {
+      "name": "dns-brute: within 2× dnsx's time",
+      "pass": true,
+      "detail": "azhaq 29.4s, dnsx 75.1s"
+    },
+    {
+      "name": "wildcard zone: no fake hosts",
+      "pass": true,
+      "detail": "3 of 3 real names found, 0 fake (dnsx without wildcard filtering reports 50)"
+    },
+    {
+      "name": "ports: ≥ 95% of naabu's open ports (connect scan, top 1000)",
+      "pass": false,
+      "detail": "azhaq 12, naabu 0, shared 0 (scanme.nmap.org, 127.0.0.1)"
+    },
+    {
+      "name": "asn: announced prefixes match registered routes",
+      "pass": true,
+      "detail": "AS394161: azhaq 102 (RIPEstat), RADb 39, shared 31"
+    },
+    {
+      "name": "ptr: ≥ 95% of dnsx -ptr's answers",
+      "pass": true,
+      "detail": "45.33.32.128/25: azhaq 36, dnsx 36, shared 36 addresses with a reverse name"
+    },
+    {
+      "name": "probe: answers ≥ 95% of the hosts httpx answers",
+      "pass": true,
+      "detail": "azhaq 384, httpx 376, shared 376 of 530 hosts"
+    },
+    {
+      "name": "probe: status, title and tech agree with httpx on ≥ 95% of shared hosts",
+      "pass": true,
+      "detail": "all three 376/376 (status 376, title 376, tech 376)"
+    },
+    {
+      "name": "probe: within 2× httpx's time",
+      "pass": true,
+      "detail": "azhaq 94.4s, httpx 135.0s, 16 requests in flight each"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 5.511120454,
+      "rss_mb": 96.859375
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 13.313866454,
+      "rss_mb": 59.171875
+    },
+    {
+      "tool": "jsluice",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 1.607853593,
+      "rss_mb": 180.05078125
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 0.229700785,
+      "rss_mb": 13.859375
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles",
+      "seconds": 11.667968288,
+      "rss_mb": 102.93359375
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles-login",
+      "seconds": 14.88382622,
+      "rss_mb": 99.8359375
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 12.662426074999999,
+      "rss_mb": 98.6640625
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 6.861654587,
+      "rss_mb": 57.3359375
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 5.192821811,
+      "rss_mb": 96.61328125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.653594851,
+      "rss_mb": 72.1875
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.879850505,
+      "rss_mb": 35.609375
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 22.345031172,
+      "rss_mb": 104.7734375
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 16.109388555,
+      "rss_mb": 66.12890625
+    },
+    {
+      "tool": "jsluice",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 0.345517596,
+      "rss_mb": 47.33203125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 4.54249501,
+      "rss_mb": 102.06640625
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 13.000987931,
+      "rss_mb": 59.31640625
+    },
+    {
+      "tool": "jsluice",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 0.949618796,
+      "rss_mb": 132.94921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 17.932256716,
+      "rss_mb": 113.20703125
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 44.186160489,
+      "rss_mb": 58.3984375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 5.215247803,
+      "rss_mb": 86.5703125
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.430706675,
+      "rss_mb": 1.49609375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.56444535,
+      "rss_mb": 71.6796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.055150113,
+      "rss_mb": 34.02734375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 4.79208681,
+      "rss_mb": 106.6953125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.053177619,
+      "rss_mb": 40.24609375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 1.20416438,
+      "rss_mb": 47.0625,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "subfinder",
+      "target": "dropin",
+      "seconds": 30.985080547,
+      "rss_mb": 39.55078125
+    },
+    {
+      "tool": "dnsx",
+      "target": "dropin",
+      "seconds": 2.35705349,
+      "rss_mb": 39.9140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 18.73946355,
+      "rss_mb": 45.0859375,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.427913442,
+      "rss_mb": 1.5078125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.03876319,
+      "rss_mb": 27.82421875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.049209266,
+      "rss_mb": 39.203125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 21.595308557,
+      "rss_mb": 77.375
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 26.618302898,
+      "rss_mb": 21.53515625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 16.14733286,
+      "rss_mb": 74.078125
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 15.944194783,
+      "rss_mb": 13.06640625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 16.129130049,
+      "rss_mb": 75.703125
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:8888/",
+      "seconds": 15.952199461,
+      "rss_mb": 12.8046875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 1.622455298,
+      "rss_mb": 74.54296875
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 5.36235796,
+      "rss_mb": 96.56640625
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 5.3081425079999995,
+      "rss_mb": 89.6015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 5.42410887,
+      "rss_mb": 91.8359375
+    },
+    {
+      "tool": "azhaq",
+      "target": "secrets",
+      "seconds": 0.414499853,
+      "rss_mb": 68.0234375
+    },
+    {
+      "tool": "jsluice",
+      "target": "secrets",
+      "seconds": 0.009600279,
+      "rss_mb": 0.015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "tenants",
+      "seconds": 7.319562047,
+      "rss_mb": 89.23828125
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 5.439528149,
+      "rss_mb": 93.40625
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.81841394,
+      "rss_mb": 87.16796875,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.983857793,
+      "rss_mb": 93.15234375
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 35.87783928,
+      "rss_mb": 89.15625
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 33.975696992,
+      "rss_mb": 243.22265625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 0.793286493,
+      "rss_mb": 46.7109375
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 2.443657676,
+      "rss_mb": 28.2109375
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.454362228,
+      "rss_mb": 42.6796875
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.64347554,
+      "rss_mb": 27.29296875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 1.110839845,
+      "rss_mb": 64.99609375
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 3.753928037,
+      "rss_mb": 27.96484375
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 58.84267308,
+      "rss_mb": 81.875
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 11.686800936000001,
+      "rss_mb": 34.76171875
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 58.922845086,
+      "rss_mb": 83.4375
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 11.012848031,
+      "rss_mb": 34.75390625
+    },
+    {
+      "tool": "azhaq",
+      "target": "hackerone.com",
+      "seconds": 25.920856246,
+      "rss_mb": 73.234375,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":232,\"counts\":{\"URLs\":200,\"api\":17,\"hostnames\":104},\"seconds\":25.881,\"requests\":0,\"db\":\"bench/.work/domains/hackerone.com-065737.db\",\"run_id\":\"4dcd1185-0c23-400e-b7e8-1aa30d828cf6\",\"failed\":[{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"hackerone.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"hackerone.com\"]}],\"next\":[\"azhaq query -db bench/.work/domains/hackerone.com-065737.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/domains/hackerone.com-065737.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/domains/hackerone.com-065737.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\"]}"
+    },
+    {
+      "tool": "subfinder",
+      "target": "hackerone.com",
+      "seconds": 31.420285781,
+      "rss_mb": 38.4140625
+    },
+    {
+      "tool": "dnsx",
+      "target": "hackerone.com",
+      "seconds": 5.378125711,
+      "rss_mb": 45.19921875
+    },
+    {
+      "tool": "gau",
+      "target": "hackerone.com",
+      "seconds": 5.990024716,
+      "rss_mb": 10.9765625
+    },
+    {
+      "tool": "azhaq",
+      "target": "tesla.com",
+      "seconds": 21.301806656,
+      "rss_mb": 85.203125,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":958,\"counts\":{\"URLs\":200,\"api\":9,\"hostnames\":509},\"seconds\":21.249,\"requests\":0,\"db\":\"bench/.work/domains/tesla.com-065737.db\",\"run_id\":\"05f0323d-94ad-4272-9b31-55dbdbcf8820\",\"failed\":[{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"tesla.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"tesla.com\"]}],\"next\":[\"azhaq query -db bench/.work/domains/tesla.com-065737.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/domains/tesla.com-065737.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/domains/tesla.com-065737.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\"]}"
+    },
+    {
+      "tool": "subfinder",
+      "target": "tesla.com",
+      "seconds": 30.977051752,
+      "rss_mb": 39.1015625
+    },
+    {
+      "tool": "dnsx",
+      "target": "tesla.com",
+      "seconds": 44.792490127,
+      "rss_mb": 48.52734375
+    },
+    {
+      "tool": "gau",
+      "target": "tesla.com",
+      "seconds": 32.798086789,
+      "rss_mb": 10.20703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 18.382740841,
+      "rss_mb": 51.5859375,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":119,\"counts\":{\"URLs\":101,\"api\":1,\"hostnames\":19},\"seconds\":18.341,\"requests\":0,\"db\":\"bench/.work/domains/vulnweb.com-065737.db\",\"run_id\":\"71302dd1-d65a-444c-9052-7024ee68237c\",\"failed\":[{\"collector\":\"azhaq-subdomains\",\"source\":\"crtsh\",\"error\":\"HTTP 502\",\"retryable\":true,\"count\":1,\"targets\":[\"vulnweb.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"vulnweb.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"vulnweb.com\"]}],\"next\":[\"azhaq query -db bench/.work/domains/vulnweb.com-065737.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/domains/vulnweb.com-065737.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/domains/vulnweb.com-065737.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\"]}"
+    },
+    {
+      "tool": "subfinder",
+      "target": "vulnweb.com",
+      "seconds": 31.403694978,
+      "rss_mb": 40.01171875
+    },
+    {
+      "tool": "dnsx",
+      "target": "vulnweb.com",
+      "seconds": 6.742233507,
+      "rss_mb": 46.19140625
+    },
+    {
+      "tool": "gau",
+      "target": "vulnweb.com",
+      "seconds": 1.752121361,
+      "rss_mb": 9.85546875
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 29.435668448,
+      "rss_mb": 75.046875,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":115,\"counts\":{\"URLs\":101,\"api\":1,\"hostnames\":22},\"seconds\":29.39,\"requests\":0,\"db\":\"bench/.work/brute/brute-070154.db\",\"run_id\":\"48d6f7d1-008a-4ff1-a0e9-5ea044b60477\",\"failed\":[{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"vulnweb.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"vulnweb.com\"]}],\"next\":[\"azhaq query -db bench/.work/brute/brute-070154.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/brute/brute-070154.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/brute/brute-070154.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\"]}"
+    },
+    {
+      "tool": "dnsx",
+      "target": "vulnweb.com",
+      "seconds": 75.093603339,
+      "rss_mb": 48.578125
+    },
+    {
+      "tool": "azhaq",
+      "target": "wild.example.com",
+      "seconds": 18.372494345,
+      "rss_mb": 46.30859375,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":8,\"counts\":{\"hostnames\":3},\"seconds\":18.324,\"requests\":0,\"db\":\"bench/.work/brute/wildcard-070154.db\",\"run_id\":\"5ae7488a-c85d-4088-ba61-b4fddcd301fc\",\"failed\":[{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"wild.example.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"wild.example.com\"]}],\"next\":[\"azhaq query -db bench/.work/brute/wildcard-070154.db -failed   (every failed target, the list to retry)\"]}"
+    },
+    {
+      "tool": "dnsx",
+      "target": "wild.example.com",
+      "seconds": 0.988825224,
+      "rss_mb": 35.75
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 18.523921724,
+      "rss_mb": 59.0390625,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":119,\"counts\":{\"URLs\":101,\"api\":1,\"hostnames\":19},\"seconds\":18.48,\"requests\":0,\"db\":\"bench/.work/brute/permute-070154.db\",\"run_id\":\"0d66bfeb-eeeb-4d4c-9a97-ac96fe7b444d\",\"failed\":[{\"collector\":\"azhaq-subdomains\",\"source\":\"crtsh\",\"error\":\"HTTP 502\",\"retryable\":true,\"count\":1,\"targets\":[\"vulnweb.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"commoncrawl\",\"error\":\"connection refused\",\"retryable\":false,\"count\":1,\"targets\":[\"vulnweb.com\"]},{\"collector\":\"azhaq-urls\",\"source\":\"wayback\",\"error\":\"HTTP 429 (rate limited)\",\"retryable\":true,\"count\":1,\"targets\":[\"vulnweb.com\"]}],\"next\":[\"azhaq query -db bench/.work/brute/permute-070154.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/brute/permute-070154.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/brute/permute-070154.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\"]}"
+    },
+    {
+      "tool": "alterx",
+      "target": "vulnweb.com",
+      "seconds": 1.033877791,
+      "rss_mb": 17.22265625
+    },
+    {
+      "tool": "dnsx",
+      "target": "vulnweb.com",
+      "seconds": 58.815076656,
+      "rss_mb": 47.25
+    },
+    {
+      "tool": "azhaq",
+      "target": "scanme.nmap.org",
+      "seconds": 9.016874434,
+      "rss_mb": 49.0390625
+    },
+    {
+      "tool": "naabu",
+      "target": "scanme.nmap.org",
+      "seconds": 0.000309802,
+      "rss_mb": 0,
+      "error": "fork/exec bench/.work/bin/naabu: no such file or directory"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 4.051444338,
+      "rss_mb": 48.07421875
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.1",
+      "seconds": 0.000184659,
+      "rss_mb": 0,
+      "error": "fork/exec bench/.work/bin/naabu: no such file or directory"
+    },
+    {
+      "tool": "azhaq",
+      "target": "AS394161",
+      "seconds": 5.9839294899999995,
+      "rss_mb": 44.125
+    },
+    {
+      "tool": "azhaq",
+      "target": "45.33.32.128/25",
+      "seconds": 6.213476218,
+      "rss_mb": 49.73046875
+    },
+    {
+      "tool": "dnsx",
+      "target": "45.33.32.128/25",
+      "seconds": 1.299915204,
+      "rss_mb": 39.02734375
+    },
+    {
+      "tool": "azhaq",
+      "target": "probe",
+      "seconds": 94.431037507,
+      "rss_mb": 129.02734375,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.6.0+dirty\",\"complete\":false,\"exit\":3,\"results\":788,\"counts\":{\"URLs\":6,\"hostnames\":502},\"seconds\":94.383,\"requests\":1060,\"db\":\"bench/.work/probe/probe-070545.db\",\"run_id\":\"32e56f1e-f098-4709-a51d-53bf4bcfaa4e\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":70,\"targets\":[\"www.vulnweb.com\",\"vulnweb.com\",\"apacvpn.tesla.com\",\"apac-cppm.tesla.com\",\"apacvpn2.tesla.com\",\"apacvpn1.tesla.com\",\"assistant-api.prd.euw1.vn.cloud.tesla.com\",\"click.emails.tesla.com\",\"cnvpn.tesla.com\",\"cnvpn1.tesla.com\",\"epuca-prd.euw1.vn.cloud.tesla.com\",\"dpuas-prd.euw1.vn.cloud.tesla.com\",\"email1.tesla.com\",\"emails.tesla.com\",\"eu-vsc-rad.tesla.com\",\"events.tesla.com\",\"external-3pl-prd.tesla.com\",\"cld-ec.tesla.com\",\"external-automation.tesla.com\",\"cx-api-apac.tesla.com\",\"financial-gw.tesla.com\",\"fra05-gpgw1.tesla.com\",\"epc.tesla.com\",\"extgithub.tesla.com\",\"finops.tesla.com\",\"marketing.tesla.com\",\"mfamobile-dev.tesla.com\",\"mfauser-dev.tesla.com\",\"model3.tesla.com\",\"mrsproxy06.tesla.com\",\"inside.tesla.com\",\"mta.email.tesla.com\",\"mta.emails.tesla.com\",\"mta2.emails.tesla.com\",\"mta3.emails.tesla.com\",\"livestream.tesla.com\",\"location-services-prd.tesla.com\",\"logcollection.tesla.com\",\"mta4.emails.tesla.com\",\"mfa-reset.tesla.com\",\"mfa.tesla.com\",\"mta5.emails.tesla.com\",\"o1.ptr2410.link.tesla.com\",\"o2.ptr556.tesla.com\",\"o4.ptr1867.tesla.com\",\"o5.ptr8466.tesla.com\",\"o6.ptr9437.tesla.com\",\"o7.ptr6980.tesla.com\",\"origin-auth.tesla.com\",\"origin-slingsdlc.tesla.com\",\"origin-sspr.tesla.com\",\"origin-www-auth.tesla.com\",\"origin-www.tesla.com\",\"ptr2.tesla.com\",\"ptr1.tesla.com\",\"sc-cppm.tesla.com\",\"sc-eu-cppm.tesla.com\",\"secureguestcn.tesla.com\",\"shop.eu.tesla.com\",\"sso-dev-origin.tesla.com\",\"ownership.tesla.com\",\"staticpay-origin-wwwcdn.tesla.com\",\"teamchatcn.tesla.com\",\"teamchatgl.tesla.com\",\"testhtml5.vulnweb.com\",\"testnotify.tesla.com\",\"testphp.vulnweb.com\",\"sspr.tesla.com\",\"view.emails.tesla.com\",\"vpn2.tesla.com\"]},{\"collector\":\"azhaq-http\",\"error\":\"connection refused\",\"retryable\":false,\"count\":46,\"targets\":[\"x3.obs.tesla.com\",\"x3-eng.obs.tesla.com\",\"x3-prod.obs.tesla.com\",\"apf-api.prd.vn.cloud.tesla.com\",\"apf-api.eng.vn.cloud.tesla.com\",\"assistant-api.prd.na.vn.cloud.tesla.com\",\"assistant-api.prd.usw2.vn.cloud.tesla.com\",\"apmv3-cdn-go.tesla.com\",\"dpuas-prd.usw.vn.cloud.tesla.com\",\"dpuft-eng.usw.vn.cloud.tesla.com\",\"dpuft-prd.usw.vn.cloud.tesla.com\",\"energy.obs.tesla.com\",\"epuca-prd.usw.vn.cloud.tesla.com\",\"fleet-apf-eng.tesla.com\",\"fleet-apf-prd.tesla.com\",\"fleet-streaming-api.eng.vn.cloud.tesla.com\",\"fleet-streaming-api.prd.vn.cloud.tesla.com\",\"fleet-music-prd.tesla.com\",\"gpuca-eng.usw.vn.cloud.tesla.com\",\"origin-apps.tesla.com\",\"origin-bolt.tesla.com\",\"origin-clmapi.tesla.com\",\"origin-courses.tesla.com\",\"origin-auth-eu1.tesla.com\",\"origin-einvoicing.tesla.com\",\"origin-edr.tesla.com\",\"origin-ehs-stg.tesla.com\",\"origin-ehs.tesla.com\",\"origin-financialgateway.tesla.com\",\"origin-finplat-prd.tesla.com\",\"origin-financialgateway-stg.tesla.com\",\"origin-grid.tesla.com\",\"origin-installations-ext-api.tesla.com\",\"origin-finplat-stg.tesla.com\",\"origin-profile.tesla.com\",\"origin-mfa.tesla.com\",\"origin-inside.tesla.com\",\"origin-mobile.tesla.com\",\"origin-profileapi.tesla.com\",\"origin-ownership.tesla.com\",\"origin-tcc-gw-stg.tesla.com\",\"origin-warp.tesla.com\",\"origin-tcc-gw.tesla.com\",\"origin-ranger-api.tesla.com\",\"origin-warp-stg.tesla.com\",\"partnerleadsharing.tesla.com\"]},{\"collector\":\"azhaq-http\",\"error\":\"connection reset\",\"retryable\":true,\"count\":2,\"targets\":[\"bi.tesla.com\",\"dataviz.tesla.com\"]},{\"collector\":\"azhaq-http\",\"error\":\"no route to host\",\"retryable\":false,\"count\":2,\"targets\":[\"meet.tesla.com\",\"share.tesla.com\"]}],\"next\":[\"azhaq query -db bench/.work/probe/probe-070545.db -failed   (every failed target, the list to retry)\"]}"
+    },
+    {
+      "tool": "httpx",
+      "target": "probe",
+      "seconds": 135.008714082,
+      "rss_mb": 305.06640625
+    }
+  ]
+}

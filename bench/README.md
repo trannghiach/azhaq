@@ -83,16 +83,16 @@ The command fails when one of these does not hold:
 
 ## Latest results
 
-2026-10-26, v0.6.0, Go 1.27.1, one machine. Domains, probing, active DNS and networks: `go run ./bench -crapi -ports=false` on commit `b71b8ab` (record `bench/history/2026-10-26T155916-b71b8ab.json`; its one failure, a captcha id that made two identical runs differ, is fixed). Applications, sessions, discovery, scope and scale: `go run ./bench -crapi -domains=false -brute=false -probe=false -network=false -ports=false` on commit `bde1d85` (record `bench/history/2026-10-26T161159-bde1d85.json`; its one failure, the access table counting the login API that answers every role 401 as an extra row, was a filter of the bench, fixed). Ports and archives are compared on GitHub's network (workflow `bench-archives`).
+2026-10-27, v0.6.1, Go 1.27.1, one machine: `go run ./bench -crapi` (record `bench/history/2026-10-27T000934-ccefb83-dirty.json`, taken before the commit). 44 of 45 checks pass; the one failure is the port comparison, which has nothing to compare with: this machine's security software removes the naabu binary. Ports and archives are compared on GitHub's network (workflow `bench-archives`).
 
 ### Applications
 
 | App | Azhaq routes | known | shell | time | RSS | katana routes | known | shell | time | RSS |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Juice Shop | 157 | 70/77 | 0 | 5.6 s | 83 MB | 5 | 1/77 | 3 | 13.6 s | 59 MB |
-| VAmPI | 14 | 12/12 | 0 | 0.6 s | 69 MB | 1 | 1/12 | 0 | 11.1 s | 35 MB |
-| ginandjuice.shop | 14 | 3/3 | 0 | 22.9 s | 91 MB | 13 | 1/3 | 0 | 16.2 s | 63 MB |
-| crAPI | 85 | 32/40 | 0 | 4.3 s | 94 MB | 3 | 0/40 | 1 | 13.2 s | 60 MB |
+| Juice Shop | 157 | 70/77 | 0 | 5.5 s | 97 MB | 5 | 1/77 | 3 | 13.3 s | 59 MB |
+| VAmPI | 14 | 12/12 | 0 | 0.7 s | 72 MB | 1 | 1/12 | 0 | 10.9 s | 36 MB |
+| ginandjuice.shop | 14 | 3/3 | 0 | 22.3 s | 105 MB | 13 | 1/3 | 0 | 16.1 s | 66 MB |
+| crAPI | 85 | 32/40 | 0 | 4.5 s | 102 MB | 4 | 0/40 | 1 | 13.0 s | 59 MB |
 
 | Known routes | Azhaq | katana | jsluice | katana ∪ jsluice |
 | --- | --- | --- | --- | --- |
@@ -103,10 +103,10 @@ The command fails when one of these does not hold:
 
 | With a browser | routes | known | shell | time |
 | --- | --- | --- | --- | --- |
-| Juice Shop, Azhaq `-browser` | 177 | 70/77 | 0 | 12.4 s |
+| Juice Shop, Azhaq `-browser` | 176 | 70/77 | 0 | 12.7 s |
 | Juice Shop, katana `-headless` | 30 | 6/77 | 4 | 6.9 s |
-| crAPI, Azhaq `-browser` | 90 | 32/40 | 0 | 18.0 s |
-| crAPI, katana `-headless` | 5 | 0/40 | 1 | 44.3 s |
+| crAPI, Azhaq `-browser` | 86 | 32/40 | 0 | 17.9 s |
+| crAPI, katana `-headless` | 5 | 0/40 | 1 | 44.2 s |
 
 Juice Shop's routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, …)`); the seven Azhaq misses are parameter routes of `/api/*` resources the server defines and the frontend never asks for by id, and two middleware mounts. crAPI's frontend joins every API path from constants (`"identity/" + API.LOGIN`); the other 8 of its 40 (admin and management endpoints) appear nowhere in the frontend. Memory is the process alone, without Chrome for the browser rows. ginandjuice.shop's time includes the domain fan-out, which waits for the slowest subdomain source.
 
@@ -114,11 +114,11 @@ Juice Shop's routes come from the calls its Angular bundle makes (`this.http.pos
 
 | | endpoints listed | expected | time |
 | --- | --- | --- | --- |
-| Juice Shop, anonymous → user, with the user's token | 30 | `/api/Users`, `/rest/user/authentication-details` 401 → 200 | 10.8 s |
-| Juice Shop, anonymous → user, signed in with `-role-login` | 32 | both, 401 → 200 | 14.9 s |
+| Juice Shop, anonymous → user, with the user's token | 35 | `/api/Users`, `/rest/user/authentication-details` 401 → 200 | 11.7 s |
+| Juice Shop, anonymous → user, signed in with `-role-login` | 37 | both, 401 → 200 | 14.9 s |
 | multi-tenant app, anonymous → member → owner, `-role-login` | | 6/6 rows of the access table; no signed-in role requested the sign-out link | 7.3 s |
 
-`azhaq roles` now asks every endpoint any role reached with every other role and fills path parameters from identifiers in the answers, so the table is a full matrix. Outside the bench, with Chrome sign-in and `-browser` on Juice Shop, it reports another user's basket (`/rest/basket/10`, found by alice, answered to bob alike) and every `/api/Users/{id}` readable by any signed-in user; on VAmPI with two tokens, every book's secret readable by both users.
+`azhaq roles` asks every endpoint any role reached with every other role and fills path parameters from identifiers in the answers, each role's own objects first, so the table is a full matrix. Outside the bench, on Juice Shop it reports another user's basket (`/rest/basket/14`, alice's, read by bob and admin), `/api/Addresss/3` read by admin only, and `/rest/memories` handing anyone users' password hashes; on VAmPI, a book's secret read by the other user and `/users/v1/_debug` handing anyone every password.
 
 ### Discovery
 
@@ -136,13 +136,13 @@ Azhaq's parameter search is slower than arjun's: it confirms each name it finds 
 
 - Scope: no request reached the host outside the program's scope (links, scripts, a redirect, a form and `robots.txt` pointed at it, with path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped.
 - Watch: three runs of an unchanged app, no change reported. Two identical Juice Shop runs diff empty.
-- Juice Shop behind a counting proxy, 184 URLs in one run of 5.2 s:
+- Juice Shop behind a counting proxy, 184 URLs in one run of 5.4 s:
 
 | | URLs as one run | detail |
 | --- | --- | --- |
-| `-max-requests 100`, then `azhaq resume` until done | yes | 5 processes; Juice Shop received at most 100 requests from one |
-| killed with SIGKILL after 1.7 s, then `azhaq resume` | yes | |
-| `-serve` with two `azhaq worker` processes | yes | the workers ran 270 tasks; 6.9 s |
+| `-max-requests 100`, then `azhaq resume` until done | yes | 3 processes; Juice Shop received at most 100 requests from one, 211 in all against 205 for one run |
+| killed with SIGKILL after 1.8 s, then `azhaq resume` | yes | |
+| `-serve` with two `azhaq worker` processes | yes | the workers ran 239 tasks; 6.8 s |
 
 ### Domains
 

@@ -320,7 +320,16 @@ func TestPrintDiffJSONLAndCounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Now().UTC()
-	if _, err := old.UpsertEntity(types.TypeHostname, "gone.test", now); err != nil {
+	gone, err := old.UpsertEntity(types.TypeHostname, "gone.test", now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// It resolved in the old run: its absence now is a removal.
+	if _, err := old.AddObservation(gone.ID, types.Observation{Collector: "azhaq-dns", Kind: "dns", Payload: json.RawMessage(`{"fqdn":"gone.test","ips":["192.0.2.1"]}`), ObservedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	// Heard of from a source, never resolved: not heard of again is not a removal.
+	if _, err := old.UpsertEntity(types.TypeHostname, "rumour.test", now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := neu.UpsertEntity(types.TypeHostname, "new.test", now); err != nil {
@@ -335,7 +344,7 @@ func TestPrintDiffJSONLAndCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, `"kind":"added"`) || !strings.Contains(out, `"kind":"removed"`) {
+	if !strings.Contains(out, `"kind":"added"`) || !strings.Contains(out, `"kind":"removed"`) || !strings.Contains(out, `"key":"rumour.test","kind":"not_seen_again"`) {
 		t.Fatalf("jsonl %q", out)
 	}
 	text, err := captureStdout(t, func() error {
@@ -344,7 +353,7 @@ func TestPrintDiffJSONLAndCounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(text, "added=1 removed=1 observations=0") {
+	if !strings.Contains(text, "added=1 removed=1 not_seen_again=1 observations=0") {
 		t.Fatalf("counts %q", text)
 	}
 }

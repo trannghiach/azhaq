@@ -18,7 +18,7 @@ import (
 const batchesInFlight = 4
 
 // perTemplate is how many URLs of one template (/product?id={n}) are
-// fetched; the rest stay in the graph as found, not visited.
+// fetched by default; the rest stay in the graph as found, not visited.
 const perTemplate = 3
 
 // RunLocal is the built-in scheduler. Work flows: a seed's items start as
@@ -55,6 +55,10 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	}
 	if !b.Passive {
 		s.reserve = fanReserve(b)
+	}
+	if e.Store != nil {
+		catalog.Claim = e.Store.Claim
+		defer func() { catalog.Claim = nil }()
 	}
 	if b.Resume && e.Store != nil {
 		if err := s.restore(); err != nil {
@@ -250,7 +254,7 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	s.seen[k] = true
 	if hint && seed.Type == types.TypeURL && webextract.Templated(seed.Key()) {
 		t := webextract.Template(seed.Key())
-		if s.tmpl[t] >= perTemplate {
+		if s.tmpl[t] >= s.perTemplate() {
 			return
 		}
 		s.tmpl[t]++
@@ -279,6 +283,13 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 		}
 		s.enqueue(t)
 	}
+}
+
+func (s *scheduler) perTemplate() int {
+	if s.b.PerTemplate > 0 {
+		return s.b.PerTemplate
+	}
+	return perTemplate
 }
 
 // drop discards the tasks that waited for col on a seed, and the tasks

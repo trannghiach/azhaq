@@ -213,13 +213,24 @@ func sortedCountKeys(m map[string]int) []string {
 // no map on stdout, the run's summary on stderr. Failures and limits are
 // in the summary it returns, not errors.
 func runEmbedded(args []string) (*report, error) {
+	return runEmbeddedAs(args, false)
+}
+
+// runEmbeddedAs is runEmbedded with the summary as one JSON line when
+// asJSON is set.
+func runEmbeddedAs(args []string, asJSON bool) (*report, error) {
 	rep := newReport("run")
 	out := runOut{embedded: true}
 	if err := mapTarget(args, rep, &out); err != nil {
 		return nil, err
 	}
 	rep.settle()
-	rep.print(os.Stderr)
+	if asJSON {
+		raw, _ := json.Marshal(rep)
+		fmt.Fprintf(os.Stderr, "%s\n", raw)
+	} else {
+		rep.print(os.Stderr)
+	}
 	return rep, nil
 }
 
@@ -231,6 +242,9 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Skipped = append(rep.Skipped, engine.Skips(ents, obs)...)
 	rep.Unreachable = engine.Unreachable(seeds, ents, obs)
 	rep.Notes = append(rep.Notes, engine.Notes(obs)...)
+	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
+		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
+	}
 	if rep.Command != "run" {
 		return // the command counts its own results
 	}

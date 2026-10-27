@@ -22,11 +22,13 @@ import (
 // budget and resumed until done, killed and resumed, and shared with two
 // workers. Each must map what one uninterrupted run maps.
 type scaleRow struct {
-	URLs int `json:"urls"` // one uninterrupted run
+	URLs        int `json:"urls"`         // one uninterrupted run
+	OneReceived int `json:"one_received"` // requests Juice Shop received from it
 
 	Budget       int  `json:"budget"`         // -max-requests per process
 	Processes    int  `json:"processes"`      // the run and its resumes
 	MostReceived int  `json:"most_received"`  // requests Juice Shop received from one process
+	AllReceived  int  `json:"all_received"`   // from the run and its resumes together
 	BudgetSame   bool `json:"budget_same"`    // same URLs as one run
 	BudgetMissed int  `json:"budget_missing"` // URLs one run has and this one lacks
 
@@ -69,8 +71,10 @@ func benchScale(target string) *scaleRow {
 	}
 
 	// One run.
+	received.Store(0)
 	_, m := run("scale", 10*time.Minute, dir, azhaq, "run", "-url", site, "-db", db("one"), "-quiet")
 	row.OneSeconds = m.Seconds
+	row.OneReceived = int(received.Load())
 	one := paths("one")
 	row.URLs = len(one)
 
@@ -79,6 +83,7 @@ func benchScale(target string) *scaleRow {
 	run("scale", 10*time.Minute, dir, azhaq, "run", "-url", site, "-db", db("budget"), "-max-requests", strconv.Itoa(row.Budget), "-quiet")
 	row.Processes = 1
 	row.MostReceived = int(received.Load())
+	row.AllReceived = row.MostReceived
 	for i := 0; i < 100; i++ {
 		received.Store(0)
 		cmd := exec.Command(azhaq, "resume", "-db", db("budget"), "-quiet")
@@ -89,6 +94,7 @@ func benchScale(target string) *scaleRow {
 		}
 		row.Processes++
 		row.MostReceived = max(row.MostReceived, int(received.Load()))
+		row.AllReceived += int(received.Load())
 	}
 	budget := paths("budget")
 	row.BudgetMissed = len(one) - overlap(one, budget)
@@ -96,6 +102,8 @@ func benchScale(target string) *scaleRow {
 	addCheck("scale: a run stopped by -max-requests and resumed maps what one run maps", row.BudgetSame && row.MostReceived <= row.Budget,
 		"%d processes of at most %d requests (Juice Shop received at most %d from one); %d URLs, one run %d, %d missing",
 		row.Processes, row.Budget, row.MostReceived, len(budget), len(one), row.BudgetMissed)
+	addCheck("scale: a stopped and resumed run sends at most 10% more than one run", float64(row.AllReceived) <= 1.1*float64(row.OneReceived),
+		"%d requests over %d processes, one run %d", row.AllReceived, row.Processes, row.OneReceived)
 
 	// Killed with SIGKILL a third of the way, then resumed.
 	row.KilledAfter = max(0.3, m.Seconds/3)

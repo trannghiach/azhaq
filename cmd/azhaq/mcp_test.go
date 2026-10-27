@@ -54,8 +54,13 @@ func TestMCPProtocol(t *testing.T) {
 			t.Errorf("tool %v", tool["name"])
 		}
 	}
-	if sc := res(3)["structuredContent"].(map[string]any); sc["locked"] != true || sc["budget"].(float64) != 100 {
-		t.Errorf("scope %v", sc)
+	var scope map[string]any
+	_ = json.Unmarshal([]byte(res(3)["content"].([]any)[0].(map[string]any)["text"].(string)), &scope)
+	if scope["locked"] != true || scope["budget"].(float64) != 100 {
+		t.Errorf("scope %v", scope)
+	}
+	if _, twice := res(3)["structuredContent"]; twice {
+		t.Errorf("the result is sent twice")
 	}
 	if res(4)["isError"] != true || !strings.Contains(res(4)["content"].([]any)[0].(map[string]any)["text"].(string), "outside the scope") {
 		t.Errorf("a host outside the lock was not refused: %v", res(4))

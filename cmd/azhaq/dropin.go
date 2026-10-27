@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -179,15 +180,19 @@ func runPreset(c *common, args []string, rep *report, see func(types.Entity, typ
 		}
 		dir, db = d, filepath.Join(d, "run.db")
 	}
-	if c.silent {
+	if c.silent || c.json {
 		args = append(args, "-quiet")
 	}
 	observer = see
-	out := runOut{embedded: true}
+	out := runOut{embedded: true, scratch: dir != ""}
 	err := mapTarget(append(args, "-db", db), rep, &out)
 	observer = nil
 	if dir != "" {
 		rep.DB = "" // gone when the command ends
+		if rep.Resume != "" {
+			rep.Resume = ""
+			rep.Notes = append(rep.Notes, "the database was temporary: give -db FILE to be able to resume a stopped run")
+		}
 	}
 	if err != nil {
 		if dir != "" {
@@ -342,7 +347,18 @@ func payloadOf(o types.Observation) map[string]any {
 	return p
 }
 
-// cmdSubs is subfinder (and subfinder | dnsx with -live).
+// apexOf is the domain of apexes that name is under.
+func apexOf(name string, apexes []string) string {
+	for _, a := range apexes {
+		if name == a || strings.HasSuffix(name, "."+a) {
+			return a
+		}
+	}
+	return ""
+}
+
+// cmdSubs is subfinder (and subfinder | dnsx with -live; with -w and
+// -permute, puredns and alterx too).
 func cmdSubs(args []string) error {
 	fs := newFlags("subs")
 	var c common
@@ -351,6 +367,8 @@ func cmdSubs(args []string) error {
 	fs.Var(&domains, "d", "domain (repeatable)")
 	list := fs.String("dL", "", "file of domains (- for stdin)")
 	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out)")
+	words := fs.String("w", "", "also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live)")
+	permute := fs.Bool("permute", false, "also resolve variations of the names found (api → api-dev, api2, dev.api), like alterx | dnsx (active DNS)")
 	given := inherit(fs, "sources", "exclude-sources", "all-sources", "providers", "resolvers", "dns-rate", "timeout", "v")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -365,19 +383,37 @@ func cmdSubs(args []string) error {
 	rep := newReport("subs")
 	rep.what = "names"
 	keep := []string{"azhaq-subdomains"}
-	if *live {
+	active := *words != "" || *permute
+	if *live || active {
 		keep = append(keep, "azhaq-dns")
+	}
+	if *live {
 		rep.what = "live names"
 	}
-	run := []string{"-passive", "-skip", skipAllBut(keep...)}
+	run := []string{"-passive"}
+	if *words != "" {
+		keep = append(keep, "azhaq-dns-brute")
+		run = append(run, "-dns-brute", *words)
+	}
+	if *permute {
+		keep = append(keep, "azhaq-permute")
+		run = append(run, "-permute")
+	}
+	run = append(run, "-skip", skipAllBut(keep...))
+	var apexes []string
 	for _, d := range ds {
 		h := normalize.Hostname(d)
 		if h == "" || strings.ContainsAny(h, "/: ") {
 			return usagef("-d wants a domain such as example.com, got %q", d)
 		}
+		apexes = append(apexes, h)
 		run = append(run, "-domain", h)
+		if active {
+			// The domains given are the scope of the guesses.
+			run = append(run, "-allow", h)
+		}
 	}
-	if !*live {
+	if !*live && !active {
 		// The names are known once the sources answer: no DNS to wait for.
 		run = append(run, "-depth", "0")
 	}
@@ -427,11 +463,36 @@ func cmdSubs(args []string) error {
 			w.obj(row)
 		}
 	}
+	// Names the guesses found: resolved, so live.
+	guessed := 0
+	for _, g := range []struct{ collector, source string }{{"azhaq-dns-brute", "dns-brute"}, {"azhaq-permute", "permute"}} {
+		for _, p := range payloads(st, g.collector) {
+			for _, name := range strs(p["names"]) {
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+				guessed++
+				if !w.json {
+					w.line(name)
+					continue
+				}
+				row := map[string]any{"host": name, "input": apexOf(name, apexes), "source": g.source, "sources": []string{g.source}}
+				if alive != nil {
+					row["a"] = strs(alive[name]["ips"])
+				}
+				w.obj(row)
+			}
+		}
+	}
 	if err := w.close(); err != nil {
 		return err
 	}
 	rep.Results = w.count()
 	rep.Counts = map[string]int{"sources asked": ran, "sources failed": ran - answered}
+	if active {
+		rep.Counts["found by guessing"] = guessed
+	}
 	if c.db != "" {
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db+" -type Hostname")
 	}
@@ -596,12 +657,11 @@ func silentHosts(st *store.Store) []string {
 
 // httpxRow names the fields the way httpx -json does (v1.12): host is the
 // name, host_ip the address the request connected to, a the addresses the
-// name resolved to.
+// name resolved to, status_code the first answer (a 302 stays a 302, as
+// httpx prints it without -fr). Where a redirect chain led within the
+// scope, final_url and final_status_code say where it ended.
 func httpxRow(r engine.ProbeRow, input string, addrs []string) map[string]any {
 	status := r.Status
-	if r.FinalStatus != 0 {
-		status = r.FinalStatus
-	}
 	u, _ := url.Parse(r.URL)
 	host, port, scheme, path := "", "", "", "/"
 	if u != nil {
@@ -655,6 +715,7 @@ func httpxRow(r engine.ProbeRow, input string, addrs []string) map[string]any {
 		out["final_url"] = r.FinalURL
 	}
 	if r.FinalStatus != 0 {
+		out["final_status_code"] = r.FinalStatus
 		out["chain_status_codes"] = []int{r.Status, r.FinalStatus}
 	}
 	if r.Location != "" {
@@ -899,7 +960,7 @@ func cmdPorts(args []string) error {
 	fs.Var(&hosts, "host", "host or IP (repeatable)")
 	list := fs.String("l", "", "file of hosts (- for stdin)")
 	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full or a list such as 22,80,8000-8100")
-	given := inherit(fs, "rate=port-rate", "resolvers", "timeout", "v", "scope", "program", "deny")
+	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -933,6 +994,9 @@ func cmdPorts(args []string) error {
 			svc, _ := s.(map[string]any)
 			port := fmt.Sprint(svc["port"])
 			key := host + ":" + port
+			if w.json {
+				key = ip + " " + key // a row per address, as naabu prints
+			}
 			mu.Lock()
 			dup := seen[key]
 			seen[key] = true
@@ -958,14 +1022,18 @@ func cmdPorts(args []string) error {
 	rep := newReport("ports")
 	rep.what = "open ports"
 	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-ports"), "-ports", *spec}
-	for _, h := range hs {
-		h = strings.TrimSpace(h)
-		if host, _, err := net.SplitHostPort(h); err == nil {
-			h = host
+	extra := given()
+	if !hasFlag(extra, "allow", "scope") {
+		// The hosts given are the scope.
+		for _, h := range hs {
+			h = strings.TrimSpace(h)
+			if host, _, err := net.SplitHostPort(h); err == nil {
+				h = host
+			}
+			run = append(run, "-allow", h)
 		}
-		run = append(run, "-allow", h)
 	}
-	_, done, err := runPreset(&c, append(run, given()...), rep, see)
+	_, done, err := runPreset(&c, append(run, extra...), rep, see)
 	if err != nil {
 		return err
 	}
@@ -975,6 +1043,17 @@ func cmdPorts(args []string) error {
 	}
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
+}
+
+// hasFlag says whether args set one of the flags named.
+func hasFlag(args []string, names ...string) bool {
+	for _, a := range args {
+		k, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if strings.HasPrefix(a, "-") && slices.Contains(names, k) {
+			return true
+		}
+	}
+	return false
 }
 
 // cmdDirs is ffuf with auto-calibration (feroxbuster with -depth): paths
@@ -989,7 +1068,7 @@ func cmdDirs(args []string) error {
 	list := fs.String("l", "", "file of services (- for stdin)")
 	words := fs.String("w", "", "wordlist (required)")
 	given := inherit(fs, "e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate", "mc=dirs-mc",
-		"H=header", "cookie", "max-requests", "timeout", "v", "scope", "program", "deny")
+		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1040,12 +1119,16 @@ func cmdDirs(args []string) error {
 	rep := newReport("dirs")
 	rep.what = "paths"
 	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", *words}
-	for _, t := range targets {
-		if u, err := url.Parse(t); err == nil {
-			run = append(run, "-allow", u.Hostname())
+	extra := given()
+	if !hasFlag(extra, "allow", "scope") {
+		// The services given are the scope.
+		for _, t := range targets {
+			if u, err := url.Parse(t); err == nil {
+				run = append(run, "-allow", u.Hostname())
+			}
 		}
 	}
-	_, done, err := runPreset(&c, append(run, given()...), rep, see)
+	_, done, err := runPreset(&c, append(run, extra...), rep, see)
 	if err != nil {
 		return err
 	}
@@ -1067,7 +1150,7 @@ func cmdParams(args []string) error {
 	fs.Var(&urls, "u", "page URL (repeatable)")
 	list := fs.String("l", "", "file of page URLs (- for stdin)")
 	words := fs.String("w", "", "parameter names, one per line (required)")
-	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "max-requests", "timeout", "v", "scope", "program", "deny")
+	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1109,12 +1192,16 @@ func cmdParams(args []string) error {
 	rep.what = "pages with parameters"
 	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-params"),
 		"-params", *words, "-params-per-host", fmt.Sprint(len(targets))}
-	for _, t := range targets {
-		if u, err := url.Parse(t); err == nil {
-			run = append(run, "-allow", u.Hostname())
+	extra := given()
+	if !hasFlag(extra, "allow", "scope") {
+		// The pages given are the scope.
+		for _, t := range targets {
+			if u, err := url.Parse(t); err == nil {
+				run = append(run, "-allow", u.Hostname())
+			}
 		}
 	}
-	_, done, err := runPreset(&c, append(run, given()...), rep, see)
+	_, done, err := runPreset(&c, append(run, extra...), rep, see)
 	if err != nil {
 		return err
 	}

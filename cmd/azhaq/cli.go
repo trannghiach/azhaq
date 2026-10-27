@@ -68,10 +68,11 @@ func init() {
 			}},
 		{name: "roles", group: groupMap, run: cmdRoles,
 			summary: "map the same target once per session and show where the answers differ (access control)",
-			usage:   "-role NAME[=Header: value] -role … [-role-login NAME=USER:PASS -login URL] [-jsonl] -- RUN FLAGS",
-			output:  "one row per endpoint whose answer depends on the session: status, length and body per role",
+			usage:   "-role NAME[=Header: value] -role … [-role-login NAME=USER:PASS -login URL] [-id [ROLE:]NAME=VALUE] [-jsonl] -- RUN FLAGS",
+			output:  "one row per endpoint whose answer depends on the session: status, length and body per role, and a verdict (a role reading another role's object, sensitive fields anyone reads, …)",
 			examples: []string{
 				"azhaq roles -role anon -role 'user=Authorization: Bearer eyJ…' -- -url https://api.example.com/",
+				"azhaq roles -role anon -role 'alice=Authorization: Bearer eyJ…' -role 'bob=Authorization: Bearer eyJ…' -id 'alice:book_title=Alice book' -- -url https://api.example.com/",
 				"azhaq roles -login https://app/login -role anon -role-login 'alice=a@x.test:pw' -role-login 'bob=b@x.test:pw' -- -url https://app/",
 			}},
 		{name: "subs", group: groupDropIn, like: "subfinder", run: cmdSubs,
@@ -162,10 +163,13 @@ func init() {
 			examples: []string{"azhaq diff -db acme.db"}},
 		{name: "export", group: groupWS, run: cmdExport,
 			summary: "write a database in another tool's format",
-			usage:   "[-db FILE] [-format jsonl|urls|hosts|names|targets|openapi|burp|html|graphml|secrets]",
-			output:  "the chosen format",
+			usage:   "[-db FILE] [-format jsonl|urls|hosts|names|targets|openapi|graphql|sdl|burp|html|graphml|secrets] [-origin ORIGIN|URL]",
+			output:  "the chosen format; graphql: {\"data\":{\"__schema\":…}} of a GraphQL endpoint read with -graphql (keyed by URL when there are several; -origin picks one), sdl: its schema in GraphQL SDL, burp: the run's scope, allow rules as include and deny rules as exclude",
 			examples: []string{
 				"azhaq export -db app.db -format openapi > app.openapi.json",
+				"azhaq export -db app.db -format graphql -origin https://app.example.com/graphql > schema.json",
+				"azhaq export -db app.db -format sdl > schema.graphql",
+				"azhaq export -db h1.db -format burp > scope.json",
 				"azhaq export -db h1.db -format targets | nuclei -l -",
 			}},
 		{name: "ingest", group: groupWS, run: cmdIngest,
@@ -293,20 +297,34 @@ func newFlags(name string) *flag.FlagSet {
 }
 
 // parse reads a command's flags; -h prints the command's help, and a
-// mistake is a usage error.
+// mistake is a usage error. Flags may come after the other arguments
+// (azhaq show URL -json); everything after -- is left as given.
 func parse(fs *flag.FlagSet, args []string) error {
-	if err := fs.Parse(args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			if describing {
-				described = fs
-			} else {
-				printHelp(os.Stdout, fs.Name(), fs)
+	var pos []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				if describing {
+					described = fs
+				} else {
+					printHelp(os.Stdout, fs.Name(), fs)
+				}
+				return err
 			}
-			return err
+			return usageErr{err}
 		}
-		return usageErr{err}
+		rest := fs.Args()
+		if len(rest) == 0 {
+			break
+		}
+		if n := len(args) - len(rest); n > 0 && args[n-1] == "--" {
+			pos = append(pos, rest...)
+			break
+		}
+		pos = append(pos, rest[0])
+		args = rest[1:]
 	}
-	return nil
+	return fs.Parse(append([]string{"--"}, pos...))
 }
 
 // flagsOf returns a command's flag set without running it.

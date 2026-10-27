@@ -71,3 +71,20 @@ func TestCallsFetchAndXHR(t *testing.T) {
 		t.Fatalf("%q", lines)
 	}
 }
+
+func TestPageCallsKeepRelativePaths(t *testing.T) {
+	got := PageCalls(`function check(h){ xmlHttp.open("GET","util/serverStatusCheckService.jsp?HostName=" + h); $.get("data") }`)
+	if len(got) != 1 || got[0].Path != "util/serverStatusCheckService.jsp" || len(got[0].Query) != 1 || got[0].Query[0] != "HostName" {
+		t.Fatalf("PageCalls = %+v", got)
+	}
+	if c := Calls(`xmlHttp.open("GET","util/status.jsp")`); len(c) != 0 {
+		t.Fatalf("Calls kept a relative path from a script file: %+v", c)
+	}
+}
+
+func TestPageCallsLeaveClientsWithABase(t *testing.T) {
+	got := PageCalls(`api.get("users/list"); fetch("httpStatus/check.jsp")`)
+	if len(got) != 1 || got[0].Path != "httpStatus/check.jsp" {
+		t.Fatalf("PageCalls = %+v", got)
+	}
+}

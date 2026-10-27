@@ -217,7 +217,7 @@ func (s *mcpServer) request(m rpcMsg) {
 			return
 		}
 		if err != nil {
-			s.reply(m.ID, toolText(err.Error(), nil, true))
+			s.reply(m.ID, toolText(err.Error(), true))
 			return
 		}
 		s.reply(m.ID, res)
@@ -241,12 +241,11 @@ func (s *mcpServer) instructions() string {
 
 var errUnknownTool = errors.New("unknown tool")
 
-// toolText is a tool result: a short text and the same data structured.
-func toolText(text string, data map[string]any, isError bool) map[string]any {
+// toolText is a tool result: one text block, compact JSON for data. The
+// same data is not sent again as structuredContent: a client that reads
+// both would pay for it twice.
+func toolText(text string, isError bool) map[string]any {
 	res := map[string]any{"content": []map[string]any{{"type": "text", "text": text}}}
-	if data != nil {
-		res["structuredContent"] = data
-	}
 	if isError {
 		res["isError"] = true
 	}
@@ -429,8 +428,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		for k, v := range extra {
 			data[k] = v
 		}
-		raw, _ := json.MarshalIndent(data, "", " ")
-		return toolText(string(raw), data, false), nil
+		raw, _ := json.Marshal(data)
+		return toolText(string(raw), false), nil
 	}
 	listed := func(r cmdResult) (map[string]any, error) {
 		got, cut := rows(r.lines, limit)
@@ -492,7 +491,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	}
 	switch name {
 	case "azhaq_scope":
-		return toolText(s.instructions(), map[string]any{"locked": s.locked, "rules": s.lock, "budget": s.budget, "used": s.used, "rate": s.rate}, false), nil
+		raw, _ := json.Marshal(map[string]any{"about": s.instructions(), "locked": s.locked, "rules": s.lock, "budget": s.budget, "used": s.used, "rate": s.rate})
+		return toolText(string(raw), false), nil
 	case "azhaq_plan":
 		t, err := targets()
 		if err != nil {
@@ -582,19 +582,14 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if p := str(a, "ports"); p != "" {
 			args = append(args, "-p", p)
 		}
-		// ports takes the hosts given as its scope; the lock narrows it.
-		var deny []string
-		for i := 0; i+1 < len(s.lock); i += 2 {
-			if s.lock[i] == "-deny" {
-				deny = append(deny, "-deny", s.lock[i+1])
-			}
-		}
 		for _, h := range hs {
 			if !s.allows(h) {
 				return nil, fmt.Errorf("%s is outside the scope this server was started with", h)
 			}
 		}
-		r, err := s.run(ctx, progress, false, append(args, deny...)...)
+		// The lock is the scope; each connect counts against the server's
+		// request budget and is paced at its -rate.
+		r, err := s.run(ctx, progress, true, args...)
 		if err != nil {
 			return nil, err
 		}
@@ -636,8 +631,14 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 			return nil, errors.New(strings.TrimSpace(r.stderr))
 		}
 		data := map[string]any{"entity": got[0]}
-		raw, _ := json.MarshalIndent(data, "", " ")
-		return toolText(string(raw), data, false), nil
+		raw, _ := json.Marshal(data)
+		if len(raw) > maxShowBytes {
+			// A GraphQL schema or a long page's facts: the export has them.
+			trimPayloads(got[0])
+			data["note"] = "large observation fields were left out; azhaq_export (graphql, sdl, openapi, jsonl) has them"
+			raw, _ = json.Marshal(data)
+		}
+		return toolText(string(raw), false), nil
 	case "azhaq_roles":
 		roles, _ := a["roles"].([]any)
 		if len(roles) < 2 {
@@ -669,6 +670,9 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		}
 		if boolean(a, "all") {
 			args = append(args, "-all")
+		}
+		for _, id := range strList(a, "ids") {
+			args = append(args, "-id", id)
 		}
 		t, err := targets()
 		if err != nil {
@@ -709,12 +713,11 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 			return nil, err
 		}
 		abs, _ := filepath.Abs(path)
-		data := map[string]any{"file": abs, "bytes": len(raw), "format": format}
-		text := fmt.Sprintf("wrote %s (%d bytes)", abs, len(raw))
+		text := fmt.Sprintf("wrote %s (%d bytes, %s)", abs, len(raw), format)
 		if len(raw) <= 16<<10 {
 			text += "\n" + string(raw)
 		}
-		return toolText(text, data, false), nil
+		return toolText(text, false), nil
 	case "azhaq_diff":
 		db, err := s.workspace(a)
 		if err != nil {
@@ -730,8 +733,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if cut {
 			data["truncated"] = true
 		}
-		out, _ := json.MarshalIndent(data, "", " ")
-		return toolText(string(out), data, false), nil
+		out, _ := json.Marshal(data)
+		return toolText(string(out), false), nil
 	case "azhaq_workspaces":
 		files, _ := filepath.Glob(filepath.Join(s.dir, "*.db"))
 		var names []string
@@ -741,15 +744,36 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		sort.Strings(names)
 		data := map[string]any{"workspaces": names, "dir": s.dir}
 		out, _ := json.Marshal(data)
-		return toolText(string(out), data, false), nil
+		return toolText(string(out), false), nil
 	}
 	return nil, fmt.Errorf("%w %q", errUnknownTool, name)
 }
 
+// maxShowBytes bounds an azhaq_show answer.
+const maxShowBytes = 24 << 10
+
+// trimPayloads replaces each observation payload field longer than 2 KB
+// with its size.
+func trimPayloads(entity any) {
+	m, _ := entity.(map[string]any)
+	obs, _ := m["observations"].([]any)
+	for _, o := range obs {
+		om, _ := o.(map[string]any)
+		p, _ := om["payload"].(map[string]any)
+		for k, v := range p {
+			if b, _ := json.Marshal(v); len(b) > 2<<10 {
+				p[k] = fmt.Sprintf("(%d bytes, left out)", len(b))
+			}
+		}
+	}
+}
+
 func exportExt(format string) string {
 	switch format {
-	case "openapi", "burp":
+	case "openapi", "burp", "graphql":
 		return ".json"
+	case "sdl":
+		return ".graphql"
 	case "html":
 		return ".html"
 	case "graphml":

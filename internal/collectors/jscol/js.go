@@ -91,6 +91,7 @@ func (c *Collector) Skip(seed types.Seed) bool {
 type script struct {
 	url     *url.URL
 	body    string
+	inline  bool // in the page: relative paths are the page's
 	fromMap bool // original source from a source map
 }
 
@@ -148,7 +149,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
 		for _, body := range webextract.InlineScripts(res.Body) {
-			queue = append(queue, script{url: base, body: body})
+			queue = append(queue, script{url: base, body: body, inline: true})
 		}
 		for _, src := range webextract.ScriptSrcs(res.Body, base) {
 			queue = c.load(ctx, raw, src, false, queue, &fetched)
@@ -184,7 +185,20 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				found = append(found, link)
 			}
 		}
-		calls = append(calls, webextract.Calls(s.body)...)
+		if s.inline {
+			for _, c := range webextract.PageCalls(s.body) {
+				if !strings.HasPrefix(c.Path, "/") && !strings.HasPrefix(c.Path, "http://") && !strings.HasPrefix(c.Path, "https://") {
+					ref, err := s.url.Parse(c.Path)
+					if err != nil {
+						continue
+					}
+					c.Path = ref.String()
+				}
+				calls = append(calls, c)
+			}
+		} else {
+			calls = append(calls, webextract.Calls(s.body)...)
+		}
 		for _, sec := range webextract.Secrets(s.body) {
 			if !secretSeen[sec.Value] && len(secrets) < 100 {
 				secretSeen[sec.Value] = true

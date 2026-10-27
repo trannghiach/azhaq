@@ -60,7 +60,7 @@ var DefaultWordlist = []string{
 type Collector struct {
 	Client   *http.Client
 	Wordlist []string
-	probed   sync.Map // scheme://host → first prefix; one sweep per origin
+	probed   sync.Map // scheme://host → the URL whose task sweeps it; one sweep per origin
 }
 
 func New(client *http.Client) *Collector {
@@ -82,7 +82,8 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
-// Skip declines every URL on an origin that was already swept.
+// Skip declines every URL on an origin but the one whose task sweeps it:
+// the first one asked, in this process or before azhaq resume.
 func (c *Collector) Skip(seed types.Seed) bool {
 	raw, err := normalize.URL(seed.Keys["url"])
 	if err != nil {
@@ -92,8 +93,21 @@ func (c *Collector) Skip(seed types.Seed) bool {
 	if err != nil {
 		return false
 	}
-	_, done := c.probed.Load(u.Scheme + "://" + u.Host)
-	return done
+	return c.owner(u.Scheme+"://"+u.Host, raw) != raw
+}
+
+// owner is the URL whose task sweeps origin, claiming it for raw when
+// nobody has.
+func (c *Collector) owner(origin, raw string) string {
+	if v, ok := c.probed.Load(origin); ok {
+		return v.(string)
+	}
+	o := raw
+	if catalog.Claim != nil {
+		o = catalog.Claim(Name+" "+origin, raw)
+	}
+	v, _ := c.probed.LoadOrStore(origin, o)
+	return v.(string)
 }
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
@@ -107,7 +121,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	prefix := probePrefix(base.Path)
 	origin := base.Scheme + "://" + base.Host
-	if _, loaded := c.probed.LoadOrStore(origin, prefix); loaded {
+	if c.owner(origin, raw) != raw {
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
 

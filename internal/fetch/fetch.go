@@ -55,6 +55,8 @@ type Result struct {
 	IP string
 	// Elapsed covers every hop, headers and body.
 	Elapsed time.Duration
+
+	cut bool // the chain stopped before its end: the budget, a failure or an interrupt
 }
 
 // Extra is copied onto every GET. Cookie values stay on the wire, not in Extra's docs.
@@ -76,6 +78,28 @@ var (
 	hostSem  = map[string]chan struct{}{}
 )
 
+// Keeper keeps the answers of a run in its workspace, so that azhaq
+// resume does not ask again what the run already asked.
+type Keeper interface {
+	// Load is the kept answer for raw, if any.
+	Load(raw string) (Result, bool)
+	// Keep records an answer.
+	Keep(raw string, res Result)
+}
+
+// Keep, when set, is where answers are kept and looked up before a GET.
+var Keep Keeper
+
+// Memo is a small record kept the same way, for requests that do not go
+// through Do (a path guess keeps only its status and sizes).
+type Memo interface {
+	Recall(key string) ([]byte, bool)
+	Remember(key string, v []byte)
+}
+
+// Memos, when set, keeps such records for azhaq resume.
+var Memos Memo
+
 // HostParallel caps in-flight uncached GETs per host (-host-parallel).
 var HostParallel = 4
 
@@ -91,6 +115,8 @@ func Reset() {
 	Extra = nil
 	Allow = nil
 	Resolver = nil
+	Keep = nil
+	Memos = nil
 	Delay = 0
 	cacheMu.Unlock()
 	resetProbes()
@@ -226,6 +252,10 @@ func dialEither(ctx context.Context, d *net.Dialer, network, port string, primar
 	return nil, first
 }
 
+// IPv6Routable says whether this machine can reach IPv6 addresses on the
+// internet.
+func IPv6Routable() bool { return ipv6Routable() }
+
 var ipv6Routable = sync.OnceValue(func() bool {
 	// A UDP "connection" sends nothing; it only asks the kernel for a
 	// route and a source address.
@@ -287,6 +317,18 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	inflight[raw] = wait
 	cacheMu.Unlock()
 
+	if Keep != nil {
+		if res, ok := Keep.Load(raw); ok {
+			// Asked before this run was stopped: not sent, not counted.
+			cacheMu.Lock()
+			cache[raw] = cacheEnt{res: res}
+			cacheHopsLocked(res)
+			delete(inflight, raw)
+			close(wait)
+			cacheMu.Unlock()
+			return res, false, nil
+		}
+	}
 	release, err := acquireHost(ctx, raw)
 	if err != nil {
 		cacheMu.Lock()
@@ -315,45 +357,72 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	res, err := do(ctx, c, raw)
 	done()
 	release()
-
 	cacheMu.Lock()
 	cache[raw] = cacheEnt{res: res, err: err}
+	var hops []Result
 	if err == nil {
-		cacheHopsLocked(res)
+		hops = cacheHopsLocked(res)
 	}
 	delete(inflight, raw)
 	close(wait)
 	cacheMu.Unlock()
+	if err == nil && !res.cut && ctx.Err() == nil && Keep != nil {
+		Keep.Keep(raw, res)
+		for _, hop := range hops {
+			Keep.Keep(hop.RequestURL, hop)
+		}
+	}
 	return res, false, err
 }
 
-// cacheHopsLocked records each hop URL so a redirect partner is not walked again.
-func cacheHopsLocked(res Result) {
-	for i, hop := range res.Hops {
-		if hop.URL == "" {
-			continue
+// cacheHopsLocked records each hop URL so a redirect partner is not walked
+// again, and returns the ones it added: a URL asked for itself keeps its
+// own answer.
+func cacheHopsLocked(res Result) []Result {
+	var added []Result
+	for _, hop := range hopResults(res) {
+		if _, ok := cache[hop.RequestURL]; !ok {
+			cache[hop.RequestURL] = cacheEnt{res: hop}
+			added = append(added, hop)
 		}
-		if _, ok := cache[hop.URL]; ok {
+	}
+	return added
+}
+
+// hopResults is the answer each later hop of a redirect chain stands for:
+// asking for it would walk the rest of the chain.
+func hopResults(res Result) []Result {
+	var out []Result
+	for i, hop := range res.Hops {
+		if hop.URL == "" || hop.URL == res.RequestURL {
 			continue
 		}
 		rest := res.Hops[i:]
-		status := 0
-		if len(rest) > 0 {
-			status = rest[0].Status
+		// Only the first and the last hop's headers are known: a hop in
+		// between has its Location.
+		header := http.Header{}
+		if hop.Location != "" {
+			header.Set("Location", hop.Location)
 		}
-		cache[hop.URL] = cacheEnt{res: Result{
+		switch {
+		case i == 0:
+			header = res.Header
+		case i == len(res.Hops)-1:
+			header = res.FinalHeader
+		}
+		out = append(out, Result{
 			RequestURL: hop.URL,
-			Status:     status,
-			StatusLine: res.StatusLine,
+			Status:     rest[0].Status,
 			URL:        res.URL,
-			Header:     res.Header,
+			Header:     header,
 			Body:       res.Body,
 			Hops:       rest,
 			Truncated:  res.Truncated,
 
 			FinalHeader: res.FinalHeader,
-		}}
+		})
 	}
+	return out
 }
 
 func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
@@ -367,6 +436,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 	var lastTrunc bool
 	var lastHeader http.Header
 	var remoteIP string
+	var cut bool
 	start := time.Now()
 	for i := 0; i < 6; i++ {
 		rctx := ctx
@@ -386,6 +456,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		ApplyHeaders(req)
 		if err := Spend(ctx); err != nil {
 			if i > 0 {
+				cut = true
 				break // the redirect is recorded; its target is not requested
 			}
 			return Result{}, err
@@ -393,6 +464,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		resp, err := c.Do(req)
 		if err != nil {
 			if i > 0 {
+				cut = true
 				break // the redirect answered; where it points did not
 			}
 			return Result{}, err
@@ -401,6 +473,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		resp.Body.Close()
 		if err != nil {
 			if i > 0 {
+				cut = true
 				break
 			}
 			return Result{}, err
@@ -445,6 +518,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		FinalHeader: lastHeader,
 		IP:          viaProxy(c, raw, remoteIP),
 		Elapsed:     time.Since(start),
+		cut:         cut,
 	}, nil
 }
 
@@ -585,8 +659,26 @@ func inScope(raw string) bool {
 var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out", "sign_out", "logoff"}
 
 // EndsSession: a run with a session never requests a logout URL.
+// HasSession says whether the run sends a session: a cookie, an
+// Authorization header, or a header whose name says it carries a token
+// or a key.
+func HasSession() bool {
+	for k, vs := range Extra {
+		if len(vs) == 0 || vs[0] == "" {
+			continue
+		}
+		k = strings.ToLower(k)
+		for _, w := range []string{"cookie", "auth", "token", "session", "key", "secret", "csrf", "xsrf"} {
+			if strings.Contains(k, w) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func EndsSession(raw string) bool {
-	if Extra.Get("Cookie") == "" && Extra.Get("Authorization") == "" {
+	if !HasSession() {
 		return false
 	}
 	u, err := url.Parse(raw)

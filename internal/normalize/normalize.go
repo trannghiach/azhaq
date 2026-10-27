@@ -85,6 +85,24 @@ func SharedSuffix(host string) string {
 	return ""
 }
 
+// Tenant says whether host lives under a name a provider hands out to
+// its customers (a bucket on s3.amazonaws.com, an app on herokuapp.com):
+// the provider's own domain is not the tenant's, and nothing under the
+// tenant's name is worth enumerating or looking up in RDAP.
+func Tenant(host string) bool {
+	host = Hostname(host)
+	if host == "" || net.ParseIP(host) != nil {
+		return false
+	}
+	if SharedSuffix(host) != "" {
+		return true
+	}
+	// Private suffixes (github.io, s3.amazonaws.com) have several labels;
+	// a TLD the list does not know has one, and is not a provider.
+	suf, icann := publicsuffix.PublicSuffix(host)
+	return !icann && strings.Contains(suf, ".")
+}
+
 // RegistrableDomain is eTLD+1, or empty for IPs and unknowns.
 // Shared PaaS hosts stop at the tenant (a.appspot.com, not appspot.com).
 func RegistrableDomain(host string) string {

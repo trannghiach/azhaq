@@ -25,7 +25,7 @@ import (
 // back to the root baseline.
 const maxProbeDirs = 24
 
-var probeToken = newProbeToken()
+var probeToken = RandomName()
 
 var (
 	probeMu   sync.Mutex
@@ -52,10 +52,38 @@ type fingerprint struct {
 
 var titleRE = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
-func newProbeToken() string {
-	var b [6]byte
+// RandomName is a path segment no site has: 10 to 14 lowercase letters
+// and digits, starting with a letter. It names nothing that would tell a
+// log reader which tool asked.
+func RandomName() string {
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	const alnum = letters + "0123456789"
+	var b [15]byte
 	_, _ = rand.Read(b[:])
-	return "azhaq-" + hex.EncodeToString(b[:])
+	n := 10 + int(b[0])%5
+	out := make([]byte, n)
+	out[0] = letters[int(b[1])%len(letters)]
+	for i := 1; i < n; i++ {
+		out[i] = alnum[int(b[i+1])%len(alnum)]
+	}
+	return string(out)
+}
+
+// SetProbeToken makes the catch-all checks ask for name: a resumed run
+// asks for the same paths as the run it continues, whose answers it kept.
+func SetProbeToken(name string) {
+	probeMu.Lock()
+	defer probeMu.Unlock()
+	if name != "" {
+		probeToken = name
+	}
+}
+
+// ProbeToken is the name the catch-all checks ask for.
+func ProbeToken() string {
+	probeMu.Lock()
+	defer probeMu.Unlock()
+	return probeToken
 }
 
 func resetProbes() {
@@ -114,7 +142,7 @@ func baselineFor(ctx context.Context, c *http.Client, origin, dir string) *basel
 	}
 	probeMu.Unlock()
 	b.once.Do(func() {
-		target := origin + dir + probeToken
+		target := origin + dir + ProbeToken()
 		res, _, err := Do(ctx, c, target)
 		if err != nil || res.Status == 0 {
 			return

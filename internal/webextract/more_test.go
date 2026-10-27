@@ -69,3 +69,33 @@ func TestJSURLsDropsNumericPaths(t *testing.T) {
 		t.Fatalf("%s", got)
 	}
 }
+
+func TestTemplateKeepsPageSelectors(t *testing.T) {
+	for raw, want := range map[string]string{
+		"http://demo.test/index.jsp?content=inside_about.htm":     "http://demo.test/index.jsp?content=inside_about.htm",
+		"http://demo.test/index.jsp?content=personal_savings.htm": "http://demo.test/index.jsp?content=personal_savings.htm",
+		"http://demo.test/list?view=grid&page=4":                  "http://demo.test/list?page={n}&view=grid",
+		"http://demo.test/s?q=gin":                                "http://demo.test/s?q={v}",
+		"http://demo.test/p?token=a1b2c3d4e5f6a7b8":               "http://demo.test/p?token={v}",
+		"http://demo.test/login?next=/account":                    "http://demo.test/login?next={v}",
+	} {
+		if got := Template(raw); got != want {
+			t.Errorf("Template(%s) = %s, want %s", raw, got, want)
+		}
+	}
+}
+
+func TestTemplateFoldsRecordsUnderOtherNames(t *testing.T) {
+	for raw, want := range map[string]string{
+		"http://demo.test/profile.php?user=alice":      "http://demo.test/profile.php?user={v}",
+		"http://demo.test/x?session=abcdef":            "http://demo.test/x?session={v}",
+		"http://demo.test/x?token=eyJhbGciOi":          "http://demo.test/x?token={v}",
+		"http://demo.test/view.php?doc=readme.txt":     "http://demo.test/view.php?doc=readme.txt",
+		"http://demo.test/help?topic=billing":          "http://demo.test/help?topic=billing",
+		"http://demo.test/load?name=annual_report.pdf": "http://demo.test/load?name=annual_report.pdf",
+	} {
+		if got := Template(raw); got != want {
+			t.Errorf("Template(%s) = %s, want %s", raw, got, want)
+		}
+	}
+}

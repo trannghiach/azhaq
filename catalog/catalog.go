@@ -52,6 +52,13 @@ type Info struct {
 	Local bool
 }
 
+// Claim, when set, records owner as the one collector run that does a
+// piece of work once per run (key: what is done, such as a sweep of an
+// origin) and returns the owner recorded first. The engine keeps claims
+// in the run's workspace, so a resumed run gives the work to the same
+// task, which runs it again only if it had not finished.
+var Claim func(key, owner string) string
+
 // Informer is optional; a collector without it is Touch.
 type Informer interface {
 	Info() Info

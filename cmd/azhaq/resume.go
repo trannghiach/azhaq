@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
+	"github.com/trannghiach/azhaq/internal/scopefile"
 	"github.com/trannghiach/azhaq/store"
 )
 
@@ -46,7 +48,9 @@ func cmdResume(args []string) error {
 	if !ok {
 		return fmt.Errorf("nothing to resume in %s: every run finished", db)
 	}
-	fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks left\n", id, db, left)
+	if !wantsJSON(rest) {
+		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks left\n", id, db, left)
+	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)
 	return cmdRun(all)
@@ -55,7 +59,8 @@ func cmdResume(args []string) error {
 // keptArgs are the run options stored for azhaq resume: everything but the
 // database and the values that carry a session or a secret (cookies, a
 // password, the worker token, headers whose name sounds like a
-// credential).
+// credential). A -scope file is kept by its full path, so a resume or an
+// export started in another directory reads the same file.
 func keptArgs(args []string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
@@ -81,6 +86,18 @@ func keptArgs(args []string) []string {
 				continue
 			}
 			out = append(out, "-header="+val)
+			continue
+		case "scope":
+			if !inline && takesValue {
+				val = args[i+1]
+				i++
+			}
+			if _, platform := scopefile.Platforms[val]; !platform && val != "" {
+				if abs, err := filepath.Abs(val); err == nil {
+					val = abs
+				}
+			}
+			out = append(out, "-scope="+val)
 			continue
 		}
 		out = append(out, a)

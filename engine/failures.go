@@ -20,7 +20,7 @@ type Failure struct {
 	Error     string   `json:"error"`
 	Retryable bool     `json:"retryable"`
 	Count     int      `json:"count"`
-	Targets   []string `json:"targets"` // the first few
+	Targets   []string `json:"targets"` // the first 100; azhaq query -failed lists all
 	// Fanout: none of the targets is what the user asked about (the
 	// domain of a URL, a name found on the way).
 	Fanout bool `json:"fanout,omitempty"`
@@ -32,19 +32,17 @@ type Skip struct {
 	Reason string `json:"reason"`
 }
 
-const maxFailureTargets = 5
+// maxFailureTargets caps the targets a summary names per kind of
+// failure; azhaq query -failed lists every one.
+const maxFailureTargets = 100
 
 // Failures lists what failed in obs, grouped by collector, source and
 // kind of error, most frequent first. ents names the entities the
 // observations sit on.
 func Failures(ents []types.Entity, obs []types.StoredObservation) []Failure {
-	keys := map[string]string{}
-	for _, e := range ents {
-		keys[e.ID] = e.Key
-	}
 	idx := map[string]int{}
 	var out []Failure
-	add := func(collector, source, raw, target string) {
+	eachFailure(ents, obs, func(collector, source, raw, target string) {
 		msg := ShortError(raw)
 		k := collector + "\x00" + source + "\x00" + msg
 		i, ok := idx[k]
@@ -58,6 +56,44 @@ func Failures(ents []types.Entity, obs []types.StoredObservation) []Failure {
 		if target != "" && len(f.Targets) < maxFailureTargets && !contains(f.Targets, target) {
 			f.Targets = append(f.Targets, target)
 		}
+	})
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Count > out[j].Count })
+	return out
+}
+
+// FailedTarget is one target whose work did not get its answer.
+type FailedTarget struct {
+	Target    string `json:"target"`
+	Collector string `json:"collector"`
+	Source    string `json:"source,omitempty"`
+	Error     string `json:"error"`
+	Retryable bool   `json:"retryable"`
+}
+
+// FailedTargets lists every failed target in obs, once per collector,
+// source and error: the list to retry.
+func FailedTargets(ents []types.Entity, obs []types.StoredObservation) []FailedTarget {
+	seen := map[string]bool{}
+	var out []FailedTarget
+	eachFailure(ents, obs, func(collector, source, raw, target string) {
+		msg := ShortError(raw)
+		k := target + "\x00" + collector + "\x00" + source + "\x00" + msg
+		if target == "" || seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, FailedTarget{Target: target, Collector: collector, Source: source, Error: msg, Retryable: Retryable(raw)})
+	})
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Target < out[j].Target })
+	return out
+}
+
+// eachFailure calls add for every failure in obs: a collector's error on
+// a target, a third-party source's error, a 429 from the target.
+func eachFailure(ents []types.Entity, obs []types.StoredObservation, add func(collector, source, raw, target string)) {
+	keys := map[string]string{}
+	for _, e := range ents {
+		keys[e.ID] = e.Key
 	}
 	for _, o := range obs {
 		var p map[string]any
@@ -106,8 +142,6 @@ func Failures(ents []types.Entity, obs []types.StoredObservation) []Failure {
 			}
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Count > out[j].Count })
-	return out
 }
 
 // Skips lists the requests Azhaq refused to send in obs (outside the
@@ -117,13 +151,28 @@ func Skips(ents []types.Entity, obs []types.StoredObservation) []Skip {
 	for _, e := range ents {
 		keys[e.ID] = e.Key
 	}
+	// A URL a path or parameter guess asked for was requested, whatever
+	// the crawler then chose: it is not listed as left alone.
+	asked := map[string]bool{}
+	for _, o := range obs {
+		if (o.Kind == "url" || o.Kind == "application") && o.Collector != "azhaq-js" && o.Collector != "azhaq-crawl" && statusOf(o.Payload) > 0 {
+			asked[keys[o.EntityID]] = true
+			if u := payloadURL(o); u != "" {
+				if n, err := normalize.URL(u); err == nil {
+					u = n
+				}
+				asked[u] = true
+			}
+		}
+	}
 	seen := map[string]bool{}
 	var out []Skip
 	for _, o := range obs {
 		var p struct {
-			Error   string `json:"error"`
-			Skipped string `json:"skipped"`
-			Word    string `json:"word"`
+			Error   string   `json:"error"`
+			Skipped string   `json:"skipped"`
+			Word    string   `json:"word"`
+			URLs    []string `json:"urls"` // guesses a collector did not send
 		}
 		var reason string
 		switch o.Kind {
@@ -139,10 +188,19 @@ func Skips(ents []types.Entity, obs []types.StoredObservation) []Skip {
 		default:
 			continue
 		}
-		s := Skip{Target: keys[o.EntityID], Reason: reason}
-		if k := s.Target + "\x00" + s.Reason; !seen[k] {
-			seen[k] = true
-			out = append(out, s)
+		targets := []string{keys[o.EntityID]}
+		if len(p.URLs) > 0 {
+			targets = p.URLs
+		}
+		for _, t := range targets {
+			if asked[t] {
+				continue
+			}
+			s := Skip{Target: t, Reason: reason}
+			if k := s.Target + "\x00" + s.Reason; !seen[k] {
+				seen[k] = true
+				out = append(out, s)
+			}
 		}
 	}
 	return out

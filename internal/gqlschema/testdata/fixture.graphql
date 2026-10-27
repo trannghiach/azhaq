@@ -1,0 +1,66 @@
+"""
+The root of reads.
+Second line with a "quote", a \ backslash and three quotes: \"""
+"""
+type Root {
+  "All users, newest first"
+  users(limit: Int = 10, offset: Int, "only those with this role" role: Role = ADMIN): [User!]!
+  node(id: ID!): Node
+  search(q: String!, filter: Filter = {kind: "a", tags: ["x"]}): [SearchResult]
+  old: String @deprecated
+  older: String @deprecated(reason: "use \"node\" instead")
+}
+
+type Mutation {
+  deleteUser(id: ID!): Boolean
+  login(username: String!, password: String!): Token
+}
+
+type Subscription {
+  userAdded: User
+}
+
+schema {
+  query: Root
+  mutation: Mutation
+  subscription: Subscription
+}
+
+interface Node {
+  id: ID!
+}
+
+interface Named implements Node {
+  id: ID!
+  name: String
+}
+
+type User implements Node & Named {
+  id: ID!
+  name: String
+  email: String
+  role: Role
+  created: DateTime
+}
+
+type Token {
+  value: String
+}
+
+union SearchResult = User | Token
+
+enum Role {
+  ADMIN
+  "A plain user"
+  USER
+  GUEST @deprecated(reason: "no guests")
+}
+
+input Filter {
+  kind: String = "all"
+  tags: [String!]
+}
+
+scalar DateTime
+
+directive @auth(requires: Role = ADMIN) on OBJECT | FIELD_DEFINITION

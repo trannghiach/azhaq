@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"regexp"
 	"sort"
@@ -33,8 +34,9 @@ func cmdQuery(args []string) error {
 	isNew := fs.Bool("new", false, "only what the last run saw that the run before it did not (a workspace)")
 	since := fs.Duration("since", 0, "only what was first seen within this long")
 	fields := fs.String("fields", "", "print only these fields, comma-separated: key, type, role, coverage, status, title, methods, params, body, scope, first_seen")
-	limit := fs.Int("limit", 200, "rows at most (0: all)")
+	limit := fs.Int("limit", 0, "rows at most, best first (default 0: all)")
 	asJSON := fs.Bool("json", false, "one JSON object per row, and the summary as JSON on stderr")
+	failed := fs.Bool("failed", false, "list every target whose work failed (timeouts, refusals, a source's errors): the list to retry")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -46,6 +48,9 @@ func cmdQuery(args []string) error {
 	}
 	rep := newReport("query")
 	rep.what = "rows"
+	if *failed {
+		return queryFailed(path, *asJSON, rep)
+	}
 	rows, err := mapRows(path)
 	if err != nil {
 		return err
@@ -130,6 +135,40 @@ func cmdQuery(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d rows matched; -limit %d printed the first %d (best first)", matched, *limit, len(out)))
 	}
 	return rep.finish(*asJSON, false)
+}
+
+// queryFailed prints every failed target of the newest run, one per
+// line: target, who failed, the error, and whether retrying may help.
+func queryFailed(path string, asJSON bool, rep *report) error {
+	g, err := readGraph(path)
+	if err != nil {
+		return err
+	}
+	ents := make([]types.Entity, 0, len(g.rows))
+	for _, r := range g.rows {
+		ents = append(ents, r.Entity)
+	}
+	list := engine.FailedTargets(ents, g.obs)
+	for _, f := range list {
+		if asJSON {
+			raw, _ := json.Marshal(f)
+			fmt.Println(string(raw))
+			continue
+		}
+		who := f.Collector
+		if f.Source != "" {
+			who += " source " + f.Source
+		}
+		line := f.Target + "\t" + who + "\t" + f.Error
+		if f.Retryable {
+			line += "\tretryable"
+		}
+		fmt.Println(line)
+	}
+	rep.what = "failed targets"
+	rep.Results = len(list)
+	rep.DB = path
+	return rep.finish(asJSON, false)
 }
 
 // mapRows is the map of a database's newest run.
@@ -336,12 +375,43 @@ func cmdShow(args []string) error {
 			mine = append(mine, o)
 		}
 	}
+	// A name's web services: what was asked on it, and how it answered
+	// or failed.
+	type service struct {
+		URL      string `json:"url"`
+		Coverage string `json:"coverage"`
+		Status   int    `json:"status,omitempty"`
+		Title    string `json:"title,omitempty"`
+		Error    string `json:"error,omitempty"`
+	}
+	var services []service
+	if row.Entity.Type == types.TypeHostname {
+		errs := map[string]string{}
+		for _, f := range engine.FailedTargets(ents, g.obs) {
+			if errs[f.Target] == "" {
+				errs[f.Target] = f.Error
+			}
+		}
+		for _, r := range g.rows {
+			if r.Entity.Type != types.TypeURL || normalize.HostFromURL(r.Entity.Key) != row.Entity.Key {
+				continue
+			}
+			if u, err := url.Parse(r.Entity.Key); err != nil || u.Path != "" && u.Path != "/" {
+				continue
+			}
+			services = append(services, service{URL: r.Entity.Key, Coverage: r.Coverage, Status: r.Status, Title: r.Title, Error: errs[r.Entity.Key]})
+		}
+	}
 	if *asJSON {
 		obs := make([]map[string]any, 0, len(mine))
 		for _, o := range mine {
 			obs = append(obs, map[string]any{"collector": o.Collector, "kind": o.Kind, "source": o.Source, "observed_at": o.ObservedAt, "payload": o.Payload})
 		}
-		return json.NewEncoder(os.Stdout).Encode(map[string]any{"row": mapRowJSON(*row), "links": links, "observations": obs})
+		out := map[string]any{"row": mapRowJSON(*row), "links": links, "observations": obs}
+		if len(services) > 0 {
+			out["services"] = services
+		}
+		return json.NewEncoder(os.Stdout).Encode(out)
 	}
 	fmt.Println(row.Line())
 	for _, d := range row.Details() {
@@ -360,6 +430,22 @@ func cmdShow(args []string) error {
 				arrow = "←"
 			}
 			fmt.Printf("  %s %s %s %s\n", arrow, l.Rel, l.Type, l.Key)
+		}
+	}
+	if len(services) > 0 {
+		fmt.Println("web services")
+		for _, sv := range services {
+			line := fmt.Sprintf("  %s  %s", sv.URL, sv.Coverage)
+			if sv.Status != 0 {
+				line += fmt.Sprintf("  status=%d", sv.Status)
+			}
+			if sv.Title != "" {
+				line += "  " + sv.Title
+			}
+			if sv.Error != "" {
+				line += "  ! " + sv.Error
+			}
+			fmt.Println(line)
 		}
 	}
 	fmt.Println("observations")

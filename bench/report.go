@@ -90,7 +90,7 @@ func printReport() {
 	}
 	if s := rec.Scale; s != nil {
 		fmt.Fprintf(w, "\nscale (juice-shop, %d URLs in one run)\tURLs as one run\tdetail\n", s.URLs)
-		fmt.Fprintf(w, "-max-requests %d, resumed\t%v\t%d processes, at most %d requests received from one\n", s.Budget, s.BudgetSame, s.Processes, s.MostReceived)
+		fmt.Fprintf(w, "-max-requests %d, resumed\t%v\t%d processes, at most %d requests received from one, %d in all (one run %d)\n", s.Budget, s.BudgetSame, s.Processes, s.MostReceived, s.AllReceived, s.OneReceived)
 		fmt.Fprintf(w, "kill -9, resumed\t%v\tkilled after %.1fs\n", s.KilledSame, s.KilledAfter)
 		fmt.Fprintf(w, "two workers\t%v\t%d tasks on the workers, %.1fs (one process %.1fs)\n", s.WorkersSame, s.WorkerTasks, s.Seconds, s.OneSeconds)
 	}

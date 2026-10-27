@@ -34,6 +34,9 @@ type Budgets struct {
 	// AllGets also requests found URLs that look like they change state
 	// (logout, delete, save…); by default they are listed, not requested.
 	AllGets bool
+	// PerTemplate is how many URLs of one template (/product?id={n}) are
+	// requested; the rest are listed. Zero is the default, 3.
+	PerTemplate int
 }
 
 type quietKey struct{}

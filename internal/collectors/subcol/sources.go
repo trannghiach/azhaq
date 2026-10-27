@@ -176,7 +176,7 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &shodan.Source{} }, 1),
 		pd(func() subscraping.Source { return &shodanct.Source{} }, 0),
 		pd(func() subscraping.Source { return &sitedossier.Source{} }, 8*perMinute),
-		pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0),
+		off(pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0)),
 		off(pd(func() subscraping.Source { return &submd.Source{} }, 0)),
 		pd(func() subscraping.Source { return &thc.Source{} }, 0),
 		pd(func() subscraping.Source { return &threatbook.Source{} }, 0),
@@ -197,7 +197,8 @@ func allSources() []source {
 // off takes a source out of the default set: it was dead or refused
 // every request when last checked (2026-10-26), and a run that always
 // reports the same failures teaches its reader to ignore failures.
-// -sources NAME or -all-sources still runs it.
+// subdomaincenter answers 500 random names, different on each call
+// (2026-10-27). -sources NAME or -all-sources still runs it.
 func off(s source) source {
 	s.deflt = false
 	return s
