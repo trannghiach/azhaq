@@ -157,4 +157,7 @@ func TestBrowserHint(t *testing.T) {
 	if h := hint(append(base, unrendered("root", "http://dvna.test/", `{"shell":true}`))); h != "" {
 		t.Errorf("empty shell, rich map: %q", h)
 	}
+	if h := hint(append(base, unrendered("l1", lesson, `{"markdown":12}`))); h != "" {
+		t.Errorf("Markdown read as text, rich map: %q", h)
+	}
 }

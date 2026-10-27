@@ -16,8 +16,8 @@ const thinMap = 10
 
 // BrowserHint is the command to map again with Chrome, and why, or "":
 // a run without -browser whose target pages leave their links to their
-// scripts, as Markdown or {{templates}} in their text, or whose front
-// page is an empty shell with few routes found behind it. A server-built
+// scripts, as {{templates}} in their text, or as Markdown or an empty
+// shell of a front page with few routes found behind it. A server-built
 // site, or an app whose scripts gave up their routes, gets no hint.
 func BrowserHint(rows []MapEntry, obs []types.StoredObservation) string {
 	routes := map[string]int{} // origin → page and API rows
@@ -53,7 +53,9 @@ func BrowserHint(rows []MapEntry, obs []types.StoredObservation) string {
 			continue
 		}
 		u := p.Unrendered
-		if u.Markdown > 0 {
+		// Markdown links are read as text: Chrome is worth it only when
+		// the map is still thin.
+		if u.Markdown > 0 && routes[originOf(p.URL)] < thinMap {
 			md = append(md, page{p.URL, u.Markdown})
 		}
 		if u.Templates >= 3 { // one or two may be a page about templates

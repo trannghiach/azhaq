@@ -51,7 +51,7 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
 | `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
 | `notes` | Caps that were hit and other things worth knowing that are not failures. |
-| `next` | Commands worth running next. A run without `-browser` whose target pages leave their links to their scripts (Markdown or `{{templates}}` in the text, or an empty shell of a front page with fewer than 10 routes found on its origin) gets `azhaq run -url ORIGIN/ -browser …` with the page that showed it: `(/learn/vulnerability/a1_injection and 11 more pages: Markdown its scripts turn into links; read as text here, Chrome sees the page as rendered)`. |
+| `next` | Commands worth running next. A run without `-browser` whose target pages leave their links to their scripts (three or more `{{templates}}` in the text; or Markdown in the text, whose links are read as text, or an empty shell of a front page, with fewer than 10 routes found on its origin) gets `azhaq run -url ORIGIN/ -browser …` with the page that showed it: `(/learn/vulnerability/a1_injection and 11 more pages: Markdown its scripts turn into links; read as text here, Chrome sees the page as rendered)`. |
 
 ## run
 
