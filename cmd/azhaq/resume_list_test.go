@@ -1,8 +1,10 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/trannghiach/azhaq/store"
@@ -34,6 +36,20 @@ func TestResumeListFromWorkspace(t *testing.T) {
 	}
 	if got := keptArgs([]string{"-list", "-"}); !reflect.DeepEqual(got, []string{"-list=-"}) {
 		t.Errorf("stdin list kept as %q", got)
+	}
+	// A list file changed since: the run continues the targets it began with.
+	changed := filepath.Join(t.TempDir(), "t.txt")
+	if err := os.WriteFile(changed, []byte("http://evil.test/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	storedList = nil
+	got, err = listFromWorkspace(db, "r1", []string{"-list", changed})
+	if err != nil || !reflect.DeepEqual(got, []string{"-list", "@run"}) || len(storedList) != 2 {
+		t.Errorf("changed file: %q %v, list %q", got, err, storedList)
+	}
+	// Files are kept absolute: azhaq resume may run from elsewhere.
+	if got := keptArgs([]string{"-dirs", "words.txt", "-screenshots=shots"}); !filepath.IsAbs(strings.TrimPrefix(got[0], "-dirs=")) || !filepath.IsAbs(strings.TrimPrefix(got[1], "-screenshots=")) {
+		t.Errorf("relative files kept as %q", got)
 	}
 }
 

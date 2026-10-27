@@ -100,6 +100,9 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	var mu sync.Mutex
 	var held []types.Observation
 	hold := fetch.MaxRequests > 0
+	if s, ok := col.(catalog.Standing); ok && s.Standing() {
+		hold = false
+	}
 	emit := func(o types.Observation) error {
 		if ctx.Err() != nil {
 			return ctx.Err()

@@ -51,9 +51,10 @@ func cmdResume(args []string) error {
 	if !wantsJSON(rest) {
 		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks known and not done\n", id, db, left)
 	}
-	runArgs, err = listFromWorkspace(db, id, runArgs)
-	if err != nil {
-		return err
+	if !hasFlag(rest, "list") {
+		if runArgs, err = listFromWorkspace(db, id, runArgs); err != nil {
+			return err
+		}
 	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)
@@ -61,8 +62,10 @@ func cmdResume(args []string) error {
 }
 
 // listFromWorkspace points the stored run's -list at the copy the
-// workspace keeps when the file cannot be read again: stdin, or the
-// temporary list a command such as dirs or probe wrote and removed.
+// workspace keeps: the file may be gone (stdin, the temporary list a
+// command such as dirs or probe wrote and removed) or changed since, and
+// a resumed run continues the targets it started with. A -list given to
+// azhaq resume replaces it.
 func listFromWorkspace(db, id string, args []string) ([]string, error) {
 	out := append([]string(nil), args...)
 	for i := 0; i < len(out); i++ {
@@ -77,9 +80,6 @@ func listFromWorkspace(db, id string, args []string) ([]string, error) {
 			}
 			at, val = i+1, out[i+1]
 		}
-		if _, err := os.Stat(val); val != "-" && err == nil {
-			continue
-		}
 		st, err := store.OpenExisting(db)
 		if err != nil {
 			return nil, err
@@ -87,7 +87,13 @@ func listFromWorkspace(db, id string, args []string) ([]string, error) {
 		kept := st.GetMeta("list:" + id)
 		st.Close()
 		if kept == "" {
+			if _, err := os.Stat(val); val != "-" && err == nil {
+				continue // a run from before workspaces kept their lists
+			}
 			return nil, fmt.Errorf("the run's target list %s is gone and %s keeps no copy of it: give it again with -list FILE", val, db)
+		}
+		if now, err := loadLines(val); err == nil && val != "-" && strings.Join(now, "\n") != kept {
+			fmt.Fprintf(os.Stderr, "azhaq: %s changed since the run started; resuming the targets the run started with (give -list to use the file as it is now)\n", val)
 		}
 		storedList = strings.Split(kept, "\n")
 		if inline {
@@ -130,17 +136,19 @@ func keptArgs(args []string) []string {
 			}
 			out = append(out, "-header="+val)
 			continue
-		case "list":
+		case "list", "in", "cloud", "facts", "paths", "providers", "resolvers", "dns-brute", "dirs", "params", "screenshots", "urls":
+			// Files and directories, made absolute: azhaq resume may run
+			// from another directory.
 			if !inline && takesValue {
 				val = args[i+1]
 				i++
 			}
-			if val != "-" {
+			if val != "-" && val != "" {
 				if abs, err := filepath.Abs(val); err == nil {
 					val = abs
 				}
 			}
-			out = append(out, "-list="+val)
+			out = append(out, "-"+name+"="+val)
 			continue
 		case "scope":
 			if !inline && takesValue {

@@ -76,6 +76,10 @@ func New(client *http.Client, o Options) *Collector {
 
 func (c *Collector) Name() string { return Name }
 
+// Standing: a hit is checked against the directory's calibration before
+// it is reported, so a run the budget stops keeps the hits it found.
+func (c *Collector) Standing() bool { return true }
+
 // Info: many requests to the target; needs -dirs and -allow, and waits for
 // the HTTP collector so it starts from a service that answered.
 func (c *Collector) Info() catalog.Info {
