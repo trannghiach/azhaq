@@ -92,6 +92,20 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"subdomains"} }
 
+// Asks names the sources a run asks about a domain.
+func (c *Collector) Asks(seed types.Seed) []string {
+	domain := normalize.Hostname(seed.Keys["domain"])
+	if domain == "" || normalize.SpecialUse(domain) {
+		return nil
+	}
+	run, _ := c.plan()
+	out := make([]string, 0, len(run))
+	for _, s := range run {
+		out = append(out, s.name)
+	}
+	return out
+}
+
 // plan picks the sources for a run and says why the others are left out.
 func (c *Collector) plan() (run []source, skipped map[string]string) {
 	only := set(c.opts.Only)

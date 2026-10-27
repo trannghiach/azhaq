@@ -36,10 +36,10 @@ func TestPlanRequests(t *testing.T) {
 	}
 
 	r := planJSON(t, "-domain", "example.com", "-domain", "example.org", "-providers", none, "-max-requests", "5000").Requests
-	if r.Sources["azhaq-rdap"] != 2 || r.Sources["azhaq-urls"] != 10 || r.Total != 12 || r.Sources["azhaq-search"] != 0 {
+	if r.Sources["azhaq-rdap"] != 2 || r.Sources["azhaq-urls"] != 10 || r.Sources["azhaq-subdomains"] != 22 || r.Total != 34 || r.Sources["azhaq-search"] != 0 {
 		t.Errorf("source queries %+v", r)
 	}
-	if strings.Join(r.NotCounted, ",") != "azhaq-subdomains" || !r.Found || r.MaxNames != 20000 {
+	if len(r.NotCounted) != 0 || !r.Found || r.MaxNames != 20000 {
 		t.Errorf("what is not known before the run %+v", r)
 	}
 	if r.PerService != 34 || r.Cap != 5000 || r.CapBy != "-max-requests" {
@@ -49,7 +49,7 @@ func TestPlanRequests(t *testing.T) {
 	// A scan engine with a key is asked; a daily allowance below
 	// -max-requests is the cap that applies.
 	r = planJSON(t, "-domain", "example.com", "-providers", keys, "-max-requests", "5000", "-daily-requests", "300", "-no-favicon").Requests
-	if r.Sources["azhaq-search"] != 1 || r.Total != 7 {
+	if r.Sources["azhaq-search"] != 1 || r.Total != 19 {
 		t.Errorf("keyed engine %+v", r)
 	}
 	if r.Cap != 300 || !strings.HasPrefix(r.CapBy, "-daily-requests") || r.PerService != 33 {
@@ -57,7 +57,7 @@ func TestPlanRequests(t *testing.T) {
 	}
 
 	r = planJSON(t, "-domain", "example.com", "-providers", none, "-passive").Requests
-	if !r.Passive || r.PerService != 0 || r.Total != 6 {
+	if !r.Passive || r.PerService != 0 || r.Total != 17 {
 		t.Errorf("passive %+v", r)
 	}
 
@@ -75,8 +75,7 @@ func TestPlanRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"source queries: 6 about the targets above (azhaq-rdap 1, azhaq-urls 5)",
-		"azhaq-subdomains: not counted",
+		"source queries: 17 about the targets above (azhaq-rdap 1, azhaq-subdomains 11, azhaq-urls 5)",
 		"requests to the targets: at most 5000 (-max-requests)",
 		"about 34 per web service (its page, the favicon, 32 built-in paths)",
 	} {
