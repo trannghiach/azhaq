@@ -21,36 +21,55 @@ var (
 	scriptRef = regexp.MustCompile(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/-]{0,200}\.m?js)['"\x60]`)
 )
 
+// JSURLs returns the URLs and paths a script names in its strings,
+// resolved against base, each once.
 func JSURLs(script string, base *url.URL) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range JSURLRefs(script, base) {
+		if !seen[r.URL] {
+			seen[r.URL] = true
+			out = append(out, r.URL)
+		}
+	}
+	return out
+}
+
+// Ref is a URL a script names, and where: Start and End are the byte
+// offsets of what names it.
+type Ref struct {
+	URL        string
+	Start, End int
+}
+
+// JSURLRefs is JSURLs with every place each URL is named, in the order
+// JSURLs lists them.
+func JSURLRefs(script string, base *url.URL) []Ref {
 	if base == nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	var out []string
-	add := func(raw string) {
-		if u, ok := resolve(base, raw); ok && !seen[u] {
-			seen[u] = true
-			out = append(out, u)
+	var out []Ref
+	add := func(raw string, start, end int) {
+		if u, ok := resolve(base, raw); ok && !StringNoise(u) {
+			out = append(out, Ref{URL: u, Start: start, End: end})
 		}
 	}
-	for _, m := range absURL.FindAllString(script, -1) {
-		add(trimURLJunk(m))
+	for _, m := range absURL.FindAllStringIndex(script, -1) {
+		add(trimURLJunk(script[m[0]:m[1]]), m[0], m[1])
 	}
-	for _, m := range relURL.FindAllStringSubmatch(script, -1) {
-		if len(m) == 2 && !numericPath.MatchString(m[1]) {
-			add(m[1])
+	for _, m := range relURL.FindAllStringSubmatchIndex(script, -1) {
+		if p := script[m[2]:m[3]]; !numericPath.MatchString(p) {
+			add(p, m[0], m[1])
 		}
 	}
-	for _, m := range dotURL.FindAllStringSubmatch(script, -1) {
-		if p := m[1]; !strings.HasSuffix(p, ".js") && !strings.HasSuffix(p, ".mjs") && !strings.HasSuffix(p, ".css") {
+	for _, m := range dotURL.FindAllStringSubmatchIndex(script, -1) {
+		if p := script[m[2]:m[3]]; !strings.HasSuffix(p, ".js") && !strings.HasSuffix(p, ".mjs") && !strings.HasSuffix(p, ".css") {
 			// Relative to the app's root, where a single-page app runs.
-			add("/" + strings.TrimPrefix(p, "./"))
+			add("/"+strings.TrimPrefix(p, "./"), m[0], m[1])
 		}
 	}
-	for _, m := range jsonPath.FindAllStringSubmatch(script, -1) {
-		if len(m) == 2 {
-			add(m[1])
-		}
+	for _, m := range jsonPath.FindAllStringSubmatchIndex(script, -1) {
+		add(script[m[2]:m[3]], m[0], m[1])
 	}
 	return out
 }
@@ -115,8 +134,12 @@ func JSONLinks(body []byte, base *url.URL) []string {
 			case len(t) < 512 && !strings.ContainsAny(t, " \t\n") &&
 				(strings.HasPrefix(t, "http://") || strings.HasPrefix(t, "https://") ||
 					(strings.HasPrefix(t, "/") && !strings.HasPrefix(t, "//"))):
-				if u, ok := resolve(base, t); ok {
+				if u, ok := resolve(base, t); ok && !StringNoise(t) {
 					add(u)
+				}
+			case strings.Contains(t, "]("):
+				for _, u := range MarkdownLinks(t, base) {
+					add(u) // text a page renders as Markdown
 				}
 			}
 		}

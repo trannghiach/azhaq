@@ -58,6 +58,10 @@ func JunkURL(raw string) bool {
 		switch seg {
 		case "nan", "undefined", "null", "[object%20object]", "%5bobject%20object%5d":
 			return true
+		case ".", "..", "%2e", "%2e%2e", ".%2e", "%2e.":
+			// http://site/.. in an archive: no browser asks for a dot
+			// segment, it resolves it first.
+			return true
 		}
 	}
 	for _, bad := range []string{"%e2%80%a6", "\u2026", "*", "%2a", "%3c", "%3e", "<", ">", "\\", "%5c", "%22", "%27"} {
@@ -75,4 +79,50 @@ func JunkURL(raw string) bool {
 		}
 	}
 	return false
+}
+
+// StringNoise reports a path read out of a string in a script or a JSON
+// document that names no route: a parser table or a minified name cut
+// out of a longer string (/pQ, /SQ: every segment one or two characters,
+// one of them letters with a capital), or a package named after its
+// owner (/juice-shop/juice-shop). Short routes in lower case (/v1, /me,
+// /id) are kept, and so is anything a page links to: this is for strings.
+func StringNoise(p string) bool {
+	if u, err := url.Parse(p); err == nil && u.Host != "" {
+		p = u.Path
+	}
+	if i := strings.IndexAny(p, "?#"); i >= 0 {
+		p = p[:i]
+	}
+	segs := strings.Split(strings.Trim(p, "/"), "/")
+	if len(segs) == 2 && segs[0] == segs[1] && len(segs[0]) >= 3 && pkgName.MatchString(segs[0]) {
+		return true
+	}
+	short, capital := true, false
+	for _, s := range segs {
+		if len(s) == 0 || len(s) > 2 {
+			short = false
+			break
+		}
+		if letters.MatchString(s) && strings.ToLower(s) != s {
+			capital = true
+		}
+	}
+	return short && capital
+}
+
+var (
+	pkgName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+	letters = regexp.MustCompile(`^[A-Za-z]+$`)
+	// versionOnly is an API version prefix and nothing under it: /v3,
+	// /api/v2.
+	versionOnly = regexp.MustCompile(`^/(?:api/)?v\d{1,2}(?:\.\d{1,2})?/?$`)
+)
+
+// VersionPrefix reports a URL whose path is an API version prefix alone
+// (/v3, /api/v2): scripts build routes under it, and it is a route of
+// its own only when something answers there.
+func VersionPrefix(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && versionOnly.MatchString(strings.ToLower(u.Path))
 }

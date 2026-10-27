@@ -32,6 +32,8 @@ const (
 	maxMaps = 8
 	// maxMapFiles caps the source file names kept per map.
 	maxMapFiles = 200
+	// maxSites caps the places kept for where one route is named.
+	maxSites = 3
 )
 
 // Collector reads the scripts of every page it is given: inline scripts,
@@ -89,10 +91,47 @@ func (c *Collector) Skip(seed types.Seed) bool {
 }
 
 type script struct {
-	url     *url.URL
-	body    string
-	inline  bool // in the page: relative paths are the page's
-	fromMap bool // original source from a source map
+	url       *url.URL
+	body      string
+	inline    bool   // in the page: relative paths are the page's
+	fromMap   bool   // original source from a source map
+	source    string // and the file it is
+	line, col int    // where an inline script starts in the page
+}
+
+// site is where in s the bytes start..end lie, as a reader finds them:
+// an inline script's lines are the page's. A call is shown as written,
+// anything else with the code around it.
+func (s script) site(loc *webextract.Locator, start, end int, call bool) webextract.Site {
+	st := loc.Site(s.url.String(), start, end)
+	if call {
+		st = loc.CallSite(s.url.String(), start, end)
+	}
+	if s.inline {
+		st.Inline = true
+		if st.Line == 1 {
+			st.Col += s.col - 1
+		}
+		st.Line += s.line - 1
+	}
+	if s.fromMap {
+		st.Source = s.source
+	}
+	return st
+}
+
+// sites keeps a few places per route.
+type sites map[string][]webextract.Site
+
+func (m sites) add(k string, st webextract.Site) {
+	for _, x := range m[k] {
+		if x.Script == st.Script && x.Source == st.Source && x.Line == st.Line && x.Col == st.Col {
+			return
+		}
+	}
+	if len(m[k]) < maxSites {
+		m[k] = append(m[k], st)
+	}
 }
 
 // sourceMap is what a map says about the code behind a bundle.
@@ -148,8 +187,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			// The generic shell: its scripts were read from the real page.
 			return types.RunMeta{Status: types.StatusOK}, nil
 		}
-		for _, body := range webextract.InlineScripts(res.Body) {
-			queue = append(queue, script{url: base, body: body, inline: true})
+		for _, in := range webextract.InlineScriptsAt(res.Body) {
+			queue = append(queue, script{url: base, body: in.Text, inline: true, line: in.Line, col: in.Col})
 		}
 		for _, src := range webextract.ScriptSrcs(res.Body, base) {
 			queue = c.load(ctx, raw, src, false, queue, &fetched)
@@ -165,26 +204,33 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	opSeen := map[string]bool{}
 	var secrets []map[string]any
 	secretSeen := map[string]bool{}
+	origin := base.Scheme + "://" + base.Host
+	named, called := sites{}, sites{} // route → where scripts name it, and call it
 	for i := 0; i < len(queue); i++ {
 		if ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
 		}
 		s := queue[i]
-		for _, link := range webextract.JSURLs(s.body, s.url) {
-			if webextract.SameOrigin(raw, link) && link != raw {
-				found = append(found, link)
+		loc := webextract.NewLocator(s.body)
+		for _, r := range webextract.JSURLRefs(s.body, s.url) {
+			if webextract.SameOrigin(raw, r.URL) && r.URL != raw {
+				found = append(found, r.URL)
+				named.add(webextract.RouteKey(r.URL), s.site(loc, r.Start, r.End, false))
 			}
 		}
 		// Paths joined from constants are relative to the app's root,
 		// where single-page apps send their requests from.
-		for _, p := range webextract.Assembled(s.body) {
+		for _, r := range webextract.AssembledRefs(s.body) {
+			p := r.URL
 			if !strings.HasPrefix(p, "http") {
-				p = base.Scheme + "://" + base.Host + "/" + strings.TrimPrefix(p, "/")
+				p = origin + "/" + strings.TrimPrefix(p, "/")
 			}
 			if link, err := normalize.URL(p); err == nil && webextract.SameOrigin(raw, link) && link != raw {
 				found = append(found, link)
+				named.add(webextract.RouteKey(link), s.site(loc, r.Start, r.End, false))
 			}
 		}
+		var cs []webextract.Call
 		if s.inline {
 			for _, c := range webextract.PageCalls(s.body) {
 				if !strings.HasPrefix(c.Path, "/") && !strings.HasPrefix(c.Path, "http://") && !strings.HasPrefix(c.Path, "https://") {
@@ -194,11 +240,17 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 					}
 					c.Path = ref.String()
 				}
-				calls = append(calls, c)
+				cs = append(cs, c)
 			}
 		} else {
-			calls = append(calls, webextract.Calls(s.body)...)
+			cs = webextract.Calls(s.body)
 		}
+		for _, c := range cs {
+			if k, ok := callRoute(c, origin, raw); ok {
+				called.add(k, s.site(loc, c.At, c.End, true))
+			}
+		}
+		calls = append(calls, cs...)
 		for _, sec := range webextract.Secrets(s.body) {
 			if !secretSeen[sec.Value] && len(secrets) < 100 {
 				secretSeen[sec.Value] = true
@@ -242,6 +294,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			row["params"] = params
 		} else if role != "script" {
 			row["url"] = webextract.RouteKey(link)
+		}
+		if at := named[webextract.RouteKey(link)]; role != "script" && len(at) > 0 {
+			row["found_in"] = at
 		}
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{
@@ -293,23 +348,25 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		meta.EmitCount++
 	}
 	// Requests the scripts make: method, path and the names they send.
-	// A route called with GET is fetched like any other found route.
-	origin := base.Scheme + "://" + base.Host
+	// A route called with GET is fetched like any other found route; one
+	// whose method only a run-time value gives is listed without one.
 	callOps := map[string][]map[string]any{}
 	var opOrder []string
 	gets := map[string]bool{}
+	params, body := map[string][]string{}, map[string][]string{} // route → names sent, whatever the method
 	for _, c := range webextract.MergeCalls(calls) {
-		link := c.Path
-		if strings.HasPrefix(link, "/") {
-			link = origin + link
-		}
-		n, err := normalize.URL(link)
-		if err != nil || !webextract.SameOrigin(raw, n) {
+		k, ok := callRoute(c, origin, raw)
+		if !ok {
 			continue
 		}
-		k := webextract.RouteKey(n)
 		if _, ok := callOps[k]; !ok {
+			callOps[k] = nil
 			opOrder = append(opOrder, k)
+		}
+		params[k] = addAll(params[k], c.Query...)
+		body[k] = addAll(body[k], c.Body...)
+		if c.Method == "" {
+			continue
 		}
 		op := map[string]any{"method": c.Method}
 		if len(c.Query) > 0 {
@@ -327,22 +384,22 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if meta.EmitCount >= maxEmit {
 			break
 		}
-		var methods, params, body []string
+		var methods []string
 		for _, op := range callOps[k] {
 			methods = addAll(methods, op["method"].(string))
-			if q, ok := op["query"].([]string); ok {
-				params = addAll(params, q...)
-			}
-			if b, ok := op["body"].([]string); ok {
-				body = addAll(body, b...)
-			}
 		}
-		row := map[string]any{"url": k, "via": "js-call", "role": "api", "methods": methods, "ops": callOps[k]}
-		if len(params) > 0 {
-			row["params"] = params
+		row := map[string]any{"url": k, "via": "js-call", "role": "api"}
+		if len(methods) > 0 {
+			row["methods"], row["ops"] = methods, callOps[k]
 		}
-		if len(body) > 0 {
-			row["body"] = body
+		if len(params[k]) > 0 {
+			row["params"] = params[k]
+		}
+		if len(body[k]) > 0 {
+			row["body"] = body[k]
+		}
+		if len(called[k]) > 0 {
+			row["found_in"] = called[k]
 		}
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "url", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
@@ -422,6 +479,20 @@ func (c *Collector) load(ctx context.Context, page, src string, needExt bool, qu
 	return append(queue, script{url: u, body: string(res.Body)})
 }
 
+// callRoute is the route a call goes to, when it stays on the page's
+// origin.
+func callRoute(c webextract.Call, origin, page string) (string, bool) {
+	link := c.Path
+	if strings.HasPrefix(link, "/") {
+		link = origin + link
+	}
+	n, err := normalize.URL(link)
+	if err != nil || !webextract.SameOrigin(page, n) {
+		return "", false
+	}
+	return webextract.RouteKey(n), true
+}
+
 func addAll(xs []string, ys ...string) []string {
 	for _, y := range ys {
 		dup := false
@@ -499,7 +570,7 @@ func (c *Collector) readMap(ctx context.Context, page, mapURL string, scriptURL 
 			m.files = append(m.files, name)
 		}
 		if i < len(sm.SourcesContent) && sm.SourcesContent[i] != nil {
-			out = append(out, script{url: scriptURL, body: *sm.SourcesContent[i], fromMap: true})
+			out = append(out, script{url: scriptURL, body: *sm.SourcesContent[i], fromMap: true, source: name})
 		}
 	}
 	return m, out

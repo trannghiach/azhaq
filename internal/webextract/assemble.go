@@ -24,14 +24,37 @@ var (
 	placeholder = regexp.MustCompile(`<(\w+)>`)
 )
 
-type memberRef struct{ base, obj, key string }
+type memberRef struct {
+	base, obj, key string
+	at, end        int // the join in the script
+}
+
+type strRef struct {
+	name, lit string // variable, literal suffix
+	at, end   int
+}
 
 // Assembled returns the paths a script builds by joining constants, as
 // written ("identity/api/auth/login"), with <name> placeholders turned
 // into {name}. Callers resolve them against the page's origin.
 func Assembled(script string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, r := range AssembledRefs(script) {
+		if !seen[r.URL] {
+			seen[r.URL] = true
+			out = append(out, r.URL)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// AssembledRefs is Assembled with each join that builds a path; URL is
+// the path as built.
+func AssembledRefs(script string) []Ref {
 	var members []memberRef
-	var strs [][2]string // variable, literal suffix
+	var strs []strRef
 	needStr, needObj := map[string]bool{}, map[string]bool{}
 	// Joins: a+b.c, a+"…", `${a}${b.c}`, `${a}…`.
 	for i := 0; i < len(script); i++ {
@@ -44,10 +67,11 @@ func Assembled(script string) []string {
 			if !ok {
 				continue
 			}
+			at := max(0, i-len(left))
 			j := skipSpace(script, i+1)
 			if j < len(script) && script[j] == '"' {
 				if lit, ok := stringAt(script, j); ok {
-					strs = append(strs, [2]string{left, lit})
+					strs = append(strs, strRef{left, lit, at, j + len(lit) + 2})
 					needStr[left] = true
 				}
 				continue
@@ -56,8 +80,8 @@ func Assembled(script string) []string {
 			if obj == "" || j >= len(script) || script[j] != '.' {
 				continue
 			}
-			if key, _ := identAt(script, j+1); key != "" {
-				members = append(members, memberRef{left, obj, key})
+			if key, k := identAt(script, j+1); key != "" {
+				members = append(members, memberRef{left, obj, key, at, k})
 				needStr[left], needObj[obj] = true, true
 			}
 		case '`':
@@ -76,14 +100,14 @@ func Assembled(script string) []string {
 				}
 				key, k := identAt(script, k+1)
 				if key != "" && strings.HasPrefix(script[k:], "}`") {
-					members = append(members, memberRef{a, obj, key})
+					members = append(members, memberRef{a, obj, key, i, k + 2})
 					needStr[a], needObj[obj] = true, true
 				}
 				continue
 			}
 			end := strings.IndexAny(script[j:], "`$\\\n")
 			if end > 0 && end <= 200 && script[j+end] == '`' {
-				strs = append(strs, [2]string{a, script[j : j+end]})
+				strs = append(strs, strRef{a, script[j : j+end], i, j + end + 1})
 				needStr[a] = true
 			}
 		}
@@ -130,13 +154,11 @@ func Assembled(script string) []string {
 		return "", false
 	}
 
-	seen := map[string]bool{}
-	var out []string
-	add := func(p string) {
+	var out []Ref
+	add := func(p string, at, end int) {
 		p = placeholder.ReplaceAllString(p, "{$1}")
-		if len(p) <= 300 && strings.Contains(p, "/") && !strings.HasPrefix(p, "//") && pathish.MatchString(p) && twoSegments.MatchString(p) && !seen[p] {
-			seen[p] = true
-			out = append(out, p)
+		if len(p) <= 300 && strings.Contains(p, "/") && !strings.HasPrefix(p, "//") && pathish.MatchString(p) && twoSegments.MatchString(p) {
+			out = append(out, Ref{URL: p, Start: at, End: end})
 		}
 	}
 	for _, r := range members {
@@ -145,15 +167,15 @@ func Assembled(script string) []string {
 			continue
 		}
 		if v, ok := objects[r.obj][0][r.key]; ok {
-			add(base + v)
+			add(base+v, r.at, r.end)
 		}
 	}
 	for _, r := range strs {
-		if base, ok := single(r[0]); ok {
-			add(base + r[1])
+		if base, ok := single(r.name); ok {
+			add(base+r.lit, r.at, r.end)
 		}
 	}
-	sort.Strings(out)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Start < out[j].Start })
 	return out
 }
 

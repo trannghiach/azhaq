@@ -34,7 +34,7 @@ func jsServer(t *testing.T, hits map[string]*atomic.Int32) *httptest.Server {
 	mux.HandleFunc("/blog", html(`<!doctype html><title>Blog</title><script src="/main.js"></script><script src="/searchLogger.js"></script>`))
 	mux.HandleFunc("/main.js", js("main", `fetch("/api/Users"); import("./chunk-AB12.js"); const w = "/160";`))
 	mux.HandleFunc("/chunk-AB12.js", js("chunk", `fetch("/rest/lazy")`))
-	mux.HandleFunc("/searchLogger.js", js("search", `logQuery('/logger', params)`))
+	mux.HandleFunc("/searchLogger.js", js("search", searchLogger))
 	mux.HandleFunc("/api/Challenges", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"description":"<a href=\"/ftp/legal.md\">x</a>","js":"fetch('/api/never')"}`))
@@ -121,6 +121,85 @@ func TestSkipsShellAndJSON(t *testing.T) {
 	run(t, col, srv.URL+"/")
 	if !col.Skip(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/main.js"}}) {
 		t.Error("parsed script not skipped at plan time")
+	}
+}
+
+// Shaped like ginandjuice.shop's searchLogger.js: the page calls a helper
+// with the path, and the helper POSTs it.
+const searchLogger = `async function logQuery(url, params) {
+    try {
+        await fetch(url, {method: "post", keepalive: true, body: JSON.stringify(params)});
+    } catch(e) {
+        console.error("Failed storing query");
+    }
+}
+
+async function searchLogger() {
+    let config = {params: deparam(new URL(location).searchParams.toString())};
+    if(config.params && config.params.search) {
+        await logQuery('/logger', config.params);
+    }
+}
+
+window.addEventListener("load", searchLogger);`
+
+// rows runs the collector on raw and returns the url rows by route path.
+func rows(t *testing.T, col *Collector, raw string) map[string][]map[string]any {
+	t.Helper()
+	out := map[string][]map[string]any{}
+	emit := func(o types.Observation) error {
+		var p map[string]any
+		_ = json.Unmarshal(o.Payload, &p)
+		if u, ok := p["url"].(string); ok && o.Kind == "url" {
+			path := u[strings.Index(strings.TrimPrefix(u, "http://"), "/")+len("http://"):]
+			out[path] = append(out[path], p)
+		}
+		return nil
+	}
+	if _, err := col.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}}, emit); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestCallsThroughAHelperAndWhereFound(t *testing.T) {
+	fetch.Reset()
+	srv := jsServer(t, map[string]*atomic.Int32{})
+	col := New(srv.Client())
+
+	var call map[string]any
+	for _, r := range rows(t, col, srv.URL+"/blog")["/logger"] {
+		if r["via"] == "js-call" {
+			call = r
+		}
+	}
+	if call == nil {
+		t.Fatal("no js-call row for /logger")
+	}
+	if m, _ := call["methods"].([]any); len(m) != 1 || m[0] != "POST" {
+		t.Errorf("methods %v", call["methods"])
+	}
+	sites, _ := call["found_in"].([]any)
+	if len(sites) != 1 {
+		t.Fatalf("found_in %v", call["found_in"])
+	}
+	site := sites[0].(map[string]any)
+	if site["script"] != srv.URL+"/searchLogger.js" || site["line"] != float64(12) || site["col"] != float64(15) ||
+		site["snippet"] != "logQuery('/logger', config.params)" {
+		t.Errorf("site %v", site)
+	}
+
+	// An inline script's place is the page's line and column.
+	fetch.Reset()
+	col = New(srv.Client())
+	cfg := rows(t, col, srv.URL+"/")["/api/config"]
+	if len(cfg) != 1 {
+		t.Fatalf("/api/config rows %v", cfg)
+	}
+	in := cfg[0]["found_in"].([]any)[0].(map[string]any)
+	if in["script"] != srv.URL+"/" || in["inline"] != true || in["line"] != float64(1) || in["col"] != float64(107) ||
+		!strings.Contains(in["snippet"].(string), `"api": "/api/config"`) {
+		t.Errorf("inline site %v", in)
 	}
 }
 

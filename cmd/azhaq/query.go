@@ -33,7 +33,7 @@ func cmdQuery(args []string) error {
 	scopeF := fs.String("scope", "", "target (what was asked about) or fanout (found on the way)")
 	isNew := fs.Bool("new", false, "only what the last run saw that the run before it did not (a workspace)")
 	since := fs.Duration("since", 0, "only what was first seen within this long")
-	fields := fs.String("fields", "", "print only these fields, comma-separated: key, type, role, coverage, status, title, methods, params, body, scope, first_seen")
+	fields := fs.String("fields", "", "print only these fields, comma-separated: key, type, role, coverage, status, title, methods, params, body, scope, first_seen, found_in")
 	limit := fs.Int("limit", 0, "rows at most, best first (default 0: all)")
 	asJSON := fs.Bool("json", false, "one JSON object per row, and the summary as JSON on stderr")
 	failed := fs.Bool("failed", false, "list every target whose work failed (timeouts, refusals, a source's errors): the list to retry")
@@ -418,6 +418,12 @@ func cmdShow(args []string) error {
 		fmt.Printf("    %s\n", d)
 	}
 	fmt.Printf("first seen %s, last seen %s\n", row.Entity.FirstSeen.Local().Format(time.DateTime), row.Entity.LastSeen.Local().Format(time.DateTime))
+	if len(row.Found) > 0 {
+		fmt.Println("found in")
+		for _, s := range row.Found {
+			fmt.Printf("  %s\n", s)
+		}
+	}
 	if len(links) > 0 {
 		fmt.Println("links")
 		for i, l := range links {

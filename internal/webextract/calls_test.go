@@ -82,6 +82,111 @@ func TestPageCallsKeepRelativePaths(t *testing.T) {
 	}
 }
 
+// Shaped like ginandjuice.shop's /resources/js/searchLogger.js: the path
+// is named where the helper is called, the method inside the helper.
+const searchLogger = `async function logQuery(url, params) {
+    try {
+        // don't hold up the page
+        await fetch(url, {method: "post", keepalive: true, body: JSON.stringify(params)});
+    } catch(e) {
+        console.error("Failed storing query");
+    }
+}
+
+async function searchLogger() {
+    let config = {params: deparam(new URL(location).searchParams.toString())};
+
+    if(config.transport_url) {
+        let script = document.createElement('script');
+        script.src = config.transport_url;
+        document.body.appendChild(script);
+    }
+
+    if(config.params && config.params.search) {
+        await logQuery('/logger', config.params);
+    }
+}
+
+window.addEventListener("load", searchLogger);`
+
+func TestCallsThroughAWrapper(t *testing.T) {
+	got := Calls(searchLogger)
+	if len(got) != 1 || got[0].Method != "POST" || got[0].Path != "/logger" {
+		t.Fatalf("Calls = %+v", got)
+	}
+	if at := searchLogger[got[0].At:got[0].End]; at != "logQuery('/logger', config.params)" {
+		t.Errorf("call site %q", at)
+	}
+}
+
+func TestCallsThroughWrapperShapes(t *testing.T) {
+	js := `const API = "/api/v2";
+	function apiPost(path, data) { return fetch(API + path, {method: "POST", body: JSON.stringify(data)}) }
+	const send = async (url, opts) => { const r = await fetch(url, opts); return r.json() };
+	function remove(id, u) { $.ajax({url: u, type: "DELETE"}) }
+	class Store { load(url, method) { return axios({url, method}) } }
+	function track(e) { return fetch(e) }
+	function hop(u) { return apiPost(u, {}) }
+	apiPost("/orders", {sku: s, qty: n});
+	send("/api/session", {method: "PUT", body: JSON.stringify({token: t})});
+	send("/api/profile");
+	send("/api/opaque", options);
+	remove(7, "/api/items/" + id);
+	this.store.load("/api/reports", "PATCH");
+	track("/tracked");
+	hop("/two/levels");
+	notAWrapper("/plain/call");`
+	var lines []string
+	for _, c := range MergeCalls(Calls(js)) {
+		lines = append(lines, c.Method+" "+c.Path+" "+strings.Join(c.Body, ","))
+	}
+	want := []string{
+		"DELETE /api/items/{id} ",
+		" /api/opaque ", // the options are a variable: the method is not known
+		"GET /api/profile ",
+		"PATCH /api/reports ",
+		"PUT /api/session token",
+		"POST /api/v2/orders qty,sku", // and not POST /api/v2, the helper alone
+		"GET /tracked ",
+	}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("got  %q\nwant %q", lines, want)
+	}
+}
+
+func TestCallsAjaxAndAxios(t *testing.T) {
+	js := `$.ajax({url: "/api/login", type: "POST", data: {user: u, pass: p}});
+	jQuery.ajax("/api/feed", {dataType: "json"});
+	axios({method: "put", url: "/api/me", data: {name: n}});
+	axios.request({url: "/api/search", params: {q: q}});
+	$("#x").ajaxComplete(f);`
+	var lines []string
+	for _, c := range MergeCalls(Calls(js)) {
+		lines = append(lines, c.Method+" "+c.Path+" "+strings.Join(c.Body, ",")+" "+strings.Join(c.Query, ","))
+	}
+	want := []string{"GET /api/feed  ", "POST /api/login pass,user ", "PUT /api/me name ", "GET /api/search  q"}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("got  %q\nwant %q", lines, want)
+	}
+}
+
+func TestCallsWrapperNamesAreTrusted(t *testing.T) {
+	// A short name declared twice is a minifier's: two modules, two
+	// functions, and the call cannot be told apart.
+	twice := `function abc(e){return fetch(e,{method:"POST"})}function abc(e){return e}abc("/x/y");`
+	if got := Calls(twice); len(got) != 0 {
+		t.Errorf("ambiguous short name followed: %+v", got)
+	}
+	once := `function abc(e){return fetch(e,{method:"POST"})}abc("/x/y");`
+	if got := Calls(once); len(got) != 1 || got[0].Method != "POST" || got[0].Path != "/x/y" {
+		t.Errorf("short name declared once: %+v", got)
+	}
+	// A request whose URL is not the helper's parameter makes no helper.
+	if got := Calls(`function go(a){var url=a.b;fetch(url,{method:"POST"})}go("/x/y")`); len(got) != 0 {
+		t.Errorf("non-parameter URL followed: %+v", got)
+	}
+}
+
 func TestPageCallsLeaveClientsWithABase(t *testing.T) {
 	got := PageCalls(`api.get("users/list"); fetch("httpStatus/check.jsp")`)
 	if len(got) != 1 || got[0].Path != "httpStatus/check.jsp" {
