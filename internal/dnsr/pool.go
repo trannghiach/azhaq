@@ -32,16 +32,17 @@ const (
 	StatusNXDomain = "nxdomain" // the name does not exist
 	StatusReserved = "reserved" // special-use name (.test, .local, …); not queried
 	StatusFailed   = "failed"   // every resolver tried failed or timed out
-	// StatusBroken: every resolver asked answered SERVFAIL or REFUSED, on
-	// two passes. They answered: the name's own DNS is broken (a lame
-	// delegation, dead name servers), for everyone, which is no
-	// resolver's fault.
+	// StatusBroken: every attempt, on two passes, was answered SERVFAIL,
+	// by two resolvers or more. They answered alike: the name's own DNS
+	// is broken (a lame delegation, dead name servers) for everyone. A
+	// REFUSED is the resolver refusing this machine, and one resolver
+	// alone may be the broken one: both stay failures.
 	StatusBroken = "servfail"
 )
 
-// errBroken: every attempt got an answer, and each was SERVFAIL or
-// REFUSED.
-var errBroken = errors.New("SERVFAIL or REFUSED from every resolver asked")
+// errBroken: every attempt was answered SERVFAIL, by two resolvers or
+// more.
+var errBroken = errors.New("SERVFAIL from every resolver asked")
 
 // Answer is what a name resolved to.
 type Answer struct {
@@ -295,7 +296,7 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	q.RecursionDesired = true
 	var last error
-	refused := 0 // attempts answered SERVFAIL or REFUSED
+	servfail := map[string]int{} // resolver → attempts it answered SERVFAIL
 	for attempt := 0; attempt <= p.retries; attempt++ {
 		server := p.servers[int(p.next.Add(1)-1)%len(p.servers)]
 		if err := p.limit.Wait(ctx, server); err != nil {
@@ -307,13 +308,19 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 			continue
 		}
 		if in.Rcode == dns.RcodeServerFailure || in.Rcode == dns.RcodeRefused {
-			refused++
+			if in.Rcode == dns.RcodeServerFailure {
+				servfail[server]++
+			}
 			last = errors.New(server + ": " + dns.RcodeToString[in.Rcode])
 			continue
 		}
 		return in, nil
 	}
-	if refused == p.retries+1 && refused > 1 {
+	n := 0
+	for _, c := range servfail {
+		n += c
+	}
+	if n == p.retries+1 && len(servfail) >= 2 {
 		return nil, fmt.Errorf("%w (last %v)", errBroken, last)
 	}
 	return nil, last

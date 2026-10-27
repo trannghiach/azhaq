@@ -150,18 +150,27 @@ func TestManyRetriesFailedNames(t *testing.T) {
 	}
 }
 
-// Every resolver answering SERVFAIL, on both passes, is the name's own
-// DNS broken: an answer, not a failure of the run. Silence stays a
-// failure.
+// Two resolvers answering SERVFAIL, on both passes, is the name's own
+// DNS broken: an answer, not a failure of the run. One resolver alone, a
+// REFUSED and silence stay failures.
 func TestBrokenNameIsNotAFailure(t *testing.T) {
-	servfail := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {
-		m := new(dns.Msg)
-		m.SetRcode(r, dns.RcodeServerFailure)
-		_ = w.WriteMsg(m)
-	})
-	p := New(Options{Resolvers: []string{servfail}, PerSecond: -1, Timeout: time.Second})
+	answer := func(rcode int) string {
+		return serve(t, func(w dns.ResponseWriter, r *dns.Msg) {
+			m := new(dns.Msg)
+			m.SetRcode(r, rcode)
+			_ = w.WriteMsg(m)
+		})
+	}
+	sf1, sf2 := answer(dns.RcodeServerFailure), answer(dns.RcodeServerFailure)
+	p := New(Options{Resolvers: []string{sf1, sf2}, PerSecond: -1, Timeout: time.Second})
 	if got := p.ResolveMany(context.Background(), []string{"lame.example.org"}, 4); got[0].Status != StatusBroken || got[0].Live() {
 		t.Fatalf("lame delegation %+v", got[0])
+	}
+	for name, rs := range map[string][]string{"one resolver": {sf1}, "refused": {answer(dns.RcodeRefused), answer(dns.RcodeRefused)}} {
+		p = New(Options{Resolvers: rs, PerSecond: -1, Timeout: time.Second})
+		if got := p.ResolveMany(context.Background(), []string{"www.example.org"}, 4); got[0].Status != StatusFailed {
+			t.Errorf("%s: %+v", name, got[0])
+		}
 	}
 	silent := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {})
 	p = New(Options{Resolvers: []string{silent}, PerSecond: -1, Timeout: 100 * time.Millisecond})
