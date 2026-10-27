@@ -244,6 +244,11 @@ The Juice Shop truth is the 77 routes its server defines that its frontend calls
 
 ## Documentation
 
+Also offline: `azhaq docs TOPIC`.
+
+- [Recipes](docs/RECIPES.md): how do I map an app, log in, find IDOR, test writes, map a program, resume, watch, export, read GraphQL, hand it to an assistant
+- [Concepts](docs/CONCEPTS.md): what a map row says, coverage states, kinds, exit codes, roles verdicts, what Azhaq sends
+- [Troubleshooting](docs/TROUBLESHOOTING.md): why is my URL `hint`, the map looks thin, exit 3, exit 4, Chrome
 - [Output](docs/OUTPUT.md): what every command prints, the summary, exit codes
 - [MCP](docs/MCP.md): serving Azhaq to assistants
 - [Architecture](docs/ARCHITECTURE.md): data model, scheduling, identity rules, limitations
