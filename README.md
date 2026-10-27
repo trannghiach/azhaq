@@ -96,7 +96,7 @@ azhaq export -db h1.db -format burp > scope.json       # Burp project options wi
 azhaq export -db h1.db -format html > report.html      # one self-contained page
 ```
 
-The OpenAPI export starts from the description the target serves, unchanged, and adds the routes it does not list with the method each script call uses, its query names and the fields of its body, HTML forms (a GET form's fields as query parameters, a POST form's as a form-encoded or multipart body, file inputs binary), pages linked with a query string as GETs taking those names, and `x-azhaq` on each operation saying where it came from and how its GET answered. Other formats: `urls`, `hosts` (names that resolve), `names` (every name), `graphml`, `secrets`, `jsonl` (everything).
+The OpenAPI export starts from the description the target serves, unchanged, and adds the routes it does not list with the method each script call uses, its query names and the fields of its body, HTML forms (a GET form's fields as query parameters, a POST form's as a form-encoded or multipart body, file inputs binary), pages linked with a query string as GETs taking those names (not the links left alone because a GET there changes something), and `x-azhaq` on each operation saying where it came from and how its GET answered. Other formats: `urls`, `hosts` (names that resolve), `names` (every name), `graphml`, `secrets`, `jsonl` (everything).
 
 ## Access control: comparing sessions
 

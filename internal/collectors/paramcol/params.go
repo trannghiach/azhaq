@@ -154,15 +154,41 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 		tried := len(chunk)
-		if s.flooded() {
+		stopped := s.flooded()
+		if stopped {
 			hits, tried = s.hits, s.alone
 		}
-		if s.flooded() || (len(chunk) >= minFlood && hits*2 > len(chunk)) {
-			// Most names "change" the answer: the page reacts to names it
-			// does not read, and none can be told apart.
-			note = fmt.Sprintf("%s answers names it does not read (%d of %d names tried changed the answer): not searched for parameters", page, hits, tried)
-			found = map[string]string{}
+		if !stopped && (len(chunk) < minFlood || hits*2 <= len(chunk)) || ctx.Err() != nil || s.err != nil {
+			continue
+		}
+		// Most names "change" the answer: a page that reacts to names it
+		// does not read, or one that reads most of a short list (names
+		// taken from its own scripts). Random names made like these tell.
+		if s.anyName(chunk) {
+			if s.err != nil {
+				break
+			}
+			for _, n := range chunk {
+				delete(found, n) // this group's; earlier ones were told apart
+			}
+			rest := "not searched for parameters"
+			if len(found) > 0 {
+				rest = "not searched further"
+			}
+			note = fmt.Sprintf("%s answers names it does not read (%d of %d names tried changed the answer): %s", page, hits, tried, rest)
 			break
+		}
+		if stopped {
+			// The narrowing stopped at what looked like a flood: finish it.
+			var left []string
+			for _, n := range chunk {
+				if _, ok := found[n]; !ok {
+					left = append(left, n)
+				}
+			}
+			s.reads = true
+			s.narrow(left, found)
+			s.reads = false
 		}
 	}
 	if ctx.Err() != nil {
@@ -225,12 +251,33 @@ type search struct {
 	// most is the largest group sent: smaller than any whose control
 	// changed the status (a query too long for the server).
 	most int
+	// reads: random names made like the chunk's changed nothing, so the
+	// names that do are read, however many.
+	reads bool
 }
 
 // flooded: nearly every name tested alone changed the answer, as on a
 // page that reacts to any name. The chunk is not narrowed further.
 func (s *search) flooded() bool {
-	return s.hits >= 2*minFlood && s.hits*4 > s.alone*3
+	return !s.reads && s.hits >= 2*minFlood && s.hits*4 > s.alone*3
+}
+
+// anyName says whether random names made like group's (as many, letters,
+// as long and at least 6, which no page reads) change the answer too: the
+// page reacts to names it does not read. A request that could not be sent
+// says nothing to keep group's finds on.
+func (s *search) anyName(group []string) bool {
+	names := make([]string, min(len(group), s.most))
+	for i := range names {
+		b := make([]byte, max(6, len(group[i])))
+		_, _ = rand.Read(b)
+		for j := range b {
+			b[j] = 'a' + b[j]%26
+		}
+		names[i] = string(b)
+	}
+	v, ok := s.test(names)
+	return !ok || v.crowd || v.why != "" || len(v.reflected) > 0
 }
 
 // spent gives the page back for azhaq resume, which searches it again.
