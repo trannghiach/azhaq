@@ -10,7 +10,7 @@ seeds ──► Plan ──► Run ──► observations ──► graph (SQLit
 
 ## Data model
 
-**Seeds** have a type and a set of keys. Collectors exist today for `URL`, `Hostname`, `Domain`, `Organization` and `CloudAccount`. `IPAddress` is stored as an entity but has no collector of its own. `Prefix`, `Certificate`, `Email` and `Application` are defined but unused.
+**Seeds** have a type and a set of keys. Collectors exist today for `URL`, `Hostname`, `Domain`, `IPAddress` (ports, TLS, reverse DNS, network), `Prefix` and `ASN` (announced prefixes, reverse DNS of a range), `Organization` and `CloudAccount`. `Certificate`, `Email` and `Application` are defined but unused.
 
 **Entities** are graph nodes, unique on `(type, key)`. Keys are normalized before lookup (lowercase hostnames, cleaned URLs), so the same hostname found by CT, DNS, a crawl and a certificate SAN is one entity.
 
@@ -160,11 +160,11 @@ A name is a wildcard answer when one of its parent zones answers for random labe
 
 ## Subdomain sources
 
-`azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
+`azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. crt.sh, Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
 
-The default set is subfinder's default set: the fast sources. `-all-sources` adds slower ones such as Common Crawl and the Wayback Machine.
+The default set, keyless: anubis, certspotter, crt.sh, crtname, hackertarget, hudsonrock, rapiddns, scanmalware, shodanct, subdomain.center, thc; keyed sources join it when their key is configured. `-all-sources` adds slower ones. subdomain.center pads its answer with random names: a name only it gave is kept when it resolves.
 
-A domain the engine derives from a URL or hostname (`-url https://app.example.com/` implies `example.com`) gets 15 seconds per source instead of 45, here and for historical URLs: the run is about the application, and one slow source would otherwise hold up its map. A domain given with `-domain` gets the full time. Sources that ignore their deadline (subfinder's crt.sh tries a Postgres connection first) are reported as timed out two seconds after it and no longer waited for.
+A domain the engine derives from a URL or hostname (`-url https://app.example.com/` implies `example.com`) gets 15 seconds per source instead of 45, here and for historical URLs: the run is about the application, and one slow source would otherwise hold up its map. A domain given with `-domain` gets the full time. Sources that ignore their deadline are reported as timed out two seconds after it and no longer waited for.
 
 ## Path guessing
 

@@ -238,7 +238,7 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 | A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 180 URLs as one run each time; 207 requests over the capped run and its resumes, one run 202 | |
 | Memory, Juice Shop | katana | 97 MB | 59 MB |
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's), and one path of ffuf's 36.
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's plain `-jc` crawl, 59 MB; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
 
 [bench/README.md](bench/README.md) has what is measured, every table and the caveats.
 
