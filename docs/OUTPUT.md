@@ -22,7 +22,7 @@ Every command follows the same contract, so a script or an assistant can read an
 
 A run keeps the answers it got in its workspace until nothing is left to resume, so `azhaq resume` does not ask again what the run already asked: the requests of a run stopped and resumed add up to about those of one uninterrupted run (Juice Shop: 211 against 205 with `-max-requests 50`; a 4,750-word path sweep: 4,812 against 4,801). A port scan the budget cut short scans that address again. A command run without `-db` uses a temporary database and cannot be resumed.
 
-Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count. `run -fail-on-errors` counts every failure.
+Failures on fan-out are listed with `"fanout": true` and do not make the exit code 3: the map of what you asked about is still complete. Fan-out is what you did not ask about: a name found on the way, and the third-party lookups (subdomain sources, archives, RDAP) of a domain that is only the domain of a URL you mapped. Ask for the domain itself (`-domain`, `subs -d`, `urls -d`) and their failures count, except a source that failed while other sources answered for the same domain: it is listed with `"partial": true` and does not make the exit code 3 (sources fail all the time; an exit code that is always 3 says nothing). `-fail-on-errors` counts every failure.
 
 ## The summary
 
@@ -34,7 +34,7 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
  "failed":[{"collector":"azhaq-http","error":"timeout","retryable":true,"count":34,
             "targets":["http://testphp.vulnweb.com/login.php","…"]}],
  "skipped":[{"target":"engage.tesla.com","reason":"outside the scope"}],
- "stopped":"the request budget of 500 is spent, 41 tasks left","resume":"azhaq resume -db app.db",
+ "stopped":"the request budget of 500 is spent, 41 tasks known and not done","resume":"azhaq resume -db app.db",
  "notes":["…"],"next":["azhaq query -db app.db -type Hostname"]}
 ```
 
@@ -48,6 +48,7 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
 | `unreachable` | Targets you gave that never answered. |
 | `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. `retryable` is true for timeouts, dropped connections, 429 and 5xx. `source` names a third-party source (crtsh, wayback). `targets` names up to 100; `azhaq query -db FILE -failed` lists every failed target, the list to retry. |
 | `skipped` | Targets and requests Azhaq chose not to touch, with the reason: outside the scope, would end the session, a scope entry a run cannot use. |
+| `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
 | `notes` | Caps that were hit and other things worth knowing that are not failures. |
 
@@ -70,7 +71,7 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | `role` (names) | `live` (resolves; a host you gave, or a name under a domain you gave), `sibling` (resolves; found on the way, under another domain), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
 | `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `summary`, `operation_id`, `source` (`js-call`, `openapi`, `graphql`). |
 | `body` | the body field names of all its operations. |
-| `status`, `title` | The URL's own answer (the first hop of a redirect). |
+| `status`, `title` | The URL's own answer (the first hop of a redirect). Without a scope, a redirect is followed only within the site (same registrable domain or address); with one, only inside it. |
 | `methods`, `params` | From API descriptions, call sites in scripts, forms and links. |
 | `forms` | `{"method","action","fields"}` for each form on the page. |
 | `template`, `count` | Pages that differ only by an ID are folded: `/product?id={n}` with the number of URLs folded. A query value that names a page (`index.jsp?content=about.htm`, `view=grid`) is not an ID: each is a page of its own. Three URLs of a template are requested (`-per-template N` changes it). |
@@ -87,11 +88,11 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | --- | --- |
 | `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`); with `-live`, `a`. |
 | `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. |
-| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code` (the first answer: a redirect stays 302, as httpx prints it), `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url` and `final_status_code` (where a redirect inside the scope ended; title and tech describe that page), `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. |
+| `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code` (the first answer: a redirect stays 302, as httpx prints it), `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url` and `final_status_code` (where a redirect inside the scope, or without one inside the site, ended; title and tech describe that page), `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. Every target given ends as a row, a failure or a skip: a name that resolved and got neither an answer nor a recorded failure is listed as failed, `no answer and no failure recorded`. |
 | `crawl` | `url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`). |
 | `urls` | `url`. |
-| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it. |
-| `dirs` | `url`, `status`, `length`, `words`, `lines`, `redirectlocation`. |
+| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`, and for a TLS port the certificate's `subject_cn` and `subject_an` (httpx's names). A service that speaks first (`ssh`, `ftp`, `smtp`, …) is named from what it says. One that waits is asked once: `HEAD / HTTP/1.0` on the open connection (an HTTP answer is `http`, its banner the `Server` header or the status line), and without one, or with a 400, a TLS handshake on a second connection, counted like a connect (`tls`; `https` when HTTP answers inside it, `tls` true). A name ending in `?` is only the port's usual service. Raw printing ports (9100–9107) are never asked anything. A second name on the same address has its web and TLS ports asked again under its own name. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it; where it cannot, the summary's notes say so (`IPv6 addresses of 1 name not scanned: no IPv6 route from this machine`). |
+| `dirs` | `url`, `status`, `length` (the whole body, as ffuf; up to 64 MB), `words`, `lines` (from the first MB), `redirectlocation`. |
 | `params` | `url`, `method`, `params`, and `why` (what changed in the answer for each name). |
 | `asn` | `as_number`, `as_name`, `prefix`. |
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
@@ -113,14 +114,14 @@ One row per endpoint whose answer depends on the session (`-all`: every endpoint
 | Field | Meaning |
 | --- | --- |
 | `status` | Each role's status; 0 for a role that was never asked. |
-| `answers` | Each role's answer: `status`, `length`, `hash` of the body, `keys` (a JSON answer's field paths, nested: `data.user.email`, `data[].id`), `error` (a JSON answer shaped like an error, such as `{"status":"error"}`), `sensitive` (its fields that hold passwords, secrets, keys, tokens, card numbers). |
+| `answers` | Each role's answer: `status`, `length`, `hash` of the body, `keys` (a JSON answer's field paths, nested: `data.user.email`, `data[].id`), `error` (a JSON answer shaped like an error, such as `{"status":"error"}`), `sensitive` (its fields that hold passwords, secrets, keys, tokens, card numbers), `location` (where a redirect sends the role). Every answer is compared by its body: one the run kept without it (a URL the `-paths` list found keeps its status only) is asked again, with the role's session. |
 | `found_by` | The roles whose own runs reached the URL, or, for an object URL, whose answers held its identifier. |
 | `template` | The route an object URL fills: its path parameters filled with identifiers the roles' answers held, or given with `-id`. |
-| `owner` | The role whose own object it is: given with `-id ROLE:…`, or an identifier only that role's answers held (in the route's own list, such as `/api/Addresss` for `/api/Addresss/{id}`, while the same list read by another role did not; or in a field named after the parameter, and nowhere in the other roles' answers). |
+| `owner` | The role whose own object it is: given with `-id ROLE:…`; known from who the role is (see below); or an identifier only that role's answers held (in the route's own list, such as `/api/Addresss` for `/api/Addresss/{id}`, while the same list read by another role did not; or in a field named after the parameter, and nowhere in the other roles' answers). |
 | `readers` | For the verdicts that say who reads it: those roles. |
 | `sensitive` | For the verdicts about sensitive fields, and on object rows: the fields. |
 
-A role reads an endpoint when it gets a 2xx answer that is not an error; any 4xx, and an error answered with a 2xx status, is a refusal. Verdicts, worst first, as `-json` gives them (the text table names the roles and fields, as in brackets):
+A role reads an endpoint when it gets a 2xx answer that is not an error. A refusal is any 4xx, an error answered with a 2xx status, a redirect to a sign-in page (a path such as `/login`, `/users/sign_in`, `/auth/…`, another site's sign-in service, or the `-login` page), and a redirect to the site's front page while another role reads the endpoint: on a cookie-session app, the visitor sent to `/login` makes a page `signed-in only`. Verdicts, worst first, as `-json` gives them (the text table names the roles and fields, as in brackets):
 
 | Verdict | Meaning |
 | --- | --- |
@@ -132,17 +133,25 @@ A role reads an endpoint when it gets a 2xx answer that is not an error; any 4xx
 | `signed-in only` | The anonymous role is refused, every signed-in role reads it. |
 | `only one role reads it` | Every other role is refused (`[only admin reads it]`). |
 | `some roles refused` | Some signed-in roles read it, others are refused. |
-| `different fields per role` | Every role reads it with the same status, with different nested fields. Fields under a list one role has empty are data, not fields. |
-| `anyone reads the same object, signed in or not` | An object URL the anonymous role reads as the others do. |
-| `status differs` | Anything else (redirects, 5xx). |
+| `different fields per role` | Every role reads it with the same status, with different nested fields. Fields under a list one role has empty are data, not fields; so is a field of a list's items that only holds true or false (`data[].liked`) and only one role gets. |
+| `anyone reads the same object, signed in or not` | An object URL the anonymous role reads as the others do. Listed once per route (`-all`: every object). |
+| `status differs` | Anything else (other redirects, 5xx). |
 
-With `-all` also: `different data per role`, `same for every role`, `no role reads it`, `not answered`. The summary counts each verdict.
+With `-all` also: `different data per role`, `same for every role`, `no role reads it`, `not answered`. The summary counts the verdicts of the rows listed; a note counts the endpoints compared and not listed (`58 more endpoints compared and not listed (34 same for every role, 23 no role reads it, 1 different data per role); -all lists them`).
 
-`-id [ROLE:]NAME=VALUE` (repeatable) fills routes with an identifier of your own: NAME is a path parameter (`book_title`), a JSON field that holds such values (`basket_id` and `BasketId` fill `/rest/basket/{id}`), or a route (`/rest/basket/{id}`). With ROLE, VALUE names that role's own object, so another role reading it is `reads another role's object`; without, it is tried like an identifier the answers held. Each route is also filled with up to 3 of each role's own identifiers and 3 others, in order (numbers by value); the replay asks objects given with `-id` first, then the roles' own objects, then what the runs reached, then other objects, and takes a URL only while `-replay-max` holds every role's request for it.
+Who each signed-in role is tells its own objects apart without `-id`: the claims of a JSON Web Token its headers or cookies carry (`sub`, `id`, `email`, `username`, `data.id`, …, and identifiers such as Juice Shop's `bid`), its own answer to a `/me`-like endpoint (`/me`, `/whoami`, `/userinfo`, …) when the anonymous role gets another, and, for `-role-login`, what the login answered and left in `localStorage` and `sessionStorage`. A list item whose owner field (`owner`, `user`, `username`, `userId`, `email`, `createdBy`, …) names a role is that role's object: the field the route's parameter maps to (`book_title` for `/books/v1/{book_title}`) is its identifier. An identifier the role's session holds for a route is its own too (`bid` fills `/rest/basket/{id}`). Each role's own objects are asked of every other role.
+
+`-id [ROLE:]NAME=VALUE` (repeatable) fills routes with an identifier of your own: NAME is a path parameter (`book_title`), a JSON field that holds such values (`basket_id` and `BasketId` fill `/rest/basket/{id}`), or a route (`/rest/basket/{id}`). With ROLE, VALUE names that role's own object, so another role reading it is `reads another role's object`; without, it is tried like an identifier the answers held. Each route is also filled with up to 5 of each role's own identifiers (those who the role is names first) and 6 others, in order (numbers by value); the replay asks objects given with `-id` first, then the roles' own objects, then what the runs reached, then other objects, and takes a URL only while `-replay-max` holds every role's request for it.
+
+A signed-in role whose session looks expired or wrong is named in a note, `role x was refused wherever a session matters: its session looks expired or wrong`, and roles exits 3: it was refused on every endpoint the anonymous role is refused and another signed-in role reads (with no other signed-in role, every endpoint the anonymous role is refused), or on every endpoint another role reads, and it read no `/me`-like endpoint unlike the anonymous role.
+
+A role given with `-role` sends those headers and nothing else, so behaviour an app ties to a cookie is not reached with a header alone: Juice Shop's `/rest/user/whoami` reads the `token` cookie, and answers `{"user":{}}` to an `Authorization` header. Give the cookie as one of the role's headers (`-role 'alice=Cookie: token=eyJ…'`, what `-cookie` sends in a run), or use `-role-login`, which carries the cookies and the token the login stored.
 
 With `-json`, stderr holds the summary only: the runs of the roles print nothing, and what they did not finish is in it (`failed`, `unreachable`, `skipped`, `notes`; a role's run stopped by a limit is `stopped`, exit 4). A role whose run could not be done (a failed sign-in) ends roles with a summary whose `notes` say why.
 
 ## diff
+
+A web page's answer is compared by status and title, and a JSON listing's also by how many items it holds (`json_items`): `watch` reports `/users/v1: [200] 5 items → [200] 6 items`. Bodies are not compared byte for byte: timestamps and tokens would make every run a change. A workspace with one run says so: a diff needs two.
 
 `diff -jsonl` prints `added` and `removed` rows, `not_seen_again` rows and a `summary`. `removed` is what answered in the older run (a name that resolved, a page with a status, a host with open ports) and is gone from the newer. `not_seen_again` is what the older run only heard of (from a subdomain source, an archive, a link) and never checked: sources answer differently from day to day and fail, so its absence says little. The summary names the `failed_sources` of the newer run.
 

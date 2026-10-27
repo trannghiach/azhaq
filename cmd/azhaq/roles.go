@@ -9,12 +9,14 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -81,8 +83,8 @@ var verdictOrder = map[string]int{verdictAnyoneSecrets: 0, verdictCross: 1, verd
 func cmdRoles(args []string) error {
 	fs := newFlags("roles")
 	var specs, logins, idSpecs stringsFlag
-	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous)")
-	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome")
+	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: …")
+	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left")
 	fs.Var(&idSpecs, "id", "[ROLE:]NAME=VALUE: also fill routes with this identifier. NAME is a path parameter (book_title), a JSON field holding such values (basket_id) or a route (/rest/basket/{id}); with ROLE, VALUE names ROLE's own object, and another role that reads it is listed")
 	loginURL := fs.String("login", "", "the login page for -role-login")
 	dir := fs.String("dir", "", "directory for one database per role (default: azhaq-roles-<time>)")
@@ -140,6 +142,7 @@ func cmdRoles(args []string) error {
 	seen := map[string]runSeen{}              // role → the values its answers held
 	templates := map[string]bool{}            // GET routes with path parameters
 	made := map[string]instance{}             // object URL → the route it fills and whose object it is
+	signedIn := map[string]browser.Session{}  // role → what its Chrome login left
 	var scopeHosts []string
 	for i, r := range roles {
 		db := filepath.Join(*dir, r.name+".db")
@@ -153,7 +156,9 @@ func cmdRoles(args []string) error {
 		if !*asJSON {
 			fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
 		}
+		browser.OnLogin = func(s browser.Session) { signedIn[r.name] = s }
 		sub, err := quietly(*asJSON, func() (*report, error) { return runEmbedded(args) })
+		browser.OnLogin = nil
 		if err != nil {
 			return rolesFailed(rep, *asJSON, fmt.Errorf("role %s: %w", r.name, err))
 		}
@@ -178,7 +183,8 @@ func cmdRoles(args []string) error {
 		// /books/v1/{book_title} with the titles each role's answers held
 		// and those given with -id: whose objects can the others read?
 		rank := map[string]int{}
-		for u, in := range instances(roles, templates, seen, answers, given) {
+		who := identities(roles, answers, seen, signedIn)
+		for u, in := range instances(roles, templates, seen, answers, given, who) {
 			if _, ok := found[u]; ok {
 				rank[u] = min(in.rank, 2)
 			} else {
@@ -198,14 +204,34 @@ func cmdRoles(args []string) error {
 		}
 	}
 
+	markRedirects(answers, *loginURL)
 	rows := roleRows(roles, answers, found, made)
-	counts := map[string]int{}
+	for _, n := range deadRoles(roles, rows) {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("role %s was refused wherever a session matters: its session looks expired or wrong", n))
+		rep.warned = true
+	}
+	counts, hidden := map[string]int{}, map[string]int{}
+	public := map[string]bool{} // routes with an object anyone reads listed already: one says it
 	var shown []roleRow
 	for _, row := range rows {
-		counts[row.Verdict]++
-		if *all || listed(row.Verdict) {
-			shown = append(shown, row)
+		show := *all || listed(row.Verdict)
+		if show && !*all && row.Verdict == verdictPublicObj {
+			show = !public[row.From]
+			public[row.From] = true
 		}
+		if show {
+			counts[row.Verdict]++
+			shown = append(shown, row)
+		} else {
+			hidden[row.Verdict]++
+		}
+	}
+	if n := len(rows) - len(shown); n > 0 {
+		var parts []string
+		for _, v := range sortedCountKeys(hidden) {
+			parts = append(parts, fmt.Sprintf("%d %s", hidden[v], v))
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d more endpoints compared and not listed (%s); -all lists them", n, strings.Join(parts, ", ")))
 	}
 	rep.Results, rep.Counts = len(shown), counts
 	if *asJSON {
@@ -430,7 +456,7 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 			if err != nil {
 				continue
 			}
-			answers[r.name][u] = answerOf(res.Status, res.Body, contentType(res))
+			answers[r.name][u], _ = resultAnswer(res)
 		}
 	}
 	fetch.Reset()
@@ -443,6 +469,59 @@ func contentType(res fetch.Result) string {
 		return res.FinalHeader.Get("Content-Type")
 	}
 	return res.Header.Get("Content-Type")
+}
+
+// resultAnswer is readAnswer for a fetch, with where a redirect sends
+// the role.
+func resultAnswer(res fetch.Result) (answer, *jsonFacts) {
+	a, f := readAnswer(res.Status, res.Body, contentType(res))
+	if res.Status >= 300 && res.Status < 400 {
+		a.Location = bareLocation(res.Header.Get("Location"))
+	}
+	return a, f
+}
+
+// signInPath: a path that asks the visitor to sign in, or says it may not.
+var signInPath = regexp.MustCompile(`(?i)(^|[/._-])(login|log-in|log_in|logon|signin|sign-in|sign_in|auth|authenticate|authorize|oauth2?|sso|saml|cas|openid|sessions?/new|unauthori[sz]ed|access-?denied|forbidden)($|[/._-])`)
+
+// signInHost: another site's sign-in service (login.example.com, sso.…).
+var signInHost = regexp.MustCompile(`(?i)(^|[.-])(login|auth|sso|signin|accounts|idp)([.-]|$)`)
+
+// markRedirects marks the redirects that refuse: to a sign-in page (a
+// path that says login, sign-in, auth…, another site's sign-in service,
+// or the -login page), and to the front page of the same site, which
+// refuses when another role reads the endpoint.
+func markRedirects(answers map[string]map[string]answer, loginURL string) {
+	for _, as := range answers {
+		for u, a := range as {
+			if a.Status >= 300 && a.Status < 400 && a.Location != "" {
+				a.toLogin, a.toRoot = redirectKind(u, a.Location, loginURL)
+				as[u] = a
+			}
+		}
+	}
+}
+
+// redirectKind says where a redirect from from to location goes: a
+// sign-in page, or the site's front page.
+func redirectKind(from, location, loginURL string) (toLogin, toRoot bool) {
+	base, err := url.Parse(from)
+	if err != nil {
+		return false, false
+	}
+	to, err := base.Parse(location)
+	if err != nil {
+		return false, false
+	}
+	sameHost := strings.EqualFold(to.Host, base.Host)
+	if l, err := url.Parse(loginURL); err == nil && loginURL != "" && strings.Trim(l.Path, "/") != "" &&
+		strings.EqualFold(l.Host, to.Host) && strings.TrimRight(l.Path, "/") == strings.TrimRight(to.Path, "/") {
+		return true, false
+	}
+	if signInPath.MatchString(to.Path) || !sameHost && signInHost.MatchString(to.Hostname()) {
+		return true, false
+	}
+	return false, sameHost && strings.Trim(to.Path, "/") == "" && strings.Trim(base.Path, "/") != ""
 }
 
 func hostSet(hosts []string) map[string]bool {
@@ -501,10 +580,27 @@ func roleRows(roles []role, answers map[string]map[string]answer, found map[stri
 
 func ok2xx(s int) bool { return s >= 200 && s < 300 }
 
+// refusing are the roles a row's answers refuse: refused, or sent back to
+// the front page while another role reads the endpoint.
+func refusing(row roleRow) map[string]bool {
+	anyReads := false
+	for _, a := range row.Answers {
+		anyReads = anyReads || reads(a)
+	}
+	out := map[string]bool{}
+	for n, a := range row.Answers {
+		if refused(a) || a.toRoot && anyReads {
+			out[n] = true
+		}
+	}
+	return out
+}
+
 // verdict says what the difference between the answers means, and fills
 // the row's readers and sensitive fields when the verdict names them. A
 // role reads an endpoint when it gets a 2xx answer that is not an error;
-// any 4xx, and an error answered as 2xx, is a refusal.
+// any 4xx, an error answered as 2xx, and a redirect to a sign-in page (or
+// to the front page, while another role reads it) is a refusal.
 func verdict(roles []role, row *roleRow) string {
 	if len(row.Answers) < 2 {
 		return verdictUnanswered
@@ -513,6 +609,7 @@ func verdict(roles []role, row *roleRow) string {
 	for _, n := range row.FoundBy {
 		found[n] = true
 	}
+	no := refusing(*row)
 	var readers, refusers []string
 	var anonReads, anonRefused, stranger bool
 	signedReads, signedRefused := 0, 0
@@ -536,7 +633,7 @@ func verdict(roles []role, row *roleRow) string {
 			} else {
 				signedReads++
 			}
-		case refused(a):
+		case no[r.name]:
 			refusers = append(refusers, r.name)
 			if r.anonymous() {
 				anonRefused = true
@@ -670,6 +767,72 @@ func othersRead(roles []role, row roleRow) []string {
 	return out
 }
 
+// deadRoles are the signed-in roles whose sessions look expired or wrong:
+// refused wherever a session matters (on every endpoint the anonymous
+// role is refused and another signed-in role reads, or, with no other
+// signed-in role, every endpoint the anonymous role is refused), or
+// refused on every endpoint another role reads; and reading no "/me"
+// endpoint unlike the anonymous role.
+func deadRoles(roles []role, rows []roleRow) []string {
+	anon, signed := "", 0
+	for _, r := range roles {
+		switch {
+		case !r.anonymous():
+			signed++
+		case anon == "":
+			anon = r.name
+		}
+	}
+	var out []string
+	for _, x := range roles {
+		if x.anonymous() {
+			continue
+		}
+		gated, gatedRead, others, othersLet, me := 0, 0, 0, 0, false
+		for _, row := range rows {
+			a, ok := row.Answers[x.name]
+			if !ok {
+				continue
+			}
+			no := refusing(row)
+			otherSigned, otherAny := false, false
+			for _, r := range roles {
+				if b, ok := row.Answers[r.name]; ok && r.name != x.name && reads(b) {
+					otherAny = true
+					otherSigned = otherSigned || !r.anonymous()
+				}
+			}
+			mine := reads(a)
+			// Gated: the anonymous visitor was asked for a session (401, 403,
+			// a sign-in page), not told the page is missing, and somebody
+			// reads it or it is the only signed-in role's to read.
+			gate := false
+			if b, ok := row.Answers[anon]; ok && anon != "" && no[anon] {
+				gate = b.Status == 401 || b.Status == 403 || b.toLogin
+			}
+			if gate && (otherSigned || signed == 1) {
+				gated++
+				if mine {
+					gatedRead++
+				}
+			}
+			if otherAny {
+				others++
+				if !no[x.name] {
+					othersLet++
+				}
+			}
+			if b, ok := row.Answers[anon]; mine && meLike(row.URL) && len(a.Keys) > 0 && (!ok || !reads(b) || b.Hash != a.Hash) {
+				me = true // a JSON "/me" answer of its own
+			}
+		}
+		if !me && (gated > 0 && gatedRead == 0 || others > 0 && othersLet == 0) {
+			out = append(out, x.name)
+		}
+	}
+	return out
+}
+
 // alike: the same object: the same body, or the same fields around the
 // same identifier.
 func alike(a, b answer, id string) bool {
@@ -729,11 +892,15 @@ func addLogins(roles []role, specs []string) ([]role, error) {
 	return roles, nil
 }
 
-// readBodies reads the JSON answers of a role's run again, from the
-// process cache the run just filled, so nothing is sent unless the cache
-// lost one: their nested fields, error shape, sensitive fields and the
-// identifiers they hold. An answer that is not the one the run stored is
-// left as stored.
+// readBodies reads the answers of a role's run again, through the
+// process cache the run just filled with the role's session, so nothing
+// is sent unless the cache lost one: the JSON answers for their nested
+// fields, error shape, sensitive fields, the identifiers they hold and
+// the list items that name their owner, and every answer the run kept
+// without its body (a URL the paths collector found keeps its status
+// only), so that no answer is compared by its status alone. A JSON answer
+// that is not the one the run stored is left as stored. Only GETs that
+// change nothing, on the run's own hosts, are asked.
 func readBodies(got map[string]answer, raw map[string]string, seen runSeen, own map[string]bool) {
 	ctx := context.Background()
 	client := fetch.Client(nil)
@@ -744,20 +911,28 @@ func readBodies(got map[string]answer, raw map[string]string, seen runSeen, own 
 	sort.Strings(urls)
 	for _, u := range urls {
 		a := got[u]
-		if !ok2xx(a.Status) || len(a.Keys) == 0 || !replayable(u, own) {
+		blind := a.Hash == "" // the run kept no body
+		if !replayable(u, own) || !blind && (!ok2xx(a.Status) || len(a.Keys) == 0) {
 			continue
 		}
 		res, _, err := fetch.Do(ctx, client, raw[u])
-		if err != nil || res.Status != a.Status {
+		if err != nil || !blind && res.Status != a.Status {
 			continue
 		}
-		b, f := readAnswer(res.Status, res.Body, contentType(res))
-		if f == nil || b.Hash != a.Hash {
-			continue
+		b, f := resultAnswer(res)
+		if !blind {
+			if f == nil || b.Hash != a.Hash {
+				continue
+			}
+			b.Length, b.Title = a.Length, a.Title
 		}
-		b.Length, b.Title = a.Length, a.Title
 		got[u] = b
-		seen.add(u, f.ids)
+		if f != nil {
+			seen.add(u, f.ids)
+			if len(f.objects) > 0 {
+				seen.objects[u] = f.objects
+			}
+		}
 	}
 }
 
@@ -798,13 +973,15 @@ func endpointAnswers(db string) (map[string]answer, map[string]string, []string,
 			continue
 		}
 		var p struct {
-			URL      string   `json:"url"`
-			Status   int      `json:"status"`
-			CatchAll bool     `json:"catchall"`
-			Length   int      `json:"length"`
-			Hash     string   `json:"body_hash"`
-			Keys     []string `json:"json_keys"`
-			Title    string   `json:"title"`
+			URL      string      `json:"url"`
+			Status   int         `json:"status"`
+			CatchAll bool        `json:"catchall"`
+			Length   int         `json:"length"`
+			Hash     string      `json:"body_hash"`
+			Keys     []string    `json:"json_keys"`
+			Title    string      `json:"title"`
+			Location string      `json:"location"`
+			Hops     []fetch.Hop `json:"hops"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" || p.Status == 0 || p.CatchAll {
 			continue
@@ -816,8 +993,17 @@ func endpointAnswers(db string) (map[string]answer, map[string]string, []string,
 		if err != nil {
 			continue
 		}
-		if _, ok := out[u]; !ok {
-			out[u] = storedAnswer(p.Status, p.Length, p.Hash, p.Keys, p.Title)
+		// The first answer with its body's hash: the paths collector keeps
+		// a status only, and the probe of the same URL comes later.
+		if old, ok := out[u]; !ok || old.Hash == "" && p.Hash != "" {
+			a := storedAnswer(p.Status, p.Length, p.Hash, p.Keys, p.Title)
+			if a.Status >= 300 && a.Status < 400 {
+				a.Location = bareLocation(p.Location)
+				if a.Location == "" && len(p.Hops) > 0 {
+					a.Location = bareLocation(p.Hops[0].Location)
+				}
+			}
+			out[u] = a
 			raw[u] = p.URL
 		}
 	}

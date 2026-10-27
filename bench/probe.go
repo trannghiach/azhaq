@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/trannghiach/azhaq/internal/normalize"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ type probeRow struct {
 	AzhaqAnswered int      `json:"azhaq_answered"`
 	HttpxAnswered int      `json:"httpx_answered"`
 	Shared        int      `json:"shared"`
+	Offsite       int      `json:"offsite"` // httpx -fr left the host's site: only the redirect's status compared
 	Status        int      `json:"status_agree"`
 	Title         int      `json:"title_agree"`
 	Tech          int      `json:"tech_agree"`
@@ -51,6 +53,12 @@ const (
 type probeResult struct {
 	scheme, status, title, favicon, cdn string
 	tech                                []string
+	// offsite: httpx -fr followed a redirect out of the host's site (a CDN,
+	// an identity provider). Azhaq records such a redirect and does not
+	// report the third party's page as the host's, so only the redirect's
+	// own status is compared.
+	offsite     bool
+	firstStatus string
 }
 
 func benchProbe(local []string) *probeRow {
@@ -93,6 +101,10 @@ func benchProbe(local []string) *probeRow {
 		}
 		row.Shared++
 		st, ti, te := a.status == x.status, a.title == x.title, strings.Join(a.tech, ",") == strings.Join(x.tech, ",")
+		if x.offsite {
+			st, ti, te = a.status == x.firstStatus, true, true
+			row.Offsite++
+		}
 		if st {
 			row.Status++
 		}
@@ -123,7 +135,7 @@ func benchProbe(local []string) *probeRow {
 	addCheck("probe: answers ≥ 95% of the hosts httpx answers", row.HttpxAnswered > 0 && float64(row.Shared) >= 0.95*float64(row.HttpxAnswered),
 		"azhaq %d, httpx %d, shared %d of %d hosts", row.AzhaqAnswered, row.HttpxAnswered, row.Shared, row.Hosts)
 	addCheck("probe: status, title and tech agree with httpx on ≥ 95% of shared hosts", row.Shared > 0 && float64(row.All) >= 0.95*float64(row.Shared),
-		"all three %d/%d (status %d, title %d, tech %d)", row.All, row.Shared, row.Status, row.Title, row.Tech)
+		"all three %d/%d (status %d, title %d, tech %d; %d redirects out of the site compared by their own status)", row.All, row.Shared, row.Status, row.Title, row.Tech, row.Offsite)
 	addCheck("probe: within 2× httpx's time", row.AzhaqSeconds <= 2*row.HttpxSeconds+1,
 		"azhaq %.1fs, httpx %.1fs, %s requests in flight each", row.AzhaqSeconds, row.HttpxSeconds, probeConcurrency)
 	return row
@@ -178,12 +190,14 @@ func httpxProbes(out []byte, hosts map[string]bool) map[string]probeResult {
 	res := map[string]probeResult{}
 	for _, l := range lines(out) {
 		var x struct {
-			URL     string   `json:"url"`
-			Status  int      `json:"status_code"`
-			Title   string   `json:"title"`
-			Tech    []string `json:"tech"`
-			Favicon string   `json:"favicon"`
-			CDNName string   `json:"cdn_name"`
+			URL      string   `json:"url"`
+			Status   int      `json:"status_code"`
+			Title    string   `json:"title"`
+			Tech     []string `json:"tech"`
+			Favicon  string   `json:"favicon"`
+			CDNName  string   `json:"cdn_name"`
+			FinalURL string   `json:"final_url"`
+			Chain    []int    `json:"chain_status_codes"`
 		}
 		if json.Unmarshal([]byte(l), &x) != nil {
 			continue
@@ -193,10 +207,15 @@ func httpxProbes(out []byte, hosts map[string]bool) map[string]probeResult {
 			continue
 		}
 		sort.Strings(x.Tech)
-		res[u.Host] = probeResult{
+		r := probeResult{
 			scheme: u.Scheme, status: fmt.Sprint(x.Status), title: squash(x.Title),
 			favicon: x.Favicon, cdn: x.CDNName, tech: x.Tech,
 		}
+		if f, err := url.Parse(x.FinalURL); err == nil && f.Hostname() != "" && len(x.Chain) > 0 &&
+			normalize.RegistrableDomain(f.Hostname()) != normalize.RegistrableDomain(u.Hostname()) {
+			r.offsite, r.firstStatus = true, fmt.Sprint(x.Chain[0])
+		}
+		res[u.Host] = r
 	}
 	return res
 }

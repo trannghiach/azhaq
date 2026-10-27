@@ -397,18 +397,22 @@ func TestRoleOwnObjects(t *testing.T) {
 	templates := map[string]bool{"http://h/api/Addresss/{id}": true, "http://h/books/v1/{book_title}": true,
 		"http://h/rest/basket/{id}": true, "http://h/admin/users/{id}": true}
 	given := []givenID{{role: "bob", name: "/rest/basket/{id}", value: "15"}, {role: "alice", name: "basket_id", value: "14"}, {name: "nothing", value: "1"}}
-	got := instances(roles, templates, seen, answers, given)
+	got := instances(roles, templates, seen, answers, given, nil)
 	owners := map[string]string{}
 	for u, in := range got {
 		owners[u] = in.owner
 	}
+	// Up to 6 values no role owns per route, numbers by value.
 	want := map[string]string{
 		"http://h/api/Addresss/7": "admin", "http://h/api/Addresss/9": "admin", "http://h/api/Addresss/12": "bob",
-		"http://h/api/Addresss/1": "", "http://h/api/Addresss/2": "", "http://h/api/Addresss/3": "",
+		"http://h/api/Addresss/1": "", "http://h/api/Addresss/2": "", "http://h/api/Addresss/3": "", "http://h/api/Addresss/4": "",
+		"http://h/api/Addresss/50":    "",
 		"http://h/books/v1/aliceOnly": "alice", "http://h/books/v1/b1": "", "http://h/books/v1/b2": "",
 		"http://h/rest/basket/14": "alice", "http://h/rest/basket/15": "bob",
-		"http://h/rest/basket/1": "", "http://h/rest/basket/2": "", "http://h/rest/basket/3": "",
-		"http://h/admin/users/1": "", "http://h/admin/users/2": "", "http://h/admin/users/3": "",
+		"http://h/rest/basket/1": "", "http://h/rest/basket/2": "", "http://h/rest/basket/3": "", "http://h/rest/basket/4": "",
+		"http://h/rest/basket/7": "", "http://h/rest/basket/9": "",
+		"http://h/admin/users/1": "", "http://h/admin/users/2": "", "http://h/admin/users/3": "", "http://h/admin/users/4": "",
+		"http://h/admin/users/7": "", "http://h/admin/users/9": "",
 	}
 	if !reflect.DeepEqual(owners, want) {
 		t.Errorf("objects %v\nwant %v", owners, want)
@@ -416,7 +420,7 @@ func TestRoleOwnObjects(t *testing.T) {
 	if !got["http://h/rest/basket/14"].given || got["http://h/api/Addresss/7"].rank != 1 || given[2].used || !given[0].used {
 		t.Error("given identifiers are marked and ranked first")
 	}
-	if again := instances(roles, templates, seen, answers, given); !reflect.DeepEqual(again, got) {
+	if again := instances(roles, templates, seen, answers, given, nil); !reflect.DeepEqual(again, got) {
 		t.Error("the same answers make other URLs")
 	}
 }
@@ -455,5 +459,19 @@ func TestRoleCrossTenant(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("verdicts %v\nwant %v", got, want)
+	}
+}
+
+func TestRoleNotDeadWhenNothingIsGated(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "user", headers: []string{"Authorization: Bearer x"}}}
+	same := answer{Status: 200, Length: 10, Hash: "aa"}
+	missing := answer{Status: 404, Length: 9, Hash: "bb"}
+	rows := []roleRow{
+		{URL: "http://a.test/", Answers: map[string]answer{"anon": same, "user": same}},
+		{URL: "http://a.test/about", Answers: map[string]answer{"anon": same, "user": same}},
+		{URL: "http://a.test/robots.txt", Answers: map[string]answer{"anon": missing, "user": missing}},
+	}
+	if dead := deadRoles(roles, rows); len(dead) != 0 {
+		t.Fatalf("a valid role on a site where nothing is gated was called dead: %v", dead)
 	}
 }

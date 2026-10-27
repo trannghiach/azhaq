@@ -47,6 +47,7 @@ type Collector struct {
 	Probe bool
 
 	emitted sync.Map // URLs already reported in this run
+	ownURL  sync.Map // URLs reported by their own URL task
 }
 
 func New(client *http.Client) *Collector {
@@ -93,17 +94,24 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			if ctx.Err() != nil {
 				return meta, ctx.Err()
 			}
-			obs, hint, cached, err := c.fetch(ctx, raw)
+			obs, hint, _, err := c.fetch(ctx, raw)
 			if err != nil {
 				lastErr = err
 				continue
 			}
 			answered = true
 			answeredURL = raw
-			if cached && seed.Type == types.TypeHostname {
-				break
-			}
-			if _, dup := c.emitted.LoadOrStore(obs.Source, true); dup {
+			// An answer is reported once per URL by a URL's own task, which
+			// the map row of that URL reads; a name's task reports it when no
+			// task has (one cached from a redirect hop, tesla.com →
+			// www.tesla.com, never was), without keeping the URL's own task
+			// from recording it on its URL.
+			if seed.Type == types.TypeURL {
+				if _, dup := c.ownURL.LoadOrStore(obs.Source, true); dup {
+					break
+				}
+				c.emitted.Store(obs.Source, true)
+			} else if _, dup := c.emitted.LoadOrStore(obs.Source, true); dup {
 				break
 			}
 			if err := emit(obs); err != nil {
@@ -296,6 +304,9 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech bool)
 		if ids := JSONIDs(res.Body); len(ids) > 0 {
 			out["json_ids"] = ids
 		}
+		if n, ok := JSONItems(res.Body); ok {
+			out["json_items"] = n
+		}
 	}
 	if len(res.Hops) > 0 {
 		out["hops"] = res.Hops
@@ -361,6 +372,33 @@ func cookieNames(h http.Header) []map[string]any {
 		out = append(out, m)
 	}
 	return out
+}
+
+// JSONItems is how many items a JSON listing holds: the length of a
+// top-level array, or of the one array an envelope holds
+// ({"data":[…]}, {"users":[…],"total":…}). A listing that grows or
+// shrinks between runs is a change worth reporting; its bytes alone are
+// not (timestamps, tokens).
+func JSONItems(body []byte) (int, bool) {
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return 0, false
+	}
+	switch x := v.(type) {
+	case []any:
+		return len(x), true
+	case map[string]any:
+		n, found := 0, 0
+		for _, f := range x {
+			if xs, ok := f.([]any); ok {
+				n, found = len(xs), found+1
+			}
+		}
+		if found == 1 {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 // JSONKeys are the top-level fields of a JSON answer ("[]" and the fields

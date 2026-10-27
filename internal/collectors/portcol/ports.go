@@ -6,8 +6,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,6 +35,9 @@ type Collector struct {
 	Pool    *dnsr.Pool
 	Scanner *portscan.Scanner
 	Ports   []int
+	// IPv6 says whether this machine can reach IPv6 addresses; nil is
+	// fetch.IPv6Routable.
+	IPv6 func() bool
 
 	mu    sync.Mutex
 	byIP  map[string]*scan // one scan per address, however many names point to it
@@ -41,12 +46,21 @@ type Collector struct {
 
 type scan struct {
 	done chan struct{}
+	host string // the name the services were asked under
 	open []portscan.Open
 	err  error
 }
 
 func New(pool *dnsr.Pool, ports []int, rate float64) *Collector {
-	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate, Take: fetch.Take}, byIP: map[string]*scan{}, maxIP: 2}
+	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate, Take: fetch.Take, UserAgent: fetch.UserAgent},
+		byIP: map[string]*scan{}, maxIP: 2}
+}
+
+func (c *Collector) routable() bool {
+	if c.IPv6 != nil {
+		return c.IPv6()
+	}
+	return fetch.IPv6Routable()
 }
 
 func (c *Collector) Name() string { return Name }
@@ -71,6 +85,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	// CNAME says so for all of them (CloudFront's IPv6 ranges read as
 	// plain AWS).
 	edgeName := ""
+	var unrouted []string // IPv6 addresses this machine cannot reach
 	if ip := net.ParseIP(host); ip != nil {
 		ips = []string{ip.String()}
 	} else if c.Pool != nil {
@@ -79,18 +94,29 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			edgeName = name
 		}
 		// Both families: a service may listen on one only (naabu -iv 4,6).
-		// IPv6 only where this machine can reach it.
+		// IPv6 only where this machine can reach it; the summary says
+		// when it cannot.
 		v4, v6 := 0, 0
 		for _, ip := range answer.IPs() {
 			switch {
-			case net.ParseIP(ip).To4() != nil && v4 < c.maxIP:
-				v4++
-				ips = append(ips, ip)
-			case net.ParseIP(ip).To4() == nil && v6 < c.maxIP && fetch.IPv6Routable():
+			case net.ParseIP(ip).To4() != nil:
+				if v4 < c.maxIP {
+					v4++
+					ips = append(ips, ip)
+				}
+			case !c.routable():
+				unrouted = append(unrouted, ip)
+			case v6 < c.maxIP:
 				v6++
 				ips = append(ips, ip)
 			}
 		}
+	}
+	if len(ips) == 0 && len(unrouted) > 0 {
+		// An IPv6-only name: nothing scanned, and the row says why.
+		raw, _ := json.Marshal(map[string]any{"host": host, "scanned": 0, "open": []int{}, unroutedKey: unrouted})
+		err := emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC()})
+		return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, err
 	}
 	for _, ip := range ips {
 		if name, kind := fingerprint.Network(net.ParseIP(ip)); name != "" && kind != "cloud" && edgeName == "" {
@@ -105,7 +131,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if edge {
 			ports = cdnPorts
 		}
-		open, err := c.scanOnce(ctx, ip, ports)
+		open, err := c.scanOnce(ctx, host, ip, ports)
 		if err != nil && ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, err
 		}
@@ -123,6 +149,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			row["cdn"] = name
 			row["note"] = "CDN or WAF address: web ports only"
 		}
+		if len(unrouted) > 0 {
+			row[unroutedKey] = unrouted
+		}
 		raw, _ := json.Marshal(row)
 		if err := emit(types.Observation{
 			Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC(),
@@ -135,33 +164,97 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				continue // the HTTP collector tries 80 and 443 on every name
 			}
 			hp := net.JoinHostPort(host, strconv.Itoa(o.Port))
-			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{
-				"url": "https://" + hp + "/", httpcol.FallbackKey: "http",
-			}})
+			keys := map[string]string{"url": "https://" + hp + "/", httpcol.FallbackKey: "http"}
+			switch o.Service {
+			case "http", "https": // the probe found out which
+				keys = map[string]string{"url": o.Service + "://" + hp + "/"}
+			}
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: keys})
 		}
 	}
 	return meta, nil
 }
 
-func (c *Collector) scanOnce(ctx context.Context, ip string, ports []int) ([]portscan.Open, error) {
+// unroutedKey lists, in a name's rows, its IPv6 addresses this machine
+// has no route to, which were not scanned.
+const unroutedKey = "ipv6_not_scanned"
+
+// Notes are what a run's port scans leave for its summary: how many
+// names had IPv6 addresses this machine could not scan.
+func Notes(obs []types.StoredObservation) []string {
+	names := map[string]bool{}
+	for _, o := range obs {
+		if o.Collector != Name {
+			continue
+		}
+		var p struct {
+			Host     string   `json:"host"`
+			Unrouted []string `json:"ipv6_not_scanned"`
+		}
+		if json.Unmarshal(o.Payload, &p) == nil && len(p.Unrouted) > 0 {
+			names[p.Host] = true
+		}
+	}
+	switch len(names) {
+	case 0:
+		return nil
+	case 1:
+		return []string{"IPv6 addresses of 1 name not scanned: no IPv6 route from this machine"}
+	}
+	return []string{fmt.Sprintf("IPv6 addresses of %d names not scanned: no IPv6 route from this machine", len(names))}
+}
+
+func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) ([]portscan.Open, error) {
 	c.mu.Lock()
 	s, ok := c.byIP[ip]
 	if !ok {
-		s = &scan{done: make(chan struct{})}
+		s = &scan{done: make(chan struct{}), host: host}
 		c.byIP[ip] = s
 	}
 	c.mu.Unlock()
 	if ok {
 		select {
 		case <-s.done:
-			return s.open, s.err
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
+		if s.err != nil || s.host == host {
+			return s.open, s.err
+		}
+		return c.askAgain(ctx, host, ip, s.open)
 	}
-	s.open, s.err = c.Scanner.Scan(ctx, ip, ports)
+	s.open, s.err = c.Scanner.Scan(ctx, host, ip, ports)
 	close(s.done)
 	return s.open, s.err
+}
+
+// askAgain is an address's open ports for another name on it: the
+// connects are not repeated, but a web or TLS port is asked again under
+// this name (its Host header and SNI), whose site and certificate may be
+// its own.
+func (c *Collector) askAgain(ctx context.Context, host, ip string, open []portscan.Open) ([]portscan.Open, error) {
+	var web []int
+	for _, o := range open {
+		switch strings.TrimSuffix(o.Service, "?") {
+		case "http", "https", "tls":
+			web = append(web, o.Port)
+		}
+	}
+	out := append([]portscan.Open(nil), open...)
+	if len(web) == 0 {
+		return out, nil
+	}
+	again, err := c.Scanner.Scan(ctx, host, ip, web)
+	byPort := map[int]portscan.Open{}
+	for _, o := range again {
+		byPort[o.Port] = o
+	}
+	for i, o := range out {
+		if n, ok := byPort[o.Port]; ok {
+			out[i] = n
+		}
+	}
+	return out, err
 }
 
 // forget drops an address's scan so a resumed run scans it again.

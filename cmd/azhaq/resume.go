@@ -49,7 +49,7 @@ func cmdResume(args []string) error {
 		return fmt.Errorf("nothing to resume in %s: every run finished", db)
 	}
 	if !wantsJSON(rest) {
-		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks left\n", id, db, left)
+		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks known and not done\n", id, db, left)
 	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)

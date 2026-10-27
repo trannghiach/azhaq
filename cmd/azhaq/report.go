@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -40,8 +41,9 @@ type report struct {
 	Notes       []string         `json:"notes,omitempty"`
 	Next        []string         `json:"next,omitempty"`
 
-	what  string // the unit of Results: "names", "web services"
-	start time.Time
+	what   string // the unit of Results: "names", "web services"
+	warned bool   // a note says the results mislead (a role's dead session): exit 3
+	start  time.Time
 }
 
 func newReport(command string) *report {
@@ -57,7 +59,7 @@ func (r *report) settle() {
 	switch {
 	case r.Stopped != "":
 		r.Exit = exitLimit
-	case len(r.Unreachable) > 0 || r.ownFailures() > 0:
+	case len(r.Unreachable) > 0 || r.ownFailures() > 0 || r.warned:
 		r.Exit = exitPartial
 	default:
 		r.Exit = exitOK
@@ -68,7 +70,7 @@ func (r *report) settle() {
 func (r *report) ownFailures() int {
 	n := 0
 	for _, f := range r.Failed {
-		if !f.Fanout {
+		if !f.Fanout && !f.Partial {
 			n++
 		}
 	}
@@ -151,6 +153,9 @@ func (r *report) print(w io.Writer) {
 		if f.Fanout {
 			tags = append(tags, "fan-out, not your target")
 		}
+		if f.Partial && !f.Fanout {
+			tags = append(tags, "other sources answered")
+		}
 		if len(tags) > 0 {
 			line += " [" + strings.Join(tags, "; ") + "]"
 		}
@@ -189,6 +194,10 @@ func (r *report) print(w io.Writer) {
 	}
 	switch r.Exit {
 	case exitPartial:
+		if len(r.Unreachable) == 0 && r.ownFailures() == 0 {
+			fmt.Fprintf(w, "  exit 3: finished, but a note above says what to check first\n")
+			break
+		}
 		fmt.Fprintf(w, "  exit 3: finished, but what is marked ! failed; the results are usable\n")
 	case exitLimit:
 		fmt.Fprintf(w, "  exit 4: stopped by a limit with work left\n")
@@ -238,10 +247,11 @@ func runEmbeddedAs(args []string, asJSON bool) (*report, error) {
 // targets that did not answer, notes and counts.
 func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entity, obs []types.StoredObservation, rows []engine.MapEntry) {
 	rep.DB = path
-	rep.Failed = engine.MarkFanout(engine.Failures(ents, obs), seeds)
+	rep.Failed = engine.MarkPartial(engine.MarkFanout(engine.Failures(ents, obs), seeds), ents, obs)
 	rep.Skipped = append(rep.Skipped, engine.Skips(ents, obs)...)
 	rep.Unreachable = engine.Unreachable(seeds, ents, obs)
 	rep.Notes = append(rep.Notes, engine.Notes(obs)...)
+	rep.Notes = append(rep.Notes, portcol.Notes(obs)...)
 	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
 		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
 	}

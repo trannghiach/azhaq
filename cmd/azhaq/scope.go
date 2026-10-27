@@ -50,17 +50,34 @@ func cmdScope(args []string) error {
 	fs := newFlags("scope")
 	spec := fs.String("scope", "", "a file or hackerone, bugcrowd, intigriti, yeswehack")
 	program := fs.String("program", "", "the program to take from a list")
+	asJSON := fs.Bool("json", false, "one JSON object: program, allow, deny, domains, targets, skipped")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
 	if *spec == "" {
-		return fmt.Errorf("give -scope")
+		return usagef("give -scope FILE or a platform (hackerone, bugcrowd, intigriti, yeswehack) with -program")
 	}
 	sc, err := loadScope(*spec, *program)
 	if err != nil {
 		return err
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(sc)
+	if *asJSON {
+		return json.NewEncoder(os.Stdout).Encode(sc)
+	}
+	name := sc.Program
+	if name == "" {
+		name = *spec
+	}
+	fmt.Printf("%s: %d rules in, %d out; %d domains to enumerate, %d targets to probe as given; %d entries a run cannot use\n",
+		name, len(sc.Allow), len(sc.Deny), len(sc.Domains), len(sc.Targets), len(sc.Skipped))
+	for _, r := range sc.Allow {
+		fmt.Printf("  in    %s\n", r)
+	}
+	for _, r := range sc.Deny {
+		fmt.Printf("  out   %s\n", r)
+	}
+	for _, r := range sc.Skipped {
+		fmt.Printf("  skip  %s\n", r)
+	}
+	return nil
 }

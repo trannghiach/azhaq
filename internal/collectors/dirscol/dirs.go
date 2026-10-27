@@ -315,10 +315,13 @@ func (c *Collector) send(ctx context.Context, target string) (response, error) {
 		return response{}, err
 	}
 	defer resp.Body.Close()
+	// Words and lines from the first MB; the length is the whole body's,
+	// as ffuf reports it (read up to 64 MB).
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	rest, _ := io.Copy(io.Discard, io.LimitReader(resp.Body, 63<<20))
 	return response{
 		Status:   resp.StatusCode,
-		Length:   len(body),
+		Length:   len(body) + int(rest),
 		Words:    bytes.Count(body, []byte{' '}) + 1,
 		Lines:    bytes.Count(bytes.TrimSpace(body), []byte{'\n'}) + 1,
 		Location: resp.Header.Get("Location"),

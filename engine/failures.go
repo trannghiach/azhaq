@@ -24,6 +24,10 @@ type Failure struct {
 	// Fanout: none of the targets is what the user asked about (the
 	// domain of a URL, a name found on the way).
 	Fanout bool `json:"fanout,omitempty"`
+	// Partial: a third-party source failed, and for each of its targets
+	// other sources answered. The results stand on those; the failure is
+	// listed, and does not make the exit code 3 (-fail-on-errors does).
+	Partial bool `json:"partial,omitempty"`
 }
 
 // Skip is a request or a target Azhaq chose not to touch, and why.
@@ -319,6 +323,56 @@ func MarkFanout(fs []Failure, seeds []types.Seed) []Failure {
 			}
 		}
 		fs[i].Fanout = !own
+	}
+	return fs
+}
+
+// MarkPartial sets Partial on the source failures of a collector whose
+// other sources answered, with names, for every target of the failure.
+func MarkPartial(fs []Failure, ents []types.Entity, obs []types.StoredObservation) []Failure {
+	keys := map[string]string{}
+	for _, e := range ents {
+		keys[e.ID] = e.Key
+	}
+	answered := map[string]int{} // collector + target → sources that answered
+	for _, o := range obs {
+		var p map[string]any
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		srcs, _ := p["sources"].(map[string]any)
+		if len(srcs) == 0 || p["degraded"] == true {
+			continue // nothing found and something broke: not an honest zero
+		}
+		target := sourceTarget(p, keys[o.EntityID])
+		for _, v := range srcs {
+			row, _ := v.(map[string]any)
+			if row["error"] != nil || row["skipped"] != nil {
+				continue
+			}
+			// A source answered when it gave something: a padding source
+			// counts by the names it kept, not the ones it made up.
+			n, _ := row["count"].(float64)
+			if kept, ok := row["kept"].(float64); ok {
+				n = kept
+			}
+			if n > 0 {
+				answered[o.Collector+"\x00"+target]++
+			}
+		}
+	}
+	for i := range fs {
+		if fs[i].Source == "" || len(fs[i].Targets) == 0 {
+			continue
+		}
+		all := true
+		for _, t := range fs[i].Targets {
+			if answered[fs[i].Collector+"\x00"+t] == 0 {
+				all = false
+				break
+			}
+		}
+		fs[i].Partial = all
 	}
 	return fs
 }

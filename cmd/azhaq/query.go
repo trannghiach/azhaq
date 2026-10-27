@@ -91,7 +91,7 @@ func cmdQuery(args []string) error {
 	}
 	var out []engine.MapEntry
 	matched := 0
-	for _, r := range engine.GroupTemplates(rows) {
+	for _, r := range engine.GroupURLTemplates(rows) {
 		if !keep(r) {
 			continue
 		}

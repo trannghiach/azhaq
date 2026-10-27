@@ -84,6 +84,7 @@ type source struct {
 	need    keyNeed
 	deflt   bool    // part of the default set
 	perSec  float64 // request rate; 0 is unlimited
+	verify  bool    // a name only it gave is kept when it resolves
 	collect func(ctx context.Context, domain string, keys []string, s *subscraping.Session) ([]string, error)
 }
 
@@ -155,7 +156,7 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &github.Source{} }, 83*perMinute),
 		pd(func() subscraping.Source { return &gitlab.Source{} }, 0),
 		pd(func() subscraping.Source { return &hackertarget.Source{} }, 2),
-		pd(func() subscraping.Source { return &hudsonrock.Source{} }, 5),
+		on(pd(func() subscraping.Source { return &hudsonrock.Source{} }, 5)),
 		pd(func() subscraping.Source { return &intelx.Source{} }, 0),
 		pd(func() subscraping.Source { return &leakix.Source{} }, 0),
 		pd(func() subscraping.Source { return &merklemap.Source{} }, 0),
@@ -164,7 +165,7 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &profundis.Source{} }, 0),
 		pd(func() subscraping.Source { return &pugrecon.Source{} }, 10),
 		pd(func() subscraping.Source { return &quake.Source{} }, 0),
-		pd(func() subscraping.Source { return &rapiddns.Source{} }, 0),
+		on(pd(func() subscraping.Source { return &rapiddns.Source{} }, 0)),
 		off(pd(func() subscraping.Source { return &reconcloud.Source{} }, 0)),
 		keyed(pd(func() subscraping.Source { return &reconeer.Source{} }, 0)),
 		pd(func() subscraping.Source { return &redhuntlabs.Source{} }, 0),
@@ -176,9 +177,9 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &shodan.Source{} }, 1),
 		pd(func() subscraping.Source { return &shodanct.Source{} }, 0),
 		pd(func() subscraping.Source { return &sitedossier.Source{} }, 8*perMinute),
-		off(pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0)),
+		verified(pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0)),
 		off(pd(func() subscraping.Source { return &submd.Source{} }, 0)),
-		pd(func() subscraping.Source { return &thc.Source{} }, 0),
+		on(pd(func() subscraping.Source { return &thc.Source{} }, 0)),
 		pd(func() subscraping.Source { return &threatbook.Source{} }, 0),
 		pd(func() subscraping.Source { return &threatcrowd.Source{} }, 0),
 		off(pd(func() subscraping.Source { return &threatminer.Source{} }, 0)),
@@ -197,10 +198,27 @@ func allSources() []source {
 // off takes a source out of the default set: it was dead or refused
 // every request when last checked (2026-10-26), and a run that always
 // reports the same failures teaches its reader to ignore failures.
-// subdomaincenter answers 500 random names, different on each call
-// (2026-10-27). -sources NAME or -all-sources still runs it.
+// -sources NAME or -all-sources still runs it.
 func off(s source) source {
 	s.deflt = false
+	return s
+}
+
+// on puts a keyless source that answers into the default set, although
+// subfinder leaves it out of its own (checked 2026-10-27: rapiddns, thc
+// and hudsonrock answered for tesla.com with names the others lacked).
+func on(s source) source {
+	s.deflt = true
+	return s
+}
+
+// verified marks a source that pads its answer with made-up names:
+// subdomain.center answers about 500 names per call, nearly all random
+// and different each time, with the odd real one among them (2026-10-27).
+// A name only such a source gave is kept when it resolves (not to a
+// wildcard).
+func verified(s source) source {
+	s.verify = true
 	return s
 }
 

@@ -2,6 +2,7 @@
 package collectors
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/trannghiach/azhaq/catalog"
@@ -27,6 +28,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
 // Options configure the built-in collectors for one run.
@@ -96,7 +98,25 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
-	subcol.Register(cat, o.Subdomains)
+	sub := o.Subdomains
+	sub.Verify = func(ctx context.Context, apex string, names []string) (live []string, unchecked int) {
+		var ask []string
+		for _, n := range names {
+			if fetch.Allow == nil || fetch.Allow(n) { // outside the scope: not even resolved
+				ask = append(ask, n)
+			}
+		}
+		for _, a := range pool.ResolveMany(ctx, ask, 128) {
+			switch {
+			case a.Status == dnsr.StatusFailed || ctx.Err() != nil:
+				unchecked++
+			case a.Live() && !dnsc.Wild.Match(ctx, a.Name, apex, a):
+				live = append(live, a.Name)
+			}
+		}
+		return live, unchecked
+	}
+	subcol.Register(cat, sub)
 	cat.MustRegister(urlcol.New(o.URLs))
 	rdapcol.Register(cat, client)
 	cloudcol.Register(cat)

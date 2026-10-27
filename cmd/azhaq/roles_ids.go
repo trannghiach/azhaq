@@ -21,12 +21,14 @@ import (
 type runSeen struct {
 	ids       map[string][]string            // field → values
 	lists     map[string]map[string][]string // URL → field → values its answer held
+	objects   map[string][]listObject        // URL → the items of its answer that name their owner
 	templates map[string]bool
 	kept      map[string]bool // what ids and lists hold already
 }
 
 func newRunSeen() runSeen {
-	return runSeen{ids: map[string][]string{}, lists: map[string]map[string][]string{}, templates: map[string]bool{}, kept: map[string]bool{}}
+	return runSeen{ids: map[string][]string{}, lists: map[string]map[string][]string{}, objects: map[string][]listObject{},
+		templates: map[string]bool{}, kept: map[string]bool{}}
 }
 
 // add keeps the values one answer held.
@@ -137,8 +139,17 @@ func newRoute(t string) (route, bool) {
 				r.names = append(r.names, s+n)
 			}
 		}
+		// The short name a session keeps it under: bid for a basket.
+		if n == "id" && len(seg) > 2 && !slices.Contains(r.names, seg[:1]+n) {
+			r.names = append(r.names, seg[:1]+n)
+		}
 	}
 	return r, true
+}
+
+// takes: the folded field name holds values of the route's parameter.
+func (r route) takes(n string) bool {
+	return n == norm(r.param) || slices.Contains(r.names, n)
 }
 
 // wants: an -id NAME meant for this route.
@@ -215,20 +226,21 @@ type instance struct {
 
 // Objects tried per route: a few of each role's own, a few of the rest.
 const (
-	perOwner = 3
-	perRoute = 3
+	perOwner = 5
+	perRoute = 6
 )
 
 // instances fills each route with identifiers: every value given with
-// -id for it, a few values each role's answers alone held (the role's own
-// objects), and a few values more than one role saw. Values are taken in
-// order (numbers by value), so the same answers give the same URLs.
+// -id for it, a few of each role's own objects, and a few values more
+// than one role saw. Values are taken in order (numbers by value), so the
+// same answers give the same URLs.
 //
-// A value is a role's own when its list (/api/Addresss for
-// /api/Addresss/{id}) held it and the same list read by another role did
-// not, or when a field named after the parameter held it and no other
-// role's answers held it anywhere.
-func instances(roles []role, templates map[string]bool, seen map[string]runSeen, answers map[string]map[string]answer, given []givenID) map[string]instance {
+// A value is a role's own when who the role is says so (an identifier its
+// session holds, or a list item whose owner field names the role), when
+// its list (/api/Addresss for /api/Addresss/{id}) held it and the same
+// list read by another role did not, or when a field named after the
+// parameter held it and no other role's answers held it anywhere.
+func instances(roles []role, templates map[string]bool, seen map[string]runSeen, answers map[string]map[string]answer, given []givenID, who map[string]identity) map[string]instance {
 	out := map[string]instance{}
 	add := func(u string, in instance) {
 		if old, ok := out[u]; ok && old.rank <= in.rank {
@@ -298,10 +310,19 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 				add(u, in)
 			}
 		}
+		known := ownedBy(rt, roles, who, seen)
 		shared := map[string][]string{}
 		for _, r := range roles {
-			var own []string
+			var sure, own []string
+			for v, owner := range known {
+				if owner == r.name {
+					sure = append(sure, v)
+				}
+			}
 			for v, from := range rt.candidates(seen[r.name]) {
+				if owner := known[v]; owner != "" {
+					continue // whose it is, who the roles are tells
+				}
 				switch {
 				case from&fromList != 0 && othersList(r.name, rt.parent) && !elsewhere(r.name, v, rt.parent),
 					from&fromNamed != 0 && !elsewhere(r.name, v, ""):
@@ -310,7 +331,10 @@ func instances(roles []role, templates map[string]bool, seen map[string]runSeen,
 					shared[v] = append(shared[v], r.name)
 				}
 			}
+			// Those who the role is names first: they are surely its own.
+			sortValues(sure)
 			sortValues(own)
+			own = append(sure, own...)
 			for _, v := range own[:min(len(own), perOwner)] {
 				if u, ok := rt.fill(v, seen[r.name].ids); ok {
 					add(u, instance{template: t, value: v, holders: []string{r.name}, owner: r.name, rank: 1})

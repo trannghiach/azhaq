@@ -1,6 +1,7 @@
 package browser
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
@@ -20,7 +22,13 @@ type Session struct {
 	Cookies []string // name=value, the cookies the site sends
 	Bearer  string   // a token the page keeps in localStorage or sessionStorage
 	From    string   // where the token was, as storage.key
+	Storage []string // what localStorage and sessionStorage held: storage.key, value, storage.key, value…
+	Answers [][]byte // the JSON answers to the requests submitting the form sent (the login's own answer)
 }
+
+// OnLogin, when set, is told of every session a login left: azhaq roles
+// learns from it who each role is (a user id, a basket id).
+var OnLogin func(Session)
 
 // Headers are the request headers that carry the session.
 func (s Session) Headers() []string {
@@ -157,6 +165,27 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 	if _, err := chromedp.Run(tab, chromedp.Evaluate[bool](fillForm(user, pass))); err != nil {
 		return Session{}, err
 	}
+	// The requests submitting sends, other than GETs: their answers say
+	// who signed in.
+	var sentMu sync.Mutex
+	var sent []network.RequestID
+	listen, stopListen := context.WithCancel(tab)
+	defer stopListen()
+	events := chromedp.Events(listen, network.RequestWillBeSent)
+	go func() {
+		for ev, err := range events {
+			if err != nil {
+				return
+			}
+			if ev.Request != nil && ev.Request.Method != "GET" && ev.Request.Method != "OPTIONS" {
+				sentMu.Lock()
+				if len(sent) < 8 {
+					sent = append(sent, ev.RequestID)
+				}
+				sentMu.Unlock()
+			}
+		}
+	}()
 	// Frameworks enable the button once they have seen the values.
 	if err := chromedp.Do(tab, chromedp.Sleep(400*time.Millisecond)); err != nil {
 		return Session{}, err
@@ -211,6 +240,21 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (Sessi
 		return s, err
 	}
 	s.Bearer, s.From = storedToken(kv)
+	s.Storage = kv
+	stopListen()
+	sentMu.Lock()
+	ids := append([]network.RequestID(nil), sent...)
+	sentMu.Unlock()
+	for _, id := range ids {
+		// A page that navigated away has dropped the body: nothing to read.
+		res, err := chromedp.Call(tab, network.GetResponseBody, network.GetResponseBodyParams{RequestID: id})
+		if body := bytes.TrimSpace(res.Body); err == nil && len(body) <= 1<<16 && json.Valid(body) && len(body) > 0 && (body[0] == '{' || body[0] == '[') {
+			s.Answers = append(s.Answers, body)
+		}
+	}
+	if OnLogin != nil {
+		OnLogin(s)
+	}
 	// sessionStorage belongs to the tab: what the login put there (a
 	// basket id, a tenant) goes into every tab opened afterwards.
 	b.mu.Lock()

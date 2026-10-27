@@ -83,7 +83,7 @@ The command fails when one of these does not hold:
 
 ## Latest results
 
-2026-10-27, v0.6.1, Go 1.27.1, one machine: `go run ./bench -crapi` (record `bench/history/2026-10-27T000934-ccefb83-dirty.json`, taken before the commit). 44 of 45 checks pass; the one failure is the port comparison, which has nothing to compare with: this machine's security software removes the naabu binary. Ports and archives are compared on GitHub's network (workflow `bench-archives`).
+2026-10-27, v0.6.2, Go 1.27.1, one machine: `go run ./bench -crapi` (record `bench/history/2026-10-27T045837-db9f6fa-dirty.json`, taken before the commit). The probe comparison compares a redirect out of the host's site by its own status: httpx `-fr` reports the third party's page as the host's, Azhaq records the redirect. 44 of 45 checks pass; the one failure is the port comparison, which has nothing to compare with: this machine's security software removes the naabu binary. Ports and archives are compared on GitHub's network (workflow `bench-archives`).
 
 ### Applications
 

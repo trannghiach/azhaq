@@ -369,7 +369,7 @@ func cmdSubs(args []string) error {
 	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out)")
 	words := fs.String("w", "", "also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live)")
 	permute := fs.Bool("permute", false, "also resolve variations of the names found (api → api-dev, api2, dev.api), like alterx | dnsx (active DNS)")
-	given := inherit(fs, "sources", "exclude-sources", "all-sources", "providers", "resolvers", "dns-rate", "timeout", "v")
+	given := inherit(fs, "sources", "exclude-sources", "all-sources", "providers", "resolvers", "dns-rate", "timeout", "v", "fail-on-errors")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -617,6 +617,26 @@ func cmdProbe(args []string) error {
 	rep.Results, rep.Counts = w.count(), nil
 	if quiet := silentHosts(st); len(quiet) > 0 {
 		rep.Counts = map[string]int{"hosts without a web service": len(quiet)}
+		// Every target ends as a service, a failure or a skip: a name
+		// that resolved and has neither is a gap, said as a failure.
+		accounted := map[string]bool{}
+		for _, f := range rep.Failed {
+			for _, t := range f.Targets {
+				accounted[normalize.HostFromURL(t)], accounted[t] = true, true
+			}
+		}
+		for _, sk := range rep.Skipped {
+			accounted[normalize.HostFromURL(sk.Target)], accounted[sk.Target] = true, true
+		}
+		var gaps []string
+		for _, h := range quiet {
+			if !accounted[h] {
+				gaps = append(gaps, h)
+			}
+		}
+		if len(gaps) > 0 {
+			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-http", Error: "no answer and no failure recorded", Retryable: true, Count: len(gaps), Targets: gaps})
+		}
 	}
 	return rep.finish(c.json, c.silent)
 }
@@ -815,7 +835,7 @@ func cmdURLs(args []string) error {
 	var domains stringsFlag
 	fs.Var(&domains, "d", "domain (repeatable)")
 	list := fs.String("dL", "", "file of domains (- for stdin)")
-	given := inherit(fs, "providers", "urls-timeout", "timeout", "v")
+	given := inherit(fs, "providers", "urls-timeout", "timeout", "v", "fail-on-errors")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1009,12 +1029,11 @@ func cmdPorts(args []string) error {
 				continue
 			}
 			n, _ := strconv.Atoi(port)
-			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "tcp", "tls": false, "timestamp": time.Now().Format(time.RFC3339Nano)}
-			if v, ok := svc["service"]; ok {
-				row["service"] = v
-			}
-			if v, ok := svc["banner"]; ok {
-				row["banner"] = v
+			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "tcp", "tls": svc["tls"] == true, "timestamp": time.Now().Format(time.RFC3339Nano)}
+			for _, k := range []string{"service", "banner", "subject_cn", "subject_an"} {
+				if v, ok := svc[k]; ok {
+					row[k] = v
+				}
 			}
 			w.obj(row)
 		}

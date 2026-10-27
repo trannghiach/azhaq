@@ -22,19 +22,35 @@ type answer struct {
 	Error     bool     `json:"error,omitempty"`     // a JSON answer shaped like an error: {"status":"error"}, {"error":…}
 	Sensitive []string `json:"sensitive,omitempty"` // fields holding passwords, secrets, keys, tokens
 	Title     string   `json:"title,omitempty"`
+	Location  string   `json:"location,omitempty"` // where a redirect sends the role
 
 	nested  bool            // Keys are nested paths read from the body, not the stored top-level fields
 	top     []string        // the top-level fields, as the run stores them
 	secrets []secret        // the values of the sensitive fields
 	held    map[string]bool // the scalar values of the answer (a few hundred), to see an object's identifier in it
+	flags   map[string]bool // paths of list items' fields that only hold true or false (data[].liked)
+	toLogin bool            // a redirect to a sign-in page
+	toRoot  bool            // a redirect to the front page
 }
 
 // reads: the role got the endpoint's data, not a refusal shaped as data.
 func reads(a answer) bool { return a.Status >= 200 && a.Status < 300 && !a.Error }
 
-// refused: any 4xx, or a success status around an error.
+// refused: any 4xx, a success status around an error, or a redirect to a
+// sign-in page.
 func refused(a answer) bool {
-	return a.Status >= 400 && a.Status < 500 || a.Status >= 200 && a.Status < 300 && a.Error
+	return a.Status >= 400 && a.Status < 500 || a.Status >= 200 && a.Status < 300 && a.Error || a.toLogin
+}
+
+// bareLocation is a redirect's target without its query, fragment or
+// path parameters: a role's redirect can carry its credentials
+// (#access_token=…, ?ticket=ST-…, ;jsessionid=…), and roles prints only
+// what tells where the role was sent.
+func bareLocation(loc string) string {
+	if i := strings.IndexAny(loc, "?#;"); i >= 0 {
+		return loc[:i]
+	}
+	return loc
 }
 
 // answerOf summarizes a response the way roles compares them.
@@ -72,6 +88,16 @@ type jsonFacts struct {
 	secrets []secret            // values of fields that hold credentials
 	ids     map[string][]string // short scalar values by field name, at any depth: what routes are filled with
 	held    map[string]bool     // the first few hundred scalar values
+	flags   map[string]bool     // paths under a list whose values are all true or false
+	objects []listObject        // the list items that name their owner
+}
+
+// listObject is an item of a list that names its owner ({"book_title":
+// "b1","user":"alice"}): its owner fields' values, and its short scalar
+// fields by folded name.
+type listObject struct {
+	owners []string
+	fields map[string]string
 }
 
 // secret is one value of a sensitive field.
@@ -101,6 +127,7 @@ func inspect(body []byte, contentType string) *jsonFacts {
 	f := &jsonFacts{ids: map[string][]string{}, held: map[string]bool{}}
 	paths := map[string]bool{}
 	seen := map[string]bool{} // field and value already kept
+	kinds := map[string]int{} // path → 1: a boolean seen, 2: anything else
 	var walk func(x any, path string, depth int)
 	walk = func(x any, path string, depth int) {
 		if depth > maxDepth {
@@ -124,8 +151,17 @@ func inspect(body []byte, contentType string) *jsonFacts {
 				switch c := t[k].(type) {
 				case map[string]any, []any:
 					walk(c, p, depth+1)
+					kinds[p] |= 2
+				case bool:
+					kinds[p] |= 1
 				default:
 					f.scalar(k, c, seen)
+					kinds[p] |= 2
+				}
+			}
+			if strings.HasSuffix(path, "[]") && len(f.objects) < maxElems {
+				if o, ok := ownedObject(t); ok {
+					f.objects = append(f.objects, o)
 				}
 			}
 		case []any:
@@ -147,7 +183,45 @@ func inspect(body []byte, contentType string) *jsonFacts {
 	walk(v, "", 0)
 	f.paths = sortedKeys(paths)
 	f.isError = errorShaped(v)
+	for p, k := range kinds {
+		if k == 1 && strings.Contains(p, "[]") {
+			if f.flags == nil {
+				f.flags = map[string]bool{}
+			}
+			f.flags[p] = true
+		}
+	}
 	return f
+}
+
+// ownedObject is a list item that names its owner (owner, user, UserId,
+// email, createdBy…), with its short scalar fields.
+func ownedObject(m map[string]any) (listObject, bool) {
+	o := listObject{fields: map[string]string{}}
+	for k, x := range m {
+		s, ok := scalarString(x)
+		if !ok || len(s) > 64 {
+			continue
+		}
+		n := norm(k)
+		o.fields[n] = s
+		if ownerField(n) {
+			o.owners = append(o.owners, s)
+		}
+	}
+	sort.Strings(o.owners)
+	return o, len(o.owners) > 0
+}
+
+// ownerField: a field (folded) that says whose an object is.
+func ownerField(n string) bool {
+	switch n {
+	case "owner", "ownerid", "ownername", "owneremail", "user", "userid", "username", "useremail", "email", "createdby", "createdbyid",
+		"author", "authorid", "authoremail", "creator", "creatorid", "customer", "customerid", "account", "accountid", "member", "memberid",
+		"uid", "login", "uploadedby", "postedby", "submittedby":
+		return true
+	}
+	return false
 }
 
 // scalar keeps one field's value: as an identifier, as a secret, as a
@@ -175,7 +249,7 @@ func (f *jsonFacts) scalar(k string, x any, seen map[string]bool) {
 func (f *jsonFacts) apply(a *answer) {
 	a.Keys, a.nested = f.paths, true
 	a.Error = f.isError
-	a.secrets, a.held = f.secrets, f.held
+	a.secrets, a.held, a.flags = f.secrets, f.held, f.flags
 	a.Sensitive = nil
 	for _, s := range f.secrets {
 		if !slices.Contains(a.Sensitive, s.field) {
@@ -392,7 +466,9 @@ func norm(s string) string {
 }
 
 // fieldsDiffer: two JSON answers with different fields. Fields under an
-// array one of them has empty are not a difference: that is data.
+// array one of them has empty are not a difference: that is data. Nor is
+// a flag only one role's list items carry (data[].liked: true): how the
+// list is shown to that role, not what it may read.
 func fieldsDiffer(a, b answer) bool {
 	if !a.nested || !b.nested {
 		x, y := a.top, b.top
@@ -404,17 +480,18 @@ func fieldsDiffer(a, b answer) bool {
 		}
 		return !slices.Equal(x, y)
 	}
-	return missing(a.Keys, b.Keys) || missing(b.Keys, a.Keys)
+	return missing(a.Keys, b.Keys, a.flags) || missing(b.Keys, a.Keys, b.flags)
 }
 
-// missing: a path of a that b lacks, under no array b has empty.
-func missing(a, b []string) bool {
+// missing: a path of a that b lacks, under no array b has empty, and not
+// one of a's list flags.
+func missing(a, b []string, flags map[string]bool) bool {
 	has := map[string]bool{}
 	for _, p := range b {
 		has[p] = true
 	}
 	for _, p := range a {
-		if has[p] || emptyArray(p, b) {
+		if has[p] || flags[p] || emptyArray(p, b) {
 			continue
 		}
 		return true

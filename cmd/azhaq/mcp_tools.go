@@ -23,7 +23,7 @@ func strs1(desc string) map[string]any {
 
 var (
 	pWorkspace = prop("string", "workspace name (a database in the server's directory); default \"default\". Runs into the same workspace can be compared with azhaq_diff.")
-	pLimit     = prop("integer", "rows at most in the result (default 100)")
+	pLimit     = prop("integer", "rows at most in the result: default 100, at most 1000 (narrow the question for more)")
 	pURL       = prop("string", "a URL to map, such as https://app.example.com/")
 	pDomain    = prop("string", "a domain whose names to enumerate and map, such as example.com")
 	pTargets   = strs1("targets, each a URL, host, host:port or IP address")
@@ -53,8 +53,12 @@ func mcpTools() []map[string]any {
 			"description": "What azhaq_map would take, leave out of the scope (and why), run and send for these targets, without sending anything: collectors per target, built-in paths, active techniques, limits.",
 			"inputSchema": obj(mapProps), "annotations": annotations(true, false, "Plan a run")},
 		{"name": "azhaq_map", "title": "Map a target",
-			"description": "Map a URL, a domain or a list of targets into a workspace: names and their addresses, web services, pages, routes the JavaScript calls (method, query and body fields), API descriptions and their operations, forms, parameters, what needs a session (401) or is refused (403). GETs only; found URLs that look like they change something (logout, delete, save) are listed, not requested. Returns the summary (failures, skipped targets, limits hit) and the highlights: auth-gated, forbidden and API routes. Read the rest with azhaq_query.",
+			"description": "Map a URL, a domain or a list of targets into a workspace: names and their addresses, web services, pages, routes the JavaScript calls (method, query and body fields), API descriptions and their operations, forms, parameters, what needs a session (401) or is refused (403). GETs only; found URLs that look like they change something (logout, delete, save) are listed, not requested. Returns the summary (failures, skipped targets, limits hit) and the highlights: auth-gated, forbidden and API routes. Read the rest with azhaq_query. A run the budget, timeout_seconds or a cancellation stopped continues with azhaq_resume; mapping again starts over.",
 			"inputSchema": obj(mapProps), "annotations": annotations(false, true, "Map a target")},
+		{"name": "azhaq_resume", "title": "Resume a run",
+			"description": "Continue the run of a workspace that a limit (the request budget, timeout_seconds) or a cancellation stopped, where it stopped: the answers it got are not asked for again. Holds to the server's scope and pace and spends what is left of its budget. Returns the summary and the highlights, like azhaq_map. A workspace keeps no session: give headers or login again if the run had them.",
+			"inputSchema": obj(map[string]any{"workspace": pWorkspace, "headers": pHeaders, "login": pLogin, "timeout_seconds": pTimeout, "limit": pLimit}),
+			"annotations": annotations(false, true, "Resume a run")},
 		{"name": "azhaq_subdomains", "title": "Find subdomains",
 			"description": "Subdomains of a domain from passive sources (certificate transparency, archives, DNS datasets), each with the sources that gave it; with live, only names that resolve (wildcard answers left out). Nothing is sent to the target.",
 			"inputSchema": obj(map[string]any{"domain": strs1("domains such as example.com"), "live": prop("boolean", "only names that resolve"), "workspace": pWorkspace, "limit": pLimit}, "domain"),
@@ -67,7 +71,7 @@ func mcpTools() []map[string]any {
 			"inputSchema": obj(map[string]any{"hosts": strs1("hosts or addresses"), "ports": prop("string", "top-100 (default), top-1000, full, or a list such as 22,80,8000-8100"), "limit": pLimit}, "hosts"),
 			"annotations": annotations(false, true, "Scan ports")},
 		{"name": "azhaq_query", "title": "Query a workspace",
-			"description": "The rows of a workspace's map that match, best first: by entity type (URL, Hostname, IPAddress, Domain), role (app, auth, forbidden, api, page, live, sibling, unresolved, dead), coverage (visited, hint, catchall, error, skipped), status (200, 401, 4xx), method (GET, POST), host, text, what the last run saw first (new). fields picks the columns: key, type, role, coverage, status, title, methods, params, body, ops, forms, scope, first_seen.",
+			"description": "The rows of a workspace's map that match, best first: by entity type (URL, Hostname, IPAddress, Domain), role (app, auth, forbidden, api, page, live, sibling, unresolved, dead), coverage (visited, hint, catchall, error, skipped), status (200, 401, 4xx), method (GET, POST), host, text, what the last run saw first (new). fields picks the columns: key, type, role, coverage, status, title, methods, params, body, ops, forms, scope, first_seen, proof, count (default key, type, role, coverage, status, title, methods, params, count).",
 			"inputSchema": obj(map[string]any{"workspace": pWorkspace, "type": strs1("entity types"), "role": strs1("roles"), "coverage": strs1("coverage values"),
 				"status": strs1("statuses: 200, 401, 4xx"), "method": prop("string", "routes with this method"), "host": prop("string", "on this host or under this domain"),
 				"match": prop("string", "keys that contain this text"), "scope": prop("string", "target or fanout"), "new": prop("boolean", "only what the last run saw first"),
@@ -88,8 +92,9 @@ func mcpTools() []map[string]any {
 				"browser": pBrowser, "depth": pDepth, "timeout_seconds": pTimeout, "limit": pLimit}, "roles"),
 			"annotations": annotations(false, true, "Compare sessions")},
 		{"name": "azhaq_export", "title": "Export a workspace",
-			"description": "Write a workspace in another tool's format next to it and return the file: openapi (the target's own description where it serves one, plus what scripts call and forms send), graphql (introspection JSON, for InQL or Burp), sdl (GraphQL schema), burp (scope), targets (web services, for nuclei -l), urls, hosts, names, html, graphml, secrets, jsonl.",
-			"inputSchema": obj(map[string]any{"workspace": pWorkspace, "format": map[string]any{"type": "string", "enum": []string{"openapi", "graphql", "sdl", "burp", "targets", "urls", "hosts", "names", "html", "graphml", "secrets", "jsonl"}}}),
+			"description": "A workspace in another tool's format: openapi (the target's own description where it serves one, plus what scripts call and forms send), graphql (introspection JSON, for InQL or Burp), sdl (GraphQL schema), burp (scope), targets (web services, for nuclei -l), urls, hosts, names, html, graphml, secrets, jsonl. Returns the export itself, 16 KB at most per call (offset gets the next part), and writes it to a file next to the workspace on the server's machine (juice.openapi.json, juice.html).",
+			"inputSchema": obj(map[string]any{"workspace": pWorkspace, "format": map[string]any{"type": "string", "enum": exportFormats, "description": "default openapi"},
+				"offset": prop("integer", "where to start in the export, in bytes: what the previous part said for the next one")}),
 			"annotations": annotations(true, false, "Export a workspace")},
 		{"name": "azhaq_diff", "title": "What changed",
 			"description": "What the last run into a workspace saw that the run before it did not, and what it no longer saw.",

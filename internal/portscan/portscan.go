@@ -1,9 +1,13 @@
 // Package portscan finds open TCP ports with full connects (no raw
-// sockets, no root) at a set rate, and reads what a service says first.
+// sockets, no root) at a set rate, reads what a service says first, and
+// asks one that says nothing whether it speaks HTTP or TLS.
 package portscan
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
 	"net"
 	"regexp"
@@ -65,11 +69,16 @@ func Ports(spec string) ([]int, error) {
 	return out, nil
 }
 
-// Open is one open port and what its service said, if anything.
+// Open is one open port and what its service said, if anything. A
+// service that speaks TLS gives the names of its certificate: the
+// subject's common name and its alternative names, as httpx calls them.
 type Open struct {
-	Port    int    `json:"port"`
-	Service string `json:"service,omitempty"`
-	Banner  string `json:"banner,omitempty"`
+	Port      int      `json:"port"`
+	Service   string   `json:"service,omitempty"`
+	Banner    string   `json:"banner,omitempty"`
+	TLS       bool     `json:"tls,omitempty"`
+	SubjectCN string   `json:"subject_cn,omitempty"`
+	SubjectAN []string `json:"subject_an,omitempty"`
 }
 
 // Scanner connects to ports at a set total rate.
@@ -77,10 +86,14 @@ type Scanner struct {
 	Rate    float64       // connection attempts per second, all hosts together; 0 means 300
 	Workers int           // connects in flight; 0 means 100
 	Timeout time.Duration // per connect; 0 means 1.5 s
-	Banner  time.Duration // how long to wait for a service to speak; 0 means 1.5 s; <0 skips
-	// Take, when set, is asked before each connect; an error stops the
-	// scan and is returned (the run's request budget is spent).
+	Banner  time.Duration // how long to wait for a service to speak (and, with Timeout, for the answer to a probe); 0 means 1.5 s; <0 skips both
+	// Take, when set, is asked before each connect, the TLS probe's
+	// included; an error stops the scan and is returned (the run's
+	// request budget is spent).
 	Take func() error
+	// UserAgent goes on the HTTP probe: a CDN's bot manager may hold a
+	// request without a browser's open.
+	UserAgent string
 
 	once    sync.Once
 	limiter *limit.Limiter
@@ -104,8 +117,10 @@ func (s *Scanner) init() {
 	})
 }
 
-// Scan connects to each port of ip once and returns the open ones.
-func (s *Scanner) Scan(ctx context.Context, ip string, ports []int) ([]Open, error) {
+// Scan connects to each port of ip once and returns the open ones. host
+// is the name the probes of silent ports ask for (the Host header, the
+// TLS server name); empty, ip.
+func (s *Scanner) Scan(ctx context.Context, host, ip string, ports []int) ([]Open, error) {
 	s.init()
 	var mu sync.Mutex
 	var open []Open
@@ -132,7 +147,7 @@ func (s *Scanner) Scan(ctx context.Context, ip string, ports []int) ([]Open, err
 		go func(p int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			if o, ok := s.probe(ctx, ip, p); ok {
+			if o, ok := s.probe(ctx, host, ip, p); ok {
 				mu.Lock()
 				open = append(open, o)
 				mu.Unlock()
@@ -147,7 +162,7 @@ func (s *Scanner) Scan(ctx context.Context, ip string, ports []int) ([]Open, err
 	return open, ctx.Err()
 }
 
-func (s *Scanner) probe(ctx context.Context, ip string, port int) (Open, bool) {
+func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, bool) {
 	d := net.Dialer{Timeout: s.Timeout}
 	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
 	if err != nil {
@@ -158,11 +173,129 @@ func (s *Scanner) probe(ctx context.Context, ip string, port int) (Open, bool) {
 	if s.Banner > 0 {
 		_ = conn.SetReadDeadline(time.Now().Add(s.Banner))
 		buf := make([]byte, 256)
-		n, _ := conn.Read(buf)
+		n, err := conn.Read(buf)
 		o.Banner = printable(buf[:n])
+		// Still open after the wait, the service waits to be asked. One
+		// that closed the connection says nothing to anyone (tcpwrapped).
+		var ne net.Error
+		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) {
+			s.identify(ctx, &o, conn, host, ip)
+		}
 	}
-	o.Service = guess(port, o.Banner)
+	if o.Service == "" {
+		o.Service = guess(port, o.Banner)
+	}
 	return o, true
+}
+
+// rawData: ports that take whatever they are sent as a job (JetDirect
+// printing on 9100–9107, as nmap leaves them out of its probes): asking
+// them anything would print it.
+func rawData(port int) bool { return port >= 9100 && port <= 9107 }
+
+// identify asks a port that said nothing what it serves, once: an HTTP
+// HEAD on the connection still open, then, without an HTTP answer or
+// with a 400 (what nginx and Go answer plain HTTP on an HTTPS port with),
+// a TLS handshake on a second connection, which counts and is paced like
+// a connect, and the same request inside it.
+func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip string) {
+	if host == "" {
+		host = ip
+	}
+	answer := s.ask(conn, host, o.Port, 80)
+	if status, banner, ok := httpAnswer(answer); ok {
+		o.Service, o.Banner = "http", banner
+		if status != 400 {
+			return
+		}
+	} else if text := printable(answer); text != "" && text != "(binary)" {
+		// Another protocol's error, such as redis's -ERR: not TLS.
+		o.Banner = text
+		return
+	}
+	if s.limiter.Wait(ctx, "") != nil || s.Take != nil && s.Take() != nil {
+		return
+	}
+	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}
+	if net.ParseIP(host) == nil {
+		cfg.ServerName = host
+	}
+	hctx, cancel := context.WithTimeout(ctx, s.Timeout+s.Banner)
+	defer cancel()
+	td := tls.Dialer{NetDialer: &net.Dialer{Timeout: s.Timeout}, Config: cfg}
+	c, err := td.DialContext(hctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(o.Port)))
+	if err != nil {
+		return
+	}
+	defer c.Close()
+	o.TLS = true
+	o.Service, o.Banner = "tls", ""
+	if certs := c.(*tls.Conn).ConnectionState().PeerCertificates; len(certs) > 0 {
+		o.SubjectCN = certs[0].Subject.CommonName
+		o.SubjectAN = append(o.SubjectAN, certs[0].DNSNames...)
+		for _, a := range certs[0].IPAddresses {
+			o.SubjectAN = append(o.SubjectAN, a.String())
+		}
+	}
+	if _, banner, ok := httpAnswer(s.ask(c, host, o.Port, 443)); ok {
+		o.Service, o.Banner = "https", banner
+	}
+}
+
+// ask sends HEAD / and returns the head of the answer, if any.
+func (s *Scanner) ask(conn net.Conn, host string, port, defaultPort int) []byte {
+	switch {
+	case port != defaultPort:
+		host = net.JoinHostPort(host, strconv.Itoa(port))
+	case strings.Contains(host, ":"):
+		host = "[" + host + "]"
+	}
+	// The time of a connect and of a banner: a remote server's answer
+	// takes a round trip more than its silence.
+	_ = conn.SetDeadline(time.Now().Add(s.Timeout + s.Banner))
+	req := "HEAD / HTTP/1.0\r\nHost: " + host + "\r\n"
+	if s.UserAgent != "" {
+		req += "User-Agent: " + s.UserAgent + "\r\n"
+	}
+	if _, err := conn.Write([]byte(req + "Accept: */*\r\n\r\n")); err != nil {
+		return nil
+	}
+	var head []byte
+	buf := make([]byte, 1024)
+	for len(head) < 4096 && !bytes.Contains(head, []byte("\r\n\r\n")) {
+		n, err := conn.Read(buf)
+		head = append(head, buf[:n]...)
+		if err != nil {
+			break
+		}
+	}
+	return head
+}
+
+// httpAnswer reads the head of an HTTP answer: its status, and what to
+// show of it, the Server header or else the status line.
+func httpAnswer(head []byte) (status int, banner string, ok bool) {
+	if !bytes.HasPrefix(head, []byte("HTTP/")) {
+		return 0, "", false
+	}
+	lines := strings.Split(string(head), "\n")
+	first := strings.TrimSpace(lines[0])
+	if f := strings.Fields(first); len(f) > 1 {
+		status, _ = strconv.Atoi(f[1])
+	}
+	for _, l := range lines[1:] {
+		k, v, found := strings.Cut(strings.TrimSpace(l), ":")
+		if !found {
+			break // the end of the head
+		}
+		if strings.EqualFold(k, "server") {
+			banner = printable([]byte(strings.TrimSpace(v)))
+		}
+	}
+	if banner == "" {
+		banner = printable([]byte(first))
+	}
+	return status, banner, true
 }
 
 // printable keeps the first line of a text banner; a service that speaks
@@ -230,8 +363,8 @@ func guess(port int, banner string) string {
 // or answered like HTTP, and is not a known non-web service.
 func (o Open) Web() bool {
 	switch strings.TrimSuffix(o.Service, "?") {
-	case "", "http", "https", "elasticsearch", "docker", "kubernetes":
-		return true
+	case "", "http", "https", "tls", "elasticsearch", "docker", "kubernetes":
+		return true // tls: a handshake answered, HTTP inside it may be slow
 	}
 	return false
 }

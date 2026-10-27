@@ -102,7 +102,7 @@ Signing in opens the page in Chrome, fills the user name and password the way ty
 
 ## A bug bounty program
 
-`-scope` takes a program's scope and makes it the run's: wildcards are enumerated as domains, hosts and URLs probed as given, out-of-scope entries excluded, and no request goes to a host outside it, not even a redirect target. Targets you give that the scope excludes are skipped and listed. It reads HackerOne's scope CSV, a Burp project options file, plain lines (`*.example.com`, `app.example.org:8443`, `10.0.0.0/24`, `!excluded.example.com`), or the current scope of any public program on HackerOne, Bugcrowd, Intigriti or YesWeHack, from [bounty-targets-data](https://github.com/arkadiyt/bounty-targets-data). Every command that sends requests to targets (`run`, `plan`, `probe`, `crawl`, `ports`, `dirs`, `params`, `shots`, and the runs inside `roles` and `watch`, after `--`) takes `-scope`, `-allow` and `-deny`. Given with targets of your own (`probe -l hosts.txt -scope hackerone -program x`), the scope filters them; it adds the program's own targets only when you give none.
+`-scope` takes a program's scope and makes it the run's: wildcards are enumerated as domains, hosts and URLs probed as given, out-of-scope entries excluded, and no request goes to a host outside it, not even a redirect target. Without any scope, a redirect is followed only within the site (the same registrable domain or address): a redirect to a third party is recorded with its `Location`, and its page is never reported as the target's. Targets you give that the scope excludes are skipped and listed. It reads HackerOne's scope CSV, a Burp project options file, plain lines (`*.example.com`, `app.example.org:8443`, `10.0.0.0/24`, `!excluded.example.com`), or the current scope of any public program on HackerOne, Bugcrowd, Intigriti or YesWeHack, from [bounty-targets-data](https://github.com/arkadiyt/bounty-targets-data). Every command that sends requests to targets (`run`, `plan`, `probe`, `crawl`, `ports`, `dirs`, `params`, `shots`, and the runs inside `roles` and `watch`, after `--`) takes `-scope`, `-allow` and `-deny`. Given with targets of your own (`probe -l hosts.txt -scope hackerone -program x`), the scope filters them; it adds the program's own targets only when you give none.
 
 ```
 azhaq scope -scope bugcrowd -program tesla                       # what a run would take, exclude and skip
@@ -114,7 +114,7 @@ Budgets: `-rate 10` paces requests to targets, `-max-requests 5000` stops a run 
 
 ## Watching a target
 
-Every run into the same `-db` adds to the workspace. `azhaq watch` runs again and again and reports what a person watching cares about: new names that resolve, new web services, new URLs, ports that opened or closed, pages whose status or title changed, and what disappeared, ignoring query values that change on every request. It posts to Slack, Discord, Telegram or any JSON webhook, and stays quiet when nothing changed.
+Every run into the same `-db` adds to the workspace. `azhaq watch` runs again and again and reports what a person watching cares about: new names that resolve, new web services, new URLs, ports that opened or closed, pages whose status or title changed, API listings that grew or shrank (`/users/v1: 5 items → 6 items`), and what disappeared, ignoring query values that change on every request. It posts to Slack, Discord, Telegram or any JSON webhook, and stays quiet when nothing changed.
 
 ```
 azhaq watch -db acme.db -notify https://hooks.slack.com/services/… -- -scope acme-scope.csv    # once, from cron
@@ -139,7 +139,7 @@ azhaq asn    -a AS64500                                                        #
 azhaq shots  -l hosts.txt -dir screenshots                                     # gowitness
 ```
 
-`probe` writes httpx's fields with httpx's meanings: `host` is the name, `host_ip` the address the request connected to, `a` and `aaaa` the addresses the name resolved to, `status_code` the first answer (a 302 stays 302). Where a redirect stays in scope it is followed, and `final_url` and `final_status_code` say where it ended; the title and technologies are the final page's. `subs -json` gives each name with the `source` and all the `sources` that gave it (`dns-brute` and `permute` for names `-w` and `-permute` found by resolving guesses). subdomain.center is out of the default sources: it answers 500 random names, different on each call. `-db FILE` keeps any of them in a workspace for `query`, `show` and `export`.
+`probe` writes httpx's fields with httpx's meanings: `host` is the name, `host_ip` the address the request connected to, `a` and `aaaa` the addresses the name resolved to, `status_code` the first answer (a 302 stays 302). Where a redirect stays in the scope (without one, in the site) it is followed, and `final_url` and `final_status_code` say where it ended; the title and technologies are the final page's. Every target given ends as a service, a failure or a skip in the summary. `subs -json` gives each name with the `source` and all the `sources` that gave it (`dns-brute` and `permute` for names `-w` and `-permute` found by resolving guesses). subdomain.center pads its answer with about 500 random names per call: a name only it gave is kept when it resolves (not to a wildcard). Keyless sources asked by default: anubis, certspotter, crt.sh, crtname, hackertarget, hudsonrock, rapiddns, scanmalware, shodanct, subdomain.center, thc; a source that fails while others answer is listed in the summary and does not make the exit code 3 (`-fail-on-errors` does). `-db FILE` keeps any of them in a workspace for `query`, `show` and `export`.
 
 What other tools found joins a workspace with `azhaq ingest`: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report, Azhaq's own export, or plain lists of URLs, hosts and addresses.
 
@@ -154,7 +154,7 @@ azhaq mcp -scope hackerone -program security -max-requests 20000 -rate 5
 claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000
 ```
 
-`azhaq mcp` serves the Model Context Protocol over stdio. Its tools run Azhaq itself and return the same summary and rows (`azhaq_plan`, `azhaq_map`, `azhaq_subdomains`, `azhaq_probe`, `azhaq_ports`, `azhaq_query`, `azhaq_show`, `azhaq_roles`, `azhaq_export`, `azhaq_diff`, …). The scope, the request budget for all calls together and the pace are fixed when the server starts; no tool argument can widen them, and results are bounded so one call does not fill a context. [docs/MCP.md](docs/MCP.md) (`azhaq docs mcp`).
+`azhaq mcp` serves the Model Context Protocol over stdio. Its tools run Azhaq itself and return the same summary and rows (`azhaq_scope`, `azhaq_plan`, `azhaq_map`, `azhaq_resume`, `azhaq_subdomains`, `azhaq_probe`, `azhaq_ports`, `azhaq_query`, `azhaq_show`, `azhaq_roles`, `azhaq_export`, `azhaq_diff`, `azhaq_workspaces`). The scope, the request budget for all calls together and the pace are fixed when the server starts; no tool argument can widen them, an unknown argument is refused, and results are bounded (at most 1,000 rows, 16 KB of an export per call) so one call does not fill a context. A map stopped by the budget, a timeout or a cancel continues with `azhaq_resume`. [docs/MCP.md](docs/MCP.md) (`azhaq docs mcp`).
 
 ## More options
 
@@ -203,26 +203,26 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-27, v0.6.1; the Wayback Machine and Common Crawl refuse the bench machine, and its security software removes naabu, so the port comparison runs on GitHub's network):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. Latest run (2026-10-27, v0.6.2; the Wayback Machine and Common Crawl refuse the bench machine, and its security software removes naabu, so the port comparison runs on GitHub's network):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 516, in 48 s | 509, in 94 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 29 s | 3 in 75 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 549, in 18 s | 511, in 66 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 53 s | 3 in 70 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 530 live hosts | httpx | 384 answered; status, title and technologies agree on all 376 shared; 94 s | 376 answered, 135 s |
+| Probing 561 live hosts | httpx | 397 answered; status, title and technologies agree on 387 of 388 shared (redirects out of the site compared by their own status: Azhaq does not report a third party's page as the host's); 103 s | 389 answered, 144 s |
 | Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
 | VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 18 s | 6/77 in 7 s, 0/40 in 44 s |
+| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 14 s, 32/40 in 17 s | 6/77 in 8 s, 0/40 in 49 s |
 | Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,104, including 2,335 of gau's 2,340 | 2,340 |
-| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 54 s | 36 hits, 4 false positives, 59 s |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 50 s | 36 hits, 4 false positives, 58 s |
 | Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
 | Screenshots, 4 front pages | gowitness | 4 | 3 |
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
 | A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 184 URLs as one run each time; 211 requests over the capped run and its resumes, one run 205 | |
-| Memory, Juice Shop | katana | 97 MB | 59 MB |
+| Memory, Juice Shop | katana | 93 MB | 61 MB |
 
 The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's), and one path of ffuf's 36.
 

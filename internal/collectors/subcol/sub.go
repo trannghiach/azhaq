@@ -7,6 +7,7 @@ package subcol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strings"
@@ -49,6 +50,10 @@ type Options struct {
 	Exclude []string            // never run these
 	All     bool                // also run sources outside the default set
 	Timeout time.Duration       // per source
+	// Verify returns the names that resolve, not to a wildcard of domain
+	// (what is kept of the names only a padding source gave), and how many
+	// it could not check (the resolvers failed). Nil keeps them all.
+	Verify func(ctx context.Context, domain string, names []string) (live []string, unchecked int)
 }
 
 type Collector struct {
@@ -189,7 +194,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				reported[i] = true
 			}
 			hintMu.Unlock()
-			pass(names)
+			if !s.verify {
+				pass(names) // a padding source's names wait for their check
+			}
 		}(i, s)
 	}
 	// Some sources ignore the context (subfinder's crt.sh tries a Postgres
@@ -249,6 +256,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	for name, why := range skipped {
 		status[name] = map[string]any{"skipped": why}
 	}
+	names, foundBy = c.verifyPadded(ctx, domain, run, names, foundBy, status)
 	sort.Strings(names)
 	for _, by := range foundBy {
 		sort.Strings(by)
@@ -277,6 +285,66 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	return meta, nil
+}
+
+// verifyPadded drops the names only padding sources gave (source.verify)
+// that do not resolve, and notes in each such source's status how many it
+// kept.
+func (c *Collector) verifyPadded(ctx context.Context, domain string, run []source, names []string, foundBy map[string][]string, status map[string]any) ([]string, map[string][]string) {
+	padding := map[string]bool{}
+	for _, s := range run {
+		if s.verify {
+			padding[s.name] = true
+		}
+	}
+	if len(padding) == 0 || c.opts.Verify == nil {
+		return names, foundBy
+	}
+	var check []string
+	for _, n := range names {
+		only := true
+		for _, by := range foundBy[n] {
+			if !padding[by] {
+				only = false
+				break
+			}
+		}
+		if only {
+			check = append(check, n)
+		}
+	}
+	if len(check) == 0 {
+		return names, foundBy
+	}
+	live := map[string]bool{}
+	got, unchecked := c.opts.Verify(ctx, domain, check)
+	for _, n := range got {
+		live[n] = true
+	}
+	drop := map[string]bool{}
+	for _, n := range check {
+		if !live[n] {
+			drop[n] = true
+			delete(foundBy, n)
+		}
+	}
+	kept := names[:0]
+	for _, n := range names {
+		if !drop[n] {
+			kept = append(kept, n)
+		}
+	}
+	for name := range padding {
+		if row, ok := status[name].(map[string]any); ok {
+			row["kept"] = len(check) - len(drop)
+			row["dropped_unresolved"] = len(drop)
+			if unchecked > 0 {
+				// Said, not silent: these may hold a real name.
+				row["error"] = fmt.Sprintf("%d of its names not checked: the DNS lookups failed", unchecked)
+			}
+		}
+	}
+	return kept, foundBy
 }
 
 // clean returns name in canonical form if it is domain or under it.

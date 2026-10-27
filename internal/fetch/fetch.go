@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 )
 
@@ -496,7 +497,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 			break
 		}
 		next, err := resp.Request.URL.Parse(loc)
-		if err != nil || !inScope(next.String()) {
+		if err != nil || !inScope(next.String()) || !followable(raw, next.String()) {
 			break // the hop is recorded with its Location; the target is not requested
 		}
 		current = next.String()
@@ -646,6 +647,34 @@ func mustURL(raw string) *url.URL {
 		return &url.URL{}
 	}
 	return u
+}
+
+// followable says whether a redirect from raw to next is followed. With a
+// scope, inScope decides. Without one, only within the site: the same
+// registrable domain, or the same address. A redirect to a third party
+// (an asset host, an identity provider) is recorded with its Location,
+// and that party's page is never reported as the target's.
+func followable(raw, next string) bool {
+	if Allow != nil {
+		return true
+	}
+	a, b := hostOf(raw), hostOf(next)
+	if a == "" || b == "" || a == b {
+		return true
+	}
+	if net.ParseIP(a) != nil || net.ParseIP(b) != nil {
+		return false
+	}
+	da, db := normalize.RegistrableDomain(a), normalize.RegistrableDomain(b)
+	return da != "" && da == db
+}
+
+func hostOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(u.Hostname())
 }
 
 func inScope(raw string) bool {

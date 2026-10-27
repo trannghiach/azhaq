@@ -181,7 +181,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	verbose := fs.Bool("v", false, "print a line for every finished task, not only failures")
 	timeout := fs.Duration("timeout", 0, "stop after this long and keep what was found; azhaq resume continues (0: no limit)")
 	showObs := fs.Bool("obs", false, "also print the observation log")
-	failErrs := fs.Bool("fail-on-errors", false, "exit 3 also when only fan-out failed (a source for the domain of a URL)")
+	failErrs := fs.Bool("fail-on-errors", false, "exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered")
 	failCapped := fs.Bool("fail-on-capped", false, "exit 4 also when the run hit -depth with hints left")
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
@@ -718,15 +718,17 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	rep.RunID = stats.RunID
 	rep.Requests = fetch.Sent()
 	if left := st.TasksLeft(); left > 0 {
+		// Tasks left counts what is known so far: the pages a resume reads
+		// lead to more, so it can grow between resumes.
 		switch {
 		case errors.Is(ctx.Err(), context.DeadlineExceeded):
-			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks left", *timeout, left)
+			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks known and not done", *timeout, left)
 		case ctx.Err() != nil:
-			rep.Stopped = fmt.Sprintf("interrupted with %d tasks left", left)
+			rep.Stopped = fmt.Sprintf("interrupted with %d tasks known and not done", left)
 		case fetch.Spent():
-			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks left", fetch.MaxRequests, left)
+			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done", fetch.MaxRequests, left)
 		default:
-			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks left", budgets.MaxItems, left)
+			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}
 		rep.Resume = "azhaq resume -db " + path
 		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
@@ -742,6 +744,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *failErrs {
 		for i := range rep.Failed {
 			rep.Failed[i].Fanout = false
+			rep.Failed[i].Partial = false
 		}
 	}
 	if remember && !*demo && input != "" {
@@ -880,7 +883,7 @@ func cmdIngest(args []string) error {
 	rep := newReport("ingest")
 	rep.what = "facts"
 	rep.Results, rep.Counts, rep.DB = len(facts), formats, path
-	rep.Next = []string{"azhaq query -db " + path, "azhaq dns -l NAMES -db " + path + "   (resolve names taken in without addresses)"}
+	rep.Next = []string{"azhaq query -db " + path, "azhaq export -db " + path + " -format names | azhaq dns -db " + path + "   (resolve the names taken in without addresses)"}
 	return rep.finish(*asJSON, false)
 }
 
@@ -950,10 +953,24 @@ func cmdDiff(args []string) error {
 		return err
 	}
 	if *ws != "" {
+		st, err := store.OpenExisting(*ws)
+		if err != nil {
+			return err
+		}
+		runs, _ := st.Runs()
+		st.Close()
+		if len(runs) < 2 {
+			// Nothing to compare yet: said, not silent.
+			if *jsonl {
+				return json.NewEncoder(os.Stdout).Encode(map[string]any{"kind": "summary", "runs": len(runs), "added": 0, "removed": 0, "not_seen_again": 0, "observations": 0, "note": "one run so far: a diff needs two"})
+			}
+			fmt.Printf("%s holds %d run so far: a diff needs two (run the same target into it again)\n", *ws, len(runs))
+			return nil
+		}
 		return printRunDiff(*ws, diffOpts{JSONL: *jsonl, Quiet: *quiet})
 	}
 	if *a == "" {
-		return fmt.Errorf("need -a OLD.db, or -db WORKSPACE.db")
+		return usagef("need -a OLD.db, or -db WORKSPACE.db")
 	}
 	newPath := *b
 	if newPath == "" {

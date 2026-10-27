@@ -69,10 +69,13 @@ func init() {
 		{name: "roles", group: groupMap, run: cmdRoles,
 			summary: "map the same target once per session and show where the answers differ (access control)",
 			usage:   "-role NAME[=Header: value] -role … [-role-login NAME=USER:PASS -login URL] [-id [ROLE:]NAME=VALUE] [-jsonl] -- RUN FLAGS",
-			output:  "one row per endpoint whose answer depends on the session: status, length and body per role, and a verdict (a role reading another role's object, sensitive fields anyone reads, …)",
+			output: "one row per endpoint whose answer depends on the session: status, length and body per role, and a verdict (a role reading another role's object, sensitive fields anyone reads, …); " +
+				"a role refused wherever a session matters is named in a note (exit 3). A role sends only the headers it is given: what an app reads from a cookie " +
+				"(Juice Shop's /rest/user/whoami) needs NAME=Cookie: …, or -role-login, which carries the cookies and the stored token",
 			examples: []string{
 				"azhaq roles -role anon -role 'user=Authorization: Bearer eyJ…' -- -url https://api.example.com/",
 				"azhaq roles -role anon -role 'alice=Authorization: Bearer eyJ…' -role 'bob=Authorization: Bearer eyJ…' -id 'alice:book_title=Alice book' -- -url https://api.example.com/",
+				"azhaq roles -role anon -role 'alice=Authorization: Bearer eyJ…' -role 'alice=Cookie: token=eyJ…' -- -url https://app/",
 				"azhaq roles -login https://app/login -role anon -role-login 'alice=a@x.test:pw' -role-login 'bob=b@x.test:pw' -- -url https://app/",
 			}},
 		{name: "subs", group: groupDropIn, like: "subfinder", run: cmdSubs,

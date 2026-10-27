@@ -579,7 +579,16 @@ func (m MapEntry) Details() []string {
 // that has it: a newsletter form in the footer is not news on every page.
 // Rows must already be sorted by BuildMap.
 func GroupTemplates(rows []MapEntry) []MapEntry {
-	out := groupTemplates(rows)
+	return dedupeForms(groupTemplates(rows, true))
+}
+
+// GroupURLTemplates folds URL templates only: every name is its own row,
+// for query, where each one can be asked about.
+func GroupURLTemplates(rows []MapEntry) []MapEntry {
+	return dedupeForms(groupTemplates(rows, false))
+}
+
+func dedupeForms(out []MapEntry) []MapEntry {
 	seen := map[string]bool{}
 	for i := range out {
 		var keep []MapForm
@@ -596,12 +605,12 @@ func GroupTemplates(rows []MapEntry) []MapEntry {
 	return out
 }
 
-func groupTemplates(rows []MapEntry) []MapEntry {
+func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 	idx := map[string]int{}
 	out := make([]MapEntry, 0, len(rows))
 	folded := map[string]int{}
 	for _, r := range rows {
-		if r.Entity.Type == types.TypeHostname && (r.Role == "dead" || r.Role == "wildcard" || r.Role == "unresolved") {
+		if foldNames && r.Entity.Type == types.TypeHostname && (r.Role == "dead" || r.Role == "wildcard" || r.Role == "unresolved") {
 			if i, ok := folded[r.Role]; ok {
 				out[i].Folded++
 				continue

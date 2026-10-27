@@ -12,11 +12,15 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
+
+	"github.com/trannghiach/azhaq/store"
 )
 
 // The MCP server speaks JSON-RPC over stdin and stdout, one message per
@@ -39,6 +43,7 @@ type mcpServer struct {
 	out     *json.Encoder
 	outMu   sync.Mutex
 	running map[string]context.CancelFunc // request id → its command
+	dropped map[string]bool               // requests the client cancelled: no response
 }
 
 func cmdMCP(args []string) error {
@@ -61,7 +66,7 @@ func cmdMCP(args []string) error {
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return err
 	}
-	s := &mcpServer{exe: exe, dir: *dir, rate: *rate, budget: *budget, running: map[string]context.CancelFunc{}}
+	s := &mcpServer{exe: exe, dir: *dir, rate: *rate, budget: *budget}
 	if *scopeSpec != "" {
 		sc, err := loadScope(*scopeSpec, *program)
 		if err != nil {
@@ -104,6 +109,9 @@ type rpcError struct {
 
 func (s *mcpServer) serve(in io.Reader, out io.Writer) error {
 	s.out = json.NewEncoder(out)
+	s.mu.Lock()
+	s.running, s.dropped = map[string]context.CancelFunc{}, map[string]bool{}
+	s.mu.Unlock()
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 1<<20), 64<<20)
 	var wg sync.WaitGroup
@@ -124,14 +132,45 @@ func (s *mcpServer) serve(in io.Reader, out io.Writer) error {
 			s.notification(m)
 			continue
 		}
+		// Known before it starts, so a cancellation sent right after the
+		// request finds it.
+		id := idKey(m.ID)
+		ctx, cancel := context.WithCancel(context.Background())
+		s.mu.Lock()
+		s.running[id] = cancel
+		s.mu.Unlock()
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			s.request(m)
+			defer func() {
+				cancel()
+				s.mu.Lock()
+				delete(s.running, id)
+				delete(s.dropped, id)
+				s.mu.Unlock()
+			}()
+			defer func() {
+				// A bug in one tool call ends that call, not the server.
+				if r := recover(); r != nil {
+					s.fail(m.ID, -32603, fmt.Sprintf("internal error: %v", r))
+				}
+			}()
+			s.request(ctx, m)
 		}()
 	}
 	wg.Wait()
 	return sc.Err()
+}
+
+// idKey is a request id as a map key: 7 and 7.0 or "a" written with
+// other spacing are the same request.
+func idKey(raw json.RawMessage) string {
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return string(raw)
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 func (s *mcpServer) send(m rpcMsg) {
@@ -141,12 +180,23 @@ func (s *mcpServer) send(m rpcMsg) {
 	_ = s.out.Encode(m)
 }
 
+// answer sends the response to a request, unless the client cancelled
+// it: it does not expect one then.
+func (s *mcpServer) answer(m rpcMsg) {
+	s.mu.Lock()
+	dropped := s.dropped[idKey(m.ID)]
+	s.mu.Unlock()
+	if !dropped {
+		s.send(m)
+	}
+}
+
 func (s *mcpServer) reply(id json.RawMessage, result any) {
-	s.send(rpcMsg{ID: id, Result: result})
+	s.answer(rpcMsg{ID: id, Result: result})
 }
 
 func (s *mcpServer) fail(id json.RawMessage, code int, msg string) {
-	s.send(rpcMsg{ID: id, Error: &rpcError{code, msg}})
+	s.answer(rpcMsg{ID: id, Error: &rpcError{code, msg}})
 }
 
 func (s *mcpServer) notification(m rpcMsg) {
@@ -155,18 +205,25 @@ func (s *mcpServer) notification(m rpcMsg) {
 		var p struct {
 			RequestID json.RawMessage `json:"requestId"`
 		}
-		if json.Unmarshal(m.Params, &p) == nil {
-			s.mu.Lock()
-			cancel := s.running[string(p.RequestID)]
-			s.mu.Unlock()
-			if cancel != nil {
-				cancel()
-			}
+		if json.Unmarshal(m.Params, &p) != nil || len(p.RequestID) == 0 {
+			return
+		}
+		// The command is stopped and keeps what it found; the request
+		// gets no response.
+		id := idKey(p.RequestID)
+		s.mu.Lock()
+		cancel := s.running[id]
+		if cancel != nil {
+			s.dropped[id] = true
+		}
+		s.mu.Unlock()
+		if cancel != nil {
+			cancel()
 		}
 	}
 }
 
-func (s *mcpServer) request(m rpcMsg) {
+func (s *mcpServer) request(ctx context.Context, m rpcMsg) {
 	switch m.Method {
 	case "initialize":
 		var p struct {
@@ -201,21 +258,11 @@ func (s *mcpServer) request(m rpcMsg) {
 			s.fail(m.ID, -32602, "invalid params: "+err.Error())
 			return
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		s.mu.Lock()
-		s.running[string(m.ID)] = cancel
-		s.mu.Unlock()
-		defer func() {
-			cancel()
-			s.mu.Lock()
-			delete(s.running, string(m.ID))
-			s.mu.Unlock()
-		}()
-		res, err := s.call(ctx, p.Name, p.Arguments, p.Meta.ProgressToken)
-		if errors.Is(err, errUnknownTool) {
+		if err := checkArgs(p.Name, p.Arguments); err != nil {
 			s.fail(m.ID, -32602, err.Error())
 			return
 		}
+		res, err := s.call(ctx, p.Name, p.Arguments, p.Meta.ProgressToken)
 		if err != nil {
 			s.reply(m.ID, toolText(err.Error(), true))
 			return
@@ -234,12 +281,56 @@ func (s *mcpServer) instructions() string {
 	return strings.Join([]string{
 		"Azhaq maps targets for security research: names, web services, pages, JavaScript routes, API operations, forms, parameters and access by role, in one graph per workspace. It never sends attack payloads.",
 		lock,
-		"Budget: " + budgetText(s.budget) + " for all calls together. Every result has a summary: results, failures (retryable or not), what was skipped and why, the limit that stopped the work.",
+		"Budget: " + budgetText(s.budget) + " for all calls together. Every result has a summary: results, failures (retryable or not), what was skipped and why, the limit that stopped the work; azhaq_resume continues a run a limit or a cancellation stopped.",
 		"Typical flow: azhaq_plan to see what a run would send, azhaq_map to map a URL or domain into a workspace, azhaq_query and azhaq_show to read it, azhaq_roles to compare sessions, azhaq_export for Burp, Postman or ZAP.",
 	}, " ")
 }
 
 var errUnknownTool = errors.New("unknown tool")
+
+// toolArgs are the arguments each tool takes, from its schema.
+var toolArgs = sync.OnceValue(func() map[string][]string {
+	out := map[string][]string{}
+	for _, t := range mcpTools() {
+		props, _ := t["inputSchema"].(map[string]any)["properties"].(map[string]any)
+		names := make([]string, 0, len(props))
+		for k := range props {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+		out[t["name"].(string)] = names
+	}
+	return out
+})
+
+// checkArgs refuses a tool the server does not have and arguments its
+// schema does not name: a misspelt limit or a scope the tools would
+// ignore must not pass in silence.
+func checkArgs(tool string, args map[string]any) error {
+	known, ok := toolArgs()[tool]
+	if !ok {
+		return fmt.Errorf("%w %q", errUnknownTool, tool)
+	}
+	var bad []string
+	for k := range args {
+		if !slices.Contains(known, k) {
+			bad = append(bad, fmt.Sprintf("%q", k))
+		}
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	sort.Strings(bad)
+	takes := "it takes none"
+	if len(known) > 0 {
+		takes = "it takes " + strings.Join(known, ", ")
+	}
+	word := "argument"
+	if len(bad) > 1 {
+		word = "arguments"
+	}
+	return fmt.Errorf("invalid params: unknown %s %s for %s; %s", word, strings.Join(bad, ", "), tool, takes)
+}
 
 // toolText is a tool result: one text block, compact JSON for data. The
 // same data is not sent again as structuredContent: a client that reads
@@ -259,6 +350,11 @@ type cmdResult struct {
 	summary map[string]any
 	stderr  string
 }
+
+// progressFirst and progressEvery pace the progress notifications of a
+// call: the first early, so a client sees the call is alive, then
+// regularly (some clients reset their timeout on each).
+var progressFirst, progressEvery = time.Second, 5 * time.Second
 
 func (s *mcpServer) run(ctx context.Context, progress any, touches bool, args ...string) (cmdResult, error) {
 	if touches {
@@ -285,7 +381,7 @@ func (s *mcpServer) run(ctx context.Context, progress any, touches bool, args ..
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	t0 := time.Now()
-	tick := time.NewTicker(5 * time.Second)
+	tick := time.NewTimer(progressFirst)
 	defer tick.Stop()
 	var waitErr error
 wait:
@@ -304,10 +400,12 @@ wait:
 			}
 			break wait
 		case <-tick.C:
+			tick.Reset(progressEvery)
 			if progress != nil {
+				took := time.Since(t0)
 				s.send(rpcMsg{Method: "notifications/progress", Params: mustJSON(map[string]any{
-					"progressToken": progress, "progress": time.Since(t0).Seconds(),
-					"message": fmt.Sprintf("azhaq %s: working, %s", args[0], time.Since(t0).Round(time.Second)),
+					"progressToken": progress, "progress": took.Round(100 * time.Millisecond).Seconds(),
+					"message": fmt.Sprintf("azhaq %s: working, %s", args[0], took.Round(time.Second)),
 				})})
 			}
 		}
@@ -319,8 +417,9 @@ wait:
 		}
 	}
 	for _, l := range strings.Split(res.stderr, "\n") {
-		if strings.HasPrefix(l, `{"type":"summary"`) {
-			_ = json.Unmarshal([]byte(l), &res.summary)
+		var sum map[string]any
+		if strings.HasPrefix(l, "{") && json.Unmarshal([]byte(l), &sum) == nil && sum["type"] == "summary" {
+			res.summary = sum
 		}
 	}
 	if res.summary != nil {
@@ -329,22 +428,59 @@ wait:
 			s.used += int64(n)
 			s.mu.Unlock()
 		}
+		if msg, _ := res.summary["error"].(string); msg != "" {
+			return res, stderrError(msg, nil) // the command could not do its job
+		}
 		return res, nil // the summary says how it went, exit code included
 	}
 	if waitErr != nil {
-		var msg []string
-		for _, l := range strings.Split(res.stderr, "\n") {
-			// The command line's pointer to its help means nothing here.
-			if l = strings.TrimSpace(l); l != "" && !strings.Contains(l, "azhaq help ") {
-				msg = append(msg, strings.TrimPrefix(l, "azhaq: "))
-			}
-		}
-		if len(msg) == 0 {
-			msg = []string{waitErr.Error()}
-		}
-		return res, errors.New(strings.Join(msg, "\n"))
+		return res, stderrError(res.stderr, waitErr)
 	}
 	return res, nil
+}
+
+// output runs a command that reads a workspace and returns its stdout as
+// it is: an export is not lines to trim.
+func (s *mcpServer) output(ctx context.Context, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, s.exe, args...)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	raw, err := cmd.Output()
+	if err != nil {
+		return nil, stderrError(stderr.String(), err)
+	}
+	return raw, nil
+}
+
+// stderrError is the error a command printed, without what only makes
+// sense on a command line: the "azhaq:" prefix and the pointer to its
+// help.
+func stderrError(stderr string, fallback error) error {
+	var msg []string
+	for _, l := range strings.Split(stderr, "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "{") {
+			// A summary with -json: its error.
+			var sum struct {
+				Error string `json:"error"`
+			}
+			if json.Unmarshal([]byte(l), &sum) != nil {
+				continue
+			}
+			l = sum.Error
+		}
+		if l == "" || strings.Contains(l, "azhaq help ") {
+			continue
+		}
+		msg = append(msg, strings.TrimPrefix(l, "azhaq: "))
+	}
+	if len(msg) == 0 {
+		if fallback == nil {
+			fallback = errors.New("the command failed without saying why")
+		}
+		return fallback
+	}
+	return errors.New(strings.Join(msg, "\n"))
 }
 
 func mustJSON(v any) json.RawMessage {
@@ -357,15 +493,32 @@ func mustJSON(v any) json.RawMessage {
 var workspaceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
 func (s *mcpServer) workspace(a map[string]any) (string, error) {
-	name := str(a, "workspace")
-	if name == "" {
-		name = "default"
-	}
-	name = strings.TrimSuffix(name, ".db")
+	name := wsName(a)
 	if !workspaceName.MatchString(name) {
 		return "", fmt.Errorf("workspace %q: letters, digits, dot, dash and underscore only", name)
 	}
 	return filepath.Join(s.dir, name+".db"), nil
+}
+
+// existing is the database of a workspace a tool reads: it must exist.
+func (s *mcpServer) existing(a map[string]any) (string, error) {
+	db, err := s.workspace(a)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(db); err != nil {
+		return "", fmt.Errorf("there is no workspace %q; azhaq_workspaces lists them", wsName(a))
+	}
+	return db, nil
+}
+
+// wsName is the workspace an argument names, "default" when none.
+func wsName(a map[string]any) string {
+	name := strings.TrimSuffix(str(a, "workspace"), ".db")
+	if name == "" {
+		name = "default"
+	}
+	return name
 }
 
 func str(a map[string]any, k string) string {
@@ -391,8 +544,10 @@ func strList(a map[string]any, k string) []string {
 	return nil
 }
 
+// num is a positive whole-number argument, at most 1<<30; anything else
+// (absent, negative, a fraction, 1e19) is def.
 func num(a map[string]any, k string, def int) int {
-	if v, ok := a[k].(float64); ok && v > 0 {
+	if v, ok := a[k].(float64); ok && v > 0 && v <= 1<<30 && v == float64(int(v)) {
 		return int(v)
 	}
 	return def
@@ -418,12 +573,28 @@ func rows(lines []string, limit int) ([]any, bool) {
 	return out, false
 }
 
+// maxLimit caps the rows of one result, whatever limit asks: a larger
+// answer fills a client's context instead of answering its question.
+const maxLimit = 1000
+
+// queryFields are the columns azhaq_query returns when fields names none:
+// enough to pick the next question, without a full row's proof, scope and
+// first_seen (100 rows of Juice Shop: 16 KB instead of 27).
+const queryFields = "key,type,role,coverage,status,title,methods,params,count"
+
+// listPrefix starts the name of a target list the server writes for a
+// command: removed when the command is done, kept while the run it
+// started can be resumed (azhaq resume reads it again).
+const listPrefix = ".targets-"
+
 func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, progress any) (map[string]any, error) {
 	if a == nil {
 		a = map[string]any{}
 	}
-	limit := num(a, "limit", 100)
+	limit := min(num(a, "limit", 100), maxLimit)
+	ws := wsName(a)
 	result := func(r cmdResult, extra map[string]any) (map[string]any, error) {
+		s.forMCP(r.summary, ws)
 		data := map[string]any{"summary": r.summary}
 		for k, v := range extra {
 			data[k] = v
@@ -435,37 +606,51 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		got, cut := rows(r.lines, limit)
 		extra := map[string]any{"rows": got}
 		if cut {
-			extra["truncated"] = fmt.Sprintf("%d rows, the first %d shown; raise limit or narrow the question", len(r.lines), limit)
+			extra["truncated"] = fmt.Sprintf("%d rows, the first %d shown; narrow the question, or raise limit (at most %d)", len(r.lines), limit, maxLimit)
 		}
 		return result(r, extra)
 	}
-	targets := func() ([]string, error) {
-		var out []string
+	// targets are the run flags for the targets the arguments name; list
+	// is the file that holds a list of them, "" when there is none.
+	targets := func() (args []string, list string, err error) {
 		for _, u := range strList(a, "url") {
-			out = append(out, "-url", u)
+			args = append(args, "-url", u)
 		}
 		for _, d := range strList(a, "domain") {
-			out = append(out, "-domain", d)
-		}
-		if ts := strList(a, "targets"); len(ts) > 0 {
-			f, err := os.CreateTemp(s.dir, "targets-*.txt")
-			if err != nil {
-				return nil, err
-			}
-			_, _ = f.WriteString(strings.Join(ts, "\n") + "\n")
-			f.Close()
-			out = append(out, "-list", f.Name())
+			args = append(args, "-domain", d)
 		}
 		if boolean(a, "program_scope") {
 			if !s.locked {
-				return nil, errors.New("program_scope needs the server started with -scope")
+				return nil, "", errors.New("program_scope needs the server started with -scope")
 			}
-			out = append(out, s.scopeSeeds()...)
+			args = append(args, s.scopeSeeds()...)
 		}
-		if len(out) == 0 {
-			return nil, errors.New("give url, domain or targets")
+		if ts := strList(a, "targets"); len(ts) > 0 {
+			f, err := os.CreateTemp(s.dir, listPrefix+"*.txt")
+			if err != nil {
+				return nil, "", err
+			}
+			_, _ = f.WriteString(strings.Join(ts, "\n") + "\n")
+			f.Close()
+			args, list = append(args, "-list", f.Name()), f.Name()
 		}
-		return out, nil
+		if len(args) == 0 {
+			return nil, "", errors.New("give url, domain or targets")
+		}
+		return args, list, nil
+	}
+	session := func() []string {
+		var f []string
+		if t := num(a, "timeout_seconds", 0); t > 0 {
+			f = append(f, "-timeout", fmt.Sprintf("%ds", t))
+		}
+		if l, ok := a["login"].(map[string]any); ok && str(l, "url") != "" {
+			f = append(f, "-login", str(l, "url"), "-login-user", str(l, "user"), "-login-pass", str(l, "password"))
+		}
+		for _, h := range strList(a, "headers") {
+			f = append(f, "-header", h)
+		}
+		return f
 	}
 	runFlags := func() []string {
 		var f []string
@@ -478,25 +663,22 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if d := num(a, "depth", 0); d > 0 {
 			f = append(f, "-depth", fmt.Sprint(d))
 		}
-		if t := num(a, "timeout_seconds", 0); t > 0 {
-			f = append(f, "-timeout", fmt.Sprintf("%ds", t))
-		}
-		if l, ok := a["login"].(map[string]any); ok && str(l, "url") != "" {
-			f = append(f, "-login", str(l, "url"), "-login-user", str(l, "user"), "-login-pass", str(l, "password"))
-		}
-		for _, h := range strList(a, "headers") {
-			f = append(f, "-header", h)
-		}
-		return f
+		return append(f, session()...)
 	}
 	switch name {
 	case "azhaq_scope":
-		raw, _ := json.Marshal(map[string]any{"about": s.instructions(), "locked": s.locked, "rules": s.lock, "budget": s.budget, "used": s.used, "rate": s.rate})
+		s.mu.Lock()
+		used := s.used
+		s.mu.Unlock()
+		raw, _ := json.Marshal(map[string]any{"about": s.instructions(), "locked": s.locked, "rules": s.lock, "budget": s.budget, "used": used, "rate": s.rate})
 		return toolText(string(raw), false), nil
 	case "azhaq_plan":
-		t, err := targets()
+		t, list, err := targets()
 		if err != nil {
 			return nil, err
+		}
+		if list != "" {
+			defer os.Remove(list)
 		}
 		r, err := s.run(ctx, progress, true, append(append([]string{"plan", "-json"}, t...), runFlags()...)...)
 		if err != nil {
@@ -505,27 +687,39 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		got, _ := rows(r.lines, 1)
 		return result(r, map[string]any{"plan": got})
 	case "azhaq_map":
-		t, err := targets()
-		if err != nil {
-			return nil, err
-		}
 		db, err := s.workspace(a)
 		if err != nil {
 			return nil, err
 		}
-		r, err := s.run(ctx, progress, true, append(append([]string{"run", "-quiet", "-json", "-db", db}, t...), runFlags()...)...)
+		t, list, err := targets()
 		if err != nil {
 			return nil, err
 		}
-		// What a researcher reads first: what needs a session, the API.
-		q, _ := s.run(ctx, nil, false, "query", "-db", db, "-json", "-role", "auth,forbidden,api,app", "-scope", "target", "-limit", fmt.Sprint(limit),
-			"-fields", "key,type,role,coverage,status,title,methods,params,body")
-		got, cut := rows(q.lines, limit)
-		extra := map[string]any{"workspace": strings.TrimSuffix(filepath.Base(db), ".db"), "highlights": got}
-		if cut || q.summary != nil && q.summary["notes"] != nil {
-			extra["more"] = "call azhaq_query on this workspace for the rest of the map"
+		r, err := s.run(ctx, progress, true, append(append([]string{"run", "-quiet", "-json", "-db", db}, t...), runFlags()...)...)
+		if list != "" && (err != nil || r.summary["resume"] == nil) {
+			os.Remove(list) // nothing will read it again
 		}
-		return result(r, extra)
+		if err != nil {
+			return nil, err
+		}
+		return s.mapped(ctx, r, db, limit, result)
+	case "azhaq_resume":
+		db, err := s.existing(a)
+		if err != nil {
+			return nil, err
+		}
+		list, err := s.resumable(db)
+		if err != nil {
+			return nil, err
+		}
+		r, err := s.run(ctx, progress, true, append([]string{"resume", "-db", db, "-quiet", "-json"}, session()...)...)
+		if err != nil {
+			return nil, err
+		}
+		if list != "" && r.summary["resume"] == nil {
+			os.Remove(list) // the run is complete
+		}
+		return s.mapped(ctx, r, db, limit, result)
 	case "azhaq_subdomains":
 		ds := strList(a, "domain")
 		if len(ds) == 0 {
@@ -555,7 +749,7 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if len(ts) == 0 {
 			return nil, errors.New("give targets: URLs, hosts, host:port or addresses")
 		}
-		f, err := os.CreateTemp(s.dir, "probe-*.txt")
+		f, err := os.CreateTemp(s.dir, listPrefix+"*.txt")
 		if err != nil {
 			return nil, err
 		}
@@ -595,7 +789,7 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		}
 		return listed(r)
 	case "azhaq_query":
-		db, err := s.workspace(a)
+		db, err := s.existing(a)
 		if err != nil {
 			return nil, err
 		}
@@ -605,6 +799,9 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 				args = append(args, "-"+k, strings.Join(v, ","))
 			}
 		}
+		if len(strList(a, "fields")) == 0 {
+			args = append(args, "-fields", queryFields)
+		}
 		if boolean(a, "new") {
 			args = append(args, "-new")
 		}
@@ -612,9 +809,16 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if err != nil {
 			return nil, err
 		}
+		if notes, ok := r.summary["notes"].([]any); ok {
+			for i, n := range notes {
+				if t, ok := n.(string); ok {
+					notes[i] = strings.ReplaceAll(t, "-limit ", "limit ") // the argument, not the flag
+				}
+			}
+		}
 		return listed(r)
 	case "azhaq_show":
-		db, err := s.workspace(a)
+		db, err := s.existing(a)
 		if err != nil {
 			return nil, err
 		}
@@ -628,7 +832,7 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		}
 		got, _ := rows(r.lines, 1)
 		if len(got) == 0 {
-			return nil, errors.New(strings.TrimSpace(r.stderr))
+			return nil, stderrError(r.stderr, fmt.Errorf("%s is not in workspace %q", key, ws))
 		}
 		data := map[string]any{"entity": got[0]}
 		raw, _ := json.Marshal(data)
@@ -674,9 +878,28 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		for _, id := range strList(a, "ids") {
 			args = append(args, "-id", id)
 		}
-		t, err := targets()
+		t, list, err := targets()
 		if err != nil {
 			return nil, err
+		}
+		if list != "" {
+			defer os.Remove(list)
+		}
+		// The server's budget holds for roles too: each role's run and the
+		// replay get an equal share of what is left.
+		share := 0
+		if s.budget > 0 {
+			s.mu.Lock()
+			left := s.budget - s.used
+			s.mu.Unlock()
+			if left <= 0 {
+				return nil, fmt.Errorf("the request budget of this server (%d) is spent; restart azhaq mcp with a larger -max-requests", s.budget)
+			}
+			share = int(left) / (len(roles) + 1)
+			if share < 1 {
+				return nil, fmt.Errorf("%d requests are left of this server's budget: too few for %d roles", left, len(roles))
+			}
+			args = append(args, "-replay-max", fmt.Sprint(share))
 		}
 		args = append(args, "--")
 		args = append(args, t...)
@@ -685,13 +908,16 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if s.rate > 0 {
 			args = append(args, "-rate", fmt.Sprint(s.rate))
 		}
+		if share > 0 {
+			args = append(args, "-max-requests", fmt.Sprint(share))
+		}
 		r, err := s.run(ctx, progress, false, args...)
 		if err != nil {
 			return nil, err
 		}
 		return listed(r)
 	case "azhaq_export":
-		db, err := s.workspace(a)
+		db, err := s.existing(a)
 		if err != nil {
 			return nil, err
 		}
@@ -699,32 +925,25 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if format == "" {
 			format = "openapi"
 		}
-		path := strings.TrimSuffix(db, ".db") + "." + strings.ReplaceAll(format, "/", "_") + exportExt(format)
-		cmd := exec.CommandContext(ctx, s.exe, "export", "-db", db, "-format", format)
-		raw, err := cmd.Output()
+		if !slices.Contains(exportFormats, format) {
+			return nil, fmt.Errorf("format %q: one of %s", format, strings.Join(exportFormats, ", "))
+		}
+		raw, err := s.output(ctx, "export", "-db", db, "-format", format)
 		if err != nil {
-			var ee *exec.ExitError
-			if errors.As(err, &ee) {
-				return nil, errors.New(strings.TrimSpace(string(ee.Stderr)))
-			}
 			return nil, err
 		}
+		path := exportPath(db, format)
 		if err := os.WriteFile(path, raw, 0o644); err != nil {
 			return nil, err
 		}
 		abs, _ := filepath.Abs(path)
-		text := fmt.Sprintf("wrote %s (%d bytes, %s)", abs, len(raw), format)
-		if len(raw) <= 16<<10 {
-			text += "\n" + string(raw)
-		}
-		return toolText(text, false), nil
+		return toolText(exportPart(abs, format, raw, num(a, "offset", 0)), false), nil
 	case "azhaq_diff":
-		db, err := s.workspace(a)
+		db, err := s.existing(a)
 		if err != nil {
 			return nil, err
 		}
-		cmd := exec.CommandContext(ctx, s.exe, "diff", "-db", db, "-jsonl", "-quiet")
-		raw, err := cmd.Output()
+		raw, err := s.output(ctx, "diff", "-db", db, "-jsonl", "-quiet")
 		if err != nil {
 			return nil, err
 		}
@@ -749,6 +968,130 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	return nil, fmt.Errorf("%w %q", errUnknownTool, name)
 }
 
+// mapped is what azhaq_map and azhaq_resume return: the run's summary and
+// the highlights of its workspace, what a researcher reads first (what
+// needs a session, the API).
+func (s *mcpServer) mapped(ctx context.Context, r cmdResult, db string, limit int,
+	result func(cmdResult, map[string]any) (map[string]any, error)) (map[string]any, error) {
+	if ctx.Err() != nil {
+		return result(r, nil) // cancelled: no one reads it
+	}
+	q, _ := s.run(ctx, nil, false, "query", "-db", db, "-json", "-role", "auth,forbidden,api,app", "-scope", "target", "-limit", fmt.Sprint(limit),
+		"-fields", "key,type,role,coverage,status,title,methods,params,body")
+	got, cut := rows(q.lines, limit)
+	extra := map[string]any{"workspace": strings.TrimSuffix(filepath.Base(db), ".db"), "highlights": got}
+	if cut || q.summary != nil && q.summary["notes"] != nil {
+		extra["more"] = "call azhaq_query on this workspace for the rest of the map"
+	}
+	return result(r, extra)
+}
+
+// resumable checks that a workspace has a run to continue, inside this
+// server's lock, and returns the target list that run reads when it is a
+// file of the server's, to remove once the run is complete.
+func (s *mcpServer) resumable(db string) (string, error) {
+	ws := strings.TrimSuffix(filepath.Base(db), ".db")
+	st, err := store.OpenExisting(db)
+	if err != nil {
+		return "", err
+	}
+	_, args, _, ok, err := st.Resumable()
+	st.Close()
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "", fmt.Errorf("nothing to resume in workspace %q: every run finished", ws)
+	}
+	// The options the run was started with come back with it: a run
+	// started elsewhere must not bring a wider scope than the server's.
+	list := ""
+	for i, arg := range args {
+		k, v, inline := strings.Cut(strings.TrimLeft(arg, "-"), "=")
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+		if !inline && i+1 < len(args) {
+			v = args[i+1]
+		}
+		switch k {
+		case "list":
+			if filepath.Dir(v) == filepath.Clean(s.dir) && strings.HasPrefix(filepath.Base(v), listPrefix) {
+				list = v
+			}
+		case "scope", "program":
+			if s.locked {
+				return "", fmt.Errorf("the run in workspace %q was started with a program scope of its own, not this server's: map it again with azhaq_map", ws)
+			}
+		case "allow":
+			if s.locked && !slices.Contains(s.allowRules(), v) {
+				return "", fmt.Errorf("the run in workspace %q was started with a scope wider than this server's (%s): map it again with azhaq_map", ws, v)
+			}
+		case "ports":
+			if !s.locked {
+				return "", errors.New("the run scans ports, which need a scope: start azhaq mcp with -allow or -scope")
+			}
+		default:
+			// Only what the tools of a server start comes back: a run started
+			// elsewhere with -all-gets, -dirs or -dns-brute is not resumed here.
+			if !mcpRunFlags[k] {
+				return "", fmt.Errorf("the run in workspace %q was started with -%s, which no tool of this server starts: map it again with azhaq_map", ws, k)
+			}
+		}
+	}
+	return list, nil
+}
+
+// mcpRunFlags are the run options the tools of a server start runs with.
+var mcpRunFlags = map[string]bool{
+	"url": true, "domain": true, "cidr": true, "passive": true, "browser": true, "depth": true, "timeout": true,
+	"header": true, "login": true, "login-user": true, "max-requests": true, "rate": true, "deny": true, "quiet": true,
+	"json": true, "probe": true, "no-favicon": true, "skip": true, "port-rate": true, "max-items": true, "live": true,
+}
+
+// forMCP rewrites what a summary says for the command line into what a
+// client of the server can do: azhaq_resume continues a stopped run, and
+// the next steps are tool calls.
+func (s *mcpServer) forMCP(sum map[string]any, ws string) {
+	if sum == nil {
+		return
+	}
+	if _, ok := sum["resume"]; ok {
+		hint := fmt.Sprintf(`azhaq_resume {"workspace":%q} continues it`, ws)
+		s.mu.Lock()
+		spent := s.budget > 0 && s.used >= s.budget
+		s.mu.Unlock()
+		if spent {
+			hint += ", once azhaq mcp is restarted with a larger -max-requests: this server's budget is spent"
+		}
+		sum["resume"] = hint
+	}
+	next, _ := sum["next"].([]any)
+	var out []string
+	for _, x := range next {
+		n, _ := x.(string)
+		switch {
+		case strings.Contains(n, "-role auth,forbidden"):
+			out = append(out, fmt.Sprintf(`azhaq_query {"workspace":%q,"role":["auth","forbidden"]}: what needs a session`, ws))
+		case strings.Contains(n, "-role api"):
+			out = append(out, fmt.Sprintf(`azhaq_query {"workspace":%q,"role":["api"],"fields":["key","methods","params","body"]}: the API routes`, ws))
+		case strings.Contains(n, "-format openapi"):
+			out = append(out, fmt.Sprintf(`azhaq_export {"workspace":%q,"format":"openapi"}: for Burp, Postman, ZAP`, ws))
+		case strings.HasPrefix(n, "azhaq roles"):
+			out = append(out, "azhaq_roles with two or more sessions: who may read what")
+		case strings.Contains(n, "-type Hostname"):
+			out = append(out, fmt.Sprintf(`azhaq_query {"workspace":%q,"type":["Hostname"]}: the names`, ws))
+		}
+		// The others take options no tool has (query -failed: the
+		// summary's failed lists them).
+	}
+	if len(out) > 0 {
+		sum["next"] = out
+	} else {
+		delete(sum, "next")
+	}
+}
+
 // maxShowBytes bounds an azhaq_show answer.
 const maxShowBytes = 24 << 10
 
@@ -768,6 +1111,19 @@ func trimPayloads(entity any) {
 	}
 }
 
+var exportFormats = []string{"openapi", "graphql", "sdl", "burp", "targets", "urls", "hosts", "names", "html", "graphml", "secrets", "jsonl"}
+
+// exportPath is the file an export of db is written to, next to it:
+// juice.html, juice.openapi.json, juice.urls.txt.
+func exportPath(db, format string) string {
+	base := strings.TrimSuffix(db, ".db")
+	ext := exportExt(format)
+	if ext == "."+format {
+		return base + ext
+	}
+	return base + "." + format + ext
+}
+
 func exportExt(format string) string {
 	switch format {
 	case "openapi", "burp", "graphql":
@@ -784,31 +1140,69 @@ func exportExt(format string) string {
 	return ".txt"
 }
 
+// maxInline bounds the part of an export one azhaq_export call returns.
+const maxInline = 16 << 10
+
+// exportPart is what azhaq_export returns: where the export was written,
+// and the export itself from offset on, at most maxInline bytes of it,
+// cut at a line, with how to get the rest.
+func exportPart(path, format string, raw []byte, offset int) string {
+	head := fmt.Sprintf("wrote %s on the server's machine (%d bytes, %s)", path, len(raw), format)
+	if offset >= len(raw) {
+		if offset > 0 {
+			head += fmt.Sprintf("; offset %d is past its end", offset)
+		}
+		return head
+	}
+	part := raw[offset:]
+	if len(part) <= maxInline {
+		if offset > 0 {
+			head += fmt.Sprintf("; bytes %d to %d, the end", offset, len(raw))
+		}
+		return head + "\n" + string(part)
+	}
+	cut := maxInline
+	if i := bytes.LastIndexByte(part[:cut], '\n'); i > 0 {
+		cut = i + 1
+	}
+	for cut > 1 && !utf8.RuneStart(part[cut]) {
+		cut--
+	}
+	end := offset + cut
+	head += fmt.Sprintf("; bytes %d to %d below. For the rest call azhaq_export again with offset %d, or ask a narrower question (format urls, hosts or targets; azhaq_query), or read the file where the server runs", offset, end, end)
+	return head + "\n" + string(part[:cut])
+}
+
+// allowRules are the -allow rules of the server's lock.
+func (s *mcpServer) allowRules() []string {
+	var out []string
+	for i := 0; i+1 < len(s.lock); i += 2 {
+		if s.lock[i] == "-allow" {
+			out = append(out, s.lock[i+1])
+		}
+	}
+	return out
+}
+
 // allows: a host the server's lock lets a tool touch.
 func (s *mcpServer) allows(host string) bool {
 	if !s.locked {
 		return true
 	}
-	var allow, deny []string
+	var deny []string
 	for i := 0; i+1 < len(s.lock); i += 2 {
-		switch s.lock[i] {
-		case "-allow":
-			allow = append(allow, s.lock[i+1])
-		case "-deny":
+		if s.lock[i] == "-deny" {
 			deny = append(deny, s.lock[i+1])
 		}
 	}
-	return scopeRules(allow, deny).Allows(host)
+	return scopeRules(s.allowRules(), deny).Allows(host)
 }
 
 // scopeSeeds are run flags that seed a run with the program's own scope.
 func (s *mcpServer) scopeSeeds() []string {
 	var out []string
-	for i := 0; i+1 < len(s.lock); i += 2 {
-		if s.lock[i] != "-allow" {
-			continue
-		}
-		r := strings.TrimPrefix(s.lock[i+1], "*.")
+	for _, rule := range s.allowRules() {
+		r := strings.TrimPrefix(rule, "*.")
 		switch {
 		case strings.HasPrefix(r, "="):
 			out = append(out, "-url", "https://"+strings.TrimPrefix(r, "=")+"/")

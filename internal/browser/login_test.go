@@ -41,7 +41,9 @@ setTimeout(() => {
     e.preventDefault();
     const r = await fetch('/api/login', {method: 'POST', body: JSON.stringify({email: email.value, password: pw.value})});
     if (!r.ok) { document.body.insertAdjacentHTML('beforeend', '<p>wrong</p>'); return; }
-    localStorage.setItem('token', (await r.json()).token);
+    const j = await r.json();
+    localStorage.setItem('token', j.token);
+    sessionStorage.setItem('bid', j.bid);
     history.pushState({}, '', '/dashboard');
     document.getElementById('app').innerHTML = '<h1>Welcome</h1>';
   });
@@ -62,7 +64,7 @@ func TestLogin(t *testing.T) {
 				return
 			}
 			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "abc123", Path: "/", HttpOnly: true})
-			fmt.Fprintf(w, `{"token":%q}`, jwt)
+			fmt.Fprintf(w, `{"token":%q,"bid":7}`, jwt)
 		default:
 			fmt.Fprint(w, loginPage)
 		}
@@ -78,9 +80,23 @@ func TestLogin(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
+	var told []Session
+	OnLogin = func(s Session) { told = append(told, s) }
+	defer func() { OnLogin = nil }()
 	s, err := b.Login(ctx, srv.URL+"/login", "member@x.test", "s3cret")
 	if err != nil {
 		t.Fatal(err)
+	}
+	// What the login answered and left in storage: who signed in.
+	if len(told) != 1 || len(s.Answers) != 1 || string(s.Answers[0]) != fmt.Sprintf(`{"token":%q,"bid":7}`, jwt) {
+		t.Errorf("told %d times, answers %q", len(told), s.Answers)
+	}
+	stored := map[string]string{}
+	for i := 0; i+1 < len(s.Storage); i += 2 {
+		stored[s.Storage[i]] = s.Storage[i+1]
+	}
+	if stored["sessionStorage.bid"] != "7" || stored["localStorage.token"] != jwt {
+		t.Errorf("storage %v", stored)
 	}
 	if s.Bearer != jwt || s.From != "localStorage.token" {
 		t.Errorf("token %q from %q", s.Bearer, s.From)

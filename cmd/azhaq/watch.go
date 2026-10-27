@@ -173,8 +173,12 @@ func diffRuns(path string) (changes, error) {
 		if !ok || nf.status == 0 || of.status == 0 || nf.catchAll || of.catchAll {
 			continue
 		}
-		if nf.status != of.status || nf.title != of.title {
+		switch {
+		case nf.status != of.status || nf.title != of.title:
 			ch.Changed = append(ch.Changed, fmt.Sprintf("%s: [%d] %s → [%d] %s", nf.url, of.status, of.title, nf.status, nf.title))
+		case nf.items > 0 && of.items > 0 && nf.items != of.items:
+			// An API listing that grew or shrank: a user, a book, an order.
+			ch.Changed = append(ch.Changed, fmt.Sprintf("%s: [%d] %d items → [%d] %d items", nf.url, of.status, of.items-1, nf.status, nf.items-1))
 		}
 	}
 	// Ports: the open set of a host that was scanned in both runs.
@@ -200,6 +204,7 @@ type facts struct {
 	catchAll    bool
 	ports       []string
 	host        string
+	items       int // items of a JSON listing, plus one; 0 when it is not one
 }
 
 func factsByEntity(st *store.Store) map[string]facts {
@@ -226,10 +231,16 @@ func factsByEntity(st *store.Store) map[string]facts {
 			if t, ok := p["title"].(string); ok && f.title == "" {
 				f.title = t
 			}
+			if n, ok := p["json_items"].(float64); ok {
+				f.items = int(n) + 1 // stored plus one: zero means not a listing
+			}
 			if p["catchall"] == true {
 				f.catchAll = true
 			}
 		case "azhaq-ports":
+			if n, _ := p["scanned"].(float64); n == 0 {
+				break // not scanned (no IPv6 route): nothing to compare
+			}
 			f.host, _ = p["host"].(string)
 			f.ports = []string{}
 			if open, ok := p["open"].([]any); ok {
@@ -259,11 +270,11 @@ func isFront(raw string) bool {
 
 func (c changes) text() string {
 	var b strings.Builder
-	when := c.Run.Local().Format("2006-01-02 15:04")
+	when := c.Run.Local().Format("2006-01-02 15:04:05")
 	if c.Baseline {
 		fmt.Fprintf(&b, "azhaq watch %s: first run %s\n", c.DB, when)
 	} else {
-		fmt.Fprintf(&b, "azhaq watch %s: %s against %s\n", c.DB, when, c.Previous.Local().Format("2006-01-02 15:04"))
+		fmt.Fprintf(&b, "azhaq watch %s: %s against %s\n", c.DB, when, c.Previous.Local().Format("2006-01-02 15:04:05"))
 	}
 	if !c.any() {
 		b.WriteString("no change\n")
@@ -355,7 +366,7 @@ func cmdNew(args []string) error {
 		case x.status != 0:
 			detail = strings.TrimSpace(fmt.Sprintf("[%d] %s", x.status, x.title))
 		}
-		fmt.Printf("%s  %-9s %s  %s\n", e.FirstSeen.Local().Format("2006-01-02 15:04"), e.Type, e.Key, detail)
+		fmt.Printf("%s  %-9s %s  %s\n", e.FirstSeen.Local().Format("2006-01-02 15:04:05"), e.Type, e.Key, detail)
 	}
 	return nil
 }
