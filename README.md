@@ -96,7 +96,7 @@ azhaq export -db h1.db -format burp > scope.json       # Burp project options wi
 azhaq export -db h1.db -format html > report.html      # one self-contained page
 ```
 
-The OpenAPI export starts from the description the target serves, unchanged, and adds the routes it does not list with the method each script call uses, its query names and the fields of its body, HTML forms as form-encoded bodies, and `x-azhaq` on each operation saying where it came from and how its GET answered. Other formats: `urls`, `hosts` (names that resolve), `names` (every name), `graphml`, `secrets`, `jsonl` (everything).
+The OpenAPI export starts from the description the target serves, unchanged, and adds the routes it does not list with the method each script call uses, its query names and the fields of its body, HTML forms (a GET form's fields as query parameters, a POST form's as a form-encoded or multipart body, file inputs binary), pages linked with a query string as GETs taking those names, and `x-azhaq` on each operation saying where it came from and how its GET answered. Other formats: `urls`, `hosts` (names that resolve), `names` (every name), `graphml`, `secrets`, `jsonl` (everything).
 
 ## Access control: comparing sessions
 
@@ -197,7 +197,7 @@ Workers: a run started with `-serve ADDR` lends its tasks to `azhaq worker -serv
 | Collector | Collects |
 | --- | --- |
 | `azhaq-http` | status, redirect chain, title, technologies, favicon hash, length, words, lines, time, the address connected to, headers, cookie names, JSON field names; flags catch-all answers |
-| `azhaq-crawl` | same-origin links, forms (with script-driven ones), parameter names, links inside JSON answers, links written in Markdown that the page renders in the browser |
+| `azhaq-crawl` | same-origin links (not a directory listing's sort links), forms (with script-driven ones, their encoding and file inputs), links inside JSON answers, links written in Markdown that the page renders in the browser |
 | `azhaq-js` | the requests scripts make (method, path, query names, body fields, worked out from literals, template literals and assigned variables, and through a helper that takes the URL), with the script, line and code each was found in, other routes and links in scripts, chunks and source maps, joined constants, GraphQL operation names, credentials |
 | `azhaq-openapi` | OpenAPI 3 and Swagger 2 documents (JSON, YAML, embedded in Swagger UI), each operation's parameters by location, body fields, security; a Swagger UI page's document even when its URL is built at run time; asks the parameterless GETs |
 | `azhaq-graphql` | GraphQL endpoints; with `-graphql`, the schema by introspection |

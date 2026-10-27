@@ -146,6 +146,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	for _, f := range webextract.Forms([]byte(p.HTML), base) {
 		row := map[string]any{"method": f.Method, "action": f.Action, "fields": f.Fields, "via": "browser"}
+		if f.Enctype != "" {
+			row["enctype"] = f.Enctype
+		}
+		if len(f.Files) > 0 {
+			row["files"] = f.Files
+		}
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "form", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
 			return meta, err

@@ -42,14 +42,15 @@ func Payload(raw string) bool {
 
 // JunkURL reports a URL that is not one: a script that ran without its
 // data (/rest/basket/NaN), a link cut short in an archive (login.ph…,
-// login.php).), or a scanner's payload kept by an archive
-// (/1234567890*~1*/, <script>, ;curl …oast.live, /etc/passwd).
+// login.php).), a scanner's payload kept by an archive
+// (/1234567890*~1*/, <script>, ;curl …oast.live, /etc/passwd), or a
+// directory listing sorted another way (see ListingSort).
 func JunkURL(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return true
 	}
-	if Payload(raw) {
+	if Payload(raw) || ListingSort(raw) {
 		return true
 	}
 	p := u.EscapedPath()
@@ -79,6 +80,39 @@ func JunkURL(raw string) bool {
 		}
 	}
 	return false
+}
+
+// ListingSort reports the sort links of an Apache or nginx directory
+// listing: ?C=N;O=D, ?C=M&O=A, with Apache's F, V and P options. They
+// are the same listing in another order, eight of them under every
+// column of every directory.
+func ListingSort(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.RawQuery == "" {
+		return false
+	}
+	var c, o bool
+	for _, kv := range strings.FieldsFunc(u.RawQuery, func(r rune) bool { return r == ';' || r == '&' }) {
+		k, v, _ := strings.Cut(kv, "=")
+		switch k {
+		case "C":
+			c = len(v) == 1 && strings.Contains("NMSD", v)
+		case "O":
+			o = v == "A" || v == "D"
+		case "F":
+			if v != "0" && v != "1" && v != "2" {
+				return false
+			}
+		case "V":
+			if v != "0" && v != "1" {
+				return false
+			}
+		case "P":
+		default:
+			return false
+		}
+	}
+	return c && o
 }
 
 // StringNoise reports a path read out of a string in a script or a JSON

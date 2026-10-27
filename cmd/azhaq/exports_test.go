@@ -2,14 +2,22 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/scopefile"
 	"github.com/trannghiach/azhaq/scope"
@@ -91,6 +99,92 @@ func TestOpenAPIExport(t *testing.T) {
 	}
 	if d.Components["securitySchemes"] == nil {
 		t.Error("the served description's security schemes are kept")
+	}
+}
+
+// A site shaped like DVWA: forms that submit to their own page (action
+// "#" or none), and a menu linking /fi/?page=include.php from every page.
+func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
+	fetch.Reset()
+	menu := `<a href="/sqli/">sqli</a> <a href="/upload/">upload</a> <a href="/security.php">security</a> <a href="/fi/?page=include.php">fi</a>`
+	pages := map[string]string{
+		"/":             menu,
+		"/sqli/":        menu + `<form action="#" method="GET"><input type="text" name="id"><input type="submit" name="Submit" value="Submit"></form>`,
+		"/upload/":      menu + `<form enctype="multipart/form-data" action="#" method="POST"><input type="hidden" name="MAX_FILE_SIZE" value="100000"><input name="uploaded" type="file"><input type="submit" name="Upload"></form>`,
+		"/security.php": menu + `<form action="#" method="POST"><select name="security"><option>low</option></select><input type="submit" name="seclev_submit"></form>`,
+		"/fi/":          menu + `<p>included</p>`,
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := pages[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, "<html><head><title>%s</title></head><body>%s</body></html>", r.URL.Path, body)
+	}))
+	defer site.Close()
+	db := filepath.Join(t.TempDir(), "x.db")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := catalog.New()
+	httpcol.Register(cat, site.Client())
+	crawlcol.Register(cat, site.Client())
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": site.URL + "/"}}
+	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	var out bytes.Buffer
+	if err := exportAs(db, "openapi", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct{ Name, In string }
+			Body       *struct {
+				Content map[string]struct {
+					Schema struct {
+						Properties map[string]struct{ Type, Format string }
+					}
+				}
+			} `json:"requestBody"`
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	query := func(path string) string {
+		var names []string
+		for _, p := range d.Paths[path]["get"].Parameters {
+			if p.In == "query" {
+				names = append(names, p.Name)
+			}
+		}
+		return strings.Join(names, ",")
+	}
+	if q := query("/sqli/"); q != "id,Submit" {
+		t.Errorf("GET /sqli/ query %q, want the form's id,Submit; %s", q, out.Bytes())
+	}
+	if q := query("/fi/"); q != "page" {
+		t.Errorf("GET /fi/ query %q, want page", q)
+	}
+	for _, p := range []string{"/upload/", "/security.php"} {
+		if q := query(p); q != "" {
+			t.Errorf("GET %s takes the query of its links: %q", p, q)
+		}
+	}
+	up := d.Paths["/upload/"]["post"].Body
+	if up == nil || up.Content["multipart/form-data"].Schema.Properties["uploaded"].Format != "binary" ||
+		up.Content["multipart/form-data"].Schema.Properties["MAX_FILE_SIZE"].Type != "string" {
+		t.Errorf("POST /upload/ body %+v", up)
+	}
+	sec := d.Paths["/security.php"]["post"].Body
+	if sec == nil || len(sec.Content["application/x-www-form-urlencoded"].Schema.Properties) != 2 {
+		t.Errorf("POST /security.php body %+v", sec)
 	}
 }
 

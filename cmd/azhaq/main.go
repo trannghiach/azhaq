@@ -29,6 +29,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
+	"github.com/trannghiach/azhaq/internal/collectors/gqlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
@@ -591,7 +592,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *workerOf != "" {
 		return runWorker(cat, *workerOf, *workerToken, budgets.Parallel)
 	}
-	eng := &engine.Engine{Cat: cat, Store: st, Observe: observer}
+	eng := &engine.Engine{Cat: cat, Store: st, Observe: observer, Client: client}
 	if *serve != "" {
 		if *workerToken == "" {
 			*workerToken = newToken()
@@ -721,6 +722,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	fillReport(rep, path, seeds, ents, obs, rows)
+	schema, _ := cat.Get(gqlcol.SchemaName)
+	if hint := engine.GraphQLHint(obs, func(raw string) bool {
+		return schema != nil && budgets.Allows(schema, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}})
+	}); hint != "" {
+		rep.Next = append(rep.Next, hint)
+	}
 	rep.RunID = stats.RunID
 	rep.Requests = fetch.Sent()
 	if left := st.TasksLeft(); left > 0 {

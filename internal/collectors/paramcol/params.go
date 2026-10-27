@@ -2,6 +2,9 @@
 // (-params, active): arjun's method. Parameters go out in large groups
 // with random values; a group that changes the answer (status, size,
 // a value reflected back) is split in halves until the names are found.
+// A page that answers any name (an error page that prints the query
+// string back) is asked the same with random names of the same lengths,
+// and only what that control does not show counts.
 // GET only: guessing names on POST could submit something.
 package paramcol
 
@@ -12,6 +15,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -93,6 +97,10 @@ func (c *Collector) Skip(seed types.Seed) bool {
 	return false
 }
 
+// minFlood is how large a group must be for most of it changing the
+// answer to mean the page answers any name.
+const minFlood = 8
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	raw, err := normalize.URL(seed.Keys["url"])
 	if err != nil {
@@ -113,7 +121,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	for k := range u.Query() {
 		known[k] = true
 	}
-	s := &search{c: c, ctx: ctx, base: u, known: known}
+	s := &search{c: c, ctx: ctx, base: u, known: known, most: c.Opts.Chunk}
 	if !s.calibrate() {
 		if s.err != nil {
 			return s.spent(page)
@@ -134,8 +142,28 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	found := map[string]string{}
+	note := ""
 	for i := 0; i < len(words) && ctx.Err() == nil && s.err == nil; i += c.Opts.Chunk {
-		s.narrow(words[i:min(i+c.Opts.Chunk, len(words))], found)
+		chunk := words[i:min(i+c.Opts.Chunk, len(words))]
+		s.alone, s.hits = 0, 0
+		s.narrow(chunk, found)
+		hits := 0
+		for _, n := range chunk {
+			if _, ok := found[n]; ok {
+				hits++
+			}
+		}
+		tried := len(chunk)
+		if s.flooded() {
+			hits, tried = s.hits, s.alone
+		}
+		if s.flooded() || (len(chunk) >= minFlood && hits*2 > len(chunk)) {
+			// Most names "change" the answer: the page reacts to names it
+			// does not read, and none can be told apart.
+			note = fmt.Sprintf("%s answers names it does not read (%d of %d names tried changed the answer): not searched for parameters", page, hits, tried)
+			found = map[string]string{}
+			break
+		}
 	}
 	if ctx.Err() != nil {
 		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
@@ -152,6 +180,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if len(found) > 0 {
 		row["why"] = found
 	}
+	if note != "" {
+		row["note"] = note
+	}
 	payload, _ := json.Marshal(row)
 	if err := emit(types.Observation{Collector: Name, Source: page, Kind: "params", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
 		return types.RunMeta{}, err
@@ -165,15 +196,41 @@ type answer struct {
 	body                         []byte
 }
 
+func answerOf(status int, body []byte) answer {
+	return answer{
+		status: status, length: len(body), body: body,
+		words: bytes.Count(body, []byte{' '}) + 1, lines: bytes.Count(bytes.TrimSpace(body), []byte{'\n'}) + 1,
+	}
+}
+
+// pair is one name=value of a query; a list, as a control may repeat a name.
+type pair struct{ name, value string }
+
 type search struct {
-	c        *Collector
-	ctx      context.Context
-	base     *url.URL
-	known    map[string]bool
-	ref      answer
-	slack    int // size difference the page shows between identical requests
-	requests int
-	err      error // the request budget ran out
+	c     *Collector
+	ctx   context.Context
+	base  *url.URL
+	known map[string]bool
+	ref   answer
+	slack int // size difference the page shows between identical requests
+	// controlled: the page answers a crowd of unknown names differently
+	// from one (it prints the query back, or counts them), so a group is
+	// judged against random names of the same lengths, not against ref.
+	controlled bool
+	requests   int
+	err        error // the request budget ran out
+	// Names of the current chunk tested alone, and those that changed
+	// the answer.
+	alone, hits int
+	// most is the largest group sent: smaller than any whose control
+	// changed the status (a query too long for the server).
+	most int
+}
+
+// flooded: nearly every name tested alone changed the answer, as on a
+// page that reacts to any name. The chunk is not narrowed further.
+func (s *search) flooded() bool {
+	return s.hits >= 2*minFlood && s.hits*4 > s.alone*3
 }
 
 // spent gives the page back for azhaq resume, which searches it again.
@@ -185,16 +242,20 @@ func (s *search) spent(page string) (types.RunMeta, error) {
 	return types.RunMeta{Status: types.StatusCapped}, s.err
 }
 
-func (s *search) get(params map[string]string) (answer, bool) {
+func (s *search) get(q []pair) (answer, bool) {
 	if err := s.c.limiter.Wait(s.ctx, s.base.Host); err != nil {
 		return answer{}, false
 	}
 	u := *s.base
-	q := u.Query()
-	for k, v := range params {
-		q.Set(k, v)
+	var b strings.Builder
+	b.WriteString(u.RawQuery)
+	for _, p := range q {
+		if b.Len() > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(url.QueryEscape(p.name) + "=" + url.QueryEscape(p.value))
 	}
-	u.RawQuery = q.Encode()
+	u.RawQuery = b.String()
 	if fetch.EndsSession(u.String()) {
 		return answer{}, false
 	}
@@ -216,101 +277,157 @@ func (s *search) get(params map[string]string) (answer, bool) {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	return answer{
-		status: resp.StatusCode, length: len(body), body: body,
-		words: bytes.Count(body, []byte{' '}) + 1, lines: bytes.Count(bytes.TrimSpace(body), []byte{'\n'}) + 1,
-	}, true
+	return answerOf(resp.StatusCode, body), true
 }
 
-// calibrate takes the page twice with one random parameter: an unknown
-// name should change nothing, and what does change between the two is the
-// page's own noise.
+// calibrate takes the page twice with one random parameter, then once
+// with a group of them as large as a chunk: one unknown name should change
+// nothing, what changes between the first two is the page's own noise,
+// and a page that answers the group otherwise is searched with controls.
 func (s *search) calibrate() bool {
-	a, ok := s.get(map[string]string{randValue(): randValue()})
+	one := randomPairs(1)
+	a, ok := s.get(one)
 	if !ok {
 		return false
 	}
-	b, ok := s.get(map[string]string{randValue(): randValue()})
+	b, ok := s.get(randomPairs(1))
 	if !ok || a.status != b.status {
 		return false
 	}
 	s.ref = a
 	s.slack = abs(a.length - b.length)
-	return s.slack < a.length/2+64
+	if s.slack >= a.length/2+64 {
+		return false
+	}
+	crowd := randomPairs(s.c.Opts.Chunk)
+	c, ok := s.get(crowd)
+	if !ok {
+		return false
+	}
+	s.controlled = len(tokens(a.body, one)) > 0 || s.differs(c, s.ref, crowd)
+	return true
 }
 
-// differs says why an answer is not the reference, or "".
-func (s *search) differs(a answer, values map[string]string) string {
-	if a.status != s.ref.status {
-		return "status"
+// differs says whether a, the answer to q, is not ref: another status, a
+// value of q in it, or another size.
+func (s *search) differs(a, ref answer, q []pair) bool {
+	return a.status != ref.status || len(tokens(a.body, q)) > 0 || s.resized(a, ref)
+}
+
+// resized: the sizes differ by more than the page's noise.
+func (s *search) resized(a, ref answer) bool {
+	if abs(a.length-ref.length) > s.slack+s.slack/2+16 {
+		return true
 	}
-	for _, v := range values {
-		if bytes.Contains(a.body, []byte(v)) {
-			return "reflected"
+	return s.slack == 0 && (a.words != ref.words || a.lines != ref.lines)
+}
+
+// verdict is what a group of names did to the answer.
+type verdict struct {
+	why       string   // status or size: some name of the group changed the answer
+	reflected []string // names whose value came back more often than a control's
+	crowd     bool     // the control changed the status too: the group's size did, not its names
+}
+
+// test sends group with random values. Against ref when the page ignores
+// unknown names; otherwise, once the answer differs from ref, against a
+// control of random names as long as the group's: what the control shows
+// too (an echoed query string, the error a long query gets) is no
+// evidence.
+func (s *search) test(group []string) (verdict, bool) {
+	q := make([]pair, len(group))
+	for i, n := range group {
+		q[i] = pair{n, randValue()}
+	}
+	a, ok := s.get(q)
+	if !ok {
+		return verdict{}, false
+	}
+	if !s.differs(a, s.ref, q) {
+		return verdict{}, true
+	}
+	base, echo := s.ref, 0
+	var control []pair
+	if s.controlled {
+		control = controlFor(group)
+		c, ok := s.get(control)
+		if !ok {
+			return verdict{}, false
+		}
+		base = c
+		for _, n := range tokens(c.body, control) {
+			echo = max(echo, n)
 		}
 	}
-	if abs(a.length-s.ref.length) > s.slack+s.slack/2+16 {
-		return "size"
+	var v verdict
+	counts := tokens(a.body, q)
+	for _, p := range q {
+		if counts[p.value] > echo {
+			v.reflected = append(v.reflected, p.name)
+		}
 	}
-	if s.slack == 0 && (a.words != s.ref.words || a.lines != s.ref.lines) {
-		return "size"
+	// The values are taken out of both answers: a reflection is judged
+	// above, by its count, and is not a change of size as well.
+	sa, sb := strip(a, q), strip(base, control)
+	switch {
+	case sa.status != sb.status:
+		v.why = "status"
+	case s.resized(sa, sb):
+		v.why = "size"
 	}
-	return ""
+	v.crowd = s.controlled && base.status != s.ref.status && a.status == base.status
+	return v, true
 }
 
 // narrow finds which names in group change the answer, halving the group
 // while it does.
 func (s *search) narrow(group []string, found map[string]string) {
-	if len(group) == 0 || s.ctx.Err() != nil {
+	if len(group) == 0 || s.ctx.Err() != nil || s.err != nil || s.flooded() {
 		return
 	}
-	values := map[string]string{}
-	for _, n := range group {
-		values[n] = randValue()
-	}
-	a, ok := s.get(values)
-	if !ok {
-		return
-	}
-	why := s.differs(a, values)
-	if why == "" {
+	if len(group) > s.most {
+		// A group this large is refused whatever its names.
+		half := len(group) / 2
+		s.narrow(group[:half], found)
+		s.narrow(group[half:], found)
 		return
 	}
 	if len(group) == 1 {
-		if why == "reflected" {
-			// Which value came back tells which name it was.
-			found[group[0]] = why
-			return
-		}
-		// Confirm: a single change must show again.
-		b, ok := s.get(map[string]string{group[0]: randValue()})
-		if ok && s.differs(b, nil) != "" {
-			found[group[0]] = why
-		}
+		s.alone++
+	}
+	v, ok := s.test(group)
+	if !ok {
 		return
 	}
-	if why == "reflected" {
-		// The reflected value names the parameter directly.
-		for n, v := range values {
-			if bytes.Contains(a.body, []byte(v)) {
-				found[n] = why
-			}
-		}
-		rest := make([]string, 0, len(group))
+	if v.crowd && len(group) > 1 {
+		s.most = min(s.most, len(group)-1)
+	}
+	for _, n := range v.reflected {
+		found[n] = "reflected" // the value that came back names the parameter
+	}
+	if v.why == "" && !v.crowd {
+		return
+	}
+	if len(v.reflected) > 0 {
+		// Others in the group may change the answer in other ways.
+		var rest []string
 		for _, n := range group {
 			if _, ok := found[n]; !ok {
 				rest = append(rest, n)
 			}
 		}
-		if len(rest) == len(group) {
+		s.narrow(rest, found)
+		return
+	}
+	if len(group) == 1 {
+		if v.crowd {
 			return
 		}
-		group = rest
-		if len(group) == 0 {
-			return
+		// Confirm: a single change must show again.
+		if w, ok := s.test(group); ok && w.why != "" && !w.crowd {
+			found[group[0]] = v.why
+			s.hits++
 		}
-		// Others in the group may change the answer in other ways.
-		s.narrow(group, found)
 		return
 	}
 	half := len(group) / 2
@@ -318,10 +435,83 @@ func (s *search) narrow(group []string, found map[string]string) {
 	s.narrow(group[half:], found)
 }
 
+// tokens counts how often each value of q appears in body, the values
+// that do. Every value is "az" and 10 hex digits, so the body is read
+// once.
+func tokens(body []byte, q []pair) map[string]int {
+	if len(q) == 0 {
+		return nil
+	}
+	want := make(map[string]bool, len(q))
+	for _, p := range q {
+		want[p.value] = true
+	}
+	var out map[string]int
+	for i := 0; ; {
+		j := bytes.Index(body[i:], []byte("az"))
+		if j < 0 {
+			return out
+		}
+		i += j
+		if i+valueLen <= len(body) && want[string(body[i:i+valueLen])] {
+			if out == nil {
+				out = map[string]int{}
+			}
+			out[string(body[i:i+valueLen])]++
+			i += valueLen
+			continue
+		}
+		i++
+	}
+}
+
+// strip is a without the values of q in its body.
+func strip(a answer, q []pair) answer {
+	counts := tokens(a.body, q)
+	if len(counts) == 0 {
+		return a
+	}
+	body := a.body
+	for v := range counts {
+		body = bytes.ReplaceAll(body, []byte(v), nil)
+	}
+	return answerOf(a.status, body)
+}
+
+// valueLen is the length of randValue's values.
+const valueLen = 12
+
 func randValue() string {
 	var b [5]byte
 	_, _ = rand.Read(b[:])
 	return "az" + hex.EncodeToString(b[:])
+}
+
+// randomPairs are n names no page reads, with random values.
+func randomPairs(n int) []pair {
+	out := make([]pair, n)
+	for i := range out {
+		out[i] = pair{randValue(), randValue()}
+	}
+	return out
+}
+
+// controlFor is a name for each of group's, as long once escaped, that no
+// page reads ("~" and letters; "~" is never escaped), with random values:
+// a page that prints the query back prints the same length for both.
+func controlFor(group []string) []pair {
+	out := make([]pair, len(group))
+	for i, n := range group {
+		l := max(1, len(url.QueryEscape(n)))
+		name := make([]byte, l)
+		_, _ = rand.Read(name)
+		name[0] = '~'
+		for j := 1; j < l; j++ {
+			name[j] = 'a' + name[j]%26
+		}
+		out[i] = pair{string(name), randValue()}
+	}
+	return out
 }
 
 func abs(x int) int {

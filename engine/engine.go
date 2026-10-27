@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,11 @@ type Engine struct {
 	// Observe, when set, sees every observation once it is stored, from
 	// any goroutine: commands print results as they come.
 	Observe func(ent types.Entity, o types.Observation)
+	// Client is what the engine's own request goes with (whether
+	// http://host/ is the https site, see scheme.go); nil is fetch's.
+	Client *http.Client
+
+	secured sync.Map // hosts whose http URLs are the https site's (scheme.go)
 }
 
 func (e *Engine) Plan(seeds []types.Seed) []types.WorkItem {
@@ -295,6 +301,7 @@ func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.T
 	if err != nil || webextract.JunkURL(u) {
 		return
 	}
+	u = e.onHTTPS(u)
 	to, err := e.Store.UpsertEntity(types.TypeURL, u, now)
 	if err != nil {
 		return

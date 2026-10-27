@@ -23,6 +23,29 @@ func TestJunkURL(t *testing.T) {
 	}
 }
 
+func TestListingSort(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"http://dvwa/dvwa/css/?C=N;O=D":          true,
+		"http://dvwa/dvwa/css/?C=M;O=A":          true,
+		"http://dvwa/docs/?C=S&O=D":              true, // nginx fancyindex
+		"http://dvwa/docs/?C=D;O=A;F=2;V=1;P=*":  true,
+		"http://dvwa/docs/?C=N":                  false,
+		"http://dvwa/docs/?C=X;O=D":              false,
+		"http://dvwa/docs/?C=N;O=D;page=2":       false,
+		"http://app/search?c=n&o=d":              false,
+		"http://app/product?C=N&O=D&id=3":        false,
+		"http://dvwa/dvwa/css/":                  false,
+		"http://dvwa/vulnerabilities/fi/?page=1": false,
+	} {
+		if got := ListingSort(raw); got != want {
+			t.Errorf("%s: %v, want %v", raw, got, want)
+		}
+		if JunkURL(raw) != want {
+			t.Errorf("JunkURL(%s) != %v", raw, want)
+		}
+	}
+}
+
 func TestJunkURLPayloads(t *testing.T) {
 	for _, raw := range []string{
 		"http://testfire.net/__weave/file/etc/passwd",

@@ -117,6 +117,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if f.Name != "" {
 			row["name"] = f.Name
 		}
+		if f.Enctype != "" {
+			row["enctype"] = f.Enctype
+		}
+		if len(f.Files) > 0 {
+			row["files"] = f.Files
+		}
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{
 			Collector: Name, Source: raw, Kind: "form",
@@ -132,16 +138,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			})
 		}
 	}
-	if names := webextract.ParamNames(body, base); len(names) > 0 {
-		payload, _ := json.Marshal(map[string]any{"params": names, "url": raw})
-		if err := emit(types.Observation{
-			Collector: Name, Source: raw, Kind: "param",
-			Payload: payload, Confidence: 0.7, ObservedAt: time.Now().UTC(),
-		}); err != nil {
-			return meta, err
-		}
-		meta.EmitCount++
-	}
+	// The query names in its links are the links' own: each link is a URL
+	// of the map, and its row lists them.
 	linked := map[string]bool{}
 	for _, link := range webextract.Links(body, base) {
 		linked[link] = true
@@ -151,8 +149,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if !webextract.SameOrigin(raw, link) {
 			continue
 		}
-		if link == raw {
-			continue
+		if link == raw || webextract.ListingSort(link) {
+			continue // the page itself, or a directory listing sorted another way
 		}
 		payload, _ := json.Marshal(map[string]string{"url": link, "via": "html"})
 		if err := emit(types.Observation{

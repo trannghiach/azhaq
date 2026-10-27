@@ -95,6 +95,69 @@ func BrowserHint(rows []MapEntry, obs []types.StoredObservation) string {
 	return ""
 }
 
+// GraphQLHint is the command to read the schema of the GraphQL endpoints a
+// run found and did not introspect, and why, or "". Recognising an
+// endpoint is a GET; its schema is a POST, behind -graphql and a scope
+// that holds the host. introspects says whether the run would have sent
+// it to an endpoint; one that answered nothing to it is not suggested
+// again.
+func GraphQLHint(obs []types.StoredObservation, introspects func(raw string) bool) string {
+	found := map[string]bool{} // endpoint → it is an IDE's page (GraphiQL)
+	read := map[string]bool{}
+	for _, o := range obs {
+		if o.Kind != "graphql" {
+			continue
+		}
+		var p struct {
+			URL string `json:"url"`
+			IDE string `json:"ide"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" {
+			continue
+		}
+		switch o.Collector {
+		case "azhaq-graphql":
+			found[p.URL] = p.IDE != ""
+		case "azhaq-graphql-schema":
+			read[p.URL] = true
+		}
+	}
+	var left []string
+	for u := range found {
+		if !read[u] && !introspects(u) {
+			left = append(left, u)
+		}
+	}
+	if len(left) == 0 {
+		return ""
+	}
+	// The endpoint first, the IDE pages in front of it after.
+	sort.Slice(left, func(i, j int) bool {
+		if found[left[i]] != found[left[j]] {
+			return !found[left[i]]
+		}
+		return left[i] < left[j]
+	})
+	var paths []string
+	for _, raw := range left {
+		if u, err := url.Parse(raw); err == nil {
+			paths = append(paths, u.Path)
+		}
+	}
+	u, err := url.Parse(left[0])
+	if err != nil || len(paths) == 0 {
+		return ""
+	}
+	which := paths[0] + " answers"
+	switch {
+	case len(paths) == 2:
+		which = paths[0] + " and " + paths[1] + " answer"
+	case len(paths) > 2:
+		which = fmt.Sprintf("%s and %d more answer", paths[0], len(paths)-1)
+	}
+	return fmt.Sprintf("azhaq run -url %s/ -graphql -allow %s …   (%s like GraphQL; -graphql reads the schema by introspection)", originOf(left[0]), u.Hostname(), which)
+}
+
 func originOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {

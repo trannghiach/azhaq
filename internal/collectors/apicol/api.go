@@ -22,7 +22,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -198,8 +197,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			ops = append(ops, x)
 			if m == "get" && len(in["path"]) == 0 && len(requiredQuery(item, op, d)) == 0 {
-				// A read that needs nothing: asked, to see who may read it.
-				if u, err := normalize.URL(strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(p, "/")); err == nil && !strings.Contains(u, "{") && webextract.StateChanging(u) == "" {
+				// A read that needs nothing: asked, to see who may read it. One
+				// whose name says it does something (/createdb) is handed on too:
+				// the run lists it as skipped, with the word, like a link.
+				if u, err := normalize.URL(strings.TrimSuffix(base, "/") + "/" + strings.TrimPrefix(p, "/")); err == nil && !strings.Contains(u, "{") {
 					meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}})
 				}
 			}
