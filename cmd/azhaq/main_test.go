@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"io"
 	"os"
 	"path/filepath"
@@ -401,5 +402,26 @@ func TestPreviousRunSameSeedsOnly(t *testing.T) {
 	}
 	if got := previousRun("URL https://other.test/"); got != "" {
 		t.Fatalf("unrelated seeds diffed against %q", got)
+	}
+}
+
+// A drop-in's help names its own flags, not the run flags they stand for:
+// dirs -rate points at -t, not -dirs-threads.
+func TestInheritedHelpNamesLocalFlags(t *testing.T) {
+	dirs := flagsOf("dirs")
+	if u := dirs.Lookup("rate").Usage; !strings.Contains(u, "-t,") || strings.Contains(u, "-dirs-threads") {
+		t.Errorf("dirs -rate: %s", u)
+	}
+	if u := flagsOf("run").Lookup("dirs-rate").Usage; !strings.Contains(u, "-dirs-threads") {
+		t.Errorf("run -dirs-rate: %s", u)
+	}
+	for _, cmd := range []string{"dirs", "ports", "params"} {
+		flagsOf(cmd).VisitAll(func(f *flag.Flag) {
+			for _, m := range flagName.FindAllString(f.Usage, -1) {
+				if strings.HasPrefix(m, "-dirs-") || m == "-port-rate" || m == "-params-rate" {
+					t.Errorf("%s -%s names %s: %s", cmd, f.Name, m, f.Usage)
+				}
+			}
+		})
 	}
 }

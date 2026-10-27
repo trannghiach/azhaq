@@ -18,7 +18,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unicode/utf8"
 
 	"github.com/trannghiach/azhaq/store"
 )
@@ -248,21 +247,29 @@ func (s *mcpServer) request(ctx context.Context, m rpcMsg) {
 		s.reply(m.ID, map[string]any{"tools": mcpTools()})
 	case "tools/call":
 		var p struct {
-			Name      string         `json:"name"`
-			Arguments map[string]any `json:"arguments"`
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
 			Meta      struct {
 				ProgressToken any `json:"progressToken"`
 			} `json:"_meta"`
 		}
-		if err := json.Unmarshal(m.Params, &p); err != nil {
+		// Read as any: arguments that are not an object are refused by the
+		// schema, which says what they should be.
+		var args any
+		err := json.Unmarshal(m.Params, &p)
+		if err == nil && len(p.Arguments) > 0 {
+			err = json.Unmarshal(p.Arguments, &args)
+		}
+		if err != nil {
 			s.fail(m.ID, -32602, "invalid params: "+err.Error())
 			return
 		}
-		if err := checkArgs(p.Name, p.Arguments); err != nil {
+		if err := checkArgs(p.Name, args); err != nil {
 			s.fail(m.ID, -32602, err.Error())
 			return
 		}
-		res, err := s.call(ctx, p.Name, p.Arguments, p.Meta.ProgressToken)
+		a, _ := args.(map[string]any)
+		res, err := s.call(ctx, p.Name, a, p.Meta.ProgressToken)
 		if err != nil {
 			s.reply(m.ID, toolText(err.Error(), true))
 			return
@@ -284,52 +291,6 @@ func (s *mcpServer) instructions() string {
 		"Budget: " + budgetText(s.budget) + " for all calls together. Every result has a summary: results, failures (retryable or not), what was skipped and why, the limit that stopped the work; azhaq_resume continues a run a limit or a cancellation stopped.",
 		"Typical flow: azhaq_plan to see what a run would send, azhaq_map to map a URL or domain into a workspace, azhaq_query and azhaq_show to read it, azhaq_roles to compare sessions, azhaq_export for Burp, Postman or ZAP.",
 	}, " ")
-}
-
-var errUnknownTool = errors.New("unknown tool")
-
-// toolArgs are the arguments each tool takes, from its schema.
-var toolArgs = sync.OnceValue(func() map[string][]string {
-	out := map[string][]string{}
-	for _, t := range mcpTools() {
-		props, _ := t["inputSchema"].(map[string]any)["properties"].(map[string]any)
-		names := make([]string, 0, len(props))
-		for k := range props {
-			names = append(names, k)
-		}
-		sort.Strings(names)
-		out[t["name"].(string)] = names
-	}
-	return out
-})
-
-// checkArgs refuses a tool the server does not have and arguments its
-// schema does not name: a misspelt limit or a scope the tools would
-// ignore must not pass in silence.
-func checkArgs(tool string, args map[string]any) error {
-	known, ok := toolArgs()[tool]
-	if !ok {
-		return fmt.Errorf("%w %q", errUnknownTool, tool)
-	}
-	var bad []string
-	for k := range args {
-		if !slices.Contains(known, k) {
-			bad = append(bad, fmt.Sprintf("%q", k))
-		}
-	}
-	if len(bad) == 0 {
-		return nil
-	}
-	sort.Strings(bad)
-	takes := "it takes none"
-	if len(known) > 0 {
-		takes = "it takes " + strings.Join(known, ", ")
-	}
-	word := "argument"
-	if len(bad) > 1 {
-		word = "arguments"
-	}
-	return fmt.Errorf("invalid params: unknown %s %s for %s; %s", word, strings.Join(bad, ", "), tool, takes)
 }
 
 // toolText is a tool result: one text block, compact JSON for data. The
@@ -660,8 +621,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if boolean(a, "browser") {
 			f = append(f, "-browser")
 		}
-		if d := num(a, "depth", 0); d > 0 {
-			f = append(f, "-depth", fmt.Sprint(d))
+		if d, ok := a["depth"].(float64); ok && d >= 0 && d <= 1<<30 {
+			f = append(f, "-depth", fmt.Sprint(int(d))) // 0 too: the targets alone
 		}
 		return append(f, session()...)
 	}
@@ -846,7 +807,7 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	case "azhaq_roles":
 		roles, _ := a["roles"].([]any)
 		if len(roles) < 2 {
-			return nil, errors.New(`give at least two roles: [{"name":"anon"},{"name":"user","header":"Authorization: Bearer …"},{"name":"alice","user":"a@x.test","password":"…"}]`)
+			return nil, errors.New("give at least two roles: [" + roleAnon + "," + roleHeader + "," + roleLogin + "]")
 		}
 		db, err := s.workspace(a)
 		if err != nil {
@@ -862,6 +823,10 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 			switch {
 			case n == "":
 				return nil, errors.New("every role needs a name")
+			case str(r, "user") != "" && len(strList(r, "header")) > 0:
+				// roles signs a role in or sends its headers, not both: one
+				// of them would be dropped.
+				return nil, fmt.Errorf("role %s: give header, or user and password, not both", n)
 			case str(r, "user") != "":
 				args = append(args, "-role-login", n+"="+str(r, "user")+":"+str(r, "password"))
 			case len(strList(r, "header")) > 0:
@@ -1138,39 +1103,6 @@ func exportExt(format string) string {
 		return ".jsonl"
 	}
 	return ".txt"
-}
-
-// maxInline bounds the part of an export one azhaq_export call returns.
-const maxInline = 16 << 10
-
-// exportPart is what azhaq_export returns: where the export was written,
-// and the export itself from offset on, at most maxInline bytes of it,
-// cut at a line, with how to get the rest.
-func exportPart(path, format string, raw []byte, offset int) string {
-	head := fmt.Sprintf("wrote %s on the server's machine (%d bytes, %s)", path, len(raw), format)
-	if offset >= len(raw) {
-		if offset > 0 {
-			head += fmt.Sprintf("; offset %d is past its end", offset)
-		}
-		return head
-	}
-	part := raw[offset:]
-	if len(part) <= maxInline {
-		if offset > 0 {
-			head += fmt.Sprintf("; bytes %d to %d, the end", offset, len(raw))
-		}
-		return head + "\n" + string(part)
-	}
-	cut := maxInline
-	if i := bytes.LastIndexByte(part[:cut], '\n'); i > 0 {
-		cut = i + 1
-	}
-	for cut > 1 && !utf8.RuneStart(part[cut]) {
-		cut--
-	}
-	end := offset + cut
-	head += fmt.Sprintf("; bytes %d to %d below. For the rest call azhaq_export again with offset %d, or ask a narrower question (format urls, hosts or targets; azhaq_query), or read the file where the server runs", offset, end, end)
-	return head + "\n" + string(part[:cut])
 }
 
 // allowRules are the -allow rules of the server's lock.

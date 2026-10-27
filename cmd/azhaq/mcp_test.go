@@ -285,40 +285,51 @@ func TestMCPMapAndResume(t *testing.T) {
 	}
 }
 
-// An export is returned, in parts past 16 KB, and written once with its
-// own extension; limit is capped and query rows are compact by default.
+// An export is returned in pages of whole lines past 16 KB, offset counts
+// lines, and it is written once with its own extension; limit is capped
+// and query rows are compact by default.
 func TestMCPExportAndLimit(t *testing.T) {
 	dir := t.TempDir()
 	s := &mcpServer{exe: fakeAzhaq(t, dir), dir: dir}
 	_ = os.WriteFile(filepath.Join(dir, "w.db"), nil, 0o644)
 	var export strings.Builder
 	for i := range 3000 {
-		fmt.Fprintf(&export, "line %04d é\n", i)
+		fmt.Fprintf(&export, "https://app.test/%04d/é\n", i)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "export"), []byte(export.String()), 0o644)
 
 	var all strings.Builder
-	offset := 0
+	offset, pages := 0, 0
 	for part := 0; ; part++ {
-		text, isErr := callText(t, s, "azhaq_export", map[string]any{"workspace": "w", "format": "html", "offset": float64(offset)})
+		text, isErr := callText(t, s, "azhaq_export", map[string]any{"workspace": "w", "format": "urls", "offset": float64(offset)})
 		head, body, _ := strings.Cut(text, "\n")
-		if isErr || !strings.Contains(head, filepath.Join(dir, "w.html")+" on the server's machine") || len(body) > maxInline {
+		if isErr || !strings.Contains(head, filepath.Join(dir, "w.urls.txt")+" on the server's machine") || !strings.Contains(head, "urls: 3000 lines") || len(body) > maxInline {
 			t.Fatalf("part %d: %s (%d bytes)", part, head, len(body))
 		}
+		if want := fmt.Sprintf("this page holds lines %d to ", offset); !strings.Contains(head, want) || !strings.HasPrefix(body, fmt.Sprintf("https://app.test/%04d/é\n", offset)) {
+			t.Fatalf("part %d does not start at line %d: %s\n%.40s", part, offset, head, body)
+		}
 		all.WriteString(body)
+		pages++
 		i := strings.Index(head, "with offset ")
 		if i < 0 {
+			if !strings.HasSuffix(head, ", the last") {
+				t.Errorf("the last page does not say so: %s", head)
+			}
 			break
 		}
 		if _, err := fmt.Sscanf(head[i:], "with offset %d", &offset); err != nil || part > 10 {
 			t.Fatalf("%s: %v", head, err)
 		}
 	}
-	if all.String() != export.String() {
-		t.Errorf("the parts do not make the export: %d bytes of %d", all.Len(), export.Len())
+	if all.String() != export.String() || pages < 4 {
+		t.Errorf("the pages do not make the export: %d bytes of %d in %d pages", all.Len(), export.Len(), pages)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "w.html.html")); err == nil {
-		t.Error("w.html.html")
+	if text, _ := callText(t, s, "azhaq_export", map[string]any{"workspace": "w", "format": "urls", "offset": float64(3000)}); !strings.Contains(text, "offset 3000 is past its end") {
+		t.Errorf("past the end: %s", text)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "w.urls.txt")); err != nil {
+		t.Error(err)
 	}
 	if text, isErr := callText(t, s, "azhaq_export", map[string]any{"workspace": "w", "format": "nope"}); !isErr || strings.Contains(text, "azhaq help") || !strings.Contains(text, "openapi") {
 		t.Errorf("bad format: %s", text)

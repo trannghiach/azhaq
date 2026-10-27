@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -57,17 +58,30 @@ var runFlags = sync.OnceValue(func() *flag.FlagSet { return flagsOf("run") })
 func inherit(fs *flag.FlagSet, specs ...string) func() []string {
 	type pair struct{ local, remote string }
 	var ps []pair
+	renamed := map[string]string{}
 	for _, spec := range specs {
 		local, remote, ok := strings.Cut(spec, "=")
 		if !ok {
 			remote = local
 		}
-		f := runFlags().Lookup(remote)
+		ps = append(ps, pair{local, remote})
+		renamed[remote] = local
+	}
+	for _, p := range ps {
+		f := runFlags().Lookup(p.remote)
 		if f == nil {
-			panic("azhaq: run has no -" + remote)
+			panic("azhaq: run has no -" + p.remote)
 		}
+		// The help names run's flags; here they go by their local names
+		// (dirs -rate says -t, not -dirs-threads).
+		usage := flagName.ReplaceAllStringFunc(f.Usage, func(m string) string {
+			if local, ok := renamed[m[1:]]; ok {
+				return "-" + local
+			}
+			return m
+		})
 		if _, ok := f.Value.(*stringsFlag); ok {
-			fs.Var(new(stringsFlag), local, f.Usage)
+			fs.Var(new(stringsFlag), p.local, usage)
 		} else {
 			var v any
 			if g, ok := f.Value.(flag.Getter); ok {
@@ -75,20 +89,19 @@ func inherit(fs *flag.FlagSet, specs ...string) func() []string {
 			}
 			switch d := v.(type) {
 			case bool:
-				fs.Bool(local, d, f.Usage)
+				fs.Bool(p.local, d, usage)
 			case int:
-				fs.Int(local, d, f.Usage)
+				fs.Int(p.local, d, usage)
 			case int64:
-				fs.Int64(local, d, f.Usage)
+				fs.Int64(p.local, d, usage)
 			case float64:
-				fs.Float64(local, d, f.Usage)
+				fs.Float64(p.local, d, usage)
 			case time.Duration:
-				fs.Duration(local, d, f.Usage)
+				fs.Duration(p.local, d, usage)
 			default:
-				fs.String(local, f.DefValue, f.Usage)
+				fs.String(p.local, f.DefValue, usage)
 			}
 		}
-		ps = append(ps, pair{local, remote})
 	}
 	return func() []string {
 		given := map[string]bool{}
@@ -110,6 +123,10 @@ func inherit(fs *flag.FlagSet, specs ...string) func() []string {
 		return out
 	}
 }
+
+// flagName is a flag a help text names: -dirs-threads, not the -empty of
+// non-empty.
+var flagName = regexp.MustCompile(`\B-[a-z][a-z0-9-]*[a-z0-9]`)
 
 // targetFlags are the flags of every command that sends requests to
 // targets: scope, pace, budget, time, session.
