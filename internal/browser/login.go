@@ -123,6 +123,11 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 		return Session{}, err
 	}
 	b.visit(loginURL)
+	if b.lost.Load() {
+		return Session{}, errLost
+	}
+	watched := func() {}
+	defer func() { watched() }() // once the tab is closed
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
 	tab, cancelT := context.WithTimeout(tab, 90*time.Second)
@@ -136,32 +141,25 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 	}
 	// What Chrome refused for the sign-in's frames: a sign-in that went to
 	// an identity provider outside the scope fails, and says so.
-	var framesMu sync.Mutex
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	frames := map[cdp.FrameID]bool{main: true}
-	all := chromedp.Events(tab, network.RequestWillBeSent)
-	go func() {
-		for ev, err := range all {
-			if err != nil {
-				return
-			}
-			framesMu.Lock()
-			frames[ev.FrameID] = true
-			framesMu.Unlock()
-		}
-	}()
-	b.sockets(tab, main)
+	t := b.open(tab, main)
+	watched = b.watch(tab, t, nil)
 	var mine []refusal
+	claimed := false
 	refused := func() []refusal {
-		framesMu.Lock()
-		mine = append(mine, b.claim(frames)...)
-		framesMu.Unlock()
+		if !claimed {
+			claimed = true
+			b.settle(t)
+			mine = b.claim(t)
+		}
 		return mine
 	}
 	defer func() {
 		if err != nil {
 			err = outside(loginURL, main, refused(), err)
+			b.leave(mine) // listed with no page: the sign-in's error names the one that matters
 		}
+		b.claim(t) // later ones of its frames are counted only
 	}()
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {
