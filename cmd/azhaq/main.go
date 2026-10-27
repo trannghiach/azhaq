@@ -173,7 +173,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
-	dbPath := fs.String("db", "", "sqlite path (default: new file each run)")
+	dbPath := fs.String("db", "", "the workspace, a SQLite file (default: a new azhaq-TIME-PID.db in the current directory, or $AZHAQ_DB; query, show and export read it afterwards)")
 	demo := fs.Bool("demo", false, "run against the built-in fixture server (no internet)")
 	pathsFile := fs.String("paths", "", "extra path wordlist (one path per line)")
 	quiet := fs.Bool("quiet", false, "print no map, only the summary (on stderr)")
