@@ -416,7 +416,7 @@ func TestRolesOnACookieApp(t *testing.T) {
 // the route's noun, singular or plural, in any case: bid is a basket's,
 // not a BasketItem's.
 func TestRoleRouteKinds(t *testing.T) {
-	for tmpl, want := range map[string]map[string]bool{
+	kinds := map[string]map[string]bool{
 		"http://h/rest/basket/{id}":       {"bid": true, "basketid": true, "basketitemid": false, "userid": false},
 		"http://h/api/BasketItems/{id}":   {"bid": false, "basketid": false, "basketitemid": true, "basketitemsid": true, "biid": true},
 		"http://h/api/Users/{id}":         {"userid": true, "uid": true, "usersid": true, "bid": false},
@@ -427,12 +427,14 @@ func TestRoleRouteKinds(t *testing.T) {
 		"http://h/api/basketitems/{id}":   {"basketitemid": true, "bid": false}, // apart from /rest/basket/{id}
 		"http://h/api/orders/{order_id}":  {"orderid": true, "oid": false},
 		"http://h/api/users/{id}/profile": {"userid": true},
-	} {
+	}
+	shorts := shortNouns(mapKeys(kinds), nil)
+	for tmpl, want := range kinds {
 		rt, ok := newRoute(tmpl)
 		if !ok {
 			t.Fatalf("%s: no route", tmpl)
 		}
-		rt.apart(map[string]bool{"basket": true, "basketitem": true, "user": true})
+		rt.apart(shorts)
 		for f, w := range want {
 			if rt.takes(f) != w {
 				t.Errorf("%s takes %s: %v", tmpl, f, !w)
@@ -442,7 +444,8 @@ func TestRoleRouteKinds(t *testing.T) {
 }
 
 // juiceSeen is what each role of a Juice Shop like app saw: everyone
-// reads every basket item; alice's session holds basket 8, bob's 9.
+// reads every basket item; alice's session holds basket 8, bob's 9, under
+// bid, which stands for the basket of /rest/basket/{id}.
 func juiceSeen(roles []role) (map[string]runSeen, map[string]map[string]answer, map[string]identity) {
 	items := []byte(`{"status":"success","data":[{"id":5,"BasketId":3,"ProductId":1},{"id":8,"BasketId":5,"ProductId":4},
 		{"id":9,"BasketId":9,"ProductId":2},{"id":10,"BasketId":8,"ProductId":6}]}`)
@@ -457,9 +460,11 @@ func juiceSeen(roles []role) (map[string]runSeen, map[string]map[string]answer, 
 		seen[r.name] = s
 	}
 	who := map[string]identity{}
+	shorts := shortNouns(map[string]bool{"http://h/rest/basket/{id}": true, "http://h/api/BasketItems/{id}": true}, seen)
 	for name, claims := range map[string]string{"alice": `{"data":{"id":27,"email":"alice@x.test"},"bid":8}`,
 		"bob": `{"data":{"id":28,"email":"bob@x.test"},"bid":9}`} {
 		id := newIdentity()
+		id.kinds = shorts
 		id.learnHeaders(http.Header{"Authorization": {"Bearer " + jwt(claims)}})
 		who[name] = id
 	}
@@ -614,6 +619,321 @@ func TestRolesBasketKinds(t *testing.T) {
 	} {
 		if rows[p].OwnerBy != want {
 			t.Errorf("%s: owner_by %q, want %q", p, rows[p].OwnerBy, want)
+		}
+	}
+}
+
+// TestRoleShortNouns: a short name stands for a route's noun only when no
+// other noun of the routes or of the answers' reference fields has its
+// initials; a compound read as one word is no rival.
+func TestRoleShortNouns(t *testing.T) {
+	routes := func(ps ...string) map[string]bool {
+		out := map[string]bool{}
+		for _, p := range ps {
+			out["http://h"+p+"/{id}"] = true
+		}
+		return out
+	}
+	brand := map[string]runSeen{"alice": newRunSeen()}
+	brand["alice"].add("http://h/api/products", map[string][]string{"BrandId": {"8"}, "bid": {"8"}, "uid": {"1"}})
+	for _, c := range []struct {
+		name   string
+		routes map[string]bool
+		seen   map[string]runSeen
+		want   map[string]string
+	}{
+		{"a basket", routes("/rest/basket", "/api/BasketItems"), nil, map[string]string{"bid": "basket", "biid": "basketitem"}},
+		{"books beside a basket", routes("/rest/basket", "/api/books"), nil, map[string]string{"bid": ""}},
+		{"books alone", routes("/api/books"), nil, map[string]string{"bid": "book"}},
+		{"basketitems read as one word", routes("/rest/basket", "/api/basketitems"), nil, map[string]string{"bid": "basket"}},
+		{"a BrandId beside a basket", routes("/rest/basket"), brand, map[string]string{"bid": ""}},
+		{"a BrandId and no route", nil, brand, map[string]string{}},
+	} {
+		if got := shortNouns(c.routes, c.seen); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%s: %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+// bidShop is an app whose sessions hold a bid claim (alice 8, bob 9) and
+// whose spec names paths: books every signed-in user reads alike, and
+// baskets, each its owner's alone, or, when open, anyone's to read with
+// the UserId they belong to.
+func bidShop(paths []string, open bool) (*httptest.Server, string, string) {
+	alice := jwt(`{"status":"success","data":{"id":27,"email":"alice@x.test"},"bid":8}`)
+	bob := jwt(`{"status":"success","data":{"id":28,"email":"bob@x.test"},"bid":9}`)
+	users := map[string]string{alice: "alice", bob: "bob"}
+	var ps []string
+	for _, p := range paths {
+		ps = append(ps, fmt.Sprintf(`%q:{"get":{"parameters":[{"name":"id","in":"path","required":true}]}}`, p))
+	}
+	spec := `{"openapi":"3.0.0","info":{"title":"shop","version":"1"},"paths":{` + strings.Join(ps, ",") + `}}`
+	baskets := map[string]string{"/rest/basket/8": "alice", "/rest/basket/9": "bob"}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		p := r.URL.Path
+		user := users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		switch {
+		case p == "/":
+			fmt.Fprint(w, `{"name":"shop"}`)
+		case p == "/openapi.json":
+			fmt.Fprint(w, spec)
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":"unauthorized"}`)
+		case strings.HasPrefix(p, "/api/books/"):
+			id := strings.TrimPrefix(p, "/api/books/")
+			fmt.Fprintf(w, `{"id":%s,"title":"Book %s","price":5}`, id, id)
+		case baskets[p] != "" && open:
+			fmt.Fprintf(w, `{"status":"success","data":{"id":%s,"UserId":%d,"Products":[]}}`, strings.TrimPrefix(p, "/rest/basket/"),
+				map[string]int{"alice": 27, "bob": 28}[baskets[p]])
+		case baskets[p] == user:
+			fmt.Fprintf(w, `{"status":"success","data":{"id":%s,"Products":[]}}`, strings.TrimPrefix(p, "/rest/basket/"))
+		case baskets[p] != "":
+			w.WriteHeader(http.StatusForbidden)
+			fmt.Fprint(w, `{"error":"forbidden"}`)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":"not found"}`)
+		}
+	}))
+	return site, alice, bob
+}
+
+// TestRolesShortNameRivals: a session's bid is not every b-noun's: beside
+// a basket route, books every signed-in user reads alike are no one's;
+// with no basket, a book bid fills is the session's only when its answer
+// says so; and a basket bid no longer claims is still tried, and its
+// answer names its owner.
+func TestRolesShortNameRivals(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		paths []string
+		open  bool
+		want  map[string]string
+		by    map[string]string
+	}{
+		{"books beside a basket", []string{"/rest/basket/{id}", "/api/books/{id}"}, false,
+			map[string]string{"/api/books/8": verdictObject, "/api/books/9": verdictObject,
+				"/rest/basket/8": verdictOnly + " [alice] of ", "/rest/basket/9": verdictOnly + " [bob] of "}, nil},
+		{"books alone", []string{"/api/books/{id}"}, false,
+			map[string]string{"/api/books/8": verdictObject, "/api/books/9": verdictObject}, nil},
+		{"books beside an open basket", []string{"/rest/basket/{id}", "/api/books/{id}"}, true,
+			map[string]string{"/api/books/8": verdictObject, "/rest/basket/8": verdictCross + " [bob] of alice", "/rest/basket/9": verdictCross + " [alice] of bob"},
+			map[string]string{"/rest/basket/8": "the answer's UserId 27 names alice (data.id claim of alice's token)"}},
+	} {
+		site, alice, bob := bidShop(c.paths, c.open)
+		got, rows, _, err := rolesJSON(t, site.URL, "-role", "anon", "-role", "alice=Authorization: Bearer "+alice, "-role", "bob=Authorization: Bearer "+bob,
+			"--", "-url", site.URL+"/")
+		site.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for p, want := range c.want {
+			if got[p] != want {
+				t.Errorf("%s: %s: %q (owner_by %q), want %q", c.name, p, got[p], rows[p].OwnerBy, want)
+			}
+		}
+		for p, want := range c.by {
+			if rows[p].OwnerBy != want {
+				t.Errorf("%s: %s: owner_by %q, want %q", c.name, p, rows[p].OwnerBy, want)
+			}
+		}
+	}
+}
+
+// whoFrom is each role's identity from the claims of its token, with what
+// the routes say its short names stand for.
+func whoFrom(shorts map[string]string, claims map[string]string) map[string]identity {
+	who := map[string]identity{}
+	for name, c := range claims {
+		id := newIdentity()
+		id.kinds = shorts
+		id.learnHeaders(http.Header{"Authorization": {"Bearer " + jwt(c)}})
+		who[name] = id
+	}
+	return who
+}
+
+// TestRoleRefFieldsNameTheirKind: a reference field names its kind in
+// full: BookId, BrandId and BranchId are not the basket the session's bid
+// is, nor a book it is not; BasketId is, when bid stands for the basket.
+func TestRoleRefFieldsNameTheirKind(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}}, {name: "bob", headers: []string{"B: 1"}}}
+	claims := map[string]string{"alice": `{"data":{"id":27},"bid":8}`, "bob": `{"data":{"id":28},"bid":9}`}
+	basket := whoFrom(map[string]string{"bid": "basket"}, claims)
+	for _, c := range []struct {
+		body  string
+		who   map[string]identity
+		owner string
+		known bool
+		by    string
+	}{
+		{`{"id":3,"BookId":8,"rating":5}`, basket, "", false, ""},
+		{`{"id":4,"BrandId":8,"name":"x"}`, basket, "", false, ""},
+		{`{"id":5,"BranchId":2,"amount":1}`, basket, "", false, ""},
+		{`{"id":3,"BookId":8,"rating":5}`, whoFrom(nil, claims), "", false, ""},
+		{`{"id":6,"BasketId":8}`, basket, "alice", true, "BasketId 8 is alice's basket (bid claim of alice's token)"},
+		{`{"id":6,"BasketId":8}`, whoFrom(map[string]string{"bid": ""}, claims), "", false, ""},
+		{`{"id":7,"BasketId":5}`, basket, "", true, "BasketId 5 is not alice's basket (8)"},
+	} {
+		a := answerOf(200, []byte(c.body), "application/json")
+		if owner, by, known, _ := whose(a.self, roles, c.who, "alice", ""); owner != c.owner || known != c.known || by != c.by {
+			t.Errorf("%s: %q %v %q, want %q %v %q", c.body, owner, known, by, c.owner, c.known, c.by)
+		}
+	}
+}
+
+// TestRoleSettleKeepsProvedOwners: an object's answer confirms or names
+// an owner, but undoes one the session or the role's own list proved
+// only by naming another role with an identifier of the same name: not by
+// an account number, another organisation of the same user, or a number
+// that equals another user's id.
+func TestRoleSettleKeepsProvedOwners(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}}, {name: "bob", headers: []string{"B: 1"}}}
+
+	// Each user's list holds only their own transaction; anyone signed in
+	// reads either.
+	who := whoFrom(nil, map[string]string{"alice": `{"sub":"27"}`, "bob": `{"sub":"28"}`})
+	lists := map[string]string{"alice": `{"data":[{"id":55,"accountId":1003,"amount":5}]}`, "bob": `{"data":[{"id":56,"accountId":1004,"amount":7}]}`}
+	seen, answers := map[string]runSeen{}, map[string]map[string]answer{}
+	for _, r := range roles {
+		s := newRunSeen()
+		answers[r.name] = map[string]answer{}
+		if l, ok := lists[r.name]; ok {
+			a, f := readAnswer(200, []byte(l), "application/json")
+			answers[r.name]["http://h/api/transactions"] = a
+			s.add("http://h/api/transactions", f.ids)
+			s.objects["http://h/api/transactions"] = f.objects
+		}
+		seen[r.name] = s
+	}
+	made := instances(roles, map[string]bool{"http://h/api/transactions/{id}": true}, seen, answers, nil, who)
+	for _, r := range roles[1:] {
+		answers[r.name]["http://h/api/transactions/55"] = answerOf(200, []byte(`{"id":55,"accountId":1003,"amount":5}`), "application/json")
+		answers[r.name]["http://h/api/transactions/56"] = answerOf(200, []byte(`{"id":56,"accountId":1004,"amount":7}`), "application/json")
+	}
+	settleOwners(roles, made, answers, who)
+	for u, want := range map[string]string{
+		"http://h/api/transactions/55": "alice: in alice's /api/transactions and not the other roles'",
+		"http://h/api/transactions/56": "bob: in bob's /api/transactions and not the other roles'",
+	} {
+		if s := made[u].owner + ": " + made[u].by; s != want {
+			t.Errorf("%s: %q, want %q", u, s, want)
+		}
+	}
+
+	// One answer each, read alike by alice and bob, over what filled the
+	// route.
+	who = whoFrom(map[string]string{"bid": "basket"}, map[string]string{"alice": `{"sub":"3","org_id":7,"customer_id":1003}`,
+		"bob": `{"sub":"4","username":"bob","email":"bob@x.test","org_id":11,"bid":9}`})
+	answers = map[string]map[string]answer{"anon": {}, "alice": {}, "bob": {}}
+	list := "in alice's /api/x and not the other roles'"
+	cases := map[string]struct {
+		in   instance
+		body string
+		want string
+	}{
+		"/api/projects/15":     {instance{owner: "alice", by: list, sure: proved}, `{"id":15,"orgId":9,"name":"side project"}`, "alice: " + list},
+		"/api/transactions/55": {instance{owner: "alice", by: list}, `{"id":55,"accountId":4,"amount":5}`, "alice: " + list},
+		"/api/transactions/57": {instance{owner: "alice", by: list}, `{"id":57,"customerId":1003}`,
+			"alice: " + list + "; the answer's customerId 1003 is alice's customer (customer_id claim of alice's token)"},
+		"/api/transactions/58": {instance{owner: "alice", by: list}, `{"id":58,"customerId":1004}`, ": "},
+		"/api/notes/1":         {instance{owner: "alice", by: list, sure: proved}, `{"id":1,"owner":"bob"}`, "alice: " + list},
+		"/api/notes/2":         {instance{owner: "alice", by: list, sure: proved}, `{"id":2,"createdBy":4}`, "alice: " + list},
+		"/api/notes/3": {instance{owner: "alice", by: list, sure: proved}, `{"id":3,"email":"bob@x.test"}`,
+			"bob: the answer's email bob@x.test names bob (email claim of bob's token)"},
+		"/api/notes/4":   {instance{owner: "alice", by: list, sure: proved}, `{"id":4,"UserId":4}`, "bob: the answer's UserId 4 names bob (sub claim of bob's token)"},
+		"/api/notes/5":   {instance{owner: "alice", by: list}, `{"id":5,"owner":"bob"}`, "bob: the answer's owner bob names bob (username claim of bob's token)"},
+		"/rest/basket/8": {instance{owner: "alice", by: "bid claim of alice's token → /rest/basket/{id}", sure: shortName}, `{"id":8,"Products":[]}`, ": "},
+		"/rest/basket/9": {instance{owner: "bob", by: "bid claim of bob's token → /rest/basket/{id}", sure: shortName}, `{"id":9,"UserId":4}`,
+			"bob: bid claim of bob's token → /rest/basket/{id}; the answer's UserId 4 names bob (sub claim of bob's token)"},
+		"/rest/basket/10": {instance{owner: "alice", by: "bid claim of alice's token → /rest/basket/{id}", sure: shortName}, `{"id":10,"UserId":4}`,
+			"bob: the answer's UserId 4 names bob (sub claim of bob's token)"},
+		"/api/BasketItems/12": {instance{owner: "alice", by: list, sure: proved}, `{"id":12,"BasketId":9}`, "alice: " + list},
+	}
+	made = map[string]instance{}
+	for u, c := range cases {
+		made[u] = c.in
+		for _, r := range []string{"alice", "bob"} {
+			answers[r][u] = answerOf(200, []byte(c.body), "application/json")
+		}
+	}
+	settleOwners(roles, made, answers, who)
+	for u, c := range cases {
+		if s := made[u].owner + ": " + made[u].by; s != c.want {
+			t.Errorf("%s: %q, want %q", u, s, c.want)
+		}
+	}
+}
+
+// TestRolesListOwnerOverAccountId runs roles on an app whose list of
+// transactions holds each user's own alone, while anyone signed in reads
+// any: the accountId of a transaction is not a user id, and bob reading
+// alice's is reported.
+func TestRolesListOwnerOverAccountId(t *testing.T) {
+	alice, bob := jwt(`{"sub":"27","email":"alice@x.test"}`), jwt(`{"sub":"28","email":"bob@x.test"}`)
+	users := map[string]string{alice: "alice", bob: "bob"}
+	tx := map[string]string{"55": `{"id":55,"accountId":1003,"amount":5}`, "56": `{"id":56,"accountId":1004,"amount":7}`}
+	mine := map[string]string{"alice": "55", "bob": "56"}
+	spec := `{"openapi":"3.0.0","info":{"title":"bank","version":"1"},"paths":{"/api/transactions":{"get":{}},
+		"/api/transactions/{id}":{"get":{"parameters":[{"name":"id","in":"path","required":true}]}}}}`
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		p := r.URL.Path
+		user := users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+		switch {
+		case p == "/":
+			fmt.Fprint(w, `{"name":"bank"}`)
+		case p == "/openapi.json":
+			fmt.Fprint(w, spec)
+		case user == "":
+			w.WriteHeader(http.StatusUnauthorized)
+			fmt.Fprint(w, `{"error":"unauthorized"}`)
+		case p == "/api/transactions":
+			fmt.Fprintf(w, `{"data":[%s]}`, tx[mine[user]])
+		case strings.HasPrefix(p, "/api/transactions/") && tx[strings.TrimPrefix(p, "/api/transactions/")] != "":
+			fmt.Fprint(w, tx[strings.TrimPrefix(p, "/api/transactions/")])
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprint(w, `{"error":"not found"}`)
+		}
+	}))
+	defer site.Close()
+	got, rows, _, err := rolesJSON(t, site.URL, "-role", "anon", "-role", "alice=Authorization: Bearer "+alice, "-role", "bob=Authorization: Bearer "+bob,
+		"--", "-url", site.URL+"/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{"/api/transactions/55": verdictCross + " [bob] of alice", "/api/transactions/56": verdictCross + " [alice] of bob"} {
+		if got[p] != want {
+			t.Errorf("%s: %q, want %q", p, got[p], want)
+		}
+	}
+	if by := rows["/api/transactions/55"].OwnerBy; by != "in alice's /api/transactions and not the other roles'" {
+		t.Errorf("owner_by %q", by)
+	}
+}
+
+// TestRoleOddFields: field names and routes of any spelling are read
+// without a panic, and a name that only folds to a reference field names
+// no kind.
+func TestRoleOddFields(t *testing.T) {
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}}}
+	who := whoFrom(map[string]string{"bid": "basket"}, map[string]string{"alice": `{"data":{"id":27},"bid":8,"x":{"İD":3},"__":{"id":1},"Ünïd":4}`})
+	for body, want := range map[string]string{`null`: "", `[]`: "", `1`: "", `"x"`: "", `{}`: "", `{"data":null}`: "", `{"data":[1,2]}`: "",
+		`{"status":"ok","data":{"İD":1,"BasketİD":8,"_id":"x","Id":"","id":null}}`:                                      "",
+		`{"a":{"b":{"c":{"d":{"e":{"f":{"g":{"h":{"i":{"j":{"k":{"l":{"m":{"n":{"o":{"p":{"q":{"r":1}}}}}}}}}}}}}}}}}}`: "",
+		`{"ÄId":5,"__id":6,"-id":7,"id":8,"basket-id":8,"Basket.Id":8}`:                                                 "alice",
+	} {
+		a, _ := readAnswer(200, []byte(body), "application/json")
+		if owner, _, _, _ := whose(a.self, roles, who, "alice", ""); owner != want {
+			t.Errorf("%s: owner %q, want %q", body, owner, want)
+		}
+	}
+	for _, tmpl := range []string{"http://h/{id}", "http://h/api/{id}", "http://h/x/İ/{id}", "http://h/-/{id}", "http://h/_/{id}", "http://h/123/{id}", "http://h/a%2Fb/{id}"} {
+		if rt, ok := newRoute(tmpl); ok {
+			rt.apart(shortNouns(map[string]bool{tmpl: true}, nil))
 		}
 	}
 }

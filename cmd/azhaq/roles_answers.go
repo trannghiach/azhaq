@@ -254,17 +254,19 @@ func selfOf(v any) (map[string]any, bool) {
 }
 
 // refField: a field (folded) that points at an object of another kind,
-// one the object belongs to (BasketId, cartId), not at its user.
+// one the object belongs to (BasketId, cartId, accountId), not at its
+// user.
 func refField(n string) bool {
 	return len(n) > 2 && strings.HasSuffix(n, "id") && !ownerField(n) && !noiseIDs[n]
 }
 
-// ownerField: a field (folded) that says whose an object is.
+// ownerField: a field (folded) that says which user an object is. An
+// account, customer or member is not the user: its number can equal a
+// user id by chance, so accountId is a reference to an account.
 func ownerField(n string) bool {
 	switch n {
 	case "owner", "ownerid", "ownername", "owneremail", "user", "userid", "username", "useremail", "email", "createdby", "createdbyid",
-		"author", "authorid", "authoremail", "creator", "creatorid", "customer", "customerid", "account", "accountid", "member", "memberid",
-		"uid", "login", "uploadedby", "postedby", "submittedby":
+		"author", "authorid", "authoremail", "creator", "creatorid", "uid", "login", "uploadedby", "postedby", "submittedby":
 		return true
 	}
 	return false
