@@ -92,9 +92,9 @@ func Take() error {
 	}
 }
 
-// Count accounts for requests already sent without asking (the
-// subresources a page loaded in Chrome fetched): they count against the
-// budget, which may then be spent.
+// Count accounts for requests already sent without asking (a worker
+// process's, a WebSocket Chrome opened): they count against the budget,
+// which may then be spent.
 func Count(n int) { sent.Add(int64(n)) }
 
 // Spent says the budget allows no more requests.

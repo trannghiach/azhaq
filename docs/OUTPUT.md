@@ -47,7 +47,7 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
 | `db` | The database the results are in (absent when it was temporary). |
 | `unreachable` | Targets you gave that never answered. |
 | `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. `retryable` is true for timeouts, dropped connections, 429 and 5xx. `source` names a third-party source (crtsh, wayback). `targets` names up to 100; `azhaq query -db FILE -failed` lists every failed target, the list to retry. |
-| `skipped` | Targets and requests Azhaq chose not to touch, with the reason: outside the scope, would end the session, a scope entry a run cannot use. |
+| `skipped` | Targets and requests Azhaq chose not to touch, with the reason: outside the scope, would end the session, a scope entry a run cannot use. Chrome's requests outside the scope are refused before they leave and listed here without their query string, `outside the scope (Chrome)` (`outside the site (Chrome)` without a scope: the registrable domain or address of the pages it was pointed at), the first 100 URLs of a run; `notes` gives the number of requests when there were more. |
 | `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
 | `notes` | Caps that were hit and other things worth knowing that are not failures. |
@@ -76,7 +76,7 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | `role` (names) | `live` (resolves; a host you gave, or a name under a domain you gave), `sibling` (resolves; found on the way, under another domain), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
 | `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `summary`, `operation_id`, `source` (`js-call`, `openapi`, `graphql`). |
 | `body` | the body field names of all its operations, whatever described them: a script's call, an API description (served or found), a GraphQL schema (argument names), a request taken in from katana. |
-| `status`, `title` | The URL's own answer (the first hop of a redirect). Without a scope, a redirect is followed only within the site (same registrable domain or address); with one, only inside it. |
+| `status`, `title` | The URL's own answer (the first hop of a redirect). Without a scope, a redirect is followed only within the site (same registrable domain or address); with one, only inside it. Chrome is held to the same rule for everything a page asks for. |
 | `methods`, `params` | From API descriptions, call sites in scripts, forms and links. |
 | `forms` | `{"method","action","fields"}` for each form on the page. |
 | `found_in` | Where scripts name the route, up to three places, calls first: `script` (its URL; the page's for a script inside the page, with `inline` true and the page's line numbers), `line` and `col` (bytes, from 1), `snippet` (up to 120 bytes: the call as written, or the string with the code around it; credentials in it, such as JSON Web Tokens, bearer tokens, secrets set to a literal or in a query string and long keys, read `[redacted]`), and `source`, the original file, when the route was read from a source map's sources (`line` and `col` are then that file's). |

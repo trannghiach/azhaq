@@ -508,7 +508,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *login != "" && out.plan {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("the run signs in at %s as %s with Chrome first", *login, *loginUser))
 	} else if *login != "" {
-		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass)
+		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
 		if err != nil {
 			return err
 		}
@@ -733,6 +733,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	fillReport(rep, path, seeds, ents, obs, rows)
+	if opts.Browser != nil {
+		chromeRefused(rep, opts.Browser)
+	}
 	rep.RunID = stats.RunID
 	rep.Requests = fetch.Sent()
 	if left := st.TasksLeft(); left > 0 {
@@ -1561,8 +1564,8 @@ func hasHost(seeds []types.Seed, raw string) bool {
 
 // signIn signs in on loginURL with Chrome (b, or a browser of its own) and
 // adds the session to every request; it returns the page the login ended
-// on.
-func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
+// on. What Chrome was refused on the way is listed in rep.
+func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (string, error) {
 	if pass == "" {
 		pass = os.Getenv("AZHAQ_LOGIN_PASS")
 	}
@@ -1572,10 +1575,14 @@ func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
 	if b == nil {
 		b = &browser.Browser{UserAgent: browserAgent()}
 		defer b.Close()
+		defer chromeRefused(rep, b)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	s, err := b.Login(ctx, loginURL, user, pass)
+	for _, u := range s.Blocked {
+		rep.Skipped = append(rep.Skipped, engine.Skip{Target: u, Reason: browser.Reason()})
+	}
 	if err != nil {
 		return "", fmt.Errorf("-login %s: %w", loginURL, err)
 	}
@@ -1603,6 +1610,18 @@ func signIn(b *browser.Browser, loginURL, user, pass string) (string, error) {
 	}
 	fmt.Fprintf(os.Stderr, "azhaq: signed in as %s (%s); now on %s\n", user, what, s.URL)
 	return s.URL, nil
+}
+
+// chromeRefused lists in rep what Chrome was refused that no page claimed
+// (a service worker's requests, WebSockets), and how many requests there
+// were when more URLs were refused than are listed.
+func chromeRefused(rep *report, b *browser.Browser) {
+	for _, u := range b.Leftover() {
+		rep.Skipped = append(rep.Skipped, engine.Skip{Target: u, Reason: browser.Reason()})
+	}
+	if n, listed, more := b.Refused(); more {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("Chrome was refused %d requests %s; the first %d URLs are listed", n, strings.TrimSuffix(browser.Reason(), " (Chrome)"), listed))
+	}
 }
 
 // browserAgent is the User-Agent Chrome sends: the run's, not Chrome's
