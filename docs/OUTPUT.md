@@ -108,7 +108,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | `asn` | `as_number`, `as_name`, `prefix`. |
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
 
-`probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind`, `key`, `collector` and `detail`).
+`probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
 
 ## roles
 

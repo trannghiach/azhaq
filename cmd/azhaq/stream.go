@@ -25,10 +25,12 @@ func streamFound(asJSON bool) func(types.Entity, types.Observation) {
 		}
 		str := func(k string) string { s, _ := p[k].(string); return s }
 		var kind, key, more string
+		var fields map[string]any // more, as fields, for -json
 		switch o.Kind {
 		case "application":
 			if st, ok := p["status"].(float64); ok && st > 0 {
 				kind, key, more = "answer", str("url"), fmt.Sprintf("[%d] %s", int(st), str("title"))
+				fields = map[string]any{"status": int(st), "title": str("title")}
 			}
 		case "url":
 			kind, key = "url", str("url")
@@ -38,9 +40,12 @@ func streamFound(asJSON bool) func(types.Entity, types.Observation) {
 			}
 		case "ports":
 			if open, _ := p["open"].([]any); len(open) > 0 {
-				kind, key, more = "ports", str("ip"), fmt.Sprint(open)
-				if h := str("host"); h != "" && h != key {
-					key = h + " (" + key + ")"
+				kind, key, more = "ports", str("host"), fmt.Sprint(open)
+				fields = map[string]any{"ip": str("ip"), "open": open}
+				if key == "" {
+					key = str("ip")
+				} else if ip := str("ip"); ip != "" && ip != key {
+					more = ip + " " + more
 				}
 			}
 		}
@@ -49,14 +54,15 @@ func streamFound(asJSON bool) func(types.Entity, types.Observation) {
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		if seen[kind+" "+key] {
+		id := kind + " " + key + " " + more
+		if seen[id] {
 			return
 		}
-		seen[kind+" "+key] = true
+		seen[id] = true
 		if asJSON {
 			row := map[string]any{"type": "found", "kind": kind, "key": key, "collector": o.Collector}
-			if more != "" {
-				row["detail"] = more
+			for k, v := range fields {
+				row[k] = v
 			}
 			_ = enc.Encode(row)
 			return
