@@ -29,6 +29,7 @@ type answer struct {
 	secrets []secret        // the values of the sensitive fields
 	held    map[string]bool // the scalar values of the answer (a few hundred), to see an object's identifier in it
 	flags   map[string]bool // paths of list items' fields that only hold true or false (data[].liked)
+	self    *listObject     // the object the answer is about: its fields say whose it is
 	toLogin bool            // a redirect to a sign-in page
 	toRoot  bool            // a redirect to the front page
 }
@@ -89,15 +90,24 @@ type jsonFacts struct {
 	ids     map[string][]string // short scalar values by field name, at any depth: what routes are filled with
 	held    map[string]bool     // the first few hundred scalar values
 	flags   map[string]bool     // paths under a list whose values are all true or false
-	objects []listObject        // the list items that name their owner
+	objects []listObject        // the list items that say whose they are
+	self    *listObject         // the object the answer is about
 }
 
-// listObject is an item of a list that names its owner ({"book_title":
-// "b1","user":"alice"}): its owner fields' values, and its short scalar
-// fields by folded name.
+// listObject is a JSON object's short scalar fields by folded name
+// ({"book_title":"b1","user":"alice"}), and its owner and reference
+// fields (UserId, BasketId) as the answer spells them.
 type listObject struct {
-	owners []string
 	fields map[string]string
+	spell  map[string]string
+}
+
+// spelled is a field's name as the answer spells it.
+func (o *listObject) spelled(n string) string {
+	if s := o.spell[n]; s != "" {
+		return s
+	}
+	return n
 }
 
 // secret is one value of a sensitive field.
@@ -181,6 +191,10 @@ func inspect(body []byte, contentType string) *jsonFacts {
 		}
 	}
 	walk(v, "", 0)
+	if m, ok := selfOf(v); ok {
+		o := objectOf(m)
+		f.self = &o
+	}
 	f.paths = sortedKeys(paths)
 	f.isError = errorShaped(v)
 	for p, k := range kinds {
@@ -194,10 +208,17 @@ func inspect(body []byte, contentType string) *jsonFacts {
 	return f
 }
 
-// ownedObject is a list item that names its owner (owner, user, UserId,
-// email, createdBy…), with its short scalar fields.
+// ownedObject is a list item that may say whose it is: it has an owner
+// field (owner, user, UserId, email, createdBy…) or points at an object
+// it belongs to (BasketId).
 func ownedObject(m map[string]any) (listObject, bool) {
-	o := listObject{fields: map[string]string{}}
+	o := objectOf(m)
+	return o, len(o.spell) > 0
+}
+
+// objectOf reads an object's short scalar fields.
+func objectOf(m map[string]any) listObject {
+	o := listObject{fields: map[string]string{}, spell: map[string]string{}}
 	for k, x := range m {
 		s, ok := scalarString(x)
 		if !ok || len(s) > 64 {
@@ -205,12 +226,37 @@ func ownedObject(m map[string]any) (listObject, bool) {
 		}
 		n := norm(k)
 		o.fields[n] = s
-		if ownerField(n) {
-			o.owners = append(o.owners, s)
+		if ownerField(n) || refField(n) {
+			o.spell[n] = k
 		}
 	}
-	sort.Strings(o.owners)
-	return o, len(o.owners) > 0
+	return o
+}
+
+// selfOf is the object an answer is about: the answer, or the object its
+// envelope carries ({"status":"success","data":{…}}).
+func selfOf(v any) (map[string]any, bool) {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	for k := range m {
+		if !envelope[norm(k)] {
+			return m, true
+		}
+	}
+	for _, k := range []string{"data", "result"} {
+		if in, ok := m[k].(map[string]any); ok {
+			return in, true
+		}
+	}
+	return nil, false
+}
+
+// refField: a field (folded) that points at an object of another kind,
+// one the object belongs to (BasketId, cartId), not at its user.
+func refField(n string) bool {
+	return len(n) > 2 && strings.HasSuffix(n, "id") && !ownerField(n) && !noiseIDs[n]
 }
 
 // ownerField: a field (folded) that says whose an object is.
@@ -249,7 +295,7 @@ func (f *jsonFacts) scalar(k string, x any, seen map[string]bool) {
 func (f *jsonFacts) apply(a *answer) {
 	a.Keys, a.nested = f.paths, true
 	a.Error = f.isError
-	a.secrets, a.held, a.flags = f.secrets, f.held, f.flags
+	a.secrets, a.held, a.flags, a.self = f.secrets, f.held, f.flags, f.self
 	a.Sensitive = nil
 	for _, s := range f.secrets {
 		if !slices.Contains(a.Sensitive, s.field) {

@@ -45,6 +45,7 @@ type roleRow struct {
 	FoundBy   []string          `json:"found_by"`            // the roles whose own runs reached it, or whose answers held its identifier
 	From      string            `json:"template,omitempty"`  // the route it fills in, for an object URL
 	Owner     string            `json:"owner,omitempty"`     // the role whose own object it is: given with -id, or held by that role's answers alone
+	OwnerBy   string            `json:"owner_by,omitempty"`  // what says it is the owner's: bid claim of alice's token → /rest/basket/{id}
 	Readers   []string          `json:"readers,omitempty"`   // the roles the verdict says read it
 	Sensitive []string          `json:"sensitive,omitempty"` // the sensitive fields the verdict is about
 	Verdict   string            `json:"verdict"`
@@ -242,6 +243,9 @@ func cmdRoles(args []string) error {
 		if err != nil {
 			rep.Notes = append(rep.Notes, "replay: "+err.Error())
 		}
+		// Whose each object is, as its own answer says (UserId, owner,
+		// BasketId), over what the identifier that filled its route said.
+		settleOwners(roles, made, answers, who)
 	}
 
 	markRedirects(answers, *loginURL)
@@ -387,12 +391,30 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 			if row.From != "" {
 				line += " from " + row.From
 			}
+			if row.Verdict == verdictCross && row.OwnerBy != "" {
+				line += " · " + row.Owner + "'s by " + shortBy(row.OwnerBy)
+			}
 		}
 		if len(row.Sensitive) > 0 && row.Verdict != verdictAnyoneSecrets && row.Verdict != verdictSecrets {
 			line += " · sensitive: " + strings.Join(row.Sensitive, ", ")
 		}
 		fmt.Println(line)
 	}
+}
+
+// shortBy is owner_by as the text table prints it: without the route,
+// printed already, nor where each value was read ("bid claim of alice's
+// token; the answer's UserId 27 names alice").
+func shortBy(by string) string {
+	parts := strings.Split(by, "; ")
+	for i, p := range parts {
+		p, _, _ = strings.Cut(p, " → ")
+		if j := strings.LastIndex(p, " ("); j > 0 && strings.HasSuffix(p, ")") {
+			p = p[:j]
+		}
+		parts[i] = p
+	}
+	return strings.Join(parts, "; ")
 }
 
 // label is the verdict as the text table says it, with who and what.
@@ -599,6 +621,9 @@ func roleRows(roles []role, answers map[string]map[string]answer, found map[stri
 		}
 		row := roleRow{URL: u, Status: map[string]int{}, Answers: map[string]answer{}, FoundBy: by,
 			From: in.template, Owner: in.owner, given: in.given, value: in.value}
+		if in.owner != "" {
+			row.OwnerBy = in.by
+		}
 		for _, r := range roles {
 			a := answers[r.name][u]
 			row.Status[r.name] = a.Status
