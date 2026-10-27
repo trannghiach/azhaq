@@ -71,6 +71,20 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
+// Asks names the archives a run asks about a domain: every one, keyed or
+// not.
+func (c *Collector) Asks(seed types.Seed) []string {
+	domain := normalize.Hostname(seed.Keys["domain"])
+	if domain == "" || normalize.SpecialUse(domain) {
+		return nil
+	}
+	out := make([]string, 0, len(c.sources))
+	for _, s := range c.sources {
+		out = append(out, s.name)
+	}
+	return out
+}
+
 type outcome struct {
 	count, pages int
 	err          error

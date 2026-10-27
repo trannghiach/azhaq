@@ -5,8 +5,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"mime"
+	"mime/multipart"
 	"net"
+	"net/url"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
@@ -39,6 +45,9 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 	if bytes.HasPrefix(trimmed, []byte("{")) && !bytes.Contains(trimmed, []byte("\n{")) {
 		var report struct {
 			Results []map[string]any `json:"results"`
+			Config  struct {
+				Method string `json:"method"`
+			} `json:"config"`
 		}
 		err := json.Unmarshal(trimmed, &report)
 		if err == nil && report.Results == nil && bytes.Count(trimmed, []byte("\n")) > 0 {
@@ -47,7 +56,7 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 		if err == nil && report.Results != nil {
 			var out []Fact
 			for _, r := range report.Results {
-				out = append(out, ffufFacts(r)...)
+				out = append(out, ffufFacts(r, report.Config.Method)...)
 			}
 			formats[FormatFFUF] = len(report.Results)
 			return out, formats, nil
@@ -105,20 +114,11 @@ func lineFacts(raw []byte, m map[string]any, exported map[string][2]string) ([]F
 		payload := map[string]any{"url": target, "template": str("template-id"), "name": info["name"], "severity": info["severity"]}
 		return []Fact{observation(urlOrHost(target), "nuclei", "finding", payload)}, FormatNuclei, nil
 	case has("request") && has("timestamp"):
-		req, _ := m["request"].(map[string]any)
-		endpoint, _ := req["endpoint"].(string)
-		payload := map[string]any{"url": endpoint, "via": "katana"}
-		if resp, ok := m["response"].(map[string]any); ok {
-			if st, ok := resp["status_code"].(float64); ok {
-				payload["status"] = int(st)
-			}
-		}
-		if mm, _ := req["method"].(string); mm != "" && mm != "GET" {
-			payload["methods"] = []string{mm}
-		}
-		return urlFacts(endpoint, "katana", payload), FormatKatana, nil
+		return katanaFacts(m), FormatKatana, nil
 	case has("url") && (has("status_code") || has("webserver") || has("tech")):
 		return httpxFacts(m), FormatHTTPX, nil
+	case has("url") && has("status") && has("redirectlocation"):
+		return ffufFacts(m, ""), FormatFFUF, nil // ffuf -json: one result per line
 	case has("host") && has("port") && !has("url"):
 		host, ip := str("host"), str("ip")
 		port := fmt.Sprint(m["port"])
@@ -188,22 +188,51 @@ func exportFacts(m map[string]any, exported map[string][2]string) []Fact {
 	return nil // edges: the facts rebuild them
 }
 
+// httpxFacts reads one httpx line as the answer azhaq-http records for a
+// URL, under azhaq-http's field names: the map, probe rows and exports
+// (targets, burp) read it as their own.
 func httpxFacts(m map[string]any) []Fact {
-	u, _ := m["url"].(string)
+	u, err := normalize.URL(text(m["url"]))
+	if err != nil {
+		return nil
+	}
+	if failed, _ := m["failed"].(bool); failed {
+		// -probe lists what did not answer: requested, no answer, as
+		// azhaq-http records a failure.
+		msg := text(m["error"])
+		if msg == "" {
+			msg = "no answer"
+		}
+		return []Fact{observation(urlSeed(u), "httpx", "error", map[string]any{"url": u, "error": msg, "via": "httpx"})}
+	}
 	payload := map[string]any{"url": u, "via": "httpx"}
 	if st, ok := m["status_code"].(float64); ok {
 		payload["status"] = int(st)
 	}
-	for from, to := range map[string]string{"title": "title", "webserver": "server", "content_type": "content_type", "tech": "tech", "final_url": "final_url", "favicon": "favicon"} {
+	// With -fr, status_code is where the redirects ended; Azhaq's status
+	// is the first answer and final_status the last.
+	if chain := ints(m["chain_status_codes"]); len(chain) > 1 {
+		payload["status"], payload["final_status"] = chain[0], chain[len(chain)-1]
+	}
+	for from, to := range map[string]string{"title": "title", "webserver": "server", "content_type": "content_type", "tech": "tech", "favicon": "favicon", "location": "location", "cdn_name": "cdn", "cdn_type": "cdn_type"} {
 		if v, ok := m[from]; ok {
 			payload[to] = v
 		}
 	}
-	ip, _ := m["host_ip"].(string)
-	if ip == "" {
-		if h, _ := m["host"].(string); net.ParseIP(h) != nil {
-			ip = h
+	for from, to := range map[string]string{"content_length": "length", "words": "words", "lines": "lines"} {
+		if v, ok := m[from].(float64); ok {
+			payload[to] = int(v)
 		}
+	}
+	if f, err := normalize.URL(text(m["final_url"])); err == nil {
+		payload["final_url"] = f
+	}
+	if d, err := time.ParseDuration(text(m["time"])); err == nil {
+		payload["ms"] = d.Milliseconds()
+	}
+	ip := text(m["host_ip"])
+	if h := text(m["host"]); ip == "" && net.ParseIP(h) != nil {
+		ip = h // httpx before host_ip wrote the address as host
 	}
 	if ip != "" {
 		payload["ip"] = ip
@@ -216,31 +245,208 @@ func httpxFacts(m map[string]any) []Fact {
 	return facts
 }
 
-func ffufFacts(r map[string]any) []Fact {
-	u, _ := r["url"].(string)
+// katanaFacts reads one katana line: the request and its answer, the
+// forms katana read on the page (-fx) and the requests its scripts sent
+// (-xhr).
+func katanaFacts(m map[string]any) []Fact {
+	req, _ := m["request"].(map[string]any)
+	resp, _ := m["response"].(map[string]any)
+	out := requestFacts(req, resp)
+	if len(out) == 0 {
+		return nil
+	}
+	page := out[0].EntityKey
+	forms, _ := resp["forms"].([]any)
+	for _, x := range forms {
+		f, _ := x.(map[string]any)
+		action, ok := page, true
+		if a := text(f["action"]); a != "" {
+			action, ok = resolve(page, a)
+		}
+		method := strings.ToUpper(text(f["method"]))
+		if method == "" {
+			method = "GET"
+		}
+		if ok {
+			out = append(out, observation(urlSeed(page), "katana", "form", map[string]any{"method": method, "action": action, "fields": strings2(f["parameters"]), "via": "katana"}))
+		}
+	}
+	xhr, _ := resp["xhr_requests"].([]any)
+	for _, x := range xhr {
+		r, _ := x.(map[string]any)
+		out = append(out, requestFacts(r, nil)...)
+	}
+	return out
+}
+
+// requestFacts reads a request katana sent or saw sent. The answer to a
+// GET is the URL's answer, as azhaq-http records one. A request with
+// another method says what the route takes (the method, its query and
+// body fields), as a call in a script does: no GET was sent, so it is not
+// the URL's answer.
+func requestFacts(req, resp map[string]any) []Fact {
+	u, err := normalize.URL(text(req["endpoint"]))
+	if err != nil {
+		return nil
+	}
+	if method := strings.ToUpper(text(req["method"])); method != "" && method != "GET" {
+		op := map[string]any{"method": method}
+		row := map[string]any{"url": u, "via": "katana", "methods": []string{method}}
+		if q := queryNames(u); len(q) > 0 {
+			op["query"], row["params"] = q, q
+		}
+		if names, media := bodyFields(text(req["body"]), header(req, "content-type")); len(names) > 0 {
+			op["body"], op["body_type"], row["body"] = names, media, names
+		}
+		row["ops"] = []any{op}
+		return []Fact{observation(urlSeed(u), "katana", "url", row)}
+	}
+	payload := map[string]any{"url": u, "via": "katana"}
+	st, _ := resp["status_code"].(float64)
+	if st <= 0 {
+		return []Fact{observation(urlSeed(u), "katana", "url", payload)}
+	}
+	payload["status"] = int(st)
+	for from, to := range map[string]string{"content-type": "content_type", "server": "server", "location": "location"} {
+		if v := header(resp, from); v != "" {
+			payload[to] = v
+		}
+	}
+	if tech := strings2(resp["technologies"]); len(tech) > 0 {
+		payload["tech"] = tech
+	}
+	if n, ok := resp["content_length"].(float64); ok {
+		payload["length"] = int(n)
+	} else if body, ok := resp["body"].(string); ok {
+		payload["length"] = len(body)
+	}
+	return []Fact{observation(urlSeed(u), "katana", "application", payload)}
+}
+
+// ffufFacts reads one ffuf result. A hit asked with GET is the URL's
+// answer, as azhaq-http records one; asked with another method (-X), it
+// says the route takes that method.
+func ffufFacts(r map[string]any, method string) []Fact {
+	u, err := normalize.URL(text(r["url"]))
+	if err != nil {
+		return nil
+	}
+	if method = strings.ToUpper(method); method != "" && method != "GET" {
+		row := map[string]any{"url": u, "via": "ffuf", "methods": []string{method}, "ops": []any{map[string]any{"method": method}}}
+		return []Fact{observation(urlSeed(u), "ffuf", "url", row)}
+	}
 	payload := map[string]any{"url": u, "via": "ffuf"}
 	for _, k := range []string{"status", "length", "words", "lines"} {
 		if v, ok := r[k].(float64); ok {
 			payload[k] = int(v)
 		}
 	}
-	if loc, _ := r["redirectlocation"].(string); loc != "" {
+	if ct := text(r["content-type"]); ct != "" {
+		payload["content_type"] = ct
+	}
+	if loc := text(r["redirectlocation"]); loc != "" {
 		payload["location"] = loc
 	}
-	return urlFacts(u, "ffuf", payload)
+	if ns, ok := r["duration"].(float64); ok {
+		payload["ms"] = int64(ns) / int64(time.Millisecond)
+	}
+	kind := "url"
+	if st, _ := payload["status"].(int); st > 0 {
+		kind = "application"
+	}
+	return []Fact{observation(urlSeed(u), "ffuf", kind, payload)}
 }
 
-// urlFacts records a URL a tool reported: an observation on the URL, so
-// the map shows how it answered.
+// urlFacts records a URL a tool listed: an observation on the URL.
 func urlFacts(u, collector string, payload map[string]any) []Fact {
 	if _, err := normalize.URL(u); err != nil {
 		return nil
 	}
-	kind := "url"
-	if _, answered := payload["status"]; answered {
-		kind = "application"
+	return []Fact{observation(urlSeed(u), collector, "url", payload)}
+}
+
+// header is a header of katana's request or response, whatever case it
+// wrote the name in (content-type, Content-Type; content_type before 1.0).
+func header(m map[string]any, name string) string {
+	h, _ := m["headers"].(map[string]any)
+	for k, v := range h {
+		if strings.EqualFold(strings.ReplaceAll(k, "_", "-"), name) {
+			return text(v)
+		}
 	}
-	return []Fact{observation(urlSeed(u), collector, kind, payload)}
+	return ""
+}
+
+// bodyFields are the field names a request body sends: a JSON object's
+// keys, or a form's names (urlencoded or multipart, as katana fills one).
+func bodyFields(body, contentType string) ([]string, string) {
+	media, params, _ := mime.ParseMediaType(contentType)
+	var obj map[string]any
+	switch {
+	case strings.TrimSpace(body) == "":
+	case json.Unmarshal([]byte(body), &obj) == nil:
+		if media == "" {
+			media = "application/json"
+		}
+		return slices.Sorted(maps.Keys(obj)), media
+	case media == "multipart/form-data" && params["boundary"] != "":
+		var names []string
+		r := multipart.NewReader(strings.NewReader(body), params["boundary"])
+		for {
+			p, err := r.NextPart()
+			if err != nil {
+				break
+			}
+			if n := p.FormName(); n != "" && !slices.Contains(names, n) {
+				names = append(names, n)
+			}
+		}
+		slices.Sort(names)
+		return names, media
+	case (media == "" || media == "application/x-www-form-urlencoded") && strings.Contains(body, "="):
+		if q, err := url.ParseQuery(strings.TrimSpace(body)); err == nil {
+			return slices.Sorted(maps.Keys(q)), "application/x-www-form-urlencoded"
+		}
+	}
+	return nil, ""
+}
+
+func queryNames(u string) []string {
+	p, err := url.Parse(u)
+	if err != nil || p.RawQuery == "" {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(p.Query()))
+}
+
+// resolve makes a form's action absolute against the page it is on.
+func resolve(page, ref string) (string, bool) {
+	base, err := url.Parse(page)
+	if err != nil {
+		return "", false
+	}
+	r, err := url.Parse(strings.TrimSpace(ref))
+	if err != nil {
+		return "", false
+	}
+	u, err := normalize.URL(base.ResolveReference(r).String())
+	return u, err == nil && (strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://"))
+}
+
+func text(v any) string {
+	s, _ := v.(string)
+	return s
+}
+
+func ints(v any) []int {
+	xs, _ := v.([]any)
+	var out []int
+	for _, x := range xs {
+		if n, ok := x.(float64); ok {
+			out = append(out, int(n))
+		}
+	}
+	return out
 }
 
 func observation(s types.Seed, collector, kind string, payload map[string]any) Fact {

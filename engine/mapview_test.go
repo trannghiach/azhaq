@@ -87,3 +87,25 @@ func TestMapTemplatesAndForms(t *testing.T) {
 		t.Errorf("API operation row:\n%s", text)
 	}
 }
+
+// A row's body is every operation's body fields: an API description puts
+// them on its operations only, a script's call on both.
+func TestMapBodyFromEveryOperation(t *testing.T) {
+	key := "https://shop.test/b2b/v2/orders"
+	ents := []types.Entity{{ID: "o", Type: types.TypeURL, Key: key}}
+	obs := []types.StoredObservation{
+		{EntityID: "spec", Observation: types.Observation{Collector: "azhaq-openapi", Kind: "url", Payload: json.RawMessage(
+			`{"url":"` + key + `","via":"openapi","methods":["POST"],"params":["cid","orderLines","orderLinesData"],
+			  "ops":[{"method":"POST","body":["cid","orderLines","orderLinesData"],"body_type":"application/json"}]}`)}},
+		{EntityID: "main.js", Observation: types.Observation{Collector: "azhaq-js", Kind: "url", Payload: json.RawMessage(
+			`{"url":"` + key + `","via":"js-call","methods":["POST"],"body":["cid","coupon"],"ops":[{"method":"POST","body":["cid","coupon"]}]}`)}},
+	}
+	seeds := []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": "https://shop.test/"}}}
+	rows := engine.BuildMap(ents, seeds, obs, nil, false)
+	if len(rows) != 1 {
+		t.Fatalf("rows %+v", rows)
+	}
+	if got := strings.Join(rows[0].Body, ","); got != "cid,coupon,orderLines,orderLinesData" {
+		t.Errorf("body %q, ops %+v", got, rows[0].Ops)
+	}
+}

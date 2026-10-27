@@ -58,6 +58,14 @@ func (a *ASN) Inputs() []types.SeedType { return []types.SeedType{types.TypeASN}
 
 func (a *ASN) Outputs() []string { return []string{"prefixes"} }
 
+// Asks: RIPEstat, for the prefixes and the holder's name.
+func (a *ASN) Asks(seed types.Seed) []string {
+	if _, ok := NormalizeASN(seed.Key()); !ok {
+		return nil
+	}
+	return []string{"RIPEstat"}
+}
+
 // NormalizeASN reads "AS64500", "as64500" or "64500".
 func NormalizeASN(s string) (string, bool) {
 	n := strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(s)), "AS")
@@ -151,6 +159,9 @@ func (p *Prefix) Name() string { return PrefixName }
 // Info: arithmetic only.
 func (p *Prefix) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
 
+// Asks nobody.
+func (p *Prefix) Asks(types.Seed) []string { return nil }
+
 func (p *Prefix) Inputs() []types.SeedType { return []types.SeedType{types.TypePrefix} }
 
 func (p *Prefix) Outputs() []string { return []string{"addresses"} }
@@ -200,6 +211,9 @@ func (r *PTR) Name() string { return PTRName }
 
 // Info: asks DNS resolvers only.
 func (r *PTR) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
+
+// Asks no source: an address is looked up on the run's resolvers.
+func (r *PTR) Asks(types.Seed) []string { return nil }
 
 func (r *PTR) Inputs() []types.SeedType { return []types.SeedType{types.TypeIPAddress} }
 

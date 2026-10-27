@@ -1,7 +1,7 @@
 // Package catalog is the registry of collectors and the interfaces a
 // collector implements: Collector, and optionally Informer (kind and
-// dependencies), Batcher (many seeds per call) and Skipper (decline a seed
-// at plan time).
+// dependencies), Batcher (many seeds per call), Skipper (decline a seed
+// at plan time) and Asker (the third parties it would ask).
 package catalog
 
 import (
@@ -109,6 +109,13 @@ func Hint(ctx context.Context, seeds ...types.Seed) bool {
 // seed does not spend the run's item budget.
 type Skipper interface {
 	Skip(seed types.Seed) bool
+}
+
+// Asker is optional. A passive collector says, without asking anything,
+// which third parties it would ask about a seed, one query each (a source
+// may page through its answer), so azhaq plan can count them.
+type Asker interface {
+	Asks(seed types.Seed) []string
 }
 
 type Catalog struct {
