@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
@@ -61,6 +62,11 @@ type Browser struct {
 	sem    chan struct{}
 
 	guard *guard
+	lost  atomic.Bool // Chrome's paused requests are no longer heard of
+
+	closeMu sync.Mutex
+	closing bool
+	working sync.WaitGroup // requests being decided
 
 	mu      sync.Mutex
 	session map[string]string    // sessionStorage a login left, for every tab
@@ -68,10 +74,13 @@ type Browser struct {
 	paid    map[cdp.FrameID]bool // tabs whose page their caller counted
 
 	refMu    sync.Mutex
-	held     map[refusal]bool // refused, not yet claimed by their tab
-	listed   map[string]bool  // refused URLs handed out to be listed
-	refused  int              // requests refused for where they went
-	unlisted bool             // more URLs were refused than are listed
+	tabs     map[cdp.FrameID]*tab // open pages, by each frame they are known to have
+	gone     map[cdp.FrameID]bool // frames of pages already read
+	popups   map[cdp.FrameID]bool // windows pages opened, closed as they open
+	held     map[refusal]bool     // refused for no open page, to list at the end
+	listed   map[string]bool      // refused URLs handed out to be listed
+	refused  int                  // requests refused for where they went
+	unlisted bool                 // more URLs were refused than are listed
 }
 
 func (b *Browser) start() error {
@@ -117,13 +126,19 @@ func (b *Browser) start() error {
 			opts = append(opts, chromedp.UserAgent(b.UserAgent))
 		}
 		b.alloc, b.cancel = chromedp.NewExecAllocator(context.Background(), opts...)
+		// The guard lives as long as this Chrome, and relays for it alone.
+		context.AfterFunc(b.alloc, b.guard.close)
 		root, _ := chromedp.NewContext(b.alloc)
 		if err := chromedp.Do(root); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
 			if strings.Contains(err.Error(), "sandbox") {
 				b.err = fmt.Errorf("%w: %v", ErrNoSandbox, err)
 			}
+			b.cancel()
 			return
+		}
+		if p := chromedp.FromContext(root).Browser.Process(); p != nil {
+			b.guard.chrome(p.Pid)
 		}
 		// No page opens before every request is held to the scope.
 		if err := b.intercept(root); err != nil {
@@ -136,14 +151,18 @@ func (b *Browser) start() error {
 	return b.err
 }
 
-// Close stops Chrome.
+// Close stops Chrome, and waits for what was handling its requests.
 func (b *Browser) Close() {
+	b.closeMu.Lock()
+	b.closing = true
+	b.closeMu.Unlock()
 	if b.cancel != nil {
 		b.cancel()
 	}
 	if b.guard != nil {
 		b.guard.close()
 	}
+	b.working.Wait()
 }
 
 // Page is what loading a URL gave.
@@ -155,7 +174,7 @@ type Page struct {
 	Requests []string // every URL the page asked for while loading, sent or not
 	Blocked  []string // URLs it asked for outside the scope, to list (Reason); not sent
 	Left     string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
-	Capped   bool     // the request budget refused some of its requests
+	Capped   bool     // the request budget refused some of its requests; what it was refused is then in Leftover, not Blocked
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -185,36 +204,37 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		return Page{}, ctx.Err()
 	}
 	defer func() { <-b.sem }()
+	if b.lost.Load() {
+		return Page{}, errLost
+	}
+	watched := func() {}
+	defer func() { watched() }() // once the tab is closed
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
 	tab, cancelT := context.WithTimeout(tab, b.Timeout)
 	defer cancelT()
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
+	var p Page
+	if err := chromedp.Do(tab); err != nil { // opens the tab
+		return p, err
+	}
 
 	// The page's requests, from the moment the tab opens, and the frames
-	// they came from: what Chrome refused for those is this page's.
+	// they came from: what Chrome refuses those is this page's.
+	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
+	t := b.open(tab, main)
+	defer func() { b.leave(b.claim(t)) }() // a page not read: its refusals listed with none
 	var mu sync.Mutex
 	var reqs []string
-	frames := map[cdp.FrameID]bool{}
-	events := chromedp.Events(tab, network.RequestWillBeSent)
-	go func() {
-		for ev, err := range events {
-			if err != nil {
-				return
-			}
-			mu.Lock()
-			reqs = append(reqs, ev.Request.URL)
-			frames[ev.FrameID] = true
-			mu.Unlock()
-		}
-	}()
-	var p Page
+	watched = b.watch(tab, t, func(ev *network.EventRequestWillBeSent) {
+		mu.Lock()
+		reqs = append(reqs, ev.Request.URL)
+		mu.Unlock()
+	})
 	if _, err := chromedp.Call(tab, network.Enable, network.EnableParams{}); err != nil {
 		return p, err
 	}
-	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	b.sockets(tab, main)
 	b.prepay(main, true)
 	defer b.prepay(main, false)
 	if len(b.Header) > 0 {
@@ -246,17 +266,25 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 			p.PNG, err = chromedp.Run(tab, chromedp.CaptureScreenshot())
 		}
 	}
+	b.settle(t)
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)
-	frames[main] = true
-	mine := b.claim(frames)
 	mu.Unlock()
-	p.Blocked = b.list(mine)
+	mine := b.claim(t)
 	for _, r := range mine {
 		p.Capped = p.Capped || r.budget
 		if r.frame == main && r.doc && !r.budget && p.Left == "" {
 			p.Left = r.url
 		}
 	}
+	if p.Capped {
+		// Its caller drops what a capped page gave, to load it again after
+		// azhaq resume: the run lists its refusals.
+		b.leave(mine)
+	} else {
+		p.Blocked = b.list(mine)
+	}
 	return p, err
 }
+
+var errLost = errors.New("Chrome no longer reports the requests it holds: its pages are not loaded")

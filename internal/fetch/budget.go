@@ -52,6 +52,13 @@ func Spend(ctx context.Context) error {
 	if w != nil {
 		w.used.Add(1)
 	}
+	return Pace(ctx)
+}
+
+// Pace waits for the run's pace (-rate) without counting a request: for
+// one counted with Take that is sent as a run's own request would be (a
+// request of Chrome's).
+func Pace(ctx context.Context) error {
 	paceMu.Lock()
 	p := pace
 	paceMu.Unlock()
@@ -93,8 +100,7 @@ func Take() error {
 }
 
 // Count accounts for requests already sent without asking (a worker
-// process's, a WebSocket Chrome opened): they count against the budget,
-// which may then be spent.
+// process's): they count against the budget, which may then be spent.
 func Count(n int) { sent.Add(int64(n)) }
 
 // Spent says the budget allows no more requests.

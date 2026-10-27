@@ -155,6 +155,12 @@ func Client(c *http.Client) *http.Client {
 	}
 }
 
+// Dial connects to addr as the run's HTTP client does: through Resolver's
+// addresses for a name.
+func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dial(ctx, network, addr)
+}
+
 // dial connects through Resolver's addresses when it has an answer, the
 // way the system would: IPv6 first where the machine has a route for it,
 // IPv4 tried too after a short head start (RFC 8305). Some edges answer
