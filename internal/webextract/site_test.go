@@ -51,6 +51,36 @@ func TestSnippetBounds(t *testing.T) {
 	}
 }
 
+// A signed-in page's inline script can hold its session: what a snippet
+// carries out of it has its credentials blanked, and a route's words kept.
+func TestSnippetsRedactCredentials(t *testing.T) {
+	jwt := "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJlX2hlcmVfYWJj"
+	for src, want := range map[string]string{
+		`fetch("/api/me",{headers:{Authorization:"Bearer ` + jwt + `"}})`:      `fetch("/api/me",{headers:{Authorization:"Bearer [redacted]"}})`,
+		`var t="` + jwt + `";$.get("/rest/user/whoami")`:                       `var t="[redacted]";$.get("/rest/user/whoami")`,
+		`login({user:"admin",password:"hunter2!"});fetch("/api/login")`:        `login({user:"admin",password:"[redacted]"});fetch("/api/login")`,
+		`fetch("/resetpw?login=user&token=ee11cbb19052e40b07aac0ca060c23ee")`:  `fetch("/resetpw?login=user&token=[redacted]")`,
+		`const k="AKfycbx9QzP2mW7rT4uVn8bLs3dH6jE1";fetch("/api/data")`:        `const k="[redacted]";fetch("/api/data")`,
+		`this.http.post("/api/Challenges/continueCodeFindIt/applyNow2",{a:b})`: `this.http.post("/api/Challenges/continueCodeFindIt/applyNow2",{a:b})`,
+		`{tmpToken:localStorage.getItem("totp_tmp_token"),totpToken:t}`:        `{tmpToken:localStorage.getItem("totp_tmp_token"),totpToken:t}`,
+	} {
+		if got := NewLocator(src).Span(0, len(src)); got != want {
+			t.Errorf("Span(%s)\n got %s\nwant %s", src, got, want)
+		}
+	}
+}
+
+// A minified bundle is one line of megabytes: a snippet looks no further
+// than it can show, wherever the line starts.
+func TestSnippetOnOneLongLine(t *testing.T) {
+	src := strings.Repeat("x=1;", 1<<18) + `fetch("/api/far")` + strings.Repeat(";y=2", 1<<18)
+	at := strings.Index(src, `"/api/far"`)
+	s := NewLocator(src).Site("m.js", at, at+len(`"/api/far"`))
+	if s.Line != 1 || s.Col != at+1 || !strings.Contains(s.Snippet, `fetch("/api/far")`) || len(s.Snippet) > MaxSnippet {
+		t.Errorf("site %+v", s)
+	}
+}
+
 func TestInlineScriptsAt(t *testing.T) {
 	page := "<html>\n<head><title>x</title></head>\n<body>\n<script>\nfetch('/api/a')</script>\n  <script src=/x.js></script><script>var b=2</script>\n</body>"
 	got := InlineScriptsAt([]byte(page))

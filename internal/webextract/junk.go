@@ -83,10 +83,12 @@ func JunkURL(raw string) bool {
 
 // StringNoise reports a path read out of a string in a script or a JSON
 // document that names no route: a parser table or a minified name cut
-// out of a longer string (/pQ, /SQ: every segment one or two characters,
-// one of them letters with a capital), or a package named after its
-// owner (/juice-shop/juice-shop). Short routes in lower case (/v1, /me,
-// /id) are kept, and so is anything a page links to: this is for strings.
+// out of a longer string (/pQ, /SQ: one segment of one or two letters
+// with a capital), or a package named after its owner
+// (/juice-shop/juice-shop: a slug with a hyphen or a dot, twice). Short
+// routes in lower case (/v1, /me, /id) are kept, and so are a locale
+// (/en/US), words repeated (/admin/admin, /api/api), and anything a page
+// links to: this is for strings.
 func StringNoise(p string) bool {
 	if u, err := url.Parse(p); err == nil && u.Host != "" {
 		p = u.Path
@@ -95,20 +97,11 @@ func StringNoise(p string) bool {
 		p = p[:i]
 	}
 	segs := strings.Split(strings.Trim(p, "/"), "/")
-	if len(segs) == 2 && segs[0] == segs[1] && len(segs[0]) >= 3 && pkgName.MatchString(segs[0]) {
+	if len(segs) == 2 && segs[0] == segs[1] && len(segs[0]) >= 3 && pkgName.MatchString(segs[0]) && strings.ContainsAny(segs[0], "-.") {
 		return true
 	}
-	short, capital := true, false
-	for _, s := range segs {
-		if len(s) == 0 || len(s) > 2 {
-			short = false
-			break
-		}
-		if letters.MatchString(s) && strings.ToLower(s) != s {
-			capital = true
-		}
-	}
-	return short && capital
+	s := segs[0]
+	return len(segs) == 1 && len(s) <= 2 && letters.MatchString(s) && strings.ToLower(s) != s
 }
 
 var (

@@ -16,27 +16,42 @@ import (
 
 // shape is what a request says about itself besides its URL.
 type shape struct {
-	method   string   // a literal method; "" when methodEx or opts decide it
-	methodEx string   // the expression that gives the method
-	opts     string   // options or settings that are not an object literal
-	bodyEx   string   // the expression sent as the body
-	body     []string // the keys of an object literal body
-	query    []string // the keys of an object literal of query parameters
+	method    string   // a literal method; "" when methodEx or opts decide it
+	methodEx  string   // the expression that gives the method
+	opts      string   // options or settings that are not an object literal
+	bodyKey   string   // where the options hold the body: body (fetch), data
+	bodyEx    string   // the expression sent as the body
+	body      []string // the keys of an object literal body
+	query     []string // the keys of an object literal of query parameters
+	dataQuery bool     // jQuery: a GET's data is its query string
+	pageRel   bool     // a path without a leading slash is the page's (fetch, XHR, $.ajax)
 }
 
 // wrapper is a function that makes a request with one of its parameters
 // as the URL.
 type wrapper struct {
-	name    string
-	dotted  bool   // a method or a property: called as x.name(…)
-	urlArg  int    // the parameter that is the URL
-	prefix  string // what the function puts before it: fetch("/api"+path)
-	method  string // the method, when the function fixes it
-	verbArg int    // else the parameter that holds the method, or -1
-	optsArg int    // else the parameter that holds the request's options, or -1
-	bodyArg int    // the parameter sent as the body, or -1
-	body    []string
-	query   []string
+	name      string
+	dotted    bool     // a method or a property: called as x.name(…)
+	urlArg    int      // the parameter that is the URL
+	prefix    string   // what the function puts before it: fetch("/api"+path)
+	method    string   // the method, when the function fixes it
+	verbArg   int      // else the parameter that holds the method, or -1
+	optsArg   int      // else the parameter that holds the request's options, or -1
+	bodyArg   int      // the parameter sent as the body, or -1
+	defaults  []string // each parameter's default, as written, or ""
+	bodyKey   string
+	body      []string
+	query     []string
+	dataQuery bool
+	pageRel   bool
+}
+
+// same: two requests in one function that a call of it makes alike.
+func (w wrapper) same(x wrapper) bool {
+	return w.name == x.name && w.dotted == x.dotted && w.urlArg == x.urlArg && w.prefix == x.prefix &&
+		w.method == x.method && w.verbArg == x.verbArg && w.optsArg == x.optsArg && w.bodyArg == x.bodyArg &&
+		w.bodyKey == x.bodyKey && w.dataQuery == x.dataQuery && w.pageRel == x.pageRel &&
+		strings.Join(w.body, ",") == strings.Join(x.body, ",") && strings.Join(w.query, ",") == strings.Join(x.query, ",")
 }
 
 // maxWrappers caps the wrappers followed in one script, and
@@ -66,9 +81,9 @@ var (
 func settingsShape(settings, bodyKey string) shape {
 	settings = strings.TrimSpace(settings)
 	if !strings.HasPrefix(settings, "{") || !strings.HasSuffix(settings, "}") {
-		return shape{opts: settings}
+		return shape{opts: settings, bodyKey: bodyKey}
 	}
-	sh := shape{method: "GET"}
+	sh := shape{method: "GET", bodyKey: bodyKey}
 	ex := optionExpr(settings, "method")
 	if ex == "" {
 		ex = optionExpr(settings, "type")
@@ -160,7 +175,7 @@ func urlParam(ex string) (name, prefix string, ok bool) {
 func originOnly(ex string) bool {
 	for _, t := range splitTop(ex, "+") {
 		t = strings.TrimSpace(t)
-		if strings.HasPrefix(t, "`") && strings.HasSuffix(t, "`") {
+		if len(t) >= 2 && strings.HasPrefix(t, "`") && strings.HasSuffix(t, "`") {
 			inner := t[1 : len(t)-1]
 			for inner != "" {
 				if !strings.HasPrefix(inner, "${") {
@@ -201,15 +216,22 @@ func wrapperOf(script string, pos int, urlEx string, sh shape, names map[string]
 	if !trusted {
 		return wrapper{}, false
 	}
+	// url = API_ROOT + url before the request: the callers' paths go
+	// under that prefix too.
+	inner, at, ok := reassigned(script, fn.body, pos, param)
+	if !ok {
+		return wrapper{}, false
+	}
+	outer, ok1 := prefixValue(script, prefixEx, pos)
+	under, ok2 := prefixValue(script, inner, at)
+	if !ok1 || !ok2 {
+		return wrapper{}, false
+	}
 	w := wrapper{name: fn.name, dotted: fn.dotted, urlArg: indexOf(fn.params, param), verbArg: -1, optsArg: -1, bodyArg: -1,
-		method: sh.method, body: sh.body, query: sh.query}
-	if prefixEx != "" {
-		ev := evaluator{src: script}
-		if v, ok := ev.eval(prefixEx, pos, 0); ok {
-			w.prefix = v
-		} else if !originOnly(prefixEx) {
-			return wrapper{}, false
-		}
+		prefix: joinPath(outer, under), defaults: fn.defaults, method: sh.method, bodyKey: sh.bodyKey,
+		body: sh.body, query: sh.query, dataQuery: sh.dataQuery, pageRel: sh.pageRel}
+	if w.bodyKey == "" {
+		w.bodyKey = "body"
 	}
 	switch {
 	case sh.methodEx != "":
@@ -221,6 +243,54 @@ func wrapperOf(script string, pos int, urlEx string, sh shape, names map[string]
 		w.bodyArg = indexOf(fn.params, stripStringify(sh.bodyEx))
 	}
 	return w, true
+}
+
+// prefixValue is what a prefix expression at pos comes to: "" for none,
+// or for a scheme and host the script does not spell out.
+func prefixValue(script, ex string, pos int) (string, bool) {
+	if strings.TrimSpace(ex) == "" {
+		return "", true
+	}
+	ev := evaluator{src: script}
+	if v, ok := ev.eval(ex, pos, 0); ok {
+		return v, true
+	}
+	return "", originOnly(ex)
+}
+
+// compoundSet is an assignment that changes a value in place: url+=…
+var compoundSet = regexp.MustCompile(`^(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)=`)
+
+// reassigned reads what a function does to its URL parameter between its
+// body's start and the request at pos: nothing, or one
+// param = PREFIX + param, whose prefix it returns with where it is. Any
+// other assignment makes the parameter something the callers did not pass.
+func reassigned(script string, body, pos int, param string) (string, int, bool) {
+	prefix, at, n := "", pos, 0
+	for from := body; from < pos; {
+		i := strings.Index(script[from:pos], param)
+		if i < 0 {
+			break
+		}
+		i += from
+		from = i + len(param)
+		if i > 0 && (isIdentByte(script[i-1]) || script[i-1] == '.') || from < len(script) && isIdentByte(script[from]) {
+			continue
+		}
+		j := skipSpace(script, from)
+		switch {
+		case j >= len(script):
+		case compoundSet.MatchString(script[j:min(len(script), j+4)]):
+			return "", 0, false
+		case script[j] == '=' && (j+1 >= len(script) || script[j+1] != '=' && script[j+1] != '>'):
+			name, pre, ok := urlParam(topExpr(script[j+1:]))
+			if n++; !ok || name != param || n > 1 {
+				return "", 0, false
+			}
+			prefix, at = pre, j+1
+		}
+	}
+	return prefix, at, true
 }
 
 func indexOf(xs []string, x string) int {
@@ -237,12 +307,11 @@ func wrapperName(name string) bool {
 	return len(name) >= 3 && !notWrappers[name]
 }
 
-// declaredOnce: a short name may be a minifier's, given anew in every
-// module, so it is trusted only when the script declares it once.
+// declaredOnce: a function is followed only when its name is declared
+// once in the script. Two functions of one name (usersApi.request and
+// ordersApi.request, or a minifier's short name given anew in every
+// module) cannot be told apart where they are called.
 func declaredOnce(script, name string) bool {
-	if len(name) >= 5 {
-		return true
-	}
 	n := 0
 	for from := 0; ; {
 		i := strings.Index(script[from:], name)
@@ -281,9 +350,11 @@ func declaredOnce(script, name string) bool {
 
 // fn is a named function a request sits in.
 type fn struct {
-	name   string
-	params []string
-	dotted bool // called as x.name(…)
+	name     string
+	params   []string
+	defaults []string // each parameter's default, or ""
+	dotted   bool     // called as x.name(…)
+	body     int      // where its body starts
 }
 
 // header is a function's head, read back from where its body starts.
@@ -328,7 +399,7 @@ func enclosingFunc(script string, pos int, param string) (fn, bool) {
 		if end <= pos {
 			continue
 		}
-		f := fn{name: h.name, params: params}
+		f := fn{name: h.name, params: params, defaults: paramDefaults(h.list), body: body}
 		switch h.sep {
 		case ':':
 			f.dotted = true // a property of an object
@@ -466,6 +537,20 @@ func paramNames(list string) []string {
 	return out
 }
 
+// paramDefaults are what each parameter defaults to, as written, or "":
+// (path, method = "POST", opts = {}) is "", "POST" quoted, {}.
+func paramDefaults(list string) []string {
+	var out []string
+	for _, p := range splitTop(list, ",") {
+		d := ""
+		if _, v, ok := strings.Cut(p, "="); ok {
+			d = strings.TrimSpace(v)
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 // closeBlock finds the "}" that closes the "{" at open, within 16 KB,
 // skipping strings and comments.
 func closeBlock(s string, open int) int {
@@ -563,12 +648,17 @@ func (w wrapper) calls(script string, relative bool) []Call {
 		if !ok {
 			continue
 		}
-		c, ok := callFrom(joinPath(w.prefix, path), w.methodAt(args), relative)
+		// As for the request itself: only fetch, XHR and $.ajax take a
+		// path relative to the page; an HTTP client has a base of its own.
+		c, ok := callFrom(joinPath(w.prefix, path), w.methodAt(args), relative && w.pageRel)
 		if !ok {
 			continue
 		}
 		c.Body = w.bodyAt(args)
 		c.Query = append(c.Query, w.query...)
+		if w.dataQuery && (c.Method == "GET" || c.Method == "HEAD") {
+			c.Query, c.Body = append(c.Query, c.Body...), nil
+		}
 		c.At, c.End = at, end+1
 		out = append(out, c)
 		if len(out) >= maxCalls {
@@ -588,6 +678,28 @@ func joinPath(prefix, path string) string {
 	return prefix + path
 }
 
+// arg is what parameter i holds in a call with args: the argument, else
+// the parameter's default (an argument of undefined takes it too); false
+// when neither.
+func (w wrapper) arg(args []string, i int) (string, bool) {
+	given := i >= 0 && i < len(args)
+	if given {
+		switch strings.TrimSpace(args[i]) {
+		case "undefined", "void 0":
+			given = false
+		}
+	}
+	switch {
+	case i < 0:
+		return "", false
+	case given:
+		return args[i], true
+	case i < len(w.defaults) && w.defaults[i] != "":
+		return w.defaults[i], true
+	}
+	return "", false
+}
+
 // methodAt is the method of a call to w with args; "" when a value known
 // only at run time decides it.
 func (w wrapper) methodAt(args []string) string {
@@ -595,29 +707,32 @@ func (w wrapper) methodAt(args []string) string {
 	case w.method != "":
 		return w.method
 	case w.verbArg >= 0:
-		if w.verbArg >= len(args) {
-			return "GET" // left out: the request's default
+		ex, ok := w.arg(args, w.verbArg)
+		if !ok {
+			return "GET" // undefined: the request's default
 		}
-		if lit, ok := literal(args[w.verbArg]); ok && httpMethods[strings.ToUpper(lit)] {
+		if lit, ok := literal(ex); ok && httpMethods[strings.ToUpper(lit)] {
 			return strings.ToUpper(lit)
 		}
 	case w.optsArg >= 0:
-		if w.optsArg >= len(args) {
+		ex, ok := w.arg(args, w.optsArg)
+		if !ok {
 			return "GET"
 		}
-		return settingsShape(args[w.optsArg], "body").method
+		return settingsShape(ex, w.bodyKey).method
 	}
 	return ""
 }
 
 func (w wrapper) bodyAt(args []string) []string {
-	switch {
-	case w.body != nil:
+	if w.body != nil {
 		return w.body
-	case w.bodyArg >= 0 && w.bodyArg < len(args):
-		return objectKeys(stripStringify(args[w.bodyArg]))
-	case w.optsArg >= 0 && w.optsArg < len(args):
-		return settingsShape(args[w.optsArg], "body").body
+	}
+	if ex, ok := w.arg(args, w.bodyArg); ok {
+		return objectKeys(stripStringify(ex))
+	}
+	if ex, ok := w.arg(args, w.optsArg); ok {
+		return settingsShape(ex, w.bodyKey).body
 	}
 	return nil
 }

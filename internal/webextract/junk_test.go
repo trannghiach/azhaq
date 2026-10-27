@@ -67,12 +67,14 @@ func TestJunkURLDotSegments(t *testing.T) {
 func TestStringNoise(t *testing.T) {
 	for p, want := range map[string]bool{
 		// Cut out of a parser table or a minified bundle.
-		"/pQ": true, "/SQ": true, "/A": true, "/aB/c": true, "http://a.test/Xy": true,
+		"/pQ": true, "/SQ": true, "/A": true, "http://a.test/Xy": true,
 		// A package named after its owner.
-		"/juice-shop/juice-shop": true, "/lodash/lodash?x=1": true,
+		"/juice-shop/juice-shop": true, "/socket.io/socket.io?x=1": true,
+		// A word twice is a route like any other.
+		"/admin/admin": false, "/api/api": false, "/test/test": false, "/lodash/lodash": false,
 		// Short routes, and anything with a longer segment.
 		"/v1": false, "/v3": false, "/api": false, "/me": false, "/id": false, "/go": false,
-		"/en/us": false, "/s/1": false, "/api/Q": false, "/Users": false, "/IO/stream": false,
+		"/en/us": false, "/en/US": false, "/v2/Me": false, "/aB/c": false, "/s/1": false, "/api/Q": false, "/Users": false, "/IO/stream": false,
 		"/admin/users": false, "/a/a": false, "/": false, "/api/api/v1": false,
 	} {
 		if got := StringNoise(p); got != want {
