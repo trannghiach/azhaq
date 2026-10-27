@@ -76,9 +76,11 @@ type planRequests struct {
 
 // sendLimits are the options that bound what a run sends to its targets.
 type sendLimits struct {
-	max       int64  // requests at most; 0: no cap
-	by        string // the option that set max
-	noFavicon bool
+	max          int64  // requests at most; 0: no cap
+	by           string // the option that set max
+	noFavicon    bool
+	chrome       bool // -browser or -screenshots
+	chromeWrites bool // -browser-writes
 }
 
 func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths []string, limits map[string]string, send sendLimits, rep *report) runPlan {
@@ -144,6 +146,12 @@ func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths
 	p.Sends = []string{"GET requests only, to the targets and what they lead to inside the scope"}
 	if !b.AllGets {
 		p.Sends = append(p.Sends, "found URLs that look like a GET would change something (logout, delete, save, reset…) are listed, not requested (-all-gets to request them)")
+	}
+	switch {
+	case send.chrome && send.chromeWrites:
+		p.Sends = append(p.Sends, "Chrome lets pages send their writes (-browser-writes): the POST, PUT and DELETE their scripts send change data on the target")
+	case send.chrome:
+		p.Sends = append(p.Sends, "Chrome sends GET, HEAD and OPTIONS only, except signing in: the writes pages would send are mapped and listed, not sent (-browser-writes to send them)")
 	}
 	if b.Passive {
 		p.Sends = []string{"nothing to the targets (-passive): third-party sources and DNS only"}

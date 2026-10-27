@@ -1,7 +1,9 @@
 // Package rendercol loads pages in a Chrome installed on the machine
 // (-browser) and records what only a running page shows: the requests its
 // scripts send (the API calls of a single-page app), and the links and
-// forms of the rendered document.
+// forms of the rendered document. The writes they send (POST, DELETE…)
+// are mapped with their method and names (WriteFacts); Chrome sends them
+// only with -browser-writes.
 package rendercol
 
 import (
@@ -121,10 +123,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 	}
+	for _, o := range WriteFacts(Name, raw, p.Writes) {
+		if err := emit(o); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
 	if p.Left != "" {
 		return meta, nil // redirected outside the scope: Chrome's error page, nothing of the target's
 	}
-	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
+	if err != nil && p.HTML == "" && len(p.Requests) == 0 && len(p.Writes) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
 	// Links and forms are the document's, where Chrome ended up: on a hash

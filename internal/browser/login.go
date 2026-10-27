@@ -142,7 +142,7 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 	// What Chrome refused for the sign-in's frames: a sign-in that went to
 	// an identity provider outside the scope fails, and says so.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main)
+	t := b.open(tab, main, true)
 	watched = b.watch(tab, t, nil)
 	var mine []refusal
 	claimed := false

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -158,6 +159,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs.Var(&asns, "asn", "seed an autonomous system: its announced prefixes (repeatable)")
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
+	browserWrites := fs.Bool("browser-writes", false, "let pages in Chrome send their writes (POST, PUT, DELETE…, beacons, forms posted on load) as a user's browser would: they change data on the target; by default Chrome sends only GET, HEAD and OPTIONS outside signing in, and maps the writes it does not send")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
 	urlsTimeout := fs.Duration("urls-timeout", 3*time.Minute, "time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes)")
@@ -490,6 +492,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	cat := catalog.New()
 	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	if *browserWrites && *shots == "" && !*render {
+		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
+	}
 	if (*shots != "" || *render) && !out.plan {
 		if _, err := browser.Find(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -500,7 +505,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 				hdr[k] = strings.Join(vs, ", ")
 			}
 		}
-		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: browserAgent(), Header: hdr}
+		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: browserAgent(), Header: hdr, Writes: *browserWrites}
 		defer opts.Browser.Close()
 		if err := opts.Browser.Start(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -587,7 +592,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if out.plan {
 		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
-		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon}
+		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon, chrome: *shots != "" || *render, chromeWrites: *browserWrites}
 		if *daily > 0 && (send.max == 0 || *daily < send.max) {
 			// A plan reads no database: what today's runs spent is not
 			// taken off.
@@ -1620,11 +1625,17 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 }
 
 // chromeRefused lists in rep what Chrome was refused that no page claimed
-// (a service worker's requests, WebSockets), and how many requests there
-// were when more URLs were refused than are listed.
+// (a service worker's requests, WebSockets, a beacon as a tab closed), and
+// how many requests there were when more URLs were refused than are
+// listed.
 func chromeRefused(rep *report, b *browser.Browser) {
 	for _, u := range b.Leftover() {
 		rep.Skipped = append(rep.Skipped, engine.Skip{Target: u, Reason: browser.Reason()})
+	}
+	for _, w := range b.LeftoverWrites() {
+		if s := (engine.Skip{Target: w, Reason: browser.WriteReason}); !slices.Contains(rep.Skipped, s) {
+			rep.Skipped = append(rep.Skipped, s)
+		}
 	}
 	if n, listed, more := b.Refused(); more {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("Chrome was refused %d requests %s; the first %d URLs are listed", n, strings.TrimSuffix(browser.Reason(), " (Chrome)"), listed))

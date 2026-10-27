@@ -44,7 +44,7 @@ var coordinatorOnly = map[string]bool{
 	"url": true, "domain": true, "list": true, "in": true, "org": true, "cloud": true, "asn": true, "cidr": true,
 	"scope": true, "program": true, "facts": true, "exec": true, "demo": true,
 	"login": true, "login-user": true, "login-pass": true, "cookie": true, "header": true,
-	"urls": true, "screenshots": true, "browser": true, "tabs": true,
+	"urls": true, "screenshots": true, "browser": true, "browser-writes": true, "tabs": true,
 	"max-requests": true, "daily-requests": true, "json": true, "quiet": true, "obs": true,
 	"providers": true, "sources": true, "exclude-sources": true, "all-sources": true,
 	"allow": true, "deny": true, "parallel": true, "fail-on-errors": true, "fail-on-capped": true,
