@@ -116,6 +116,13 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 				m.Ops = append(m.Ops, gql...)
 				m.Methods = addName(m.Methods, "POST")
 			}
+			// Body is every operation's body fields, whatever described
+			// them: a description lists them on its operations only.
+			for _, o := range m.Ops {
+				for _, n := range o.Body {
+					m.Body = addName(m.Body, n)
+				}
+			}
 			m.Forms, m.Params = pageForms(byEnt[e.ID], m.Params)
 		}
 		out = append(out, m)
@@ -182,8 +189,8 @@ func coverageOf(e types.Entity, obs []types.StoredObservation, leftover map[stri
 		}
 	}
 	for _, o := range obs {
-		if o.Kind == "error" && o.Collector == "azhaq-http" {
-			return "error" // requested, no answer
+		if o.Kind == "error" && (o.Collector == "azhaq-http" || o.Collector == "httpx") {
+			return "error" // requested, no answer (httpx -probe's failed lines, taken in)
 		}
 		if o.Kind == "skipped" {
 			return "skipped" // found, deliberately not requested
@@ -716,13 +723,14 @@ func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 	return out
 }
 
-// pageForms collects the forms crawled on a page and adds the page's other
-// parameter names (query strings in its links) to params.
+// pageForms collects the forms found on a page (crawled, rendered, or
+// taken in from katana) and adds the page's other parameter names (query
+// strings in its links) to params.
 func pageForms(obs []types.StoredObservation, params []string) ([]MapForm, []string) {
 	var forms []MapForm
 	inForm := map[string]bool{}
 	for _, o := range obs {
-		if (o.Collector != "azhaq-crawl" && o.Collector != "azhaq-render") || o.Kind != "form" {
+		if o.Kind != "form" {
 			continue
 		}
 		var f MapForm

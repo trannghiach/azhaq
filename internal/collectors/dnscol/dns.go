@@ -49,6 +49,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"dns"} }
 
+// Asks no source: a name is looked up on the run's resolvers.
+func (c *Collector) Asks(types.Seed) []string { return nil }
+
 func (c *Collector) BatchSize() int { return 256 }
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {

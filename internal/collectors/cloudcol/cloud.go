@@ -41,6 +41,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"domain", "hostname", "url"} }
 
+// Asks nobody: the inventory is a local file.
+func (c *Collector) Asks(types.Seed) []string { return nil }
+
 func (c *Collector) Run(_ context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	path := seed.Keys["path"]
 	if path == "" {

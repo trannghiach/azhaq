@@ -570,7 +570,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	collectors.Register(cat, opts)
 	if out.plan {
 		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
-		plan := buildPlan(cat, seeds, budgets, paths, limitsOf(budgets, *maxRequests, *rateFlag, *timeout, *daily), rep)
+		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon}
+		if *daily > 0 && (send.max == 0 || *daily < send.max) {
+			// Less what today's runs in the workspace spent: a plan reads
+			// no database.
+			send.max, send.by = *daily, "-daily-requests, less what today's runs spent"
+		}
+		plan := buildPlan(cat, seeds, budgets, paths, limitsOf(budgets, *maxRequests, *rateFlag, *timeout, *daily), send, rep)
 		rep.Results, rep.what = len(plan.Targets), "targets"
 		return printPlan(plan, *jsonOut)
 	}
@@ -821,7 +827,7 @@ func printMap(rows []engine.MapEntry) {
 // output, Azhaq's own export, connector facts or plain lists.
 func cmdIngest(args []string) error {
 	fs := newFlags("ingest")
-	in := fs.String("in", "", "a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report, azhaq export, connector facts, or lines of URLs, hostnames and addresses")
+	in := fs.String("in", "", "a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report or -json lines, azhaq export, connector facts, or lines of URLs, hostnames and addresses")
 	dbPath := fs.String("db", "", "the database to add to (default: a new file)")
 	asJSON := fs.Bool("json", false, "the summary as JSON")
 	if err := parse(fs, args); err != nil {

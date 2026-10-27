@@ -70,6 +70,21 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"services"} }
 
+// Asks names the engines a run asks about a domain: those with a key.
+func (c *Collector) Asks(seed types.Seed) []string {
+	domain := normalize.Hostname(seed.Key())
+	if domain == "" || normalize.SpecialUse(domain) {
+		return nil
+	}
+	var out []string
+	for _, e := range engines() {
+		if len(c.Keys[e.name]) > 0 && c.Keys[e.name][0] != "" {
+			out = append(out, e.name)
+		}
+	}
+	return out
+}
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	domain := normalize.Hostname(seed.Key())
 	if domain == "" || normalize.SpecialUse(domain) {

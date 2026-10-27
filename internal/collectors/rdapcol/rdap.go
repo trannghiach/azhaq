@@ -48,6 +48,16 @@ func (c *Collector) Inputs() []types.SeedType {
 
 func (c *Collector) Outputs() []string { return []string{"rdap", "organization", "domain"} }
 
+// Asks: rdap.org once for a domain (it redirects to the registry's
+// server). An organization asks nobody: there is no public search by name.
+func (c *Collector) Asks(seed types.Seed) []string {
+	domain := normalize.Hostname(seed.Keys["domain"])
+	if seed.Type != types.TypeDomain || domain == "" || (normalize.SpecialUse(domain) && c.BaseURL == "") {
+		return nil
+	}
+	return []string{hostOf(c.domainURL(domain))}
+}
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	switch seed.Type {
 	case types.TypeDomain:

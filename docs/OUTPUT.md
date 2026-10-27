@@ -70,7 +70,7 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`. |
 | `role` (names) | `live` (resolves; a host you gave, or a name under a domain you gave), `sibling` (resolves; found on the way, under another domain), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
 | `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `summary`, `operation_id`, `source` (`js-call`, `openapi`, `graphql`). |
-| `body` | the body field names of all its operations. |
+| `body` | the body field names of all its operations, whatever described them: a script's call, an API description (served or found), a GraphQL schema (argument names), a request taken in from katana. |
 | `status`, `title` | The URL's own answer (the first hop of a redirect). Without a scope, a redirect is followed only within the site (same registrable domain or address); with one, only inside it. |
 | `methods`, `params` | From API descriptions, call sites in scripts, forms and links. |
 | `forms` | `{"method","action","fields"}` for each form on the page. |
@@ -159,7 +159,7 @@ A web page's answer is compared by status and title, and a JSON listing's also b
 
 - `query -json` prints map rows (as `run -json`), or only the `-fields` asked for; every row that matches, unless `-limit` says otherwise (the summary then says how many matched). `query -failed` prints every failed target instead: `target`, `collector`, `source`, `error`, `retryable`.
 - `show -json` prints one object: `row` (the map row), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`); for a hostname, `services`: its front pages with `coverage`, `status`, `title`, and the `error` of one that failed. A GraphQL endpoint read with `-graphql` has an `azhaq-graphql-schema` observation whose payload holds `queries`, `mutations`, `subscriptions` and `types` (names) and `schema`, the introspection's whole `__schema` object (past 8 MB without its descriptions; past that left out, with its size in `schema_bytes`). A server that refuses the full introspection query for its depth is asked for the names only, and `schema` is absent.
-- `plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`.
+- `plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`, and `requests`: what is known of the requests before any is sent. `source_queries` counts, per collector, the queries to third-party sources about the targets listed (one per source asked; a source may page through its answer), `source_queries_total` adds them up, and `source_queries_not_counted` names the collectors that do not say before they run which sources they ask (`azhaq-subdomains`). `found_domains_asked` is true when domains found on the way would be asked about too (inside the scope; without one, within `-depth` and `-max-items`). The requests to the targets are a bound, not a count: how many names resolve and answer is known only by asking (`max_names` of them at most are looked up). `per_web_service` is about what each web service costs before its links, scripts and archived URLs are followed (its page, the favicon, the built-in paths), and `cap` the requests to the targets at most, set by `cap_by` (`-max-requests`, or `-daily-requests` less what the day's runs in the workspace spent); 0 is no cap. `passive` is true when nothing goes to the targets.
 - `ingest` prints only its summary: `results` is the facts read, `counts` the lines read per format.
 
 ## export
@@ -169,7 +169,7 @@ A web page's answer is compared by status and title, and a JSON listing's also b
 | Format | Output |
 | --- | --- |
 | `jsonl` | Everything: one object per map row (`"kind":"entity"`), observation and edge. |
-| `urls`, `hosts`, `names`, `targets` | One per line: every URL; names that resolve; every name; web services (front pages), for `nuclei -l` and `httpx`. |
+| `urls`, `hosts`, `names`, `targets` | One per line: every URL; names that resolve; every name; web services (front pages that answered, Azhaq's or taken in from httpx, katana or ffuf), for `nuclei -l` and `httpx`. |
 | `openapi` | OpenAPI 3 JSON of one origin (`-origin`, default the one with the most API routes): the description the target serves, as it is, plus the routes scripts call, forms and what answered. `x-azhaq` on each operation: `source`, `coverage`, `status`, `needs_credentials`. |
 | `graphql` | The introspection result of each GraphQL endpoint read with `-graphql`, as InQL, Burp, Postman, graphql-voyager and clairvoyance read it. |
 | `sdl` | The same schemas in the GraphQL schema language. |

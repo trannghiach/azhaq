@@ -47,7 +47,7 @@ azhaq run: 185 map rows (160 URLs, 71 api, 11 auth, 1 forbidden) · 205 requests
 
 That is OWASP Juice Shop: the routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, {tmpToken, totpToken})`), which string matching does not see. Each URL row says whether it was `visited`, only found (`hint`), answered with the page every unknown path gets (`catchall`, a single-page app's shell), failed (`error`), answered 404 (`gone`, often an archived URL), or was deliberately not requested (`skipped`), then its role: `app`, `auth` (401), `forbidden` (403), `api`, `page`, `script`. Pages that differ only by an ID fold into one template row (`/catalog/product?productId={n}  (18 urls)`); forms and the operations of a route are indented below it.
 
-What a default run sends to a target: a GET to each target, to the 32 built-in paths of each web service (`robots.txt`, sitemaps, `.well-known/*`, API description locations, `admin`, `backup`, `.git/HEAD`, …), to the routes its pages, scripts and API descriptions name (GETs only, parameterless ones only, none that look state-changing), and to up to 40 URL templates per domain from web archives. `azhaq plan` with the same flags prints exactly this for your targets without sending anything.
+What a default run sends to a target: a GET to each target, to the 32 built-in paths of each web service (`robots.txt`, sitemaps, `.well-known/*`, API description locations, `admin`, `backup`, `.git/HEAD`, …), to the routes its pages, scripts and API descriptions name (GETs only, parameterless ones only, none that look state-changing), and to up to 40 URL templates per domain from web archives. `azhaq plan` with the same flags prints this for your targets without sending anything: the collectors each target gets, the queries to third-party sources about them, counted (the archives, RDAP, keyed scan engines; not the subdomain sources, which the plan names without counting), and a bound on the requests to the targets. That bound is not a count: how many names resolve and answer is known only by asking, so the plan gives what each web service costs before its links are followed (about 34 requests: its page, the favicon, the built-in paths) and the cap that applies, `-max-requests` or `-daily-requests`.
 
 Requests carry a current browser's User-Agent, as httpx and katana do: CDN bot managers hold other requests open without an answer. `-header 'User-Agent: …'` replaces it, and `-header 'X-Bug-Bounty: me'` adds a program's identification header.
 
@@ -106,7 +106,7 @@ Signing in opens the page in Chrome, fills the user name and password the way ty
 
 ```
 azhaq scope -scope bugcrowd -program tesla                       # what a run would take, exclude and skip
-azhaq plan  -scope bugcrowd -program tesla -max-requests 5000    # what it would send
+azhaq plan  -scope bugcrowd -program tesla -max-requests 5000    # what it would ask whom, and the cap
 azhaq run   -scope bugcrowd -program tesla -db tesla.db -rate 5 -max-requests 5000
 ```
 
@@ -141,7 +141,7 @@ azhaq shots  -l hosts.txt -dir screenshots                                     #
 
 `probe` writes httpx's fields with httpx's meanings: `host` is the name, `host_ip` the address the request connected to, `a` and `aaaa` the addresses the name resolved to, `status_code` the first answer (a 302 stays 302). Where a redirect stays in the scope (without one, in the site) it is followed, and `final_url` and `final_status_code` say where it ended; the title and technologies are the final page's. Every target given ends as a service, a failure or a skip in the summary. `subs -json` gives each name with the `source` and all the `sources` that gave it (`dns-brute` and `permute` for names `-w` and `-permute` found by resolving guesses). subdomain.center pads its answer with about 500 random names per call: a name only it gave is kept when it resolves (not to a wildcard). Keyless sources asked by default: anubis, certspotter, crt.sh, crtname, hackertarget, hudsonrock, rapiddns, scanmalware, shodanct, subdomain.center, thc; a source that fails while others answer is listed in the summary and does not make the exit code 3 (`-fail-on-errors` does). `-db FILE` keeps any of them in a workspace for `query`, `show` and `export`.
 
-What other tools found joins a workspace with `azhaq ingest`: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report, Azhaq's own export, or plain lists of URLs, hosts and addresses.
+What other tools found joins a workspace with `azhaq ingest`: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report or `-json` lines, Azhaq's own export, or plain lists of URLs, hosts and addresses. An answer httpx, katana or ffuf got to a GET is taken in as Azhaq's own probe records one, so it is a web service for `export -format targets`, `burp` and `html`, and an answer for the map and `openapi`; a request katana sent with another method, or saw a script send (`-xhr`), says what the route takes, with its body's fields; the forms katana read (`-fx`) are the page's.
 
 ```
 subfinder -d example.com -json | azhaq ingest -in - -db example.db

@@ -52,6 +52,9 @@ func TestMapGraphQLOperations(t *testing.T) {
 		login.Summary != "mutation login(username: String!, password: String!): Token" || strings.Join(login.Body, ",") != "username,password" {
 		t.Errorf("login %+v", login)
 	}
+	if !slices.Contains(m.Body, "username") || !slices.Contains(m.Body, "password") {
+		t.Errorf("body is every operation's: %v", m.Body)
+	}
 	d := m.Details()
 	if !slices.Contains(d, "query users(limit: Int = 10, offset: Int, role: Role = ADMIN): [User!]!") || !slices.Contains(d, "subscription userAdded: User") {
 		t.Errorf("details %q", d)
