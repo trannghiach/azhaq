@@ -123,7 +123,9 @@ func cmdRoles(args []string) error {
 	}
 	for _, a := range runArgs {
 		switch strings.TrimLeft(strings.SplitN(a, "=", 2)[0], "-") {
-		case "db", "cookie", "header", "login", "login-user", "login-pass":
+		case "db":
+			return usagef("roles sets -db itself, one database per role in -dir; leave it out of the run options, and give -dir DIR before -- to choose where they go")
+		case "cookie", "header", "login", "login-user", "login-pass":
 			return usagef("roles sets -%s itself; leave it out of the run options", strings.TrimLeft(strings.SplitN(a, "=", 2)[0], "-"))
 		}
 	}
