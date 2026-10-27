@@ -550,13 +550,11 @@ func nounWords(field string) string {
 // identifier that role's session holds under the field's own name (its
 // email, its user id as UserId; not an accountId that equals it): a user
 // in two organisations, an account number like a user id. An object given
-// with -id stays the role's it was given as.
+// with -id stays the role's it was given as; an answer that names that role
+// confirms it.
 func settleOwners(roles []role, made map[string]instance, answers map[string]map[string]answer, who map[string]identity) {
 	for _, u := range sortedKeys(mapKeys(made)) {
 		in := made[u]
-		if in.given {
-			continue
-		}
 		owner, by, known, strong, n := "", "", false, false, 0
 		agree := true
 		for _, r := range roles {
@@ -574,14 +572,23 @@ func settleOwners(roles []role, made map[string]instance, answers map[string]map
 			n++
 		}
 		told := n > 0 && agree && known
+		if in.given {
+			if told && owner != "" && owner == in.owner {
+				in.by += "; the answer's " + by
+				in.told = toldConfirms
+				made[u] = in
+			}
+			continue
+		}
 		switch {
 		case told && owner != "" && owner == in.owner:
 			if in.by != "" {
 				in.by += "; "
 			}
 			in.by += "the answer's " + by
+			in.told = toldConfirms
 		case told && owner != "" && (in.owner == "" || in.sure != proved || strong):
-			in.owner, in.by = owner, "the answer's "+by
+			in.owner, in.by, in.told = owner, "the answer's "+by, toldNames
 		case in.owner != "" && in.sure == shortName:
 			in.owner, in.by = "", "" // a guess the answer does not bear out
 		case told && owner == "" && in.sure == hinted:

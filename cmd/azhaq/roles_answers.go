@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"html"
 	"regexp"
 	"slices"
 	"sort"
@@ -23,7 +24,12 @@ type answer struct {
 	Sensitive []string `json:"sensitive,omitempty"` // fields holding passwords, secrets, keys, tokens
 	Title     string   `json:"title,omitempty"`
 	Location  string   `json:"location,omitempty"` // where a redirect sends the role
+	Refusal   bool     `json:"refusal,omitempty"`  // a 2xx answer that is the origin's refusal page, or that -refusal matches
+	// SessionSuspect: asked after the role's session last proved alive,
+	// and not proved alive again after it (see canaries).
+	SessionSuspect bool `json:"session_suspect,omitempty"`
 
+	said    string          // what a short answer says: a JSON message, an HTML title and first heading
 	nested  bool            // Keys are nested paths read from the body, not the stored top-level fields
 	top     []string        // the top-level fields, as the run stores them
 	secrets []secret        // the values of the sensitive fields
@@ -35,12 +41,12 @@ type answer struct {
 }
 
 // reads: the role got the endpoint's data, not a refusal shaped as data.
-func reads(a answer) bool { return a.Status >= 200 && a.Status < 300 && !a.Error }
+func reads(a answer) bool { return a.Status >= 200 && a.Status < 300 && !a.Error && !a.Refusal }
 
-// refused: any 4xx, a success status around an error, or a redirect to a
-// sign-in page.
+// refused: any 4xx, a success status around an error or the origin's
+// refusal page, or a redirect to a sign-in page.
 func refused(a answer) bool {
-	return a.Status >= 400 && a.Status < 500 || a.Status >= 200 && a.Status < 300 && a.Error || a.toLogin
+	return a.Status >= 400 && a.Status < 500 || a.Status >= 200 && a.Status < 300 && (a.Error || a.Refusal) || a.toLogin
 }
 
 // bareLocation is a redirect's target without its query, fragment or
@@ -72,7 +78,37 @@ func readAnswer(status int, body []byte, contentType string) (answer, *jsonFacts
 	} else {
 		a.Error = errorKeys(a.top)
 	}
+	a.Title, a.said = sayOf(body, contentType)
 	return a, f
+}
+
+// heading is a page's first h1 or h2.
+var heading = regexp.MustCompile(`(?is)<h[12][^>]*>(.*?)</h[12]>`)
+
+var tags = regexp.MustCompile(`<[^>]*>`)
+
+// sayOf reads what a short answer says, to tell refusals by: an HTML
+// page's title, and its title and first heading; a JSON answer's message;
+// a short text.
+func sayOf(body []byte, contentType string) (title, said string) {
+	if len(body) > 64<<10 {
+		return "", ""
+	}
+	clean := func(s string) string {
+		s = tags.ReplaceAllString(html.UnescapeString(s), " ")
+		return strings.Join(strings.Fields(s), " ")
+	}
+	if strings.Contains(strings.ToLower(contentType), "html") {
+		if m := titleTag.FindSubmatch(body); m != nil {
+			title = clean(string(m[1]))
+		}
+		said = title
+		if m := heading.FindSubmatch(body); m != nil {
+			said = strings.TrimSpace(said + " " + clean(string(m[1])))
+		}
+		return title, said
+	}
+	return "", reasonText(body, contentType)
 }
 
 // storedAnswer is an answer as the run's database has it: no body, the
