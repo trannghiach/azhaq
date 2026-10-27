@@ -3,6 +3,7 @@ package gqlcol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -138,7 +139,60 @@ func TestIntrospectionRefused(t *testing.T) {
 	fetch.Reset()
 	srv, posts = server(t, `{"errors":[{"message":"GraphQL introspection is not allowed, but the query contained __schema or __type"}]}`)
 	got, _ = run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
-	if *posts != 1 || got != nil {
-		t.Errorf("introspection off: %d posts, %v", *posts, got)
+	if *posts != 2 || got != nil {
+		t.Errorf("introspection off: %d posts, %v", *posts, got) // the full query, and one document to read fields from errors
+	}
+}
+
+// With introspection off, the root fields are read from the server's
+// validation errors; no document asked can pass validation.
+func TestSchemaFromSuggestions(t *testing.T) {
+	fetch.Reset()
+	var docs []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var q struct{ Query string }
+		_ = json.NewDecoder(r.Body).Decode(&q)
+		docs = append(docs, q.Query)
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(q.Query, "__schema") {
+			w.Write([]byte(`{"errors":[{"message":"GraphQL introspection is not allowed"}]}`))
+			return
+		}
+		root, have := "Query", map[string]string{"paste": "PasteObject", "pastes": "[PasteObject]", "systemHealth": ""}
+		if strings.HasPrefix(q.Query, "mutation") {
+			root, have = "Mutations", map[string]string{"createPaste": "CreatePaste", "deletePaste": "DeletePaste"}
+		}
+		var errs []map[string]string
+		for _, f := range strings.Fields(strings.Trim(strings.SplitN(q.Query, "{", 2)[1], " }")) {
+			typ, ok := have[f]
+			switch {
+			case !ok && strings.HasPrefix(f, "paste") && root == "Query":
+				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "Query". Did you mean "pastes" or "paste"?`})
+			case !ok && f == "createPost" && root == "Mutations":
+				errs = append(errs, map[string]string{"message": `Cannot query field "createPost" on type "Mutations". Did you mean "createPaste" or "deletePaste"?`})
+			case !ok:
+				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "` + root + `".`})
+			case typ != "":
+				errs = append(errs, map[string]string{"message": `Field "` + f + `" of type "` + typ + `" must have a sub selection.`})
+			}
+			if f == "createPaste" && root == "Mutations" {
+				errs = append(errs, map[string]string{"message": `Field "createPaste" argument "title" of type "String!" is required but not provided.`})
+			}
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"errors": errs})
+	}))
+	defer srv.Close()
+	got, _ := run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
+	if got["recovered"] != "suggestions" || fmt.Sprint(got["queries"]) != "[paste pastes systemHealth]" || fmt.Sprint(got["mutations"]) != "[createPaste deletePaste]" {
+		t.Fatalf("recovered %v", got)
+	}
+	sigs, _ := got["signatures"].(map[string]any)
+	if fmt.Sprint(sigs["mutations"]) != "[createPaste(title: String!): CreatePaste deletePaste: DeletePaste]" {
+		t.Errorf("signatures %v", sigs)
+	}
+	for _, d := range docs[1:] {
+		if !strings.Contains(d, poison) {
+			t.Errorf("a document that could pass validation: %q", d)
+		}
 	}
 }

@@ -153,7 +153,9 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 		full = nil
 	}
 	if !ok {
-		return types.RunMeta{Status: types.StatusOK}, nil
+		// Introspection is off or refused: the fields the server's errors
+		// name are what can still be read.
+		return s.recoverSchema(ctx, raw, status, emit)
 	}
 	row := summary(sc)
 	if full != nil {
@@ -164,6 +166,31 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 		}
 	}
 	row["url"], row["role"], row["status"] = raw, "graphql", status
+	return one(emit, raw, "graphql", row)
+}
+
+// recoverSchema reads the root fields of the query and mutation types
+// from the server's validation errors, when introspection gave nothing.
+func (s *Schema) recoverSchema(ctx context.Context, raw string, status int, emit func(types.Observation) error) (types.RunMeta, error) {
+	q, err := s.recoverType(ctx, raw, "query")
+	if err != nil {
+		return failed(err)
+	}
+	if q == nil {
+		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	m, err := s.recoverType(ctx, raw, "mutation")
+	if err != nil {
+		return failed(err)
+	}
+	row := map[string]any{"url": raw, "role": "graphql", "status": status, "introspection": false, "recovered": "suggestions",
+		"queries": q.names(), "types": typeNames(q, m)}
+	sigs := map[string]any{"queries": q.signatures()}
+	if m != nil {
+		row["mutations"] = m.names()
+		sigs["mutations"] = m.signatures()
+	}
+	row["signatures"] = sigs
 	return one(emit, raw, "graphql", row)
 }
 
@@ -252,7 +279,7 @@ func one(emit func(types.Observation) error, source, kind string, row map[string
 }
 
 func kindName(row map[string]any) string {
-	if row["introspection"] == true {
+	if row["introspection"] == true || row["recovered"] != nil {
 		return SchemaName
 	}
 	return Name
