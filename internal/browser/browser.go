@@ -20,6 +20,8 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+
+	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
 // ErrNoChrome means no Chrome or Chromium was found.
@@ -75,6 +77,7 @@ type Browser struct {
 	mu      sync.Mutex
 	session map[string]string    // sessionStorage a login left, for every tab
 	sites   map[string]bool      // without a scope: the sites of the pages Chrome was pointed at
+	allow   func(string) bool    // the run's scope when Chrome started (fetch.Allow), or nil
 	paid    map[cdp.FrameID]bool // tabs whose page their caller counted
 
 	refMu    sync.Mutex
@@ -105,6 +108,10 @@ func (b *Browser) start() error {
 			b.Timeout = 30 * time.Second
 		}
 		b.sem = make(chan struct{}, b.Tabs)
+		// The scope this Chrome is held to, as the run set it when Chrome
+		// started: a later fetch.Reset (a run ending, a test) does not move
+		// it under requests still being decided.
+		b.allow = fetch.Allow
 		if b.guard, err = newGuard(b.allowedHost); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
 			return

@@ -115,8 +115,8 @@ func (b *Browser) allowedHost(host string) bool {
 	if host == "" {
 		return false
 	}
-	if allow := fetch.Allow; allow != nil {
-		return allow(host)
+	if b.allow != nil {
+		return b.allow(host)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()

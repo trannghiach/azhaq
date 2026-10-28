@@ -219,7 +219,7 @@ func TestClientRoutesUnclosedObjects(t *testing.T) {
 	}
 	start := time.Now()
 	rs := ClientRoutes(b.String())
-	if d := time.Since(start); d > 3*time.Second {
+	if d := time.Since(start); d > raceSlowdown*3*time.Second {
 		t.Errorf("%v for 4 MB of unclosed objects", d)
 	}
 	if len(rs) != 0 {
