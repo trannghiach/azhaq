@@ -1,7 +1,7 @@
 // Package browser drives a Chrome already installed on the machine
 // (headless, through the DevTools protocol): screenshots, and pages whose
-// content only exists once their scripts run. Nothing is downloaded, and
-// Chrome reaches only what the run may (scope.go).
+// content only exists once their scripts run. Nothing is downloaded
+// (downloads.go), and Chrome reaches only what the run may (scope.go).
 package browser
 
 import (
@@ -152,9 +152,15 @@ func (b *Browser) start() error {
 		if p := chromedp.FromContext(root).Browser.Process(); p != nil {
 			b.guard.chrome(p.Pid)
 		}
-		// No page opens before every request is held to the scope.
+		// No page opens before every request is held to the scope, and
+		// every download refused.
 		if err := b.intercept(root); err != nil {
 			b.err = fmt.Errorf("starting Chrome: holding its requests to the scope: %w", err)
+			b.cancel()
+			return
+		}
+		if err := b.denyDownloads(root); err != nil {
+			b.err = fmt.Errorf("starting Chrome: refusing its downloads: %w", err)
 			b.cancel()
 			return
 		}
@@ -179,15 +185,16 @@ func (b *Browser) Close() {
 
 // Page is what loading a URL gave.
 type Page struct {
-	URL      string // after redirects
-	Title    string
-	PNG      []byte
-	HTML     string
-	Requests []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not
-	Blocked  []string // URLs it asked for outside the scope, to list (Reason); not sent
-	Writes   []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
-	Left     string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
-	Capped   bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
+	URL       string // after redirects
+	Title     string
+	PNG       []byte
+	HTML      string
+	Requests  []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
+	Blocked   []string // URLs it asked for outside the scope, to list (Reason); not sent
+	Downloads []string // what it would have saved to disk, to list (DownloadReason); refused
+	Writes    []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
+	Left      string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
+	Capped    bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -203,9 +210,11 @@ func (b *Browser) sessionScript() string {
 }
 
 // Load opens rawURL in a new tab, waits for the network to settle, and
-// returns the page; shot adds a screenshot of the viewport. The caller has
-// counted the page itself against the budget (fetch.Spend); every other
-// request Chrome sends for it is counted here.
+// returns the page; shot adds a screenshot of the viewport, and has the
+// page's images, fonts and media fetched, which a page read for its
+// requests and its document does without. The caller has counted the
+// page itself against the budget (fetch.Spend); every other request
+// Chrome sends for it is counted here.
 func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, error) {
 	if err := b.start(); err != nil {
 		return Page{}, err
@@ -236,7 +245,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	// The page's requests, from the moment the tab opens, and the frames
 	// they came from: what Chrome refuses those is this page's.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main, false)
+	t := b.open(tab, main, false, !shot)
 	defer func() { // a page not read: its refusals listed with none
 		b.leave(b.claim(t))
 		b.leaveWrites(b.writesOf(t))
@@ -244,8 +253,8 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	var mu sync.Mutex
 	var reqs []string
 	watched = b.watch(tab, t, func(ev *network.EventRequestWillBeSent) {
-		if ev.Request == nil || !reads(ev.Request.Method) {
-			return // a write: the request paused says more of it (Writes)
+		if ev.Request == nil || !reads(ev.Request.Method) || decoration(ev.Type) {
+			return // a write: the request paused says more of it (Writes); a decoration names no route
 		}
 		mu.Lock()
 		reqs = append(reqs, ev.Request.URL)
@@ -304,6 +313,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		b.leaveWrites(writes)
 	} else {
 		p.Blocked = b.list(mine)
+		p.Downloads = b.downloads(mine)
 		p.Writes = writes
 	}
 	return p, err

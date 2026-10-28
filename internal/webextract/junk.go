@@ -21,8 +21,29 @@ var payloadMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
 	`\b(oast\.(live|fun|pro|me|site|online)|interact\.sh|interactsh|burpcollaborator\.net|oastify\.com|dnslog\.cn|ceye\.io|requestbin\.|pipedream\.net|canarytokens\.|xss\.ht)\b`,
 }, "|"))
 
+// scannerMarks are the names scanners leave in a target's archive: the
+// files they ask for to prove an inclusion (acunetix_xsl_inclusion_test,
+// netsparker(0).txt), the parameters they tag their requests with
+// (?invicti=1), the hosts of their blind tests (bxss.me, xss.rocks) and
+// the probes of those whose name a product page could carry
+// (/products/nessus is a page; nessus_test, appscan_fingerprint and
+// qualystest are not). A word searched for (?q=netsparker) is the
+// user's.
+var scannerMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
+	`(?:^|/)(?:acunetix|acumonitor|netsparker|invicti|bxss|burpcollaborator)`,
+	`[?&](?:acunetix|netsparker|invicti|bxss)[\w-]*=`,
+	`(?:^|[/?&=.])(?:bxss\.me|xss\.rocks|interactsh|oastify|burpcollaborator)`,
+	`(?:appscan|nessus|qualys|webinspect)(?:[_(]|test\b|\.txt)`,
+}, "|"))
+
+// randomExe is an executable at the root named by a scanner's random
+// token: /7zSo1DIz.exe. Letters and digits, 6 to 10 of them, and nothing
+// else in the path.
+var randomExe = regexp.MustCompile(`^/([A-Za-z0-9]{6,10})\.(?:exe|dll|scr)$`)
+
 // Payload reports a URL that carries a scanner's payload in its path or
-// query (see payloadMarks).
+// query (see payloadMarks), or a scanner's own name or random file
+// (scannerMarks, randomExe).
 func Payload(raw string) bool {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -37,7 +58,33 @@ func Payload(raw string) bool {
 			low = d
 		}
 	}
-	return payloadMarks.MatchString(low)
+	if payloadMarks.MatchString(low) || scannerMarks.MatchString(low) {
+		return true
+	}
+	if m := randomExe.FindStringSubmatch(u.Path); m != nil {
+		return randomToken(m[1])
+	}
+	return false
+}
+
+// randomToken: a digit among the letters, and the case changing at least
+// twice (7zSo1DIz, NhYzAp8A), which no name a person gave a file does
+// (Setup64, winrar).
+func randomToken(s string) bool {
+	digit, changes := false, 0
+	var last rune
+	for _, r := range s {
+		switch {
+		case r >= '0' && r <= '9':
+			digit = true
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+			if last != 0 && (last <= 'Z') != (r <= 'Z') {
+				changes++
+			}
+			last = r
+		}
+	}
+	return digit && changes >= 2
 }
 
 // JunkURL reports a URL that is not one: a script that ran without its

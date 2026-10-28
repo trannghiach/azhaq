@@ -98,8 +98,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			c.shot.Delete(t)
 			return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
 		}
-		if len(p.Blocked) > 0 {
-			payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
+		for _, s := range []struct {
+			why  string
+			urls []string
+		}{{browser.Reason(), p.Blocked}, {browser.DownloadReason, p.Downloads}} {
+			if len(s.urls) == 0 {
+				continue
+			}
+			payload, _ := json.Marshal(map[string]any{"skipped": s.why, "urls": s.urls})
 			if err := emit(types.Observation{Collector: Name, Source: t, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 				return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 			}

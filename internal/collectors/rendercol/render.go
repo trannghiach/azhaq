@@ -116,8 +116,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
 	}
 	meta := types.RunMeta{Status: types.StatusOK}
-	if len(p.Blocked) > 0 {
-		payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
+	for _, s := range []struct {
+		why  string
+		urls []string
+	}{{browser.Reason(), p.Blocked}, {browser.DownloadReason, p.Downloads}} {
+		if len(s.urls) == 0 {
+			continue
+		}
+		payload, _ := json.Marshal(map[string]any{"skipped": s.why, "urls": s.urls})
 		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 			return meta, err
 		}

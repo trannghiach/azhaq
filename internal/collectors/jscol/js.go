@@ -387,6 +387,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var queue []script
 	var fetched []string
 	var found []string
+	tails := map[string]bool{} // named only joined to a base: this.host+`/orders`
 	var mans []buildManifest
 	var maps []sourceMap
 	appRoot := &url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/"} // where the app's router takes its paths from
@@ -521,9 +522,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if !webextract.SameOrigin(raw, s.url.String()) {
 			refBase = base
 		}
+		specStart, specEnd := webextract.EmbeddedSpec(s.body)
 		for _, r := range webextract.JSURLRefs(s.body, refBase) {
 			if r.URL == raw || inRoutes(routes, r.Start) || webextract.InSocket(ws, r.Start) || !keepString(raw, r.URL) {
 				continue
+			}
+			if r.Start >= specStart && r.Start < specEnd && jsonKey(s.body, r.End) {
+				continue // a path of the description ("/orders": {…}), under its servers: azhaq-openapi reads it
+			}
+			if _, seen := tails[r.URL]; !seen || !r.Joined {
+				tails[r.URL] = r.Joined
 			}
 			found = append(found, r.URL)
 			named.add(webextract.RouteKey(r.URL), s, loc, r.Start, r.End, false)
@@ -816,6 +824,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if role == "asset" || role == "script" {
 			continue // scripts that loaded are listed above
 		}
+		if tails[link] && tailOf(link, callOps) {
+			continue // this.host+`/orders`: the call says where its base put it
+		}
 		if v, ok := viewOf(appRoot, link); ok {
 			if _, ok := views.match(v); ok {
 				continue // a link to one of the app's views: its row, and its hint, are above
@@ -963,6 +974,34 @@ func callRoute(c webextract.Call, origin, page string) (string, bool) {
 		return "", false
 	}
 	return webextract.RouteKey(n), true
+}
+
+// jsonKey says whether the string ending at i is a key of a JSON object.
+func jsonKey(src string, i int) bool {
+	for ; i < len(src) && strings.ContainsRune(" \t\r\n", rune(src[i])); i++ {
+	}
+	return i < len(src) && src[i] == ':'
+}
+
+// tailOf says whether link, a path a script joins to a base it does not
+// spell out, is the tail of a route a call builds under a prefix
+// (/rest/order-history/orders for `/orders`) and of no call at the root:
+// a GET at the root would ask the catch-all page for it.
+func tailOf(link string, calls map[string][]map[string]any) bool {
+	u, err := url.Parse(link)
+	if err != nil || u.Path == "" || u.Path == "/" {
+		return false
+	}
+	origin := u.Scheme + "://" + u.Host
+	if _, root := calls[link]; root {
+		return false
+	}
+	for k := range calls {
+		if strings.HasPrefix(k, origin+"/") && strings.HasSuffix(k, u.Path) && len(k) > len(origin)+len(u.Path) {
+			return true
+		}
+	}
+	return false
 }
 
 // partial says whether a URL a script builds was worked out only as far
