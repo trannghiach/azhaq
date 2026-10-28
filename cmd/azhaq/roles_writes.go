@@ -23,11 +23,12 @@ import (
 
 // Write verdicts, listed before every read verdict.
 const (
-	verdictWriteAnyone = "anyone writes another role's object"
-	verdictWriteCross  = "writes another role's object"
-	verdictWriteOwner  = "only its owner writes it"
-	verdictWriteVoid   = "the owner's own write was refused"
-	verdictWriteDry    = "would be sent (-dry-writes)"
+	verdictWriteAnyone  = "anyone writes another role's object"
+	verdictWriteCross   = "writes another role's object"
+	verdictWriteOwner   = "only its owner writes it"
+	verdictWriteVoid    = "the owner's own write was refused"
+	verdictWriteRefused = "the other roles were refused"
+	verdictWriteDry     = "would be sent (-dry-writes)"
 )
 
 func init() {
@@ -36,6 +37,7 @@ func init() {
 	verdictOrder[verdictWriteOwner] = 20
 	verdictOrder[verdictWriteVoid] = 21
 	verdictOrder[verdictWriteDry] = -3
+	verdictOrder[verdictWriteRefused] = 20
 }
 
 // writeOp is a write a route takes, as a role's run found it: PUT
@@ -56,7 +58,7 @@ type writeReq struct {
 	body   []byte
 	from   string // what it is: "alice.har", or "PUT /api/Users/{id} with an empty body"
 	status int    // what the owner got, recorded in its HAR; 0 for a map write
-	empty  bool   // a map write: an empty object, which changes nothing
+	empty  bool   // a map write: an empty object, sent first as its owner
 }
 
 // writeMethods reads -replay-writes: the methods to replay, of POST, PUT,
@@ -157,8 +159,11 @@ var logoutPath = regexp.MustCompile(`(?i)log[-_]?out|sign[-_]?out|log[-_]?off`)
 func endsSession(u *url.URL) bool { return logoutPath.MatchString(u.Path) }
 
 // mapWrites are the writes the routes the runs found take, filled with
-// each role's own objects: PUT and PATCH with an empty object, which
-// asks for the write and changes nothing; DELETE with no body.
+// each role's own objects: PATCH with an empty object, which asks for the
+// write and changes nothing; PUT with an empty object, which changes
+// nothing on a server that updates the fields sent and may clear the
+// object on one that replaces it, so the owner's own goes first and its
+// object is read again before anyone else is asked; DELETE with no body.
 func mapWrites(made map[string]instance, writes map[string][]writeOp, methods map[string]bool) []writeReq {
 	var urls []string
 	for u, in := range made {
@@ -277,7 +282,9 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		if stop != nil {
 			break
 		}
-		row.Verdict = writeVerdict(roles, &row, ownerLet)
+		// A map DELETE is never asked of its owner: it would delete it.
+		ownerAsked := w.status != 0 || w.empty
+		row.Verdict = writeVerdict(roles, &row, ownerLet, ownerAsked)
 		rows = append(rows, finishWriteRow(row))
 	}
 	return rows, sent, stop
@@ -307,6 +314,7 @@ func changedBy(owner role, u string, before answer) bool {
 	}
 	fetch.Extra = owner.session.Clone()
 	res, _, err := fetch.Do(context.Background(), fetch.Client(nil), u)
+	fetch.Extra = nil
 	if err != nil {
 		return false
 	}
@@ -368,7 +376,7 @@ func sendWrite(ctx context.Context, client *http.Client, r role, w writeReq) (an
 
 // writeVerdict: who besides the owner was let to write. A write is let
 // when it is answered 2xx and not with an error shaped as data.
-func writeVerdict(roles []role, row *roleRow, ownerLet bool) string {
+func writeVerdict(roles []role, row *roleRow, ownerLet, ownerAsked bool) string {
 	var anyone, signed []string
 	for _, r := range roles {
 		a, ok := row.Answers[r.name]
@@ -389,6 +397,8 @@ func writeVerdict(roles []role, row *roleRow, ownerLet bool) string {
 		return verdictWriteCross
 	case ownerLet:
 		return verdictWriteOwner
+	case !ownerAsked:
+		return verdictWriteRefused
 	}
 	return verdictWriteVoid
 }

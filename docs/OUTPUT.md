@@ -201,7 +201,7 @@ With `-json`, stderr holds the summary only: the runs of the roles print nothing
 `-replay-writes METHODS` (`post`, `put`, `patch`, `delete`, comma-separated) also asks each role's writes with every other role's session, after the reads. It needs `-allow` or `-scope` in the run options: writes change data on the target. The writes are:
 
 - the ones a role sent, from a HAR (`-har NAME=FILE`, as a browser's developer tools or Burp save it): its requests with those methods on the run's hosts, one each, with their bodies and `Content-Type`, `Accept` and `X-Requested-With`, never the session that sent them (cookies, `Authorization`, a CSRF token); a logout is never replayed;
-- the PUT, PATCH and DELETE that the routes the runs found take (from API descriptions and scripts), on each role's own objects (the same as the read replay's): PUT and PATCH with an empty JSON object, which asks for the write and changes nothing, DELETE with no body. A route whose write takes a form, and a POST to an object, are left to the HAR.
+- the PUT, PATCH and DELETE that the routes the runs found take (from API descriptions and scripts), on each role's own objects (the same as the read replay's): PATCH with an empty JSON object, which asks for the write and changes nothing; PUT with an empty JSON object, which changes nothing on a server that updates the fields sent but may clear the owner's own object on one that replaces it on PUT, DELETE with no body. A route whose write takes a form, and a POST to an object, are left to the HAR.
 
 A map write is first sent with its owner's session; when the owner is let, its object is read again, and if a value it held changed (timestamps aside) nobody else is asked (`the owner's own write was refused` or a note in `owner_by`). Then the anonymous roles, then the other signed-in roles. A DELETE goes to the others alone, the anonymous role first, and stops at the first that is let; its owner is then asked for the object (`afterwards its owner got 404 for it`). A write is let when it is answered 2xx and not with an error shaped as data. Every write counts against `-replay-max` (what the read replay left) and the run's `-max-requests`, at the run's `-rate`, and is sent without following a redirect.
 
@@ -212,6 +212,7 @@ A map write is first sent with its owner's session; when the owner is let, its o
 | `would be sent (-dry-writes)` | yes | `-dry-writes`: nothing was sent |
 | `only its owner writes it` | `-all` | the others were refused |
 | `the owner's own write was refused` | `-all` | the owner was not let, or its empty write changed its object: nothing to compare |
+| `the other roles were refused` | `-all` | a DELETE (never asked of its owner) that no other role was let to send |
 
 The row's `owner_by` says where the write came from (`alice.har`, `PUT /api/BasketItems/{id} with an empty body`), `confidence` how surely the object is the owner's, and `evidence` who was let; `azhaq roles show -dir DIR -method PUT URL` prints each role's curl line with the write's body.
 

@@ -179,3 +179,20 @@ func TestReplayWritesFlags(t *testing.T) {
 		}
 	}
 }
+
+// A map DELETE no other role is let to send is a protected object, not
+// an owner refused: its owner was never asked.
+func TestReplayWriteDeleteRefused(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403)
+	}))
+	defer srv.Close()
+	h := http.Header{}
+	h.Set("A", "1")
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}, session: h}, {name: "bob", headers: []string{"A: 2"}, session: h}}
+	rows, _, _ := replayWrites(roles, []writeReq{{owner: "alice", method: "DELETE", url: srv.URL + "/api/items/3", header: http.Header{}}},
+		nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteRefused {
+		t.Errorf("%+v", rows)
+	}
+}

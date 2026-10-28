@@ -101,7 +101,8 @@ func (c *Collector) Skip(seed types.Seed) bool {
 		return false
 	}
 	b := apiBase(u.Path)
-	return b == "" || c.owner(origin+b, raw) != raw
+	// The root sweep asks /api/swagger.json and /api/openapi.json.
+	return b == "" || b == "/api/" || c.owner(origin+b, raw) != raw
 }
 
 // specWords are where an API's description sits under its base

@@ -390,30 +390,53 @@ func takeovers(ents []types.Entity, obs []types.StoredObservation) []takeoverRow
 	for _, e := range ents {
 		keys[e.ID] = e.Key
 	}
-	byHost := map[string]takeoverRow{}
+	type finding struct {
+		FQDN     string            `json:"fqdn"`
+		URL      string            `json:"url"`
+		CNAMEs   []string          `json:"cnames"`
+		Takeover *takeover.Finding `json:"takeover"`
+	}
+	var found []finding
+	chains := map[string][]string{} // host → its CNAME chain, from DNS
 	for _, o := range obs {
 		if o.Collector != "azhaq-dns" && o.Collector != "azhaq-http" {
 			continue
 		}
-		var p struct {
-			FQDN     string            `json:"fqdn"`
-			URL      string            `json:"url"`
-			Takeover *takeover.Finding `json:"takeover"`
-		}
-		if json.Unmarshal(o.Payload, &p) != nil || p.Takeover == nil {
+		var p finding
+		if json.Unmarshal(o.Payload, &p) != nil {
 			continue
 		}
-		host := p.FQDN
+		if p.FQDN == "" && p.URL == "" {
+			p.FQDN = normalize.Hostname(keys[o.EntityID])
+		}
+		if len(p.CNAMEs) > 0 {
+			chains[normalize.Hostname(p.FQDN)] = p.CNAMEs
+		}
+		if p.Takeover != nil {
+			found = append(found, p)
+		}
+	}
+	byHost := map[string]takeoverRow{}
+	for _, p := range found {
+		host := normalize.Hostname(p.FQDN)
 		if host == "" {
 			host = normalize.HostFromURL(p.URL)
 		}
-		if host == "" {
-			host = normalize.Hostname(keys[o.EntityID])
+		f := *p.Takeover
+		if f.Strength == "page" {
+			// A service's page, judged again by where DNS says the name
+			// points: to that service, strong; elsewhere, nothing.
+			if chain := chains[host]; len(chain) > 0 {
+				var ok bool
+				if f, ok = takeover.ByPage(chain, []byte(pageWords(f))); !ok {
+					continue
+				}
+			}
 		}
 		if old, ok := byHost[host]; ok && old.Strength == "strong" {
 			continue
 		}
-		byHost[host] = takeoverRow{Host: host, Finding: *p.Takeover}
+		byHost[host] = takeoverRow{Host: host, Finding: f}
 	}
 	out := make([]takeoverRow, 0, len(byHost))
 	for _, t := range byHost {
@@ -421,4 +444,15 @@ func takeovers(ents []types.Entity, obs []types.StoredObservation) []takeoverRow
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
 	return out
+}
+
+// pageWords is the quoted page text a page finding rests on, to judge
+// again beside a CNAME chain.
+func pageWords(f takeover.Finding) string {
+	if i := strings.Index(f.Evidence, `"`); i >= 0 {
+		if j := strings.Index(f.Evidence[i+1:], `"`); j >= 0 {
+			return f.Evidence[i+1 : i+1+j]
+		}
+	}
+	return ""
 }

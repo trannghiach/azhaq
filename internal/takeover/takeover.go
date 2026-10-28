@@ -28,32 +28,32 @@ type service struct {
 	suffixes []string       // CNAME targets on the service
 	dangling bool           // a target that does not resolve can be claimed
 	page     *regexp.Regexp // what its front page says when nothing is there
+	// alone: the page's words are the service's own and nowhere else, so
+	// they say something even with no CNAME known; a page that other sites
+	// can show counts only beside a CNAME to the service.
+	alone bool
 }
 
+// services are the ones the public takeover lists call claimable. Azure's
+// are the names that serve the web; a disabled Traffic Manager profile or
+// a deleted database answers NXDOMAIN while its owner still holds it, or
+// serves nobody's pages.
 var services = []service{
-	{"AWS S3", []string{".s3.amazonaws.com", ".s3-website", ".s3.dualstack."}, false, regexp.MustCompile(`<Code>NoSuchBucket</Code>|The specified bucket does not exist`)},
-	{"GitHub Pages", []string{".github.io"}, false, regexp.MustCompile(`There isn't a GitHub Pages site here\.`)},
-	{"Heroku", []string{".herokuapp.com", ".herokudns.com", ".herokussl.com"}, false, regexp.MustCompile(`herokucdn\.com/error-pages/no-such-app\.html|<title>No such app</title>`)},
-	{"Azure", []string{".azurewebsites.net", ".cloudapp.net", ".cloudapp.azure.com", ".trafficmanager.net", ".blob.core.windows.net",
-		".azure-api.net", ".azurehdinsight.net", ".azureedge.net", ".azurecontainer.io", ".database.windows.net", ".azuredatalakestore.net",
-		".search.windows.net", ".redis.cache.windows.net", ".servicebus.windows.net", ".visualstudio.com"}, true, nil},
-	{"AWS Elastic Beanstalk", []string{".elasticbeanstalk.com"}, true, nil},
-	{"Bitbucket", []string{".bitbucket.io"}, false, regexp.MustCompile(`Repository not found`)},
-	{"Ghost", []string{".ghost.io"}, false, regexp.MustCompile(`Domain error.{0,200}ghost|The thing you were looking for is no longer here, or never was`)},
-	{"Pantheon", []string{".pantheonsite.io"}, false, regexp.MustCompile(`The gods are wise, but do not know of the site which you seek\.`)},
-	{"Surge.sh", []string{".surge.sh"}, false, regexp.MustCompile(`project not found`)},
-	{"Shopify", []string{".myshopify.com"}, false, regexp.MustCompile(`Sorry, this shop is currently unavailable\.|Only one step left!`)},
-	{"Tumblr", []string{".tumblr.com"}, false, regexp.MustCompile(`Whatever you were looking for doesn't currently exist at this address|There's nothing here\.`)},
-	{"WordPress.com", []string{".wordpress.com"}, false, regexp.MustCompile(`Do you want to register <em>[^<]*\.wordpress\.com</em>`)},
-	{"Help Scout", []string{".helpscoutdocs.com"}, false, regexp.MustCompile(`No settings were found for this company:`)},
-	{"Help Juice", []string{".helpjuice.com"}, false, regexp.MustCompile(`We could not find what you're looking for\.`)},
-	{"ReadMe", []string{".readme.io"}, false, regexp.MustCompile(`Project doesnt exist\.\.\. yet!`)},
-	{"Strikingly", []string{".s.strikinglydns.com"}, false, regexp.MustCompile(`page not found|But if you're looking to build your own website`)},
-	{"Agile CRM", []string{".agilecrm.com"}, false, regexp.MustCompile(`Sorry, this page is no longer available\.`)},
-	{"Ngrok", []string{".ngrok.io", ".ngrok.app"}, false, regexp.MustCompile(`Tunnel [^ ]+ not found|ERR_NGROK_3200`)},
-	{"Webflow", []string{".proxy.webflow.com", ".proxy-ssl.webflow.com"}, false, regexp.MustCompile(`The page you are looking for doesn't exist or has been moved\.`)},
-	{"Fly.io", []string{".fly.dev"}, true, nil},
-	{"Netlify", []string{".netlify.app", ".netlify.com"}, false, regexp.MustCompile(`Not Found - Request ID:`)},
+	{"AWS S3", nil, false, regexp.MustCompile(`<Code>NoSuchBucket</Code>`), true},
+	{"GitHub Pages", []string{".github.io"}, false, regexp.MustCompile(`There isn't a GitHub Pages site here\.`), true},
+	{"Heroku", []string{".herokuapp.com", ".herokudns.com", ".herokussl.com"}, false, regexp.MustCompile(`herokucdn\.com/error-pages/no-such-app\.html`), true},
+	{"Azure", []string{".azurewebsites.net", ".cloudapp.net", ".cloudapp.azure.com", ".blob.core.windows.net",
+		".azure-api.net", ".azurehdinsight.net", ".azureedge.net", ".azurecontainer.io"}, true, nil, false},
+	{"AWS Elastic Beanstalk", []string{".elasticbeanstalk.com"}, true, nil, false},
+	{"Bitbucket", []string{".bitbucket.io"}, false, regexp.MustCompile(`Repository not found`), false},
+	{"Ghost", []string{".ghost.io"}, false, regexp.MustCompile(`Failed to resolve DNS path for this host`), true},
+	{"Pantheon", []string{".pantheonsite.io"}, false, regexp.MustCompile(`The gods are wise, but do not know of the site which you seek\.`), true},
+	{"Surge.sh", []string{".surge.sh"}, false, regexp.MustCompile(`project not found`), false},
+	{"WordPress.com", []string{".wordpress.com"}, false, regexp.MustCompile(`Do you want to register <em>[^<]*\.wordpress\.com</em>`), true},
+	{"Help Scout", []string{".helpscoutdocs.com"}, false, regexp.MustCompile(`No settings were found for this company:`), true},
+	{"ReadMe", []string{".readme.io"}, false, regexp.MustCompile(`Project doesnt exist\.\.\. yet!`), true},
+	{"Ngrok", []string{".ngrok.io", ".ngrok.app"}, false, regexp.MustCompile(`ERR_NGROK_3200`), true},
+	{"Fly.io", []string{".fly.dev"}, true, nil, false},
 }
 
 func (s service) on(target string) bool {
@@ -96,9 +96,10 @@ func ByCNAME(host string, chain []string, targetGone, registered bool) (Finding,
 	return Finding{}, false
 }
 
-// ByPage judges a name by its front page: a service's own "nothing is
-// here" page, on a name whose CNAME points at that service (or, with no
-// CNAME known, the page alone).
+// ByPage judges a name by its front page: a service's own page for a name
+// nobody claimed. Beside a CNAME to that service it is strong; with no
+// CNAME known, only a page no other site shows counts, as "page" (the
+// DNS answer then says more); beside a CNAME elsewhere it says nothing.
 func ByPage(chain []string, body []byte) (Finding, bool) {
 	if len(body) == 0 {
 		return Finding{}, false
@@ -111,14 +112,14 @@ func ByPage(chain []string, body []byte) (Finding, bool) {
 		if s.page == nil || !s.page.Match(body) {
 			continue
 		}
-		if target != "" && !s.on(target) {
-			continue // the page's words on another service's name prove nothing
+		evidence := s.name + "'s page for a name nobody claimed: " + quote(s.page.Find(body))
+		switch {
+		case target != "" && s.on(target):
+			return Finding{Service: s.name, Target: target, Strength: "strong", Evidence: "CNAME to " + target + "; " + evidence}, true
+		case target == "" && s.alone:
+			return Finding{Service: s.name, Strength: "page", Evidence: evidence + " (no CNAME known: check where the name points)"}, true
 		}
-		f := Finding{Service: s.name, Target: target, Strength: "strong", Evidence: s.name + "'s page for a name nobody claimed: " + quote(s.page.Find(body))}
-		if target != "" {
-			f.Evidence = "CNAME to " + target + "; " + f.Evidence
-		}
-		return f, true
+		return Finding{}, false
 	}
 	return Finding{}, false
 }

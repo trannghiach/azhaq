@@ -18,7 +18,7 @@ var watchKinds = []struct {
 	{"url", regexp.MustCompile(`(?i)^(url|uri|link|href|src|source_?url|image_?url|img_?url|feed|webhook(_?url)?|proxy|host|domain|endpoint|site|fetch|load)$`)},
 	{"file", regexp.MustCompile(`(?i)^(file|filename|file_?name|path|filepath|file_?path|dir|directory|folder|document|template|include|download|attachment)$`)},
 	{"command", regexp.MustCompile(`(?i)^(cmd|command|exec|execute|run|shell|eval|ping)$`)},
-	{"debug", regexp.MustCompile(`(?i)^(debug|is_?admin|admin|role|roles|access|privilege|permission|internal|preview|dev|verbose)$`)},
+	{"debug", regexp.MustCompile(`(?i)^(debug|is_?admin|is_?staff|is_?superuser|privileges?|verbose|test_?mode|impersonate)$`)},
 	{"id", regexp.MustCompile(`(?i)^(id|uid|user_?id|account_?id|customer_?id|order_?id|owner_?id|profile_?id|member_?id|basket_?id|invoice_?id)$`)},
 	{"callback", regexp.MustCompile(`(?i)^(callback|jsonp|cb)$`)},
 }
