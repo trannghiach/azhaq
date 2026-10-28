@@ -2,6 +2,7 @@ package webextract
 
 import (
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -88,6 +89,65 @@ func TestFormsAndGenerator(t *testing.T) {
 	fs := Forms(html, base)
 	if len(fs) != 1 || fs[0].Method != "POST" || fs[0].ID != "signin" || fs[0].Name != "login" || !contains(fs[0].Fields, "user") {
 		t.Fatalf("forms %+v", fs)
+	}
+}
+
+func TestFormSubmittingToItsPage(t *testing.T) {
+	// DVWA's forms: action="#" and no action submit to the page itself,
+	// its query kept, its fragment dropped.
+	base, _ := url.Parse("http://dvwa.test/vulnerabilities/sqli/?id=1&Submit=Submit#top")
+	page := []byte(`<form action="#" method="GET"><input type="text" name="id"><input type="submit" name="Submit"></form>
+<form enctype="multipart/form-data" method="POST"><input type="hidden" name="MAX_FILE_SIZE"><input name="uploaded" type="FILE"><input type="submit" name="Upload"></form>
+<form action="" method="post" enctype="bogus"><input name="security"></form>
+<form action="/login.php" method="post"><input name="username"></form>`)
+	fs := Forms(page, base)
+	if len(fs) != 4 {
+		t.Fatalf("forms %+v", fs)
+	}
+	self := "http://dvwa.test/vulnerabilities/sqli/?id=1&Submit=Submit"
+	for i, want := range []Form{
+		{Method: "GET", Action: self},
+		{Method: "POST", Action: self, Enctype: "multipart/form-data", Files: []string{"uploaded"}},
+		{Method: "POST", Action: self, Enctype: "application/x-www-form-urlencoded"},
+		{Method: "POST", Action: "http://dvwa.test/login.php", Enctype: "application/x-www-form-urlencoded"},
+	} {
+		f := fs[i]
+		if f.Method != want.Method || f.Action != want.Action || f.Enctype != want.Enctype || strings.Join(f.Files, ",") != strings.Join(want.Files, ",") {
+			t.Errorf("form %d: %+v, want %+v", i, f, want)
+		}
+	}
+}
+
+// A <base href> moves what the page's relative URLs resolve against, as
+// browsers take it: the first one with an href, for the whole page. A
+// form with no action still submits to the page; action="#" to the base.
+func TestBaseHref(t *testing.T) {
+	page, _ := url.Parse("http://app.test/shop/item.php?id=2")
+	body := []byte(`<html><head><base href="/app/"><base href="/other/"><script src="main.js"></script></head><body>
+<a href="list.php">list</a> <a href="/abs">abs</a> <iframe src="frame.html"></iframe>
+<form action="search.php"><input name="q"></form>
+<form method="post"><input name="note"></form>
+<form action="#top" method="post"><input name="x"></form></body></html>`)
+	links := Links(body, page)
+	for _, want := range []string{"http://app.test/app/list.php", "http://app.test/abs", "http://app.test/app/frame.html", "http://app.test/app/search.php"} {
+		if !contains(links, want) {
+			t.Errorf("links %v lack %s", links, want)
+		}
+	}
+	if src := ScriptSrcs(body, page); len(src) != 1 || src[0] != "http://app.test/app/main.js" {
+		t.Errorf("scripts %v", src)
+	}
+	fs := Forms(body, page)
+	var actions []string
+	for _, f := range fs {
+		actions = append(actions, f.Action)
+	}
+	if want := "http://app.test/app/search.php http://app.test/shop/item.php?id=2 http://app.test/app/"; strings.Join(actions, " ") != want {
+		t.Errorf("actions %q, want %q", actions, want)
+	}
+	// Not a web URL: the page's own.
+	if got := Links([]byte(`<base href="javascript:alert(1)"><a href="x">x</a>`), page); len(got) != 1 || got[0] != "http://app.test/shop/x" {
+		t.Errorf("links %v", got)
 	}
 }
 

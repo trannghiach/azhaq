@@ -25,18 +25,25 @@ var skipExt = map[string]bool{
 type Form struct {
 	Method string
 	Action string
-	ID     string
-	Name   string
-	Fields []string
+	// Enctype is how a POST form encodes its fields, lower case:
+	// application/x-www-form-urlencoded unless it says multipart/form-data
+	// or text/plain. Empty for GET.
+	Enctype string
+	ID      string
+	Name    string
+	Fields  []string
+	Files   []string // the fields that are file inputs
 }
 
 // Forms returns <form> elements and script-driven forms: any element with a
 // data-action attribute (data-method gives the method) whose inputs are
-// posted by JavaScript.
-func Forms(body []byte, base *url.URL) []Form {
-	if base == nil {
+// posted by JavaScript. page is the page's URL; a <base href> moves the
+// actions it resolves.
+func Forms(body []byte, page *url.URL) []Form {
+	if page == nil {
 		return nil
 	}
+	base := docBase(body, page)
 	var out []Form
 	z := html.NewTokenizer(bytes.NewReader(body))
 	var cur *Form
@@ -49,18 +56,14 @@ func Forms(body []byte, base *url.URL) []Form {
 		if method == "" {
 			method = "GET"
 		}
-		if action == "" {
-			action = base.Path
-		}
-		act := ""
-		if u, ok := resolve(base, action); ok {
-			act = u
-		}
 		cur = &Form{
 			Method: method,
-			Action: act,
+			Action: formAction(page, base, action),
 			ID:     attr(tok.Attr, "id"),
 			Name:   attr(tok.Attr, "name"),
+		}
+		if method == "POST" {
+			cur.Enctype = enctype(attr(tok.Attr, "enctype"))
 		}
 		curTag, depth = strings.ToLower(tok.Data), 1
 	}
@@ -101,12 +104,74 @@ func Forms(body []byte, base *url.URL) []Form {
 				continue
 			}
 			cur.Fields = append(cur.Fields, name)
+			if tag == "input" && strings.EqualFold(attr(tok.Attr, "type"), "file") {
+				cur.Files = append(cur.Files, name)
+			}
 		}
 	}
 	if cur != nil {
 		out = append(out, *cur)
 	}
 	return out
+}
+
+// formAction is where a form submits, as browsers take it. An empty
+// action is the page's own URL with its query; any other resolves against
+// the base, a fragment alone (action="#") to the base itself. The
+// fragment is never sent.
+func formAction(page, base *url.URL, action string) string {
+	action = strings.TrimSpace(action)
+	if action == "" || strings.HasPrefix(action, "#") {
+		to := page
+		if action != "" {
+			to = base
+		}
+		u, err := normalize.URL(to.String())
+		if err != nil {
+			return ""
+		}
+		return u
+	}
+	u, _ := resolve(base, action)
+	return u
+}
+
+// docBase is what a page's relative URLs resolve against: its first
+// <base href>, itself resolved against the page's URL, or the page's URL.
+func docBase(body []byte, page *url.URL) *url.URL {
+	z := html.NewTokenizer(bytes.NewReader(body))
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			return page
+		}
+		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
+			continue
+		}
+		tok := z.Token()
+		if !strings.EqualFold(tok.Data, "base") {
+			continue
+		}
+		href := attr(tok.Attr, "href")
+		if href == "" {
+			continue
+		}
+		u, err := page.Parse(href)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			return page
+		}
+		return u
+	}
+}
+
+// enctype is a POST form's encoding as browsers read the attribute: an
+// unknown value is the default.
+func enctype(v string) string {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case "multipart/form-data", "text/plain":
+		return v
+	}
+	return "application/x-www-form-urlencoded"
 }
 
 func nameIn(xs []string, n string) bool {
@@ -139,38 +204,13 @@ func Generator(body []byte) string {
 	}
 }
 
-func ParamNames(body []byte, base *url.URL) []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(name string) {
-		name = strings.TrimSpace(name)
-		if name == "" || seen[name] {
-			return
-		}
-		seen[name] = true
-		out = append(out, name)
-	}
-	for _, link := range Links(body, base) {
-		u, err := url.Parse(link)
-		if err != nil {
-			continue
-		}
-		for k := range u.Query() {
-			add(k)
-		}
-	}
-	for _, f := range Forms(body, base) {
-		for _, name := range f.Fields {
-			add(name)
-		}
-	}
-	return out
-}
-
+// Links are a page's links, iframes and GET form actions, resolved
+// against its <base href> when it has one, else against base, its URL.
 func Links(body []byte, base *url.URL) []string {
 	if base == nil {
 		return nil
 	}
+	base = docBase(body, base)
 	var out []string
 	seen := map[string]bool{}
 	z := html.NewTokenizer(bytes.NewReader(body))
@@ -200,10 +240,12 @@ func Links(body []byte, base *url.URL) []string {
 	return out
 }
 
+// ScriptSrcs are a page's script URLs, resolved as Links are.
 func ScriptSrcs(body []byte, base *url.URL) []string {
 	if base == nil {
 		return nil
 	}
+	base = docBase(body, base)
 	var out []string
 	seen := map[string]bool{}
 	z := html.NewTokenizer(bytes.NewReader(body))
@@ -377,6 +419,7 @@ func Icons(body []byte, base *url.URL) []string {
 	if base == nil {
 		return nil
 	}
+	base = docBase(body, base)
 	var hrefs []string
 	z := html.NewTokenizer(bytes.NewReader(body))
 	for {
@@ -389,12 +432,6 @@ func Icons(body []byte, base *url.URL) []string {
 		}
 		tok := z.Token()
 		switch strings.ToLower(tok.Data) {
-		case "base":
-			if b := attr(tok.Attr, "href"); b != "" {
-				if u, err := base.Parse(b); err == nil {
-					base = u
-				}
-			}
 		case "link":
 			href := attr(tok.Attr, "href")
 			if href == "" {

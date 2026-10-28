@@ -56,8 +56,14 @@ func cmdMCP(args []string) error {
 	budget := fs.Int64("max-requests", 0, "requests to targets all tool calls together may send (0: no cap)")
 	rate := fs.Float64("rate", 0, "requests per second to targets in every tool call (0: no pace)")
 	dir := fs.String("dir", "azhaq-mcp", "directory for the workspaces the tools write")
+	unlocked := fs.Bool("unlocked", false, "serve without a scope: any target a tool is given may be touched (port scans stay refused)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if *scopeSpec == "" && len(allow) == 0 && !*unlocked {
+		// An assistant names its own targets: without a scope, nothing
+		// holds it to the program.
+		return usagef("azhaq mcp holds an assistant to a scope: give -allow DOMAIN (repeatable) or -scope, or -unlocked to let it touch any target it names")
 	}
 	exe, err := os.Executable()
 	if err != nil {

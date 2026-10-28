@@ -118,6 +118,14 @@ type Asker interface {
 	Asks(seed types.Seed) []string
 }
 
+// Standing is optional. Its reports stand on their own when the request
+// budget stops it midway, each checked before it was made (a path guess
+// against the directory's answer to paths that cannot exist): they are
+// kept as they come, where other collectors' are held until the task ends.
+type Standing interface {
+	Standing() bool
+}
+
 type Catalog struct {
 	mu sync.RWMutex
 	by map[string]Collector

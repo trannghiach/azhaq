@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"mime"
@@ -40,6 +41,25 @@ const (
 // hostnames and addresses. It returns the facts and, for each format
 // seen, how many lines were read as it.
 func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
+	facts, formats, skipped, err := ReadLines(raw)
+	if err == nil && len(skipped) > 0 {
+		err = errors.New(skipped[0])
+	}
+	return facts, formats, err
+}
+
+// ReadLines is ReadAny that skips the lines it cannot read and says
+// which (the first few, "line 3: …"), as long as it read some: one
+// unknown record shape in a tool's output does not lose the rest.
+func ReadLines(raw []byte) ([]Fact, map[string]int, []string, error) {
+	var skipped []string
+	nSkipped := 0
+	skip := func(lineNo int, err error) {
+		nSkipped++
+		if len(skipped) < 5 {
+			skipped = append(skipped, fmt.Sprintf("line %d: %v", lineNo, err))
+		}
+	}
 	formats := map[string]int{}
 	trimmed := bytes.TrimSpace(raw)
 	if bytes.HasPrefix(trimmed, []byte("{")) && !bytes.Contains(trimmed, []byte("\n{")) {
@@ -51,7 +71,7 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 		}
 		err := json.Unmarshal(trimmed, &report)
 		if err == nil && report.Results == nil && bytes.Count(trimmed, []byte("\n")) > 0 {
-			return nil, nil, fmt.Errorf("one JSON document, not JSON lines: ingest reads tools' line-by-line output (and ffuf's report)")
+			return nil, nil, nil, fmt.Errorf("one JSON document, not JSON lines: ingest reads tools' line-by-line output (and ffuf's report)")
 		}
 		if err == nil && report.Results != nil {
 			var out []Fact
@@ -59,7 +79,7 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 				out = append(out, ffufFacts(r, report.Config.Method)...)
 			}
 			formats[FormatFFUF] = len(report.Results)
-			return out, formats, nil
+			return out, formats, nil, nil
 		}
 	}
 	var out []Fact
@@ -76,7 +96,8 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 		if !strings.HasPrefix(line, "{") {
 			f, ok := plainFact(line)
 			if !ok {
-				return nil, nil, fmt.Errorf("line %d: not JSON, and not a URL, hostname or address: %q", lineNo, clip(line))
+				skip(lineNo, fmt.Errorf("not JSON, and not a URL, hostname or address: %q", clip(line)))
+				continue
 			}
 			formats[FormatLines]++
 			out = append(out, f)
@@ -84,16 +105,27 @@ func ReadAny(raw []byte) ([]Fact, map[string]int, error) {
 		}
 		var m map[string]any
 		if err := json.Unmarshal([]byte(line), &m); err != nil {
-			return nil, nil, fmt.Errorf("line %d: %w", lineNo, err)
+			skip(lineNo, err)
+			continue
 		}
 		facts, format, err := lineFacts([]byte(line), m, exported)
 		if err != nil {
-			return nil, nil, fmt.Errorf("line %d: %w", lineNo, err)
+			skip(lineNo, err)
+			continue
 		}
 		formats[format]++
 		out = append(out, facts...)
 	}
-	return out, formats, sc.Err()
+	if err := sc.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	if nSkipped > 0 {
+		formats["skipped"] = nSkipped
+		if len(formats) == 1 {
+			return nil, nil, nil, errors.New(skipped[0] + " (and every other line: nothing ingest reads)")
+		}
+	}
+	return out, formats, skipped, nil
 }
 
 func lineFacts(raw []byte, m map[string]any, exported map[string][2]string) ([]Fact, string, error) {
@@ -113,7 +145,7 @@ func lineFacts(raw []byte, m map[string]any, exported map[string][2]string) ([]F
 		target := str("matched-at")
 		payload := map[string]any{"url": target, "template": str("template-id"), "name": info["name"], "severity": info["severity"]}
 		return []Fact{observation(urlOrHost(target), "nuclei", "finding", payload)}, FormatNuclei, nil
-	case isObject(m["request"]) && has("timestamp"): // httpx -irr writes request as a string
+	case isObject(m["request"]) && (has("timestamp") || text(m["request"].(map[string]any)["endpoint"]) != ""): // httpx -irr writes request as a string
 		return katanaFacts(m), FormatKatana, nil
 	case has("url") && (has("status_code") || has("webserver") || has("tech")):
 		return httpxFacts(m), FormatHTTPX, nil

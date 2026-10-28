@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -94,14 +95,15 @@ func TestOpenAPI3(t *testing.T) {
 	if got := strings.Join(ops["/users/v1/login"].Params, ","); got != "password,username" {
 		t.Errorf("body params %q", got)
 	}
-	// GETs that need no parameter are handed on to be asked; one whose
-	// name says it does something is not.
+	// GETs that need no parameter are handed on: the run asks them, or
+	// lists one whose name says it does something as skipped.
 	var hints []string
 	for _, h := range meta.NextHints {
 		hints = append(hints, strings.TrimPrefix(h.Keys["url"], srv(meta)))
 	}
-	if strings.Join(hints, ",") != "/users/v1" || calls != 0 {
-		t.Errorf("hints %v, calls %d: want /users/v1 handed on, nothing called here", hints, calls)
+	slices.Sort(hints)
+	if strings.Join(hints, ",") != "/createdb,/users/v1" || calls != 0 {
+		t.Errorf("hints %v, calls %d: want /createdb and /users/v1 handed on, nothing called here", hints, calls)
 	}
 }
 

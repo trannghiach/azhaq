@@ -22,6 +22,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -92,7 +93,21 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return types.RunMeta{Status: types.StatusCapped}, err
 		}
 		p, err = c.Browser.Load(ctx, t, true)
-		fetch.Count(max(0, len(p.Requests)-1))
+		if p.Capped {
+			c.shot.Delete(t)
+			return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
+		}
+		if len(p.Blocked) > 0 {
+			payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
+			if err := emit(types.Observation{Collector: Name, Source: t, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+				return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
+			}
+		}
+		if p.Left != "" {
+			// Redirected outside the scope: what shows is Chrome's error,
+			// not the target's page.
+			return types.RunMeta{Status: types.StatusOK}, nil
+		}
 		if err == nil && len(p.PNG) > 0 {
 			break
 		}

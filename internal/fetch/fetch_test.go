@@ -240,3 +240,25 @@ func TestScopeStopsRequestsAndRedirects(t *testing.T) {
 		t.Errorf("%d requests left the scope", outside)
 	}
 }
+
+// Without a scope, a redirect stays in the site: the registrable domain,
+// or the very address or name when there is none.
+func TestFollowableSite(t *testing.T) {
+	for _, c := range []struct {
+		from, to string
+		want     bool
+	}{
+		{"https://app.example.com/", "https://www.example.com/x", true},
+		{"https://example.com/", "https://EXAMPLE.com./x", true},
+		{"https://app.example.com/", "https://sso.example.net/", false},
+		{"http://127.0.0.1:8898/", "http://127.0.0.1:8897/", true},
+		{"http://127.0.0.1:8898/", "http://localhost:8897/", false},
+		{"http://127.0.0.1/", "http://127.0.0.2/", false},
+		{"http://intranet/", "http://wiki/", false},
+		{"https://a.github.io/", "https://b.github.io/", false},
+	} {
+		if got := followable(c.from, c.to); got != c.want {
+			t.Errorf("%s → %s: %v", c.from, c.to, got)
+		}
+	}
+}

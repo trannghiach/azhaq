@@ -66,6 +66,45 @@ func TestMarkdownLinksAreFollowed(t *testing.T) {
 	}
 }
 
+func TestListingSortLinksAreLeftOut(t *testing.T) {
+	// Apache's autoindex: four columns, each sortable both ways.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/dvwa/css/" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte(`<html><head><title>Index of /dvwa/css</title></head><body><h1>Index of /dvwa/css</h1>
+<table><tr><th><a href="?C=N;O=D">Name</a></th><th><a href="?C=M;O=A">Last modified</a></th><th><a href="?C=S;O=A">Size</a></th><th><a href="?C=D;O=A">Description</a></th></tr>
+<tr><td><a href="/dvwa/">Parent Directory</a></td></tr><tr><td><a href="main.css">main.css</a></td></tr></table></body></html>`))
+	}))
+	t.Cleanup(srv.Close)
+	var urls []string
+	meta, err := New(srv.Client()).Run(context.Background(), types.Seed{
+		Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/dvwa/css/"},
+	}, func(o types.Observation) error {
+		var p struct {
+			URL string `json:"url"`
+		}
+		_ = json.Unmarshal(o.Payload, &p)
+		if o.Kind == "url" {
+			urls = append(urls, strings.TrimPrefix(p.URL, srv.URL))
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(urls, " ") != "/dvwa/ /dvwa/css/main.css" {
+		t.Errorf("urls %v", urls)
+	}
+	for _, h := range meta.NextHints {
+		if strings.Contains(h.Key(), "?C=") {
+			t.Errorf("sort link requested: %s", h.Key())
+		}
+	}
+}
+
 func TestPOSTFormIsNotHinted(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

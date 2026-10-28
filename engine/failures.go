@@ -362,7 +362,7 @@ func MarkPartial(fs []Failure, ents []types.Entity, obs []types.StoredObservatio
 		}
 	}
 	for i := range fs {
-		if fs[i].Source == "" || len(fs[i].Targets) == 0 {
+		if fs[i].Source == "" || len(fs[i].Targets) == 0 || coreSources[fs[i].Source] {
 			continue
 		}
 		all := true
@@ -376,6 +376,11 @@ func MarkPartial(fs []Failure, ents []types.Entity, obs []types.StoredObservatio
 	}
 	return fs
 }
+
+// coreSources are the sources whose failure is never partial: crt.sh
+// holds the most names of any certificate log, and the others do not
+// make up for it.
+var coreSources = map[string]bool{"crtsh": true}
 
 // thirdParty collectors ask others about a domain (archives, CT, RDAP):
 // what they fail to say is part of a map only when the domain itself was

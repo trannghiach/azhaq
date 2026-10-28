@@ -86,3 +86,23 @@ func TestMapGraphQLCap(t *testing.T) {
 		t.Errorf("%d ops, %d lines, last %q", len(m.Ops), len(d), d[len(d)-1])
 	}
 }
+
+// A run that found an endpoint and did not read its schema says how to.
+func TestGraphQLHint(t *testing.T) {
+	found := types.StoredObservation{Observation: types.Observation{Collector: "azhaq-graphql", Kind: "graphql",
+		Payload: json.RawMessage(`{"url":"http://127.0.0.1:5013/graphql","role":"graphql","status":400}`)}}
+	never := func(string) bool { return false }
+	want := "azhaq run -url http://127.0.0.1:5013/ -graphql -allow 127.0.0.1 …   (/graphql answers like GraphQL; -graphql reads the schema by introspection)"
+	if got := engine.GraphQLHint([]types.StoredObservation{found}, never); got != want {
+		t.Errorf("hint %q", got)
+	}
+	read := schemaObs("e", `{"url":"http://127.0.0.1:5013/graphql","queries":["pastes"]}`)
+	if got := engine.GraphQLHint([]types.StoredObservation{found, read}, never); got != "" {
+		t.Errorf("schema read, hint %q", got)
+	}
+	// -graphql with the host in scope: introspection was sent and got
+	// nothing (turned off); the flag is not suggested again.
+	if got := engine.GraphQLHint([]types.StoredObservation{found}, func(string) bool { return true }); got != "" {
+		t.Errorf("introspection sent, hint %q", got)
+	}
+}

@@ -2,14 +2,23 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
+	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/scopefile"
 	"github.com/trannghiach/azhaq/scope"
@@ -94,6 +103,105 @@ func TestOpenAPIExport(t *testing.T) {
 	}
 }
 
+// A site shaped like DVWA: forms that submit to their own page (action
+// "#" or none), a menu linking /fi/?page=include.php from every page, and
+// links a GET to which changes something (the run leaves them alone, and
+// so must a tool importing the description).
+func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
+	fetch.Reset()
+	menu := `<a href="/sqli/">sqli</a> <a href="/upload/">upload</a> <a href="/security.php">security</a> <a href="/fi/?page=include.php">fi</a>` +
+		`<a href="/security.php?phpids=on">enable PHPIDS</a> <a href="/setup.php">setup</a> <a href="/setup.php?action=reset">reset</a>`
+	pages := map[string]string{
+		"/":             menu,
+		"/sqli/":        menu + `<form action="#" method="GET"><input type="text" name="id"><input type="submit" name="Submit" value="Submit"></form>`,
+		"/upload/":      menu + `<form enctype="multipart/form-data" action="#" method="POST"><input type="hidden" name="MAX_FILE_SIZE" value="100000"><input name="uploaded" type="file"><input type="submit" name="Upload"></form>`,
+		"/security.php": menu + `<form action="#" method="POST"><select name="security"><option>low</option></select><input type="submit" name="seclev_submit"></form>`,
+		"/fi/":          menu + `<p>included</p>`,
+	}
+	var asked sync.Map
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Store(r.URL.RequestURI(), true)
+		body, ok := pages[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, "<html><head><title>%s</title></head><body>%s</body></html>", r.URL.Path, body)
+	}))
+	defer site.Close()
+	db := filepath.Join(t.TempDir(), "x.db")
+	st, err := store.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat := catalog.New()
+	httpcol.Register(cat, site.Client())
+	crawlcol.Register(cat, site.Client())
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": site.URL + "/"}}
+	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64}); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	var out bytes.Buffer
+	if err := exportAs(db, "openapi", "", &out); err != nil {
+		t.Fatal(err)
+	}
+	var d struct {
+		Paths map[string]map[string]struct {
+			Parameters []struct{ Name, In string }
+			Body       *struct {
+				Content map[string]struct {
+					Schema struct {
+						Properties map[string]struct{ Type, Format string }
+					}
+				}
+			} `json:"requestBody"`
+		}
+	}
+	if err := json.Unmarshal(out.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	query := func(path string) string {
+		var names []string
+		for _, p := range d.Paths[path]["get"].Parameters {
+			if p.In == "query" {
+				names = append(names, p.Name)
+			}
+		}
+		return strings.Join(names, ",")
+	}
+	if q := query("/sqli/"); q != "id,Submit" {
+		t.Errorf("GET /sqli/ query %q, want the form's id,Submit; %s", q, out.Bytes())
+	}
+	if q := query("/fi/"); q != "page" {
+		t.Errorf("GET /fi/ query %q, want page", q)
+	}
+	for _, p := range []string{"/upload/", "/security.php"} {
+		if q := query(p); q != "" {
+			t.Errorf("GET %s takes the query of its links: %q", p, q)
+		}
+	}
+	for _, u := range []string{"/security.php?phpids=on", "/setup.php?action=reset"} {
+		if _, ok := asked.Load(u); ok {
+			t.Errorf("the run requested %s", u)
+		}
+	}
+	if d.Paths["/setup.php"] != nil {
+		t.Errorf("/setup.php, never requested, is in the description: %v", d.Paths["/setup.php"])
+	}
+	up := d.Paths["/upload/"]["post"].Body
+	if up == nil || up.Content["multipart/form-data"].Schema.Properties["uploaded"].Format != "binary" ||
+		up.Content["multipart/form-data"].Schema.Properties["MAX_FILE_SIZE"].Type != "string" {
+		t.Errorf("POST /upload/ body %+v", up)
+	}
+	sec := d.Paths["/security.php"]["post"].Body
+	if sec == nil || len(sec.Content["application/x-www-form-urlencoded"].Schema.Properties) != 2 {
+		t.Errorf("POST /security.php body %+v", sec)
+	}
+}
+
 func sortStrings(xs []string) []string {
 	for i := range xs {
 		for j := i + 1; j < len(xs); j++ {
@@ -165,6 +273,38 @@ func TestOpenAPIUniqueOperationIDs(t *testing.T) {
 	}
 	if !slices.Equal(first, want) {
 		t.Errorf("operations %q", first)
+	}
+}
+
+// A route the run left alone because a GET there changes something is no
+// GET of the export; what a script sends there with another method, and
+// what a served description says, stay.
+func TestOpenAPISkippedRoutes(t *testing.T) {
+	spec := `{"base":"https://app.test/","document":{"openapi":"3.0.1","info":{"title":"Shop"},
+		"paths":{"/api/cache/clear":{"get":{"responses":{"200":{"description":"ok"}}}}}}}`
+	skipped := func(r engine.MapEntry) engine.MapEntry { r.Coverage, r.Status = "skipped", 0; return r }
+	g := &graphView{path: "x.db",
+		obs: []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-openapi", Kind: "api", Payload: json.RawMessage(spec)}}},
+		rows: []engine.MapEntry{
+			urlRow("https://app.test/api/items", engine.Op{Method: "GET"}),
+			skipped(urlRow("https://app.test/api/items?action=delete")),
+			skipped(urlRow("https://app.test/api/logout", engine.Op{Method: "GET"}, engine.Op{Method: "POST"})),
+			skipped(urlRow("https://app.test/api/reset")),
+			skipped(urlRow("https://app.test/api/cache/clear", engine.Op{Method: "GET"})),
+			{Entity: types.Entity{Type: types.TypeURL, Key: "https://app.test/admin.php?mode=install"}, Role: "page", Coverage: "skipped", Params: []string{"mode"}},
+		}}
+	doc, err := openAPI(g, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// /api/reset, its method unknown, is described as a guessed POST; a
+	// URL left alone for its query (?action=delete) adds nothing.
+	want := []string{"get /api/cache/clear ", "get /api/items get_api_items", "post /api/logout post_api_logout", "post /api/reset post_api_reset"}
+	if got := operations(t, doc); !slices.Equal(got, want) {
+		t.Errorf("operations %q, want %q", got, want)
+	}
+	if params := doc["paths"].(map[string]any)["/api/items"].(map[string]any)["get"].(map[string]any)["parameters"]; params != nil {
+		t.Errorf("GET /api/items takes the names of a link left alone: %v", params)
 	}
 }
 

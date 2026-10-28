@@ -257,3 +257,12 @@ func TestNumClamps(t *testing.T) {
 		t.Errorf("a fraction is %d", n)
 	}
 }
+
+// An assistant names its own targets: the server does not start without a
+// scope unless told to.
+func TestMCPNeedsAScope(t *testing.T) {
+	err := cmdMCP([]string{"-dir", t.TempDir()})
+	if exitCode(err) != exitUsage || !strings.Contains(err.Error(), "-unlocked") {
+		t.Errorf("no scope: %v", err)
+	}
+}

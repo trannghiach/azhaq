@@ -155,6 +155,12 @@ func Client(c *http.Client) *http.Client {
 	}
 }
 
+// Dial connects to addr as the run's HTTP client does: through Resolver's
+// addresses for a name.
+func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
+	return dial(ctx, network, addr)
+}
+
 // dial connects through Resolver's addresses when it has an answer, the
 // way the system would: IPv6 first where the machine has a route for it,
 // IPv4 tried too after a short head start (RFC 8305). Some edges answer
@@ -653,27 +659,33 @@ func mustURL(raw string) *url.URL {
 // next is on raw's site. A redirect to a third party (an asset host, an
 // identity provider) is recorded with its Location, and that party's
 // page is never reported as the target's.
-func followable(raw, next string) bool { return Site(raw, next) }
+func followable(raw, next string) bool { return SameSite(raw, next) }
 
-// Site says whether other belongs to the site of page, the way redirects
-// are followed: with a scope, when the scope allows other's host; without
-// one, when it is page's host or a host of the same registrable domain
-// (an address is only itself). A bundle on cdn.example.com and an API on
-// api.example.com belong to www.example.com; a library on a third-party
-// CDN does not.
-func Site(page, other string) bool {
+// SameSite says whether other belongs to the site of page, the way
+// redirects are followed: with a scope, when the scope allows other's
+// host; without one, when both hosts share a Site (an address is only
+// itself). A bundle on cdn.example.com and an API on api.example.com
+// belong to www.example.com; a library on a third-party CDN does not.
+func SameSite(page, other string) bool {
 	if Allow != nil {
 		return inScope(other)
 	}
 	a, b := hostOf(page), hostOf(other)
-	if a == "" || b == "" || a == b {
+	if a == "" || b == "" {
 		return true
 	}
-	if net.ParseIP(a) != nil || net.ParseIP(b) != nil {
-		return false
+	return Site(a) == Site(b)
+}
+
+// Site is what a run without a scope keeps to from a host: its
+// registrable domain, or the host itself (an address, a name without one).
+// Chrome is held to the sites of the pages it is pointed at the same way.
+func Site(host string) string {
+	host = strings.ToLower(host)
+	if d := normalize.RegistrableDomain(host); d != "" {
+		return d
 	}
-	da, db := normalize.RegistrableDomain(a), normalize.RegistrableDomain(b)
-	return da != "" && da == db
+	return host
 }
 
 func hostOf(raw string) string {

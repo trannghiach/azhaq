@@ -52,6 +52,11 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 		batchBusy: map[string]int{},
 		parked:    map[string][]task{},
 		results:   make(chan finished, b.Parallel),
+		ctx:       ctx,
+		secure:    givenHTTPS(seeds),
+		schemes:   map[string]bool{},
+		asked:     map[string]bool{},
+		waiting:   map[string][]heldHint{},
 	}
 	if !b.Passive {
 		s.reserve = fanReserve(b)
@@ -97,6 +102,9 @@ type finished struct {
 	metas   []types.RunMeta
 	errs    []error
 	partial bool // early hints from a task still running
+
+	scheme string // the host whose http://host/ was asked (scheme.go)
+	same   bool   // and whether it is the https site
 }
 
 type scheduler struct {
@@ -130,6 +138,13 @@ type scheduler struct {
 	leases  map[string]lease
 	remote  int // of inflight, the leased ones
 	leaseNo int
+
+	// http://host/ hints on a host given as https://host/ (scheme.go).
+	ctx     context.Context
+	secure  httpsGiven            // where the run was given https
+	schemes map[string]bool       // host → its http URLs are the https site's
+	asked   map[string]bool       // hosts whose http://host/ was asked
+	waiting map[string][]heldHint // hints held for that answer
 }
 
 type lease struct {
@@ -233,6 +248,12 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	}
 	if hint && !s.b.Scope.AllowsSeed(seed) {
 		return
+	}
+	if hint {
+		var held bool
+		if seed, held = s.scheme(seed, depth); held {
+			return
+		}
 	}
 	k := seedKey(seed)
 	if s.seen[k] {
@@ -614,6 +635,10 @@ func (s *scheduler) startBatch(ctx context.Context) bool {
 }
 
 func (s *scheduler) handle(f finished) {
+	if f.scheme != "" {
+		s.schemeAnswered(f.scheme, f.same)
+		return
+	}
 	if f.partial {
 		for i, t := range f.tasks {
 			for _, h := range f.metas[i].NextHints {
@@ -688,6 +713,11 @@ func (s *scheduler) leftover() []types.Seed {
 	for _, seed := range s.beyond {
 		if !s.seen[seedKey(seed)] {
 			put(seed)
+		}
+	}
+	for _, held := range s.waiting {
+		for _, h := range held {
+			put(h.seed)
 		}
 	}
 	return out

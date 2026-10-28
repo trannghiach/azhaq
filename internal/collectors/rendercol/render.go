@@ -15,6 +15,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
@@ -82,11 +83,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	c.count[u.Host]++
 	c.mu.Unlock()
 
-	if err := fetch.Spend(ctx); err != nil {
+	undo := func() {
 		c.mu.Lock()
 		delete(c.done, key)
 		c.count[u.Host]--
 		c.mu.Unlock()
+	}
+	if err := fetch.Spend(ctx); err != nil {
+		undo()
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}
 	load := raw
@@ -103,15 +107,36 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			c.mu.Unlock()
 		}
 	}
-	fetch.Count(max(0, len(p.Requests)-1)) // what the page fetched besides itself
+	if p.Capped {
+		// The budget refused some of what the page asked for: rendered
+		// again after azhaq resume.
+		undo()
+		return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
+	}
+	meta := types.RunMeta{Status: types.StatusOK}
+	if len(p.Blocked) > 0 {
+		payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
+	if p.Left != "" {
+		return meta, nil // redirected outside the scope: Chrome's error page, nothing of the target's
+	}
 	if err != nil && p.HTML == "" && len(p.Requests) == 0 {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	base, _ := url.Parse(raw)
-	if p.URL != "" && load == raw {
+	// Links and forms are the document's, where Chrome ended up: on a hash
+	// route (/#/basket) the app's front page, not the route's path.
+	base, _ := url.Parse(load)
+	if p.URL != "" {
 		if f, err := url.Parse(p.URL); err == nil {
 			base = f
 		}
+	}
+	if base != nil {
+		base.Fragment = ""
 	}
 	seen := map[string]string{} // URL → how it was seen
 	for _, r := range p.Requests {
@@ -128,7 +153,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 	}
-	meta := types.RunMeta{Status: types.StatusOK}
 	for link, how := range seen {
 		role := webextract.ClassifyURL(link)
 		if role == "asset" || link == raw {
@@ -146,6 +170,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	for _, f := range webextract.Forms([]byte(p.HTML), base) {
 		row := map[string]any{"method": f.Method, "action": f.Action, "fields": f.Fields, "via": "browser"}
+		if f.Enctype != "" {
+			row["enctype"] = f.Enctype
+		}
+		if len(f.Files) > 0 {
+			row["files"] = f.Files
+		}
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "form", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
 			return meta, err
