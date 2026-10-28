@@ -115,7 +115,7 @@ Every command prints results on stdout, and a summary on stderr: what failed and
 | Chrome | GET, HEAD and CORS preflights, and the sign-in form; a page's own writes are refused and mapped, unless `-browser-writes` | `-browser`, `-login`, `shots` |
 | Other roles' writes | POST, PUT, PATCH, DELETE | `roles -replay-writes` (needs a scope) |
 
-URLs whose names say a GET would change something (`/logout`, `/createdb`, `?phpids=on`) are listed, not requested. URLs carrying a scanner's payload never enter the map. Nothing goes to a host outside the scope, Chrome included; without a scope, nothing leaves the site. `-rate` paces it, `-max-requests` caps it, and `azhaq plan` prints it before anything is sent.
+URLs whose names say a GET would change something (`/logout`, `/createdb`, `?phpids=on`) are listed, not requested. URLs carrying a scanner's payload never enter the map. No request to a target goes to a host outside the scope, Chrome's included; without a scope, they stay on the site. Third-party sources (subdomain lists, archives, RDAP) are asked about your domains; `-passive` sends nothing to the targets. `-rate` paces it, `-max-requests` caps it, and `azhaq plan` prints it before anything is sent.
 
 ## A workspace
 
