@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- `params -rate 0` (`-params-rate 0`) sends without a pace, as arjun does: five lab pages and 6,453 names in 0.9 s; 0 used to mean the default 20 a second.
 - MCP tools take a single string where a list of strings is expected.
 - The release archives carry the recipes, concepts and troubleshooting pages and the benchmark's README.
 

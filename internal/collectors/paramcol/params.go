@@ -40,7 +40,7 @@ type Options struct {
 	Words   []string
 	Chunk   int     // names per request; default 250, as arjun
 	PerHost int     // pages searched per host; default 20
-	Rate    float64 // requests per second per host; default 20
+	Rate    float64 // requests per second per host; 0: no limit, as arjun
 	// AllGets also sends, with a session, names that read like an action
 	// (delete, reset…); by default they are left out.
 	AllGets bool
@@ -64,7 +64,7 @@ func New(client *http.Client, o Options) *Collector {
 		o.PerHost = 20
 	}
 	if o.Rate <= 0 {
-		o.Rate = 20
+		o.Rate = 1e6 // no pace but the answers', as arjun
 	}
 	c := *fetch.Client(client)
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }

@@ -147,7 +147,7 @@ azhaq dirs   -u https://app.example.com/ -w common.txt -e php,bak              #
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt     # arjun
 ```
 
-Each reads targets from flags, a file or stdin, prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` pace themselves (100 path guesses a second per host by default): `-rate 0` runs `dirs` as fast as ffuf. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
+Each reads targets from flags, a file or stdin, prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` pace themselves (100 and 20 requests a second per host by default): `-rate 0` runs them as fast as ffuf and arjun. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
 
 ## For assistants: MCP
 

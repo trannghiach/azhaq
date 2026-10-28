@@ -221,7 +221,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
 	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active: needs -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
-	paramsRate := fs.Float64("params-rate", 20, "parameter requests per second per host")
+	paramsRate := fs.Float64("params-rate", 20, "parameter requests per second per host (0: no limit, as arjun)")
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
