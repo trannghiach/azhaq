@@ -16,6 +16,12 @@
 
 ### New
 
+- Scripts on other hosts the scope allows (a CDN, `api.example.com`) are read, and the routes they call there are mapped on their own host, with the script that names them; without a scope, hosts of the same site.
+- The views of an app's router (Angular, React Router, Vue Router): rows of kind `client-route` (`http://app/#/administration`), with the `guard` that protects a view (`canActivate`); never requested.
+- Build manifests: Next.js `_buildManifest.js` and `_ssgManifest.js` (`/admin/users/[userId]` as `/admin/users/{userId}`), Create React App, Vite, Angular service worker and Nuxt.
+- Source maps without a comment: the `SourceMap` header, or `<script>.map` guessed (at most 10 per origin, kept only when it is a source map).
+- WebSocket endpoints (`new WebSocket`, socket.io) as rows of kind `websocket`, never requested as pages.
+- Chrome is GET-only by default: a page's own POST, PUT, PATCH, DELETE and beacons are refused before they leave, mapped as the route's operation (`source: browser`) and listed as left alone; `-browser-writes` lets them go.
 - API descriptions are looked for under each API base a run's routes reveal (`/identity/api/v2/openapi.json`, springdoc's `v3/api-docs` and `swagger-config`, springfox's `swagger-resources`), not only at the root: up to 8 bases per origin, 10 requests each.
 - Map rows name the parameters worth trying first (`watch`: `returnUrl (redirect)`, `file (file)`, `cmd (command)`, `isAdmin (debug)`, …).
 - Subdomain takeover candidates in the summary of `subs -live`, `dns`, `probe` and `run`: a CNAME to a name on Azure, Elastic Beanstalk or Fly.io that does not resolve, a CNAME to a domain nobody registered, or a hosting service's page for a name nobody claimed (GitHub Pages, S3, Heroku, Shopify, …), each with its evidence.
