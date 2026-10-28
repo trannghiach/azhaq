@@ -25,7 +25,7 @@
 
 ### Fixed
 
-- An answer of 401 or 403 is never a catch-all: a route that exists but is gated (`/api/Feedbacks/1`, which answers 401 like every id under it) is kept and marked `auth`/`forbidden`, and its coverage no longer flips between `visited` and `catchall` from one run to the next (which made `diff` and `watch` report phantom changes).
+- An answer of 401 or 403 is never a catch-all: a route that exists but is gated is kept and marked `auth`/`forbidden`, not dismissed as the page an unknown path gets, and its coverage no longer flips between `visited` and `catchall` from one run to the next (which made `diff` and `watch` report phantom changes).
 - `roles` whose replay was cut short by `-replay-max` reports it: exit 4, `complete:false`, and a `stopped:` line, instead of a clean exit 0 that hid an access-control comparison left unfinished.
 - A path in a directory past the 24 whose unknown-path answer is asked is compared with the nearest directory above it, not the site's root: Juice Shop's `/rest/…` error page for unknown paths is no longer taken for a route.
 - `params -rate 0` (`-params-rate 0`) sends without a pace, as arjun does: five lab pages and 6,453 names in 0.9 s; 0 used to mean the default 20 a second.
