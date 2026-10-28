@@ -10,6 +10,10 @@ func TestURL(t *testing.T) {
 	if got != "https://example.com/a" {
 		t.Fatalf("got %q", got)
 	}
+	// The start of a URL a script builds at run time: no port is no URL.
+	if got, err := URL("http://127.0.0.1:/"); err == nil {
+		t.Errorf("an empty port: %q", got)
+	}
 }
 
 func TestHostname(t *testing.T) {

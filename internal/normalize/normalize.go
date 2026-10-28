@@ -45,6 +45,9 @@ func URL(raw string) (string, error) {
 	u.Host = strings.ToLower(u.Host)
 	host, port, err := net.SplitHostPort(u.Host)
 	if err == nil {
+		if port == "" {
+			return "", errPort // http://127.0.0.1:/x, the start of a URL a script builds at run time
+		}
 		if (u.Scheme == "http" && port == "80") || (u.Scheme == "https" && port == "443") {
 			u.Host = host
 		} else {
@@ -178,3 +181,9 @@ type emptyError struct{}
 func (emptyError) Error() string { return "empty" }
 
 var errEmpty emptyError
+
+type portError struct{}
+
+func (portError) Error() string { return "empty port" }
+
+var errPort portError

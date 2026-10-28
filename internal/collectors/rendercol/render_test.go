@@ -296,3 +296,28 @@ Promise.allSettled([
 		})
 	}
 }
+
+// socket.io's polling transport POSTs to the socket's path as the page
+// loads: that is the socket's row (azhaq-js lists it), not an API route
+// of the page's.
+func TestWriteFactsSkipSocketPolling(t *testing.T) {
+	page := "http://127.0.0.1:3001/"
+	obs := WriteFacts(Name, page, []browser.Write{
+		{Method: "POST", URL: "http://127.0.0.1:3001/socket.io", Query: []string{"EIO", "sid", "t", "transport"}, Sent: true},
+		{Method: "POST", URL: "http://127.0.0.1:3001/rest/user/login", Body: []string{"email", "password"}, BodyType: "application/json"},
+	})
+	var rows []string
+	for _, o := range obs {
+		if o.Kind != "url" {
+			continue
+		}
+		var p struct {
+			URL string `json:"url"`
+		}
+		_ = json.Unmarshal(o.Payload, &p)
+		rows = append(rows, p.URL)
+	}
+	if !slices.Equal(rows, []string{"http://127.0.0.1:3001/rest/user/login"}) {
+		t.Errorf("rows %v", rows)
+	}
+}

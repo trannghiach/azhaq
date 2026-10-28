@@ -2,6 +2,7 @@ package rendercol
 
 import (
 	"encoding/json"
+	"net/url"
 	"slices"
 	"time"
 
@@ -29,6 +30,9 @@ func WriteFacts(collector, page string, ws []browser.Write) []types.Observation 
 		}
 		if !webextract.SameOrigin(page, w.URL) {
 			continue
+		}
+		if u, err := url.Parse(w.URL); err == nil && webextract.SocketPath(u.Path) {
+			continue // socket.io's polling POST: the socket's row says it, as azhaq-js has it
 		}
 		k := webextract.RouteKey(w.URL)
 		r := routes[k]

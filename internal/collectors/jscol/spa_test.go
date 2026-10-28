@@ -3,6 +3,7 @@ package jscol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -56,6 +58,19 @@ func (s *served) asked(path string) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.hits[path]
+}
+
+// askedSuffix counts the requests for paths that end in suffix.
+func (s *served) askedSuffix(suffix string) int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := 0
+	for p, c := range s.hits {
+		if strings.HasSuffix(p, suffix) {
+			n += c
+		}
+	}
+	return n
 }
 
 // observe runs the collector on raw: its url rows by URL, and the URLs it
@@ -223,21 +238,94 @@ func TestClientRoutesAndSockets(t *testing.T) {
 }
 
 // A router that keeps its views in the path: the views are rows of their
-// own path, never requested.
+// own path, with their guard, and asked for once with a GET (the server
+// may answer them itself), a template left as a row. A link to a view is
+// the view's, not a page of its own.
 func TestClientRoutesInThePath(t *testing.T) {
 	fetch.Reset()
 	t.Cleanup(fetch.Reset)
 	srv := serve(t, map[string]string{
-		"/":       `<!doctype html><div id="root"></div><script src="/app.js"></script>`,
-		"/app.js": `(0,o.jsx)(Me,{path:"/admin",element:(0,o.jsx)(RequireAuth,{children:(0,o.jsx)(Admin,{})})});var l=(0,o.jsx)(Link,{to:"/admin"});`,
+		"/": `<!doctype html><div id="root"></div><script src="/app.js"></script>`,
+		"/app.js": `(0,o.jsx)(Me,{path:"/admin",element:(0,o.jsx)(RequireAuth,{children:(0,o.jsx)(Admin,{})})});var l=(0,o.jsx)(Link,{to:"/admin"});` +
+			`const routes=[{path:"/reports",component:Reports},{path:"/reports/:id",component:Report}];createRouter({history:createWebHistory(),routes});`,
 	}, nil)
 	col := New(srv.Client())
 	got, hints := observe(t, col, srv.URL+"/")
-	if r := got[srv.URL+"/admin"]; r == nil || r["role"] != "client-route" || r["guard"] != "RequireAuth" {
-		t.Fatalf("admin %v", got)
+	if r := got[srv.URL+"/admin"]; r == nil || r["role"] != "client-route" || r["guard"] != "RequireAuth" || len(r["found_in"].([]any)) != 2 {
+		t.Fatalf("admin %v", r)
 	}
-	if contains(hints, srv.URL+"/admin") || srv.asked("/admin") != 0 {
-		t.Error("a view was requested")
+	for _, p := range []string{"/admin", "/reports"} {
+		if !contains(hints, srv.URL+p) {
+			t.Errorf("%s not hinted: %v", p, hints)
+		}
+	}
+	if r := got[srv.URL+"/reports/{id}"]; r == nil || r["role"] != "client-route" {
+		t.Errorf("reports/{id} %v", r)
+	}
+	for _, h := range hints {
+		if strings.Contains(h, "{") {
+			t.Errorf("a template was hinted: %s", h)
+		}
+	}
+}
+
+// A Create React App manifest that lists a map for every chunk of a
+// build that left none behind: the maps are asked for out of the
+// origin's budget for maps no script named, not one GET each.
+func TestAssetManifestMapsCapped(t *testing.T) {
+	fetch.Reset()
+	t.Cleanup(fetch.Reset)
+	files := `"main.js":"/static/js/main.0123abcd.js","main.js.map":"/static/js/main.0123abcd.js.map"`
+	for i := 0; i < 40; i++ {
+		files += fmt.Sprintf(`,"static/js/%d.chunk.js.map":"/static/js/%d.abcd%04d.chunk.js.map"`, i, i, i)
+	}
+	srv := serve(t, map[string]string{
+		"/":                           `<!doctype html><div id="root"></div><script src="/static/js/main.0123abcd.js"></script>`,
+		"/static/js/main.0123abcd.js": `fetch("/api/v1/cra")`,
+		"/asset-manifest.json":        `{"files":{` + files + `},"entrypoints":["static/js/main.0123abcd.js"]}`,
+	}, nil)
+	col := New(srv.Client())
+	got, _ := observe(t, col, srv.URL+"/")
+	if m := got[srv.URL+"/asset-manifest.json"]; m == nil || m["role"] != "manifest" {
+		t.Errorf("manifest %v", m)
+	}
+	if n := srv.askedSuffix(".map"); n > maxGuessedMaps {
+		t.Errorf("%d maps asked for, the budget is %d", n, maxGuessedMaps)
+	}
+}
+
+// A call whose URL a script builds from a port it only knows at run time
+// ('http://127.0.0.1:' + PORT + '/x') is worked out as far as its
+// authority: that is no route of any host.
+func TestPartialOrigin(t *testing.T) {
+	fetch.Reset()
+	t.Cleanup(fetch.Reset)
+	srv := serve(t, map[string]string{
+		"/": `<!doctype html><script>const PORT=window.__p;fetch('http://127.0.0.1:' + PORT + '/other-post', {method:'POST', body:'q=1'});` +
+			`fetch('http://127.0.0.1:' + PORT + '/other-cors', {method:'PUT'});fetch('/api/items', {method:'POST', body:'q=1'});</script>`,
+	}, nil)
+	col := New(srv.Client())
+	got, hints := observe(t, col, srv.URL+"/")
+	for u := range got {
+		if strings.Contains(u, "127.0.0.1:/") || strings.HasSuffix(u, ":") {
+			t.Errorf("a route of no host: %s", u)
+		}
+	}
+	for _, h := range hints {
+		if strings.Contains(h, "127.0.0.1:/") {
+			t.Errorf("hinted: %s", h)
+		}
+	}
+	if got[srv.URL+"/api/items"] == nil {
+		t.Errorf("the page's own call: %v", keys(got))
+	}
+	for _, p := range []string{"http://127.0.0.1:", "https://api.", "https://api.example.com:", "http://:8080/x"} {
+		if _, ok := callRoute(webextract.Call{Path: p, Method: "POST"}, srv.URL, srv.URL+"/"); ok {
+			t.Errorf("%q taken as a route", p)
+		}
+		if keepString(srv.URL+"/", p) {
+			t.Errorf("%q kept", p)
+		}
 	}
 }
 

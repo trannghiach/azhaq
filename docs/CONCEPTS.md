@@ -35,7 +35,7 @@ URL http://localhost:3000/rest/2fa/verify  target  hint  api  POST
 
 ## Kinds of URL
 
-`app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest), `client-route` (a view a single-page app's router draws, such as `http://host/#/administration`, with the `guard` that keeps it), `websocket` (an endpoint scripts open a WebSocket to). Views and sockets are never requested: `hint`.
+`app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest), `client-route` (a view a single-page app's router draws, such as `http://host/#/administration`, with the `guard` that keeps it), `websocket` (an endpoint scripts open a WebSocket to). Views after the hash and sockets are never requested: `hint`. A view in the path (`http://host/admin`) is asked for once: what the server answers stands (`auth`, `page`), the guard noted beside it; the shell leaves it a `client-route`.
 
 ## Names
 

@@ -106,11 +106,28 @@ func bodyFields(body []byte, contentType string) ([]string, string) {
 			return out, media
 		}
 	case (media == "" || media == "application/x-www-form-urlencoded") && strings.Contains(string(body), "="):
-		if q, err := url.ParseQuery(strings.TrimSpace(string(body))); err == nil && len(q) > 0 {
-			return names(slices.Collect(maps.Keys(q))), "application/x-www-form-urlencoded"
+		if out := names(formNames(strings.TrimSpace(string(body)))); len(out) > 0 {
+			return out, "application/x-www-form-urlencoded"
 		}
 	}
 	return nil, ""
+}
+
+// formNames are the names of a urlencoded body's name=value pairs. A
+// bare token between the &s (a=1&b=2&token) is a value with no name, not
+// the key url.ParseQuery would make of it.
+func formNames(body string) []string {
+	var out []string
+	for _, pair := range strings.Split(body, "&") {
+		k, _, ok := strings.Cut(pair, "=")
+		if !ok {
+			continue
+		}
+		if n, err := url.QueryUnescape(k); err == nil && n != "" && !slices.Contains(out, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // names keeps the ones that read as names, sorted, at most maxNames: an
