@@ -160,6 +160,8 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 			b.leave(mine) // listed with no page: the sign-in's error names the one that matters
 		}
 		b.claim(t) // later ones of its frames are counted only
+		// A frame not yet known as the sign-in's had its write refused.
+		b.leaveWrites(b.writesOf(t))
 	}()
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {

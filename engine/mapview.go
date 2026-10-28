@@ -244,6 +244,9 @@ func ownObs(e types.Entity, obs []types.StoredObservation) []types.StoredObserva
 		if o.Collector == "azhaq-js" || o.Collector == "azhaq-crawl" || o.Collector == "azhaq-render" {
 			continue
 		}
+		if o.Collector == "azhaq-shots" && o.Kind == "url" {
+			continue // a write the page sent, to itself too: its route's
+		}
 		if u := payloadURL(o); u != "" && !sameRoute(u, e.Key) {
 			continue
 		}

@@ -1330,8 +1330,8 @@ func cmdShots(args []string) error {
 		return err
 	}
 	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector != "azhaq-shots" {
-			return
+		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
+			return // what Chrome refused, and the writes it mapped, are the summary's
 		}
 		p := payloadOf(o)
 		if w.json {

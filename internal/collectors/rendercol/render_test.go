@@ -240,10 +240,17 @@ Promise.allSettled([
 					}
 				}
 			}
+			form := false
 			for _, ob := range obs {
 				if strings.Contains(string(ob.Payload), "secret") || strings.Contains(string(ob.Payload), "a@b.test") {
 					t.Errorf("a value sent is kept: %s", ob.Payload)
 				}
+				form = form || ob.Kind == "form" && strings.Contains(string(ob.Payload), `"action":"`+srv.URL+`/api/subscribe"`)
+			}
+			if !writes && !form {
+				// The form post refused, the page stays as it was: its
+				// form is read, not Chrome's error page.
+				t.Errorf("the page's form is not read: %d facts", len(obs))
 			}
 
 			// The map: each route a hint with the method and names sent.

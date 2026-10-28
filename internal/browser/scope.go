@@ -229,6 +229,13 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		// Not sent, nor counted: what it would have sent is mapped.
 		b.wrote(t, ev.FrameID, writeOf(ev.Request))
 		b.done(t)
+		if r.doc {
+			// A form posted: stopped as a user stops it, the page stays
+			// as it was. Blocked, Chrome would show its error instead,
+			// to read and to screenshot as the page.
+			_, _ = chromedp.CallBrowser(root, cdpfetch.FailRequest, cdpfetch.FailRequestParams{RequestID: ev.RequestID, ErrorReason: network.ErrorReasonAborted})
+			return
+		}
 		b.fail(root, ev.RequestID)
 		return
 	case r.doc && b.paidFor(ev.FrameID):

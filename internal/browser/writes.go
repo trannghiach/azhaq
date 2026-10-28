@@ -18,7 +18,8 @@ import (
 // Chrome sends GET, HEAD and OPTIONS (a CORS preflight) only. Whatever
 // else a page or its scripts send, a POST, a DELETE, a beacon, a form
 // posted as the page loads, is failed before it leaves, as a request
-// outside the scope is: a page that saves, tracks or deletes on load
+// outside the scope is (a form's post is stopped, so that the page stays
+// as it was): a page that saves, tracks or deletes on load
 // would otherwise change data on the target behind a run that maps. The
 // sign-in's own tab is let send them (it posts the credentials), and so
 // is every page with -browser-writes (Browser.Writes). What a page would
