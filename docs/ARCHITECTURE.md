@@ -57,6 +57,52 @@ A collector may also implement:
 
 A collector can also hand over seeds before it returns with `catalog.Hint(ctx, seeds...)`. The subdomain collector does this as each source answers, so DNS starts on the fast sources' names while a slow source is still running.
 
+## Collectors at a glance
+
+| Collector | Collects |
+| --- | --- |
+| `azhaq-http` | status, redirect chain, title, technologies, favicon hash, length, words, lines, time, the address connected to, headers, cookie names, JSON field names; flags catch-all answers |
+| `azhaq-crawl` | same-origin links (not a directory listing's sort links), forms (with script-driven ones, their encoding and file inputs), links inside JSON answers, links written in Markdown that the page renders in the browser |
+| `azhaq-js` | the requests scripts make (method, path, query names, body fields, worked out from literals, template literals and assigned variables, and through a helper that takes the URL), with the script, line and code each was found in, other routes and links in scripts, chunks and source maps, joined constants, GraphQL operation names, credentials |
+| `azhaq-openapi` | OpenAPI 3 and Swagger 2 documents (JSON, YAML, embedded in Swagger UI), each operation's parameters by location, body fields, security; a Swagger UI page's document even when its URL is built at run time; asks the parameterless GETs |
+| `azhaq-graphql` | GraphQL endpoints; with `-graphql`, the schema by introspection |
+| `azhaq-paths` | the built-in paths: robots.txt, sitemaps, API description locations, … |
+| `azhaq-dns` | A/AAAA, CNAME chains, the CDN or WAF in front, MX/TXT/NS; dead and wildcard names marked and never probed |
+| `azhaq-tls` | certificates and their names |
+| `azhaq-subdomains` | names from passive sources (certificate transparency, archives, DNS datasets; 50+ with keys), with the sources of each name and each source's count or error |
+| `azhaq-urls` | historical URLs from the Wayback Machine, Common Crawl, OTX, urlscan and Arquivo, junk left out |
+| `azhaq-dns-brute`, `azhaq-permute`, `azhaq-dirs`, `azhaq-params`, `azhaq-ports` | the active techniques above |
+| `azhaq-asn`, `azhaq-prefix`, `azhaq-ptr` | networks, their addresses and reverse DNS names |
+| `azhaq-render`, `azhaq-shots` | Chrome: rendered pages and their requests; screenshots |
+| `azhaq-search` | Shodan, FOFA and Netlas, with keys |
+| `azhaq-rdap` | registration data and nameservers |
+| `azhaq-cloud` | domains, hosts and URLs from a local cloud inventory |
+
+Sources Azhaq does not query itself can be plugged in as external programs: [docs/CONNECTOR.md](docs/CONNECTOR.md).
+
+## Run options
+
+| Option | Effect |
+| --- | --- |
+| `-browser` | also load pages in Chrome: the requests their scripts send and the links and forms of the rendered page (Chrome is held to the scope like every request, and sends GET, HEAD and OPTIONS only) |
+| `-browser-writes` | let pages in Chrome send their writes (POST, PUT, DELETE…) as a user's browser would, inside the scope and the budget: it changes data on the target (`run`, `crawl`, `shots`, and the runs inside `roles`) |
+| `-login URL -login-user U -login-pass P` | sign in with Chrome first (password also from `$AZHAQ_LOGIN_PASS`) |
+| `-cookie N=V`, `-header 'K: V'` | reuse a session you already have; add headers |
+| `-screenshots DIR` | a screenshot of each web service, look-alikes grouped in the HTML report (Chrome on the machine; `AZHAQ_CHROME` to point at one) |
+| `-asn AS64500`, `-cidr 192.0.2.0/24` | start from networks: announced prefixes, address ranges, their reverse DNS names and web services |
+| `-list FILE` | targets one per line (`-` for stdin): URLs, hosts, `host:port`, addresses |
+| `-passive` | third-party sources and DNS only; nothing is sent to the targets |
+| `-probe`, `-web-ports 80,443,8080` | only fetch the targets themselves; ports to try on each name |
+| `-sources`, `-exclude-sources`, `-all-sources`, `-providers FILE` | subdomain sources and API keys (subfinder's `provider-config.yaml` format) |
+| `-resolvers FILE`, `-dns-rate N` | DNS resolvers and their pace |
+| `-dns-brute FILE`, `-permute` | active: names from a wordlist, variations of found names (need a scope) |
+| `-dirs FILE`, `-params FILE`, `-ports SPEC`, `-graphql` | active: paths from a wordlist, query parameters, TCP ports, GraphQL introspection (need a scope; the drop-ins `dirs`, `params`, `ports` take the targets you name as theirs) |
+| `-all-gets` | also request found URLs that look state-changing |
+| `-depth N`, `-max-items N`, `-parallel N`, `-host-parallel N`, `-delay D` | expansion and concurrency |
+| `-v` | a line for every finished task |
+
+Workers: a run started with `-serve ADDR` lends its tasks to `azhaq worker -server URL` processes on other machines, which send back what they found (each worker keeps its own HTTP cache, so requests the workers share are repeated: about 40% more on Juice Shop with two workers, for the same URLs). The catalog, engine, store and types are public Go packages for running Azhaq in-process and adding collectors; the API may change before 1.0.
+
 ## Engine
 
 `engine` exposes four operations:
