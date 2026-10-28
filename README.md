@@ -60,7 +60,7 @@ $ azhaq run -url http://localhost:3000/ -db juice.db
   URL http://localhost:3000/api/Users  target  visited  auth  POST  status=401
   URL http://localhost:3000/#/administration  target  hint  client-route  guard=canActivate
   …
-azhaq run: 193 map rows (124 URLs, 71 api, 43 client routes, 11 auth, 1 forbidden, 1 websocket) · 202 requests · 4.5 s · db juice.db
+azhaq run: 182 map rows (113 URLs, 71 api, 43 client routes, 11 auth, 7 forbidden, 1 websocket) · 191 requests · 4.6 s · db juice.db
   next: azhaq query -db juice.db -role auth,forbidden   (what needs a session)
   next: azhaq export -db juice.db -format openapi > api.json   (for Burp, Postman, ZAP)
 ```
@@ -161,7 +161,7 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. Latest run (2026-10-28, v0.7.0; 44 of 45 checks pass: this machine's security software removes naabu, so the port comparison runs on GitHub's network):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. Latest run (2026-10-28, v0.7.2; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
@@ -179,7 +179,7 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 192 URLs as one run each time; 208 requests over the capped run and its resumes, one run 202 | |
+| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | each maps everything one run maps; 197 requests over the capped run and its resumes, one run 191 | |
 | Memory, Juice Shop | katana | 93 MB | 60 MB |
 
 The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (68 s against arjun's 26 s), memory (above katana's plain `-jc` crawl; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
