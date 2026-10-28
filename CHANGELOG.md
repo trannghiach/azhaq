@@ -12,6 +12,11 @@
 
 ### Changed
 
+- `roles -replay-writes` claims a write on another role's object only when it is proven: the owner's object is read as the owner before and after, and must have changed the way the write asks (or be gone). A 2xx that changed nothing is `answered 2xx but changed nothing of the owner's`; a POST to a collection is `creates in another role's collection`; both are listed with `-all` only. Routes that only take a write (`PUT /users/v1/{username}/email`) are filled with each role's identifiers without a HAR.
+- A static document (a PDF, an image) no longer tops `roles` as the same answer for a session that did not find it.
+- A name is called dead only when a second resolver, of another operator, agrees.
+- An origin that leaves 5 requests in a row unanswered is stopped for the run: what was left for it is `capped`, listed under "left alone" with the reason, and `azhaq resume` retries it (exit 4).
+- Work is ordered by value: front pages and API paths first, other pages next, archived URLs last; archived static files (images behind query strings, media hosts) are listed and never requested.
 - A directory named after a verb (`/vulnerabilities/exec/`, `/admin/user/add/`) is a section with a form, and is requested; `/exec`, `/import_paste` and a directory under an API path (`/api/jobs/run/`) are still left alone.
 
 ### Fixed
