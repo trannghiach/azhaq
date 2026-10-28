@@ -623,7 +623,7 @@ func TestWriteEvidence(t *testing.T) {
 		t.Errorf("body %s", b)
 	}
 	out, err := captureStdout(t, func() error { return cmdRolesShow([]string{"-dir", dir, "http://h/api/items/3", "-method", "put"}) })
-	if err != nil || !strings.HasPrefix(out, "PUT http://h/api/items/3\n  [bob writes alice's object] guess") {
+	if err != nil || !strings.HasPrefix(out, "PUT http://h/api/items/3\n  [bob writes alice's object] proved") {
 		t.Errorf("%v\n%s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(dir, evidenceFile)); err != nil {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -87,31 +88,30 @@ func TestMapWrites(t *testing.T) {
 	}
 }
 
-// An app that lets any signed-in user write anyone's item, and the
-// anonymous visitor nothing.
-func TestReplayWrites(t *testing.T) {
+// An app where any signed-in user really writes anyone's object: bob's PUT
+// changes alice's object, so the cross write is proved; the anonymous
+// visitor is refused.
+func TestReplayWritesProved(t *testing.T) {
 	var mu sync.Mutex
-	var log []string
-	deleted := false
+	note := "hi"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		mu.Lock()
-		log = append(log, r.Method+" "+r.URL.Path+" "+r.Header.Get("A")+" "+string(body))
-		mu.Unlock()
 		if r.Header.Get("A") == "" {
 			w.WriteHeader(401)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		switch {
-		case r.Method == http.MethodGet && deleted:
-			w.WriteHeader(404)
-		case r.Method == http.MethodDelete:
-			deleted = true
-			w.WriteHeader(204)
-		default:
-			w.Write([]byte(`{"id":3,"owner":"alice","note":"hi","updatedAt":"2026-10-27T10:00:00Z"}`))
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Method != http.MethodGet {
+			var m map[string]any
+			body, _ := io.ReadAll(r.Body)
+			if json.Unmarshal(body, &m) == nil {
+				if s, ok := m["note"].(string); ok {
+					note = s
+				}
+			}
 		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"id":3,"owner":"alice","note":"` + note + `","updatedAt":"2026-10-27T10:00:00Z"}`))
 	}))
 	defer srv.Close()
 	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
@@ -120,24 +120,134 @@ func TestReplayWrites(t *testing.T) {
 	before, _ := readAnswer(200, []byte(`{"id":3,"owner":"alice","note":"hi","updatedAt":"2026-10-27T09:00:00Z"}`), "application/json")
 	answers := map[string]map[string]answer{"alice": {u: before}}
 	own := map[string]bool{"127.0.0.1": true}
-	put := writeReq{owner: "alice", method: "PUT", url: u, header: http.Header{"Content-Type": {"application/json"}}, body: []byte("{}"), empty: true, from: "PUT /api/items/{id} with an empty body"}
-	rows, n, err := replayWrites(roles, []writeReq{put}, answers, own, 0, 100)
-	if err != nil || len(rows) != 1 || n != 4 {
-		t.Fatalf("rows %+v sent %d err %v", rows, n, err)
+	// A HAR write with a body of alice's: bob's session changes alice's note.
+	put := writeReq{owner: "alice", method: "PUT", url: u, header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"note":"pwned"}`), status: 200, from: "alice.har"}
+	rows, _, err := replayWrites(roles, []writeReq{put}, answers, own, 0, 100)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows %+v err %v", rows, err)
 	}
-	if r := rows[0]; r.Verdict != verdictWriteCross || strings.Join(r.Readers, ",") != "bob" || r.Method != "PUT" || r.Status["anon"] != 401 || r.label() != "bob writes alice's object" {
+	if r := rows[0]; r.Verdict != verdictWriteCross || strings.Join(r.Readers, ",") != "bob" || r.Status["anon"] != 401 || r.label() != "bob writes alice's object" {
 		t.Errorf("put row %+v", r)
 	}
-	// A DELETE goes to the others alone, the anonymous role first, stops at
-	// the first let, and asks the owner afterwards.
-	log = nil
+	if !strings.Contains(rows[0].OwnerBy, "after bob's PUT the owner's object changed") {
+		t.Errorf("owner_by %q", rows[0].OwnerBy)
+	}
+}
+
+// A real cross DELETE: bob's DELETE removes alice's object, so the owner's
+// read afterwards is gone and the write is proved.
+func TestReplayWriteDeleteProved(t *testing.T) {
+	var mu sync.Mutex
+	deleted := false
+	var log []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		log = append(log, r.Method+" "+r.Header.Get("A"))
+		g := deleted
+		if r.Method == http.MethodDelete && r.Header.Get("A") != "" {
+			deleted = true
+		}
+		mu.Unlock()
+		switch {
+		case r.Header.Get("A") == "":
+			w.WriteHeader(401)
+		case r.Method == http.MethodGet && g:
+			w.WriteHeader(404)
+		case r.Method == http.MethodDelete:
+			w.WriteHeader(204)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"id":3,"owner":"alice"}`))
+		}
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}, session: h("1")}, {name: "bob", headers: []string{"A: 2"}, session: h("2")}}
+	u := srv.URL + "/api/items/3"
+	before, _ := readAnswer(200, []byte(`{"id":3,"owner":"alice"}`), "application/json")
+	answers := map[string]map[string]answer{"alice": {u: before}}
 	del := writeReq{owner: "alice", method: "DELETE", url: u, header: http.Header{}}
-	rows, _, _ = replayWrites(roles, []writeReq{del}, answers, own, 0, 100)
-	if r := rows[0]; r.Verdict != verdictWriteCross || !strings.Contains(r.OwnerBy, "afterwards its owner got 404") {
+	rows, _, _ := replayWrites(roles, []writeReq{del}, answers, map[string]bool{"127.0.0.1": true}, 0, 100)
+	if r := rows[0]; r.Verdict != verdictWriteCross || strings.Join(r.Readers, ",") != "bob" || !strings.Contains(r.OwnerBy, "the owner's object is gone") {
 		t.Errorf("delete row %+v", r)
 	}
-	if want := []string{"DELETE /api/items/3  ", "DELETE /api/items/3 2 ", "GET /api/items/3 1 "}; strings.Join(log, "|") != strings.Join(want, "|") {
+	// anon DELETE (refused, no owner read), bob DELETE (let), owner GET (gone).
+	if want := "DELETE |DELETE 2|GET 1"; strings.Join(log, "|") != want {
 		t.Errorf("requests %q", log)
+	}
+}
+
+// VAmPI's PUT /users/v1/{username}/email changes the caller's email,
+// whatever the path says: bob's write on alice's path answers 2xx but
+// leaves alice's object unchanged, so it is not a cross write.
+func TestReplayWriteCallerObject(t *testing.T) {
+	var mu sync.Mutex
+	emails := map[string]string{"alice": "alice@x.test", "bob": "bob@x.test"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		caller := r.Header.Get("A")
+		if caller == "" {
+			w.WriteHeader(401)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet:
+			// /users/v1/{username}: anyone may read it.
+			who := strings.TrimPrefix(r.URL.Path, "/users/v1/")
+			w.Write([]byte(`{"username":"` + who + `","email":"` + emails[who] + `"}`))
+		default:
+			// The write changes the caller's email, not the path's.
+			var m map[string]any
+			body, _ := io.ReadAll(r.Body)
+			if json.Unmarshal(body, &m) == nil {
+				if s, ok := m["email"].(string); ok {
+					emails[caller] = s
+				}
+			}
+			w.WriteHeader(204)
+		}
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	obj := srv.URL + "/users/v1/alice"
+	before, _ := readAnswer(200, []byte(`{"username":"alice","email":"alice@x.test"}`), "application/json")
+	answers := map[string]map[string]answer{"alice": {obj: before}}
+	put := writeReq{owner: "alice", method: "PUT", url: srv.URL + "/users/v1/alice/email",
+		header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"email":"pwned@x.test"}`), status: 204, from: "alice.har"}
+	rows, _, _ := replayWrites(roles, []writeReq{put}, answers, map[string]bool{"127.0.0.1": true}, 0, 100)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteNoChange {
+		t.Fatalf("rows %+v", rows)
+	}
+	if emails["alice"] != "alice@x.test" {
+		t.Errorf("alice's email changed: %q", emails["alice"])
+	}
+}
+
+// A POST to a collection creates a new object; even when the other role is
+// let, it is a create, never a cross write.
+func TestReplayWriteCreate(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("A") == "" {
+			w.WriteHeader(401)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(201)
+		w.Write([]byte(`{"owner":"` + r.Header.Get("A") + `"}`))
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	post := writeReq{owner: "alice", method: "POST", url: srv.URL + "/books/v1", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"title":"t"}`), status: 201, from: "alice.har"}
+	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteCreate || !slices.Contains(rows[0].Readers, "bob") {
+		t.Fatalf("rows %+v", rows)
+	}
+	if listed(verdictWriteCreate) {
+		t.Errorf("a create should not be listed by default")
 	}
 }
 
@@ -164,6 +274,47 @@ func TestReplayWriteChangedObject(t *testing.T) {
 		map[string]map[string]answer{"alice": {u: before}}, map[string]bool{"127.0.0.1": true}, 0, 100)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteVoid || len(asked) != 2 {
 		t.Errorf("rows %+v asked %q", rows, asked)
+	}
+}
+
+// A route that only takes a write (PUT /users/v1/{username}/email, with no
+// GET) still gets an instance filled with each role's own identifier, from
+// -id and from learned identity, so -replay-writes has something to send.
+func TestWriteOnlyTemplateReplayed(t *testing.T) {
+	const route = "http://app.test/users/v1/{username}/email"
+	templates := map[string]bool{route: true}
+	writes := map[string][]writeOp{route: {{method: "PUT", bodyType: "application/json"}}}
+
+	// With -id.
+	rolesID := []role{{name: "alice", headers: []string{"A: 1"}}, {name: "bob", headers: []string{"A: 2"}}}
+	given, err := parseIDs([]string{"alice:username=alice"}, rolesID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]runSeen{"alice": newRunSeen(), "bob": newRunSeen()}
+	who := identities(rolesID, map[string]map[string]answer{}, seen, nil)
+	made := instances(rolesID, templates, seen, map[string]map[string]answer{}, given, who)
+	if in, ok := made["http://app.test/users/v1/alice/email"]; !ok || in.owner != "alice" || in.template != route {
+		t.Fatalf("by -id: %+v", made)
+	}
+	if reqs := mapWrites(made, writes, map[string]bool{"PUT": true}); len(reqs) != 1 || reqs[0].owner != "alice" || string(reqs[0].body) != "{}" {
+		t.Fatalf("by -id map writes: %+v", reqs)
+	}
+
+	// With learned identity: a /me answer names alice's username.
+	me := "http://app.test/me"
+	s := newRunSeen()
+	s.add(me, map[string][]string{"username": {"alice"}})
+	seen2 := map[string]runSeen{"alice": s, "bob": newRunSeen()}
+	meAns, _ := readAnswer(200, []byte(`{"username":"alice"}`), "application/json")
+	answers := map[string]map[string]answer{"alice": {me: meAns}}
+	who2 := identities(rolesID, answers, seen2, nil)
+	made2 := instances(rolesID, templates, seen2, answers, nil, who2)
+	if in, ok := made2["http://app.test/users/v1/alice/email"]; !ok || in.owner != "alice" {
+		t.Fatalf("by identity: %+v", made2)
+	}
+	if reqs := mapWrites(made2, writes, map[string]bool{"PUT": true}); len(reqs) != 1 || reqs[0].owner != "alice" {
+		t.Fatalf("by identity map writes: %+v", reqs)
 	}
 }
 
