@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.1
+
+### Fixed
+
+- Chrome keeps the scope it started with; a later reset of the run's settings raced with the requests it was still deciding.
+- The run's resolver is swapped whole: a request a finished run left behind (a source past its deadline) raced the next run's reset.
+- `golang.org/x/net` v0.62.0 (GO-2026-6866, GO-2026-6860 in its HTML parser).
+
 ## v0.7.0
 
 ### Changed

@@ -12,7 +12,7 @@ require (
 	github.com/projectdiscovery/wappalyzergo v0.3.5
 	github.com/stretchr/testify v1.12.1
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/net v0.60.0
+	golang.org/x/net v0.62.0
 	golang.org/x/time v0.16.0
 	modernc.org/sqlite v1.57.0
 )
@@ -29,7 +29,6 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.27 // indirect
@@ -51,8 +50,8 @@ require (
 	github.com/weppos/publicsuffix-go v0.50.3 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
-	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.74.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
