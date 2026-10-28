@@ -33,3 +33,17 @@ func TestTenant(t *testing.T) {
 		}
 	}
 }
+
+// A hash route is the view's address; any other fragment is not.
+func TestClientURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"HTTP://Shop.test:80/#/administration": "http://shop.test/#/administration",
+		"https://shop.test/app#!/admin":        "https://shop.test/app#!/admin",
+		"https://shop.test/docs#install":       "https://shop.test/docs",
+		"https://shop.test/admin":              "https://shop.test/admin",
+	} {
+		if got, err := ClientURL(in); err != nil || got != want {
+			t.Errorf("%s: %q %v", in, got, err)
+		}
+	}
+}

@@ -28,7 +28,7 @@ func BrowserHint(rows []MapEntry, obs []types.StoredObservation) string {
 		}
 		target[r.Entity.Key] = true
 		switch r.Role {
-		case "asset", "script", "sourcemap":
+		case "asset", "script", "sourcemap", "manifest", "client-route", "websocket":
 		default:
 			routes[originOf(r.Entity.Key)]++
 		}

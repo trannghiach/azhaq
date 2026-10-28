@@ -844,11 +844,14 @@ func cmdCrawl(args []string) error {
 		if r.Entity.Type != types.TypeURL || (*noShell && r.Coverage == "catchall") || r.Scope != "target" {
 			continue
 		}
-		if !*assets && (r.Role == "script" || r.Role == "asset" || r.Role == "sourcemap") {
+		if !*assets && (r.Role == "script" || r.Role == "asset" || r.Role == "sourcemap" || r.Role == "manifest") {
 			continue
 		}
 		if !w.json && strings.Contains(r.Entity.Key, "{") {
 			continue // a route with a parameter (/api/Cards/{id}) is no URL to request; -json lists it
+		}
+		if !w.json && (r.Role == "client-route" || r.Role == "websocket") {
+			continue // a view the app draws, a socket: no page a GET gets; -json lists them
 		}
 		counts[r.Coverage]++
 		if w.json {

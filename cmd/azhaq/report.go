@@ -270,7 +270,13 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 		switch r.Entity.Type {
 		case types.TypeURL:
 			switch r.Role {
-			case "asset", "script", "sourcemap":
+			case "asset", "script", "sourcemap", "manifest":
+				continue
+			case "client-route":
+				counts["client routes"]++
+				continue
+			case "websocket":
+				counts["websockets"]++
 				continue
 			case "api", "auth", "forbidden":
 				counts[r.Role]++
@@ -332,6 +338,9 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("found_in", r.Found, len(r.Found) > 0)
 	w := engine.Watch(r)
 	set("watch", w, len(w) > 0)
+	set("guard", r.Guard, r.Guard != "")
+	set("protocol", r.Protocol, r.Protocol != "")
+	set("namespace", r.Namespace, r.Namespace != "")
 	set("template", r.Template, r.Template != "")
 	set("count", r.Count, r.Count > 1)
 	set("folded", r.Folded, r.Folded > 0)

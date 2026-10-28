@@ -10,7 +10,9 @@ import (
 
 var (
 	absURL = regexp.MustCompile(`https?://[A-Za-z0-9._~:/?#\[\]@!$&*+,;=%-]+`)
-	relURL = regexp.MustCompile(`['"\x60](/[A-Za-z0-9._~/?#&=+-]{1,256})['"\x60]`)
+	// relURL is a path in a string; [id] and [...slug] are a file-system
+	// router's parameters (/admin/users/[userId]).
+	relURL = regexp.MustCompile(`['"\x60](/[A-Za-z0-9._~/?#&=+\[\]-]{1,256})['"\x60]`)
 	// dotURL is a link written relative to the page: "./redirect?to=".
 	dotURL = regexp.MustCompile(`['"\x60](\./[A-Za-z][A-Za-z0-9._~/-]{0,200})(?:\?[A-Za-z0-9._~&=+-]*)?['"\x60?]`)
 	// numericPath is "/160" or "/2/3": sizes and ratios, not routes.
@@ -18,8 +20,25 @@ var (
 	jsonPath    = regexp.MustCompile(`"(?:url|href|path|route|page|api|endpoint)"\s*:\s*"(/[A-Za-z0-9._~/?#&=+-]{1,256})"`)
 	// scriptRef matches module imports and chunk names: "./chunk-AB12.js",
 	// "../lib/x.mjs", "/static/js/42.3f9c.chunk.js", "chunk-AB12.js".
-	scriptRef = regexp.MustCompile(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/-]{0,200}\.m?js)['"\x60]`)
+	scriptRef = regexp.MustCompile(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/\[\]-]{0,200}\.m?js)['"\x60]`)
+	// brackets is a path segment with a file-system router's parameter.
+	brackets = regexp.MustCompile(`\[\[?(?:\.\.\.)?[A-Za-z_$][\w$]*\]\]?`)
+	// nameTemplate is a bundler's file name template: a placeholder next
+	// to a dot ([name].[contenthash].js, [id].js). A page's chunk has a
+	// hash after a dash ([userId]-9f8e.js).
+	nameTemplate = regexp.MustCompile(`\][.]|[.]\[`)
 )
+
+// bracketPath maps a file-system router's parameters to the map's:
+// /admin/users/[userId] → /admin/users/{userId}, [...slug] → {slug}.
+// ok is false for brackets that are not one (/[a-z]).
+func bracketPath(p string) (string, bool) {
+	if !strings.Contains(p, "[") && !strings.Contains(p, "]") {
+		return p, true
+	}
+	out := brackets.ReplaceAllStringFunc(p, dynamicSegment)
+	return out, !strings.ContainsAny(out, "[]")
+}
 
 // JSURLs returns the URLs and paths a script names in its strings,
 // resolved against base, each once.
@@ -58,7 +77,7 @@ func JSURLRefs(script string, base *url.URL) []Ref {
 		add(trimURLJunk(script[m[0]:m[1]]), m[0], m[1])
 	}
 	for _, m := range relURL.FindAllStringSubmatchIndex(script, -1) {
-		if p := script[m[2]:m[3]]; !numericPath.MatchString(p) {
+		if p, ok := bracketPath(script[m[2]:m[3]]); ok && !numericPath.MatchString(p) {
 			add(p, m[0], m[1])
 		}
 	}
@@ -82,12 +101,27 @@ func ScriptRefs(script string, scriptURL *url.URL) []string {
 	}
 	seen := map[string]bool{}
 	var out []string
+	// Next.js names chunks from its asset root (static/chunks/…), not
+	// from the folder of the manifest that lists them.
+	nextRoot := scriptURL
+	if i := strings.Index(scriptURL.Path, "/_next/"); i >= 0 {
+		r := *scriptURL
+		r.Path, r.RawPath, r.RawQuery = scriptURL.Path[:i+len("/_next/")], "", ""
+		nextRoot = &r
+	}
 	for _, m := range scriptRef.FindAllStringSubmatch(script, -1) {
 		ref := m[1]
 		if strings.Contains(ref, "//") || strings.HasPrefix(ref, "@") {
 			continue
 		}
-		if u, ok := resolve(scriptURL, ref); ok && !seen[u] {
+		if strings.ContainsAny(ref, "[]") && (strings.ContainsAny(brackets.ReplaceAllString(ref, ""), "[]") || nameTemplate.MatchString(ref)) {
+			continue // a name template ([name].[contenthash].js), not a file
+		}
+		base := scriptURL
+		if strings.HasPrefix(ref, "static/") {
+			base = nextRoot
+		}
+		if u, ok := resolve(base, ref); ok && !seen[u] {
 			seen[u] = true
 			out = append(out, u)
 		}

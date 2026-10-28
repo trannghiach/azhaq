@@ -610,7 +610,7 @@ func takesQuery(r engine.MapEntry) bool {
 		return false
 	}
 	switch r.Role {
-	case "asset", "script", "sourcemap":
+	case "asset", "script", "sourcemap", "manifest", "client-route", "websocket":
 		return false
 	}
 	return true
@@ -1186,6 +1186,10 @@ func graphML(path string, w io.Writer) error {
 // description, or one whose path says so even when it answered 401 or 403
 // (the map shows those as auth or forbidden).
 func isAPI(r engine.MapEntry) bool {
+	switch r.Role {
+	case "client-route", "websocket", "manifest", "sourcemap":
+		return false // drawn by the app, or not answered over HTTP
+	}
 	return r.Role == "api" || len(r.Methods) > 0 || webextract.ClassifyURL(r.Entity.Key) == "api"
 }
 

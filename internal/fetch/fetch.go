@@ -655,16 +655,22 @@ func mustURL(raw string) *url.URL {
 	return u
 }
 
-// followable says whether a redirect from raw to next is followed. With a
-// scope, inScope decides. Without one, only within the site: the same
-// registrable domain, or the same address. A redirect to a third party
-// (an asset host, an identity provider) is recorded with its Location,
-// and that party's page is never reported as the target's.
-func followable(raw, next string) bool {
+// followable says whether a redirect from raw to next is followed: when
+// next is on raw's site. A redirect to a third party (an asset host, an
+// identity provider) is recorded with its Location, and that party's
+// page is never reported as the target's.
+func followable(raw, next string) bool { return SameSite(raw, next) }
+
+// SameSite says whether other belongs to the site of page, the way
+// redirects are followed: with a scope, when the scope allows other's
+// host; without one, when both hosts share a Site (an address is only
+// itself). A bundle on cdn.example.com and an API on api.example.com
+// belong to www.example.com; a library on a third-party CDN does not.
+func SameSite(page, other string) bool {
 	if Allow != nil {
-		return true
+		return inScope(other)
 	}
-	a, b := hostOf(raw), hostOf(next)
+	a, b := hostOf(page), hostOf(other)
 	if a == "" || b == "" {
 		return true
 	}
