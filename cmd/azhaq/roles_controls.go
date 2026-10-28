@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,18 +38,19 @@ type control struct {
 }
 
 // askControls asks each cross read's readers for a made-up identifier on
-// its route, at most budget requests, and makes a row whose route answered
-// one alike answers any identifier. A reader is asked once per route and
-// shape of identifier.
-func askControls(roles []role, rows []roleRow, own map[string]bool, pages []refusalPage, budget int) (int, error) {
+// its route, at most budget requests. A row whose route answered every
+// reader's made-up identifier alike answers any identifier; a reader it
+// answered alike beside one it did not is no longer one of its readers.
+// A reader is asked once per route and shape of identifier.
+func askControls(roles []role, rows []roleRow, own map[string]bool, pages []refusalPage, refusal *regexp.Regexp, budget int) (int, error) {
 	byName := map[string]role{}
 	for _, r := range roles {
 		byName[r.name] = r
 	}
 	ctx := context.Background()
-	fakes := map[string]string{}  // route and shape → the made-up value
-	asked := map[string]answer{}  // URL and reader → its answer
-	held := map[string][]byte{}   // URL and reader → its body
+	fakes := map[string]string{} // route and shape → the made-up value
+	asked := map[string]answer{} // URL and reader → its answer
+	held := map[string][]byte{}  // URL and reader → its body
 	sent := 0
 	for i := range rows {
 		row := &rows[i]
@@ -80,7 +82,7 @@ func askControls(roles []role, rows []roleRow, own map[string]bool, pages []refu
 				if err != nil {
 					continue
 				}
-				if matchesPage(fu, a, pages) {
+				if ok2xx(a.Status) && (matchesPage(fu, a, pages) || refusal != nil && refusal.Match(body)) {
 					a.Refusal = true
 				}
 				asked[k], held[k] = a, body
@@ -94,8 +96,11 @@ func askControls(roles []role, rows []roleRow, own map[string]bool, pages []refu
 			continue
 		}
 		row.Control = c
-		if len(c.Alike) > 0 {
+		switch {
+		case len(c.Alike) == len(row.Readers):
 			row.Verdict = verdictAnyID
+		case len(c.Alike) > 0:
+			row.Readers = slices.DeleteFunc(row.Readers, func(n string) bool { return slices.Contains(c.Alike, n) })
 		}
 	}
 	return sent, nil
@@ -118,9 +123,9 @@ func answersAnything(c, real answer, body []byte, fake string) bool {
 	return json.Unmarshal(body, &v) == nil && holdsData(v, "", fake, 0)
 }
 
-// holdsData: a JSON value holds a value besides fake and the envelope's
-// (status, message): a template of nulls and the identifier asked for is
-// a "not found" shaped as data.
+// holdsData: a JSON value holds a value besides the envelope's (status,
+// message) and those made of fake: a template of nulls and the identifier
+// asked for ("Book q-mfkrb") is a "not found" shaped as data.
 func holdsData(v any, k, fake string, depth int) bool {
 	if depth > maxDepth {
 		return false
@@ -146,7 +151,7 @@ func holdsData(v any, k, fake string, depth int) bool {
 	case nil:
 	default:
 		s, ok := scalarString(t)
-		return ok && s != fake
+		return ok && !strings.Contains(s, fake)
 	}
 	return false
 }

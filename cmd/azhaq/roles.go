@@ -31,8 +31,9 @@ type role struct {
 	name       string
 	headers    []string
 	user, pass string
-	cmd        string      // prints its headers: run before its run and again before the replay
-	session    http.Header // what its requests carried, once its run signed in
+	cmd        string        // prints its headers: run before its run and again before the replay
+	session    http.Header   // what its requests carried, once its run signed in
+	past       []http.Header // the sessions it had before the replay renewed it
 }
 
 func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" && r.cmd == "" }
@@ -144,6 +145,11 @@ func cmdRoles(args []string) error {
 	}
 	if len(roles) < 2 {
 		return usagef("need at least two -role, for example -role anon -role 'user=Cookie: session=…'")
+	}
+	for _, r := range roles {
+		if r.name+".db" == evidenceFile {
+			return usagef("a role may not be named %s: %s in -dir keeps the answers behind the rows", r.name, evidenceFile)
+		}
 	}
 	given, err := parseIDs(idSpecs, roles)
 	if err != nil {
@@ -302,7 +308,7 @@ func cmdRoles(args []string) error {
 				roles[i].session[k] = v
 			}
 		}
-		watch := &replayWatch{every: *canaryEvery, canaries: pickCanaries(roles, answers, canaries, own), renew: renewer(roles, *loginURL, *asJSON), refusal: refusalRE}
+		watch := &replayWatch{every: *canaryEvery, canaries: pickCanaries(roles, answers, made, canaries, own), renew: renewer(roles, *loginURL, *asJSON), refusal: refusalRE}
 		if watch.every > 0 {
 			for _, r := range roles {
 				if !r.anonymous() && watch.canaries[r.name] == nil {
@@ -336,7 +342,7 @@ func cmdRoles(args []string) error {
 		// answers it alike answers anything.
 		fetch.Reset()
 		fetch.SetRate(rate)
-		n, err := askControls(roles, rows, own, pages, max(0, *replayMax-replayed))
+		n, err := askControls(roles, rows, own, pages, refusalRE, max(0, *replayMax-replayed))
 		fetch.Reset()
 		rep.Requests += int64(n)
 		replayed += n
@@ -515,22 +521,7 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 	for _, row := range rows {
 		cells := make([]string, len(roles))
 		for i, r := range roles {
-			a, ok := row.Answers[r.name]
-			switch {
-			case !ok || a.Status == 0:
-				cells[i] = "-"
-			case a.Error && ok2xx(a.Status):
-				cells[i] = fmt.Sprintf("%d:err", a.Status) // a refusal answered as success
-			case a.Refusal && ok2xx(a.Status):
-				cells[i] = fmt.Sprintf("%d:refused", a.Status) // the origin's refusal page, or -refusal
-			case a.Status >= 200 && a.Status < 300:
-				cells[i] = fmt.Sprintf("%d:%s", a.Status, size(a.Length))
-			default:
-				cells[i] = strconv.Itoa(a.Status)
-			}
-			if a.SessionSuspect {
-				cells[i] += "?"
-			}
+			cells[i] = answerCell(row.Answers[r.name])
 		}
 		target := row.URL
 		if row.Method != "" {
@@ -563,6 +554,29 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 		}
 		fmt.Println(line)
 	}
+}
+
+// answerCell is an answer as the text table prints it: 200:1.2k, 401, 200:err (a
+// refusal answered as success), 200:refused (the origin's refusal page, or
+// -refusal), with ? when its session is suspect.
+func answerCell(a answer) string {
+	var c string
+	switch {
+	case a.Status == 0:
+		return "-"
+	case a.Error && ok2xx(a.Status):
+		c = fmt.Sprintf("%d:err", a.Status)
+	case a.Refusal && ok2xx(a.Status):
+		c = fmt.Sprintf("%d:refused", a.Status)
+	case ok2xx(a.Status) && a.Hash != "":
+		c = fmt.Sprintf("%d:%s", a.Status, size(a.Length))
+	default: // a status without its body: what a HAR recorded
+		c = strconv.Itoa(a.Status)
+	}
+	if a.SessionSuspect {
+		c += "?"
+	}
+	return c
 }
 
 // shortBy is owner_by as the text table prints it: without the route,
@@ -599,7 +613,7 @@ func (row roleRow) label() string {
 	case row.Verdict == verdictCross && len(row.Readers) > 1:
 		return who + " read " + row.Owner + "'s object"
 	case row.Verdict == verdictAnyID && row.Control != nil:
-		return "answers any identifier: " + strings.Join(row.Control.Alike, ", ") + " read a made-up " + row.Control.Value + " as " + row.Owner + "'s"
+		return "answers any identifier: " + strings.Join(row.Control.Alike, ", ") + " read " + row.Owner + "'s object and a made-up " + row.Control.Value + " alike"
 	case row.Verdict == verdictOnly && len(row.Readers) == 1:
 		return "only " + who + " reads it"
 	}

@@ -80,9 +80,10 @@ func parseCanaries(specs []string, roles []role) ([]canarySpec, error) {
 
 // pickCanaries chooses each signed-in role's canary: the -canary given for
 // it, or for every role; else, of what its run read, its own "/me"-like
-// answer (one the anonymous role does not get alike), then an endpoint the
-// anonymous role was refused (401, 403), JSON first, then the shortest.
-func pickCanaries(roles []role, answers map[string]map[string]answer, specs []canarySpec, own map[string]bool) map[string]*canary {
+// answer, then one of its own objects (made), then an endpoint the
+// anonymous role was refused; never one the anonymous role reads alike.
+// JSON first, then the shortest.
+func pickCanaries(roles []role, answers map[string]map[string]answer, made map[string]instance, specs []canarySpec, own map[string]bool) map[string]*canary {
 	anon := ""
 	for _, r := range roles {
 		if r.anonymous() {
@@ -107,15 +108,20 @@ func pickCanaries(roles []role, answers map[string]map[string]answer, specs []ca
 		}
 		best, rank := "", 99
 		for u, a := range answers[r.name] {
-			if !reads(a) || !replayable(u, own) || fetch.EndsSession(u) {
+			if !reads(a) || !replayable(u, own) || logoutPath.MatchString(pathOf(u)) {
 				continue
 			}
 			b, ok := answers[anon][u]
+			if ok && reads(b) && b.Hash == a.Hash {
+				continue // the session tells nothing here
+			}
 			k := 0
 			switch {
-			case meLike(u) && (!ok || !reads(b) || b.Hash != a.Hash):
-			case ok && (b.Status == 401 || b.Status == 403):
+			case meLike(u):
+			case made[u].owner == r.name:
 				k = 2
+			case ok && refused(b):
+				k = 4
 			default:
 				continue
 			}
@@ -175,6 +181,9 @@ type replayWatch struct {
 func renewer(roles []role, loginURL string, quiet bool) func(int) error {
 	return func(i int) error {
 		r := roles[i]
+		if r.session != nil {
+			roles[i].past = append(roles[i].past, r.session.Clone()) // its values are still taken out of what is kept
+		}
 		switch {
 		case r.cmd != "":
 			lines, err := cmdHeaders(r)
@@ -213,6 +222,10 @@ func renewer(roles []role, loginURL string, quiet bool) func(int) error {
 	}
 }
 
+// maxRenewals caps the new sessions one role's replay asks for: a token
+// that lives a minute dies more than once in a long replay.
+const maxRenewals = 5
+
 // roleReplay asks one role the URLs it has no answer for, through its
 // session, checking the session as it goes; sent counts every request,
 // checks and retries too, against budget.
@@ -229,11 +242,11 @@ type roleReplay struct {
 
 	since    []string // asked since the last good check
 	good     bool     // the last check found the session alive
-	renewed  bool
+	renewals int      // new sessions it got
+	spent    bool     // a new session failed too, or none could be had: no more are asked for
 	retried  int
 	suspect  int
 	failedAt string // the first failed check: its URL and status
-	asked    int
 }
 
 func (rr *roleReplay) setup() {
@@ -247,12 +260,10 @@ func (rr *roleReplay) setup() {
 func (rr *roleReplay) ask(u string) {
 	res, _, err := fetch.Do(rr.ctx, fetch.Client(nil), u)
 	*rr.sent++
-	rr.asked++
 	if err != nil {
 		return
 	}
-	name := rr.roles[rr.i].name
-	rr.answers[name][u], _ = resultAnswer(res)
+	rr.answers[rr.roles[rr.i].name][u], _ = resultAnswer(res)
 }
 
 // check asks the role's canary; with no budget left it is not asked, and
@@ -273,37 +284,42 @@ func (rr *roleReplay) check() bool {
 	return ok
 }
 
-// renew gets the role a new session once, and checks it.
+// renew gets the role a new session and checks it. A session that fails
+// its check as soon as it is had is the last asked for.
 func (rr *roleReplay) renew() bool {
-	if rr.renewed || rr.w.renew == nil || *rr.sent >= rr.budget {
+	if rr.spent || rr.w.renew == nil || rr.renewals >= maxRenewals || *rr.sent >= rr.budget {
 		return false
 	}
-	rr.renewed = true
+	rr.renewals++
 	if err := rr.w.renew(rr.i); err != nil {
 		rr.w.notes = append(rr.w.notes, fmt.Sprintf("role %s: its session could not be renewed during the replay: %v", rr.roles[rr.i].name, err))
+		rr.spent = true
 		rr.setup()
 		return false
 	}
 	rr.setup() // the new session, and an empty cache: what is asked again is sent again
-	return rr.check()
+	ok := rr.check()
+	rr.spent = !ok
+	return ok
 }
 
 // checkpoint checks the session after a stretch of requests: the stretch
 // stands when the checks before and after it found the session alive.
-// Else the session is renewed once and the stretch asked again; what
-// still has no live session around it is suspect.
+// Else the session is renewed and the stretch asked again; what still has
+// no live session around it is suspect.
 func (rr *roleReplay) checkpoint() {
 	ok := rr.check()
 	if ok && rr.good {
 		rr.since = nil
 		return
 	}
+	var left []string // not asked again: as suspect as they were
 	if !ok && rr.renew() {
 		redo := rr.since
 		rr.since = nil
 		for _, u := range redo {
 			if *rr.sent >= rr.budget || rr.ctx.Err() != nil {
-				rr.since = append(rr.since, u) // not asked again: as suspect as it was
+				left = append(left, u)
 				continue
 			}
 			rr.ask(u)
@@ -311,13 +327,13 @@ func (rr *roleReplay) checkpoint() {
 			rr.since = append(rr.since, u)
 		}
 		if ok = rr.check(); ok {
-			rr.since, rr.good = nil, true
-			return
+			rr.since = left
+			rr.good = true
 		}
 	}
 	name := rr.roles[rr.i].name
-	for _, u := range rr.since {
-		if a, ok := rr.answers[name][u]; ok {
+	for _, u := range append(left, rr.since...) {
+		if a, ok := rr.answers[name][u]; ok && !a.SessionSuspect {
 			a.SessionSuspect = true
 			rr.answers[name][u] = a
 			rr.suspect++
@@ -365,11 +381,16 @@ func (rr *roleReplay) note() {
 	if rr.roles[rr.i].user != "" {
 		how = "it signed in again"
 	}
+	if rr.renewals > 1 {
+		how += fmt.Sprintf(" (%d times)", rr.renewals)
+	}
 	switch {
 	case rr.suspect > 0:
-		rr.w.notes = append(rr.w.notes, fmt.Sprintf("role %s's session failed its check (%s) during the replay and did not come back: %d of its answers were asked after it was last seen alive (session_suspect)",
-			name, rr.failedAt, rr.suspect))
-	case rr.renewed && rr.failedAt != "":
+		rr.w.notes = append(rr.w.notes, fmt.Sprintf("role %s's session failed its check (%s) during the replay and did not come back: %s asked after it was last seen alive (session_suspect)",
+			name, rr.failedAt, plural(rr.suspect, "answer")))
+	case rr.renewals > 0 && rr.failedAt != "" && rr.retried == 0:
+		rr.w.notes = append(rr.w.notes, fmt.Sprintf("role %s's session failed its check (%s) during the replay; %s", name, rr.failedAt, how))
+	case rr.renewals > 0 && rr.failedAt != "":
 		rr.w.notes = append(rr.w.notes, fmt.Sprintf("role %s's session failed its check (%s) during the replay; %s, and the %s asked since the last good check were asked again",
 			name, rr.failedAt, how, plural(rr.retried, "request")))
 	}

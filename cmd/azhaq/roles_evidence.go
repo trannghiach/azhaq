@@ -31,7 +31,7 @@ import (
 
 const (
 	maxKeptBody  = 256 << 10 // of each body, kept
-	maxKeptTotal = 128 << 20 // of all bodies, gzipped, held until the listed rows are known
+	maxKeptTotal = 64 << 20  // of all bodies, gzipped, held until the listed rows are known
 	evidenceFile = "roles.db"
 )
 
@@ -39,7 +39,7 @@ const (
 const (
 	confProved = "proved" // what filled the route (the session, the owner's own list, -id) and the object's answer both say so
 	confLikely = "likely" // one of them says so
-	confGuess  = "guess"  // initials, or the owner's answers alone
+	confGuess  = "guess"  // initials or the owner's answers alone, or a route that answers any identifier
 )
 
 // bodyKeep holds the bodies of the answers by hash, gzipped and cut, until
@@ -141,11 +141,8 @@ func newRedactor(roles []role) *redactor {
 	_, _ = rand.Read(rd.key)
 	seen := map[string]bool{}
 	for _, r := range roles {
-		h := r.session
-		if h == nil {
-			h = headerOf(r.headers)
-		}
-		for k, vs := range h {
+		hs := append([]http.Header{r.session, headerOf(r.headers)}, r.past...)
+		for k, vs := range mergeHeaders(hs) {
 			if plainHeader(k) {
 				continue
 			}
@@ -168,6 +165,19 @@ func newRedactor(roles []role) *redactor {
 	}
 	slices.SortFunc(rd.sent, func(a, b string) int { return len(b) - len(a) })
 	return rd
+}
+
+// mergeHeaders is every value of hs under its name.
+func mergeHeaders(hs []http.Header) http.Header {
+	out := http.Header{}
+	for _, h := range hs {
+		for k, vs := range h {
+			for _, v := range vs {
+				out.Add(k, v)
+			}
+		}
+	}
+	return out
 }
 
 func (rd *redactor) tag(v string) string {
@@ -196,13 +206,19 @@ func (rd *redactor) body(b []byte) []byte {
 	if loc := jsonPairOpen.FindStringSubmatchIndex(s); loc != nil && sensitiveField(s[loc[2]:loc[3]]) != "" {
 		s = s[:loc[3]+1] + `: "` + rd.tag(s[loc[3]:]) + `"`
 	}
+	return []byte(rd.text(s))
+}
+
+// text takes out of s the tokens and the values the roles sent: a URL can
+// carry them too (?token=…).
+func (rd *redactor) text(s string) string {
 	s = jwtValue.ReplaceAllStringFunc(s, rd.tag)
 	for _, v := range rd.sent {
 		if strings.Contains(s, v) {
 			s = strings.ReplaceAll(s, v, rd.tag(v))
 		}
 	}
-	return []byte(s)
+	return s
 }
 
 // plainHeader: a header that says how to answer, not who asks.
@@ -314,28 +330,29 @@ func explain(rows []roleRow, made map[string]instance, roles []role, who map[str
 	}
 }
 
-// confidenceOf says how surely an object is its owner's: what filled its
-// route said so from the owner's session (an identifier it holds, its
-// initials, a list item naming the owner by it), the owner's own list or
-// -id; and the object's own answer confirms it.
+// confidenceOf says how surely an object is its owner's. Proved: what
+// filled its route named the owner from its session (an identifier it
+// holds by its full name, a list item naming the owner by it), its own
+// list or -id, and the object's own answer confirms it. Likely: one of
+// the two. A guess: initials, or the owner's answers alone.
 func confidenceOf(in instance) string {
-	filled := in.given || in.sure == proved || in.sure == shortName || strings.HasPrefix(in.by, "item of ")
+	filled := in.given || in.sure == proved || strings.HasPrefix(in.by, "item of ")
 	if in.told == toldNames {
 		filled = false // the answer named the owner; what filled the route did not
 	}
 	switch {
 	case filled && in.told == toldConfirms:
 		return confProved
-	case filled && in.sure != shortName, in.told != toldNone:
+	case filled, in.told != toldNone:
 		return confLikely
 	}
 	return confGuess
 }
 
 // harConfidence: a write from the owner's HAR is likely the owner's own
-// object's when its body or URL names an object of the owner's session
-// (its BasketId, its user id); else a guess, as many writes are anyone's
-// to send (a review, a feedback).
+// object's when its body names the owner (its user id, its BasketId);
+// else a guess, as many writes are anyone's to send (a review, a
+// feedback).
 func harConfidence(row roleRow, roles []role, who map[string]identity) string {
 	var v any
 	if json.Unmarshal(row.reqBody, &v) == nil {
@@ -357,7 +374,7 @@ func readEvidence(row roleRow) string {
 	for _, n := range row.Readers {
 		same = same && row.Answers[n].Hash == oa.Hash
 	}
-	how := fmt.Sprintf("the same body, %s", size(oa.Length))
+	how := "the same body, " + byteSize(oa.Length)
 	if !same {
 		how = "the same fields around " + row.value
 	}
@@ -366,19 +383,23 @@ func readEvidence(row roleRow) string {
 	if row.OwnerBy != "" {
 		parts = append(parts, shortBy(row.OwnerBy))
 	}
-	if c := row.Control; c != nil {
-		var ns []string
-		for _, n := range row.Readers {
-			if a, ok := c.Answers[n]; ok {
-				ns = append(ns, fmt.Sprintf("%d", a.Status))
+	if c := row.Control; c != nil && len(c.Answers) > 0 {
+		var got []string
+		for _, n := range sortedKeys(mapKeys(c.Answers)) {
+			g := n + " " + answerCell(c.Answers[n])
+			if slices.Contains(c.Alike, n) {
+				g += " alike"
 			}
+			got = append(got, g)
 		}
+		line := "a made-up " + c.Value + " got " + strings.Join(got, ", ")
 		switch {
+		case len(c.Alike) == len(c.Answers):
+			line += ": the route answers any identifier"
 		case len(c.Alike) > 0:
-			parts = append(parts, fmt.Sprintf("a made-up %s got %s alike (%s): the route answers any identifier", c.Value, strings.Join(c.Alike, " and "), strings.Join(ns, ", ")))
-		case len(ns) > 0:
-			parts = append(parts, fmt.Sprintf("a made-up %s got %s", c.Value, strings.Join(dedupe(ns), ", ")))
+			line += ": the route answers any identifier for " + strings.Join(c.Alike, " and ")
 		}
+		parts = append(parts, line)
 	}
 	if len(row.mutual) > 0 {
 		parts = append(parts, "both ways: "+row.Owner+" reads "+strings.Join(row.mutual, " and ")+"'s too")
@@ -386,25 +407,24 @@ func readEvidence(row roleRow) string {
 	return strings.Join(parts, "; ")
 }
 
-func dedupe(xs []string) []string {
-	var out []string
-	for _, x := range xs {
-		if !slices.Contains(out, x) {
-			out = append(out, x)
-		}
+// byteSize is n bytes in words: 80 bytes, 1.2 KB.
+func byteSize(n int) string {
+	if n < 1<<10 {
+		return plural(n, "byte")
 	}
-	return out
+	return strings.ReplaceAll(strings.ReplaceAll(size(n), "k", " KB"), "M", " MB")
 }
 
-// writeEvidence says in one line who was let to write the owner's object.
+// writeEvidence says in one line who was let to write the owner's object,
+// and where the write came from.
 func writeEvidence(row roleRow) string {
 	var let []string
 	for _, n := range row.Readers {
-		let = append(let, fmt.Sprintf("%s %d", n, row.Answers[n].Status))
+		let = append(let, n+" got "+answerCell(row.Answers[n]))
 	}
-	s := fmt.Sprintf("%s let (%s)", strings.Join(row.Readers, " and "), strings.Join(let, ", "))
+	s := strings.Join(let, ", ")
 	if a, ok := row.Answers[row.Owner]; ok && a.Status != 0 {
-		s += fmt.Sprintf(" as %s was (%d)", row.Owner, a.Status)
+		s += ", as " + row.Owner + " did (" + answerCell(a) + ")"
 	}
 	return s + "; " + row.OwnerBy
 }
@@ -435,8 +455,9 @@ func saveEvidence(dir string, roles []role, rows []roleRow) error {
 			reqBody = rd.body(reqBody)
 		}
 		add := func(r role, kind, asked string, a answer) {
+			asked = rd.text(asked)
 			line, _ := curlLine(row.Method, asked, r, row.reqType, reqBody)
-			ea := store.EvidenceAnswer{Role: r.name, Kind: kind, Asked: asked, Status: a.Status, Curl: line}
+			ea := store.EvidenceAnswer{Role: r.name, Kind: kind, Asked: asked, Status: a.Status, Length: a.Length, Curl: line}
 			if b, ctype, cut, ok := keptBodyOf(a.Hash); ok {
 				ea.Body, ea.ContentType, ea.Truncated = rd.body(b), ctype, cut
 			}
@@ -539,13 +560,15 @@ func cmdRolesShow(args []string) error {
 		Curl        string     `json:"curl"`
 		SameAs      string     `json:"same_as,omitempty"`
 		Against     string     `json:"against,omitempty"`
+		NotJSON     bool       `json:"not_json,omitempty"` // either body is not JSON: no field to compare
 		Diff        []diffLine `json:"diff,omitempty"`
 		More        int        `json:"diff_more,omitempty"`
+		kept        bool
 	}
 	var list []shown
 	var vars []string
 	for _, a := range er.Answers {
-		s := shown{Role: a.Role, Kind: a.Kind, Asked: a.Asked, Status: a.Status, Length: len(a.Body), ContentType: a.ContentType, Truncated: a.Truncated, Curl: a.Curl}
+		s := shown{Role: a.Role, Kind: a.Kind, Asked: a.Asked, Status: a.Status, Length: a.Length, ContentType: a.ContentType, Truncated: a.Truncated, Curl: a.Curl, kept: a.Body != nil}
 		for _, v := range shellVar.FindAllStringSubmatch(a.Curl, -1) {
 			if !slices.Contains(vars, v[1]) {
 				vars = append(vars, v[1])
@@ -556,7 +579,9 @@ func cmdRolesShow(args []string) error {
 				s.SameAs = base.Role
 			} else {
 				s.Against = base.Role
-				s.Diff, s.More = jsonDiff(base.Body, a.Body, 20)
+				var ok bool
+				s.Diff, s.More, ok = jsonDiff(base.Body, a.Body, 20)
+				s.NotJSON = !ok
 			}
 		}
 		list = append(list, s)
@@ -598,7 +623,7 @@ func cmdRolesShow(args []string) error {
 			who += " (owner)"
 		}
 		info := []string{fmt.Sprintf("%d", s.Status)}
-		if s.Kind == "answer" {
+		if s.kept || s.Length > 0 {
 			info = append(info, size(s.Length))
 		}
 		if s.ContentType != "" {
@@ -607,7 +632,7 @@ func cmdRolesShow(args []string) error {
 		if s.Truncated {
 			info = append(info, "cut at 256 KB")
 		}
-		if s.Length == 0 && s.Kind == "answer" && s.Status != 0 {
+		if !s.kept && s.Length > 0 {
 			info = append(info, "body not kept")
 		}
 		fmt.Printf("%s  %s\n", who, strings.Join(info, "  "))
@@ -615,8 +640,10 @@ func cmdRolesShow(args []string) error {
 		switch {
 		case s.SameAs != "":
 			fmt.Printf("  the same body as %s's\n", s.SameAs)
-		case s.Against != "" && len(s.Diff) == 0 && s.More == 0:
-			fmt.Printf("  not JSON both: the body differs from %s's\n", s.Against)
+		case s.NotJSON:
+			fmt.Printf("  the body differs from %s's (not JSON: no field to compare)\n", s.Against)
+		case s.Against != "" && len(s.Diff) == 0:
+			fmt.Printf("  the same fields and values as %s's\n", s.Against)
 		case s.Against != "":
 			fmt.Printf("  against %s's:\n", s.Against)
 			for _, d := range s.Diff {
@@ -685,11 +712,11 @@ func (d diffLine) String() string {
 }
 
 // jsonDiff compares two JSON bodies field by field: at most limit lines,
-// and how many more. Nil when either is not JSON.
-func jsonDiff(base, other []byte, limit int) ([]diffLine, int) {
+// and how many more; not ok when either is not JSON.
+func jsonDiff(base, other []byte, limit int) (lines []diffLine, more int, ok bool) {
 	var a, b any
 	if json.Unmarshal(base, &a) != nil || json.Unmarshal(other, &b) != nil {
-		return nil, 0
+		return nil, 0, false
 	}
 	fa, fb := map[string]string{}, map[string]string{}
 	flatten(a, "", fa)
@@ -698,8 +725,6 @@ func jsonDiff(base, other []byte, limit int) ([]diffLine, int) {
 	for k := range fb {
 		keys[k] = true
 	}
-	var out []diffLine
-	more := 0
 	for _, k := range sortedKeys(keys) {
 		x, inA := fa[k]
 		y, inB := fb[k]
@@ -714,13 +739,13 @@ func jsonDiff(base, other []byte, limit int) ([]diffLine, int) {
 		default:
 			continue
 		}
-		if len(out) == limit {
+		if len(lines) == limit {
 			more++
 			continue
 		}
-		out = append(out, d)
+		lines = append(lines, d)
 	}
-	return out, more
+	return lines, more, true
 }
 
 // flatten puts each leaf of a JSON value under its path: data.items[0].id.

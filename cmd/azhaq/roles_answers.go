@@ -103,7 +103,7 @@ func sayOf(body []byte, contentType string) (title, said string) {
 			title = clean(string(m[1]))
 		}
 		said = title
-		if m := heading.FindSubmatch(body); m != nil {
+		if m := heading.FindSubmatch(body); m != nil && clean(string(m[1])) != title {
 			said = strings.TrimSpace(said + " " + clean(string(m[1])))
 		}
 		return title, said

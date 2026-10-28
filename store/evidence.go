@@ -27,6 +27,7 @@ type EvidenceAnswer struct {
 	Kind        string // "answer" or "control"
 	Asked       string // the URL asked
 	Status      int
+	Length      int // of the body as answered, before it was cut or redacted
 	ContentType string
 	Curl        string // the request, with the role's session as placeholders
 	Body        []byte // as kept: cut, sensitive values taken out
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS answers (
   kind TEXT NOT NULL,
   asked TEXT NOT NULL,
   status INTEGER NOT NULL,
+  length INTEGER NOT NULL DEFAULT 0,
   content_type TEXT NOT NULL,
   curl TEXT NOT NULL,
   body BLOB,
@@ -98,7 +100,7 @@ func (e *Evidence) Save(roles []string, rows []EvidenceRow) error {
 		return err
 	}
 	defer insRow.Close()
-	insAns, err := tx.Prepare(`INSERT OR REPLACE INTO answers (url, method, role, kind, asked, status, content_type, curl, body, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	insAns, err := tx.Prepare(`INSERT OR REPLACE INTO answers (url, method, role, kind, asked, status, length, content_type, curl, body, truncated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
@@ -116,7 +118,7 @@ func (e *Evidence) Save(roles []string, rows []EvidenceRow) error {
 			if a.Truncated {
 				cut = 1
 			}
-			if _, err := insAns.Exec(r.URL, r.Method, a.Role, a.Kind, a.Asked, a.Status, a.ContentType, a.Curl, body, cut); err != nil {
+			if _, err := insAns.Exec(r.URL, r.Method, a.Role, a.Kind, a.Asked, a.Status, a.Length, a.ContentType, a.Curl, body, cut); err != nil {
 				return err
 			}
 		}
@@ -144,7 +146,7 @@ func (e *Evidence) Row(url, method string) (EvidenceRow, bool, error) {
 		return out, false, err
 	}
 	out.Row = []byte(row)
-	rs, err := e.db.Query(`SELECT role, kind, asked, status, content_type, curl, body, truncated FROM answers WHERE url = ? AND method = ? ORDER BY kind, role`, url, method)
+	rs, err := e.db.Query(`SELECT role, kind, asked, status, length, content_type, curl, body, truncated FROM answers WHERE url = ? AND method = ? ORDER BY kind, role`, url, method)
 	if err != nil {
 		return out, false, err
 	}
@@ -153,7 +155,7 @@ func (e *Evidence) Row(url, method string) (EvidenceRow, bool, error) {
 		var a EvidenceAnswer
 		var body []byte
 		var cut int
-		if err := rs.Scan(&a.Role, &a.Kind, &a.Asked, &a.Status, &a.ContentType, &a.Curl, &body, &cut); err != nil {
+		if err := rs.Scan(&a.Role, &a.Kind, &a.Asked, &a.Status, &a.Length, &a.ContentType, &a.Curl, &body, &cut); err != nil {
 			return out, false, err
 		}
 		if body != nil {
