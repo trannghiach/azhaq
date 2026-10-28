@@ -131,6 +131,11 @@ func TestStaticArchivedURLs(t *testing.T) {
 		"https://www.example.org/api/photos?id=1":                                 false,
 		"https://www.example.org/products/42":                                     false,
 		"https://www.example-images.org/products/42":                              false,
+		"https://media.example.org/admin/login":                                   false,
+		"https://cdn-app.example.org/api/v1/users":                                false,
+		"https://images.example.org/upload?file=x":                                false,
+		"https://photos.example.org/variants/9f8e7d6c5b4a3210":                    true,
+		"https://img.example.org/0a1b2c3d-4e5f":                                   true,
 	} {
 		if got := static(raw); got != want {
 			t.Errorf("%s: static=%v, want %v", raw, got, want)

@@ -304,12 +304,6 @@ func static(raw string) bool {
 	if err != nil {
 		return false
 	}
-	first, _, _ := strings.Cut(strings.ToLower(u.Hostname()), ".")
-	for _, word := range strings.Split(first, "-") {
-		if mediaHosts[word] {
-			return true
-		}
-	}
 	segs := strings.Split(strings.ToLower(u.Path), "/")
 	for i, seg := range segs {
 		if seg == "" {
@@ -324,7 +318,55 @@ func static(raw string) bool {
 			}
 		}
 	}
+	// A media-named host (img.*, cdn-photos.*) mostly serves files, but a
+	// page or an API on it (/login, /api/users, ?q=…) is a route and is
+	// asked; only a URL ending in an opaque id (a hash, a numbered variant)
+	// with no extension is taken for an asset.
+	if u.RawQuery == "" && webextract.ClassifyURL(raw) != "api" && mediaHost(u.Hostname()) && opaqueID(lastSeg(u.Path)) {
+		return true
+	}
 	return false
+}
+
+// mediaHost says a hostname's first label names a file store (img, cdn,
+// media, cdn-photos).
+func mediaHost(host string) bool {
+	first, _, _ := strings.Cut(strings.ToLower(host), ".")
+	for _, word := range strings.Split(first, "-") {
+		if mediaHosts[word] {
+			return true
+		}
+	}
+	return false
+}
+
+func lastSeg(p string) string {
+	p = strings.Trim(p, "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
+}
+
+// opaqueID is a path segment that names nothing a reader would type: eight
+// or more characters of hex digits, digits, dashes and underscores, with a
+// digit among them (a UUID, a content hash, an image variant id). A word
+// like "login" or "dashboard" is not one.
+func opaqueID(seg string) bool {
+	if len(seg) < 8 {
+		return false
+	}
+	digit := false
+	for _, r := range seg {
+		switch {
+		case r >= '0' && r <= '9':
+			digit = true
+		case r >= 'a' && r <= 'f', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return digit
 }
 
 // score ranks what is worth a look: parameters, APIs and server-side

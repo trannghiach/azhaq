@@ -199,7 +199,7 @@ func resolveFound(ctx context.Context, pool *dnsr.Pool, wild *dnsr.Wildcards, ap
 		workers = 128
 	}
 	var found []string
-	for _, a := range pool.ResolveMany(ctx, names, workers) {
+	for _, a := range pool.ResolveMany(dnsr.Bulk(ctx), names, workers) {
 		if a.Live() && !wild.Match(ctx, a.Name, apex, a) {
 			found = append(found, a.Name)
 		}

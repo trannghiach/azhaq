@@ -123,3 +123,32 @@ func TestOriginAnswerResetsCount(t *testing.T) {
 		t.Errorf("a cancelled request counted: %v", OriginsDown())
 	}
 }
+
+// A task that takes an origin-stopped refusal another request had cached
+// (it was waiting on the URL or the host slot when the origin tripped) is
+// still marked for azhaq resume, not left to be recorded as seen.
+func TestCachedOriginDownMarksTask(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	url := "http://127.0.0.1:9/p"
+	down := &neterr.OriginDown{Origin: "http://127.0.0.1:9", Failures: OriginTrips}
+	cacheMu.Lock()
+	cache[url] = cacheEnt{err: down}
+	cacheMu.Unlock()
+	ctx, _, _ := WatchBudget(context.Background())
+	if _, cached, err := Do(ctx, slowClient(), url); !cached || !errors.Is(err, neterr.ErrOriginDown) {
+		t.Fatalf("cached refusal: cached=%v err=%v", cached, err)
+	}
+	if Stopped(ctx) == nil {
+		t.Fatal("a task that took the cached origin-down refusal was not marked for resume")
+	}
+	// A plain cached timeout (not an origin-down refusal) does not mark it.
+	cacheMu.Lock()
+	cache[url] = cacheEnt{err: context.DeadlineExceeded}
+	cacheMu.Unlock()
+	ctx2, _, _ := WatchBudget(context.Background())
+	_, _, _ = Do(ctx2, slowClient(), url)
+	if Stopped(ctx2) != nil {
+		t.Fatal("a cached timeout wrongly marked the task as its origin stopped")
+	}
+}

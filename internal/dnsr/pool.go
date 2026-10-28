@@ -276,7 +276,11 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 		return false
 	}
 	if m.Rcode == dns.RcodeNameError {
-		if second() {
+		// A generated name (DNS brute force, permutations) that one good
+		// resolver says does not exist almost never exists, and confirming
+		// every miss would double a wordlist's queries; a NODATA or a
+		// dangling CNAME below is still confirmed.
+		if !bulk(ctx) && second() {
 			a.Status = StatusOK
 			return a
 		}
@@ -398,6 +402,20 @@ func (p *Pool) pick(attempt int, avoid string) string {
 		s = p.servers[int(p.next.Add(1)-1)%n]
 	}
 	return s
+}
+
+type bulkKey struct{}
+
+// Bulk marks ctx as a bulk resolve (DNS brute force, permutations), where
+// a plain NXDOMAIN is taken at its word: see resolve. A NODATA answer or a
+// dangling CNAME is confirmed either way.
+func Bulk(ctx context.Context) context.Context {
+	return context.WithValue(ctx, bulkKey{}, true)
+}
+
+func bulk(ctx context.Context) bool {
+	v, _ := ctx.Value(bulkKey{}).(bool)
+	return v
 }
 
 // confirms says whether a dead-looking answer for name is worth a second

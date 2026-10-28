@@ -230,3 +230,20 @@ func TestDeadNameAgreedByTwo(t *testing.T) {
 		t.Fatalf("under a wildcard zone %+v asked %d resolvers", a, n.Load())
 	}
 }
+
+// A bulk resolve (DNS brute force) takes a plain NXDOMAIN at its word: one
+// query per miss, not two. A NODATA answer is still confirmed.
+func TestBulkSkipsNXDOMAINSecondOpinion(t *testing.T) {
+	var n atomic.Int32
+	count := func(w dns.ResponseWriter, r *dns.Msg) { n.Add(1); testZone(w, r) }
+	p := New(Options{Resolvers: []string{serve(t, count), serve(t, count)}, PerSecond: -1, Timeout: time.Second})
+	ctx := Bulk(context.Background())
+	if a := p.Resolve(ctx, "missing.example.org"); a.Status != StatusNXDomain || n.Load() != 1 {
+		t.Fatalf("bulk nxdomain %+v asked %d resolvers, want 1", a, n.Load())
+	}
+	// A real name still resolves, and a NODATA name is still confirmed.
+	n.Store(0)
+	if a := p.Resolve(ctx, "www.example.org"); a.Status != StatusOK {
+		t.Fatalf("bulk real name %+v", a)
+	}
+}

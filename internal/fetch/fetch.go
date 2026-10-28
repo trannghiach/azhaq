@@ -3,6 +3,7 @@ package fetch
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -197,6 +198,18 @@ func originRefused(ctx context.Context, raw string) error {
 		return nil
 	}
 	err := &neterr.OriginDown{Origin: o, Failures: OriginTrips}
+	markStopped(ctx, err)
+	return err
+}
+
+// markStopped notes on ctx that a request got the origin-stopped refusal,
+// whether it was about to send one or took the refusal another request on
+// the same URL had already cached: either way its task is not done, and
+// azhaq resume runs it again. Harmless for any other error.
+func markStopped(ctx context.Context, err error) {
+	if !errors.Is(err, neterr.ErrOriginDown) {
+		return
+	}
 	if w, _ := ctx.Value(refusedKey{}).(*watch); w != nil {
 		w.mu.Lock()
 		if w.down == nil {
@@ -204,7 +217,6 @@ func originRefused(ctx context.Context, raw string) error {
 		}
 		w.mu.Unlock()
 	}
-	return err
 }
 
 // noteOrigin counts how raw's origin answered: an answer of any kind
@@ -435,6 +447,7 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	cacheMu.Lock()
 	if e, ok := cache[raw]; ok {
 		cacheMu.Unlock()
+		markStopped(ctx, e.err)
 		return e.res, true, e.err
 	}
 	if wait, ok := inflight[raw]; ok {
@@ -450,6 +463,7 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		cacheMu.Lock()
 		e := cache[raw]
 		cacheMu.Unlock()
+		markStopped(ctx, e.err)
 		return e.res, true, e.err
 	}
 	if err := originRefused(ctx, raw); err != nil {
