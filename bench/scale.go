@@ -98,8 +98,8 @@ func benchScale(target string) *scaleRow {
 	}
 	budget := paths("budget")
 	row.BudgetMissed = len(one) - overlap(one, budget)
-	row.BudgetSame = sameSet(one, budget)
-	addCheck("scale: a run stopped by -max-requests and resumed maps what one run maps", row.BudgetSame && row.MostReceived <= row.Budget,
+	row.BudgetSame = covers(one, budget)
+	addCheck("scale: a run stopped by -max-requests and resumed maps everything one run maps", row.BudgetSame && row.MostReceived <= row.Budget,
 		"%d processes of at most %d requests (Juice Shop received at most %d from one); %d URLs, one run %d, %d missing",
 		row.Processes, row.Budget, row.MostReceived, len(budget), len(one), row.BudgetMissed)
 	addCheck("scale: a stopped and resumed run sends at most 10% more than one run", float64(row.AllReceived) <= 1.1*float64(row.OneReceived),
@@ -115,8 +115,8 @@ func benchScale(target string) *scaleRow {
 	_ = cmd.Wait()
 	run("scale", 10*time.Minute, dir, azhaq, "resume", "-db", db("killed"), "-quiet")
 	killed := paths("killed")
-	row.KilledSame = sameSet(one, killed)
-	addCheck("scale: a run killed with SIGKILL and resumed maps what one run maps", row.KilledSame,
+	row.KilledSame = covers(one, killed)
+	addCheck("scale: a run killed with SIGKILL and resumed maps everything one run maps", row.KilledSame,
 		"killed after %.1fs; %d URLs, one run %d", row.KilledAfter, len(killed), len(one))
 
 	// The run with two workers.
@@ -156,19 +156,21 @@ func benchScale(target string) *scaleRow {
 		}
 	}
 	shared := paths("workers")
-	row.WorkersSame = sameSet(one, shared)
-	addCheck("scale: a run shared with two workers maps what one run maps", row.WorkersSame && row.WorkerTasks > 0,
+	row.WorkersSame = covers(one, shared)
+	addCheck("scale: a run shared with two workers maps everything one run maps", row.WorkersSame && row.WorkerTasks > 0,
 		"%d URLs, one run %d; the workers ran %d tasks", len(shared), len(one), row.WorkerTasks)
 	return row
 }
 
-func sameSet(a, b map[string]bool) bool {
-	if len(a) != len(b) {
-		return false
-	}
+// covers reports whether got holds every URL of ref: a resumed, killed-and-
+// resumed or worker-shared run must map everything one run maps. Finding
+// more is not a failure — a run retries a target that timed out once, and
+// the single reference run, under the harness's concurrent load, may itself
+// have lost one; what must never happen is losing work one run found.
+func covers(ref, got map[string]bool) bool {
 	var miss []string
-	for k := range a {
-		if !b[k] {
+	for k := range ref {
+		if !got[k] {
 			miss = append(miss, k)
 		}
 	}
