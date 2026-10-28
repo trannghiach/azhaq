@@ -14,6 +14,8 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/takeover"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -36,7 +38,8 @@ type report struct {
 	Unreachable []string         `json:"unreachable,omitempty"`
 	Failed      []engine.Failure `json:"failed,omitempty"`
 	Skipped     []engine.Skip    `json:"skipped,omitempty"`
-	Stopped     string           `json:"stopped,omitempty"` // the limit that stopped the work
+	Takeover    []takeoverRow    `json:"takeover,omitempty"` // names another party may take over
+	Stopped     string           `json:"stopped,omitempty"`  // the limit that stopped the work
 	Resume      string           `json:"resume,omitempty"`
 	Notes       []string         `json:"notes,omitempty"`
 	Next        []string         `json:"next,omitempty"`
@@ -179,6 +182,9 @@ func (r *report) print(w io.Writer) {
 			fmt.Fprintln(w, line)
 		}
 	}
+	for _, t := range r.Takeover {
+		fmt.Fprintf(w, "  ! takeover candidate (%s): %s · %s\n", t.Strength, t.Host, t.Evidence)
+	}
 	for _, n := range r.Notes {
 		fmt.Fprintf(w, "  note: %s\n", n)
 	}
@@ -252,6 +258,7 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Unreachable = engine.Unreachable(seeds, ents, obs)
 	rep.Notes = append(rep.Notes, engine.Notes(obs)...)
 	rep.Notes = append(rep.Notes, portcol.Notes(obs)...)
+	rep.Takeover = takeovers(ents, obs)
 	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
 		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
 	}
@@ -356,4 +363,51 @@ func progressTicker(ctx context.Context, st *store.Store, silent bool) func() {
 		}
 	}()
 	return func() { once.Do(func() { close(done) }) }
+}
+
+// takeoverRow is a name another party may take over, and why.
+type takeoverRow struct {
+	Host string `json:"host"`
+	takeover.Finding
+}
+
+// takeovers are the names whose DNS answer (a CNAME to something gone) or
+// front page (a service's page for a name nobody claimed) says another
+// party may take them, one each, the strongest finding kept.
+func takeovers(ents []types.Entity, obs []types.StoredObservation) []takeoverRow {
+	keys := map[string]string{}
+	for _, e := range ents {
+		keys[e.ID] = e.Key
+	}
+	byHost := map[string]takeoverRow{}
+	for _, o := range obs {
+		if o.Collector != "azhaq-dns" && o.Collector != "azhaq-http" {
+			continue
+		}
+		var p struct {
+			FQDN     string            `json:"fqdn"`
+			URL      string            `json:"url"`
+			Takeover *takeover.Finding `json:"takeover"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.Takeover == nil {
+			continue
+		}
+		host := p.FQDN
+		if host == "" {
+			host = normalize.HostFromURL(p.URL)
+		}
+		if host == "" {
+			host = normalize.Hostname(keys[o.EntityID])
+		}
+		if old, ok := byHost[host]; ok && old.Strength == "strong" {
+			continue
+		}
+		byHost[host] = takeoverRow{Host: host, Finding: *p.Takeover}
+	}
+	out := make([]takeoverRow, 0, len(byHost))
+	for _, t := range byHost {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Host < out[j].Host })
+	return out
 }

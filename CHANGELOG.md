@@ -16,6 +16,9 @@
 
 ### New
 
+- Subdomain takeover candidates in the summary of `subs -live`, `dns`, `probe` and `run`: a CNAME to a name on Azure, Elastic Beanstalk or Fly.io that does not resolve, a CNAME to a domain nobody registered, or a hosting service's page for a name nobody claimed (GitHub Pages, S3, Heroku, Shopify, …), each with its evidence.
+- GraphQL with introspection turned off: the root fields, their types and required arguments, read from the server's validation errors (`"recovered":"suggestions"`); no document asked can pass validation, so nothing runs. Endpoints that run queries sent with GET are marked `get_queries`.
+- Docs: `azhaq docs recipes`, `concepts` and `troubleshooting`.
 - `roles -replay-writes post,put,patch[,delete]` asks each role's writes with every other role's session: its own from a HAR (`-har alice=alice.har`), and the PUT, PATCH (an empty object, which changes nothing) and DELETE its routes take on its objects; `[bob writes alice's object]` on Juice Shop's basket items. Opt-in, inside the scope you name; `-dry-writes` lists them without sending.
 - `run -stream` prints the names, URLs, answers and open ports as they are found, before the ranked map.
 - `dirs` prints and keeps each hit as it is found, so a stopped run keeps them; a drop-in run given `-db` resumes with `azhaq resume` (the workspace keeps its target list).

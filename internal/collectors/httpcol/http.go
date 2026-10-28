@@ -25,6 +25,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/takeover"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -262,6 +263,12 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech bool)
 	}
 	if gen := webextract.Generator(res.Body); gen != "" {
 		out["generator"] = gen
+	}
+	if isRoot(reqURL) {
+		// A hosting service's page for a name nobody claimed.
+		if f, ok := takeover.ByPage(nil, res.Body[:min(len(res.Body), 64<<10)]); ok {
+			out["takeover"] = f
+		}
 	}
 	if n := len(res.Hops); n > 1 {
 		out["final_status"] = res.Hops[n-1].Status

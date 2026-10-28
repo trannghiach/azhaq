@@ -14,6 +14,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/takeover"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -111,6 +112,19 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 		payload["cnames"] = a.CNAME
 		if cn := a.CNAME[0]; cn != host && normalize.SameSite(host, cn) {
 			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": cn}})
+		}
+	}
+	if len(a.CNAME) > 0 && (a.Status == dnsr.StatusNXDomain || a.Status == dnsr.StatusCNAME) {
+		target := a.CNAME[len(a.CNAME)-1]
+		gone := a.Status == dnsr.StatusNXDomain
+		registered := true
+		if gone && takeover.Service(target) == "" && !normalize.SameSite(host, target) {
+			if d := takeover.Domain(target); d != "" {
+				registered = c.Pool.Registered(ctx, d)
+			}
+		}
+		if f, ok := takeover.ByCNAME(host, a.CNAME, gone, registered); ok {
+			payload["takeover"] = f
 		}
 	}
 	switch a.Status {

@@ -61,6 +61,7 @@ Rows of the kinds `domain` (a domain you gave) and `addr` (an address) carry no 
 | partial | One source failed while others answered for the same domain. Listed with `"partial": true`; the exit code stays 0, except for crt.sh. |
 | degraded | Every source or archive failed, so an empty answer is not an honest zero. |
 | left alone | URLs not requested because a GET there would change something. |
+| takeover candidate | A name whose CNAME points at something gone (a service name anyone may create, a domain nobody holds), or whose front page is a hosting service's page for an unclaimed name. Confirm by hand. |
 | next | Commands worth running next, in the summary. |
 
 Exit codes: `0` complete, `1` error, `2` usage (nothing was sent), `3` finished with failures (the results are usable; the summary says what failed), `4` stopped by a limit (`azhaq resume` continues).
