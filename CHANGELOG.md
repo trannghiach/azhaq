@@ -16,6 +16,7 @@
 
 ### New
 
+- `roles` results you can trust and replay: each cross read says how sure it is (`proved`, `likely`, `guess`) and why (`evidence`); a made-up identifier of the same shape is asked as a control, and a route that answers it like a real object is `answers any identifier`; access that works both ways is said; each session is checked on a canary during the replay and renewed (`-role-cmd`, `-role-login`), and what it answered while possibly dead is `session_suspect`; the site's `200 Access denied` page is learned as a refusal (or given with `-refusal`); `azhaq roles show -dir DIR URL` prints the kept answers side by side, a field-level diff and a curl per role with its session as a shell variable.
 - Scripts on other hosts the scope allows (a CDN, `api.example.com`) are read, and the routes they call there are mapped on their own host, with the script that names them; without a scope, hosts of the same site.
 - The views of an app's router (Angular, React Router, Vue Router): rows of kind `client-route` (`http://app/#/administration`), with the `guard` that protects a view (`canActivate`); never requested.
 - Build manifests: Next.js `_buildManifest.js` and `_ssgManifest.js` (`/admin/users/[userId]` as `/admin/users/{userId}`), Create React App, Vite, Angular service worker and Nuxt.
