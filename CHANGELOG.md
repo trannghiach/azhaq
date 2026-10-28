@@ -16,6 +16,8 @@
 
 ### New
 
+- API descriptions are looked for under each API base a run's routes reveal (`/identity/api/v2/openapi.json`, springdoc's `v3/api-docs` and `swagger-config`, springfox's `swagger-resources`), not only at the root: up to 8 bases per origin, 10 requests each.
+- Map rows name the parameters worth trying first (`watch`: `returnUrl (redirect)`, `file (file)`, `cmd (command)`, `isAdmin (debug)`, …).
 - Subdomain takeover candidates in the summary of `subs -live`, `dns`, `probe` and `run`: a CNAME to a name on Azure, Elastic Beanstalk or Fly.io that does not resolve, a CNAME to a domain nobody registered, or a hosting service's page for a name nobody claimed (GitHub Pages, S3, Heroku, Shopify, …), each with its evidence.
 - GraphQL with introspection turned off: the root fields, their types and required arguments, read from the server's validation errors (`"recovered":"suggestions"`); no document asked can pass validation, so nothing runs. Endpoints that run queries sent with GET are marked `get_queries`.
 - Docs: `azhaq docs recipes`, `concepts` and `troubleshooting`.
