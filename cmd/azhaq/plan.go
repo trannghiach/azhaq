@@ -205,13 +205,13 @@ func printPlan(p runPlan, asJSON bool) error {
 		fmt.Printf("  %-18s %s\n", n, p.Collectors[n])
 	}
 	if len(p.Paths) > 0 {
-		fmt.Printf("built-in paths asked on each web service (%d): %s\n", len(p.Paths), strings.Join(p.Paths, " "))
+		fmt.Printf("built-in path checks on each web service (%d; -no-paths turns them off): %s\n", len(p.Paths), strings.Join(p.Paths, " "))
 	}
 	active := "none"
 	if len(p.Active) > 0 {
 		active = strings.Join(p.Active, " ")
 	}
-	fmt.Printf("active techniques: %s\n", active)
+	fmt.Printf("active techniques (wordlists, ports, introspection; besides the built-in path checks): %s\n", active)
 	var lim []string
 	for _, k := range []string{"depth", "max-items", "max-requests", "rate", "timeout", "daily-requests"} {
 		lim = append(lim, k+" "+p.Limits[k])

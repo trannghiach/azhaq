@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -17,15 +18,12 @@ func TestMCPArgumentTypes(t *testing.T) {
 	for _, c := range []struct{ tool, args, want string }{
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":["anon","alice=Authorization: Bearer x"]}`,
 			`argument roles[0] of azhaq_roles must be an object {name, header, password, user}, such as {"name":"anon"}, {"name":"user","header":["Authorization: Bearer …"]} or {"name":"alice","user":"alice@example.com","password":"…"}, not the string "anon"`},
-		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","header":"Authorization: Bearer x"}]}`,
-			`argument roles[1].header of azhaq_roles must be an array of strings, not the string "Authorization: Bearer x"`},
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"}]}`, `argument roles of azhaq_roles must hold at least 2 items, not 1`},
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"nme":"bob"}]}`, `unknown property "nme" in roles[1] of azhaq_roles; it takes header, name, password, user`},
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"header":[]}]}`, `argument roles[1] of azhaq_roles needs "name", such as`},
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","user":"bob"}]}`, `argument roles[1] of azhaq_roles gives "user" without "password"`},
 		{"azhaq_map", `{"url":"https://example.com/","login":{"url":"https://example.com/login","user":"a"}}`, `argument login of azhaq_map needs "password"`},
 		{"azhaq_map", `{"url":["https://example.com/"]}`, `argument url of azhaq_map must be a string, not an array of 1`},
-		{"azhaq_map", `{"targets":"example.com"}`, `argument targets of azhaq_map must be an array of strings, not the string "example.com"`},
 		{"azhaq_map", `{"url":"https://example.com/","passive":"yes"}`, `argument passive of azhaq_map must be true or false, not the string "yes"`},
 		{"azhaq_map", `{"url":"https://example.com/","depth":2.5}`, `argument depth of azhaq_map must be an integer of at least 0, not the number 2.5`},
 		{"azhaq_query", `{"limit":"10"}`, `argument limit of azhaq_query must be an integer of at least 1, not the string "10"`},
@@ -37,7 +35,6 @@ func TestMCPArgumentTypes(t *testing.T) {
 		{"azhaq_export", `{"format":"yaml"}`, `argument format of azhaq_export must be one of openapi, graphql, sdl, burp, targets, urls, hosts, names, html, graphml, secrets, jsonl, not the string "yaml"`},
 		{"azhaq_export", `{"offset":-1}`, `argument offset of azhaq_export must be an integer of at least 0, not the number -1`},
 		{"azhaq_show", `{}`, `azhaq_show needs the argument "key"`},
-		{"azhaq_subdomains", `{"domain":"example.com"}`, `argument domain of azhaq_subdomains must be an array of strings, not the string "example.com"`},
 		{"azhaq_ports", `{"hosts":["a.test", 7]}`, `argument hosts[1] of azhaq_ports must be a string, not the number 7`},
 		{"azhaq_scope", `{"x":null}`, `unknown argument "x" for azhaq_scope; it takes none`},
 		{"azhaq_workspaces", `{"workspace":null}`, `unknown argument "workspace" for azhaq_workspaces; it takes none`},
@@ -59,6 +56,10 @@ func TestMCPArgumentTypes(t *testing.T) {
 		{"azhaq_query", `{"workspace":"w","fields":["key","first_seen"],"scope":"target","limit":5,"new":true}`},
 		{"azhaq_export", `{"workspace":"w","format":"burp","offset":0}`},
 		{"azhaq_map", `{"targets":["a.test"],"login":{"url":"https://a.test/login","user":"u","password":"p"},"timeout_seconds":30}`},
+		// One string where a list of strings goes is a list of one.
+		{"azhaq_map", `{"targets":"example.com"}`},
+		{"azhaq_subdomains", `{"domain":"example.com"}`},
+		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","header":"Authorization: Bearer x"}]}`},
 	} {
 		var args any
 		if c.args != "" {
@@ -79,11 +80,11 @@ func TestMCPArgumentTypesOverRPC(t *testing.T) {
 	s := &mcpServer{dir: t.TempDir(), exe: "/nonexistent"}
 	got := rpcAll(t, s,
 		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"azhaq_roles","arguments":{"url":"http://127.0.0.1:5002/","roles":["anon","alice=Authorization: Bearer x"]}}}`,
-		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"azhaq_roles","arguments":{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","header":"Authorization: Bearer x"}]}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"azhaq_roles","arguments":{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","header":7}]}}}`,
 		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"azhaq_query","arguments":[1]}}`,
 		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"azhaq_scope"}}`,
 	)
-	for id, want := range map[float64]string{1: `roles[0] of azhaq_roles must be an object`, 2: `roles[1].header of azhaq_roles must be an array of strings, not the string`, 3: `must be an object`} {
+	for id, want := range map[float64]string{1: `roles[0] of azhaq_roles must be an object`, 2: `roles[1].header of azhaq_roles must be an array of strings, not the number 7`, 3: `must be an object`} {
 		e, _ := got[id]["error"].(map[string]any)
 		if e == nil || e["code"].(float64) != -32602 || !strings.Contains(e["message"].(string), want) {
 			t.Errorf("%v: %v", id, got[id])
@@ -264,5 +265,16 @@ func TestMCPNeedsAScope(t *testing.T) {
 	err := cmdMCP([]string{"-dir", t.TempDir()})
 	if exitCode(err) != exitUsage || !strings.Contains(err.Error(), "-unlocked") {
 		t.Errorf("no scope: %v", err)
+	}
+}
+
+func TestMCPStringForList(t *testing.T) {
+	var args any
+	_ = json.Unmarshal([]byte(`{"workspace":"w","role":"auth"}`), &args)
+	if err := checkArgs("azhaq_query", args); err != nil {
+		t.Fatal(err)
+	}
+	if got := args.(map[string]any)["role"]; !reflect.DeepEqual(got, []any{"auth"}) {
+		t.Errorf("role is %#v", got)
 	}
 }

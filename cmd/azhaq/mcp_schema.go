@@ -145,6 +145,13 @@ func (c argCheck) object(s map[string]any, v map[string]any, at string) error {
 		if p == nil {
 			continue
 		}
+		// One string where a list of strings goes is that list of one:
+		// {"role":"auth"} as -role auth is.
+		if items, _ := p["items"].(map[string]any); p["type"] == "array" && items["type"] == "string" {
+			if str, ok := v[k].(string); ok {
+				v[k] = []any{str}
+			}
+		}
 		sub := k
 		if at != "" {
 			sub = at + "." + k

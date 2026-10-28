@@ -898,7 +898,7 @@ func cmdURLs(args []string) error {
 	defer os.Remove(f.Name())
 	rep := newReport("urls")
 	rep.what = "archived URLs"
-	run := []string{"-passive", "-depth", "0", "-skip", skipAllBut("azhaq-urls"), "-urls", f.Name()}
+	run := []string{"-passive", "-depth", "0", "-skip", skipAllBut("azhaq-urls"), "-urls", f.Name(), "-urls-source"}
 	for _, d := range ds {
 		run = append(run, "-domain", d)
 	}
@@ -915,9 +915,10 @@ func cmdURLs(args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, u := range lines {
+	for _, l := range lines {
+		u, src, _ := strings.Cut(l, "\t")
 		if w.json {
-			w.obj(map[string]string{"url": u})
+			w.obj(map[string]string{"url": u, "source": src})
 		} else {
 			w.line(u)
 		}

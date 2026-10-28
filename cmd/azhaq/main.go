@@ -173,6 +173,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	noTech := fs.Bool("no-tech", false, "skip technology fingerprints (saves about 30 MB of memory)")
 	noFavicon := fs.Bool("no-favicon", false, "do not hash the favicon of front pages (one or two requests less per web service)")
 	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
+	urlsFrom := fs.Bool("urls-source", false, "with -urls: each line is the URL, a tab, and the archive that gave it")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
@@ -223,6 +224,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
+	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
 	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
 	var cookies, headers, allow, deny, domains stringsFlag
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
@@ -416,6 +418,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		budgets.Parallel = *parallel
 	}
 	budgets.Skip = map[string]bool{}
+	if *noPaths {
+		budgets.Skip["azhaq-paths"] = true
+	}
 	for _, name := range splitList(*skip) {
 		budgets.Skip[name] = true
 	}
@@ -575,7 +580,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return fmt.Errorf("provider keys: %w", err)
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources}
-	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, Timeout: *urlsTimeout}
+	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout}
 	if *urlsOut != "" && *resumeRun == "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends
 			return err

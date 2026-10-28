@@ -35,6 +35,7 @@ type Options struct {
 	Client   *http.Client
 	Keys     map[string][]string // urlscan's key, from the provider file
 	Out      string              // write every URL here, one per line
+	OutFrom  bool                // and the source that gave it first, after a tab
 	Timeout  time.Duration       // per source; default 3 minutes
 	MaxPages int                 // per source; default 50
 }
@@ -112,6 +113,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 
 	var mu sync.Mutex
 	seen := map[string]bool{}
+	from := map[string]string{} // URL → the source that gave it first
 	var all []string
 	results := make([]outcome, len(c.sources))
 	var wg sync.WaitGroup
@@ -138,6 +140,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 					count++
 					if !seen[u] && len(all) < maxURLs {
 						seen[u] = true
+						from[u] = s.name
 						all = append(all, u)
 					}
 				}
@@ -159,7 +162,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
 	}
 	sort.Strings(all)
-	if err := c.write(all); err != nil {
+	if err := c.write(all, from); err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
 
@@ -294,8 +297,8 @@ func rank(ts []template) []template {
 	return out
 }
 
-// write appends urls to the -urls file.
-func (c *Collector) write(urls []string) error {
+// write appends urls to the -urls file, each with its source when asked.
+func (c *Collector) write(urls []string, from map[string]string) error {
 	if c.opts.Out == "" || len(urls) == 0 {
 		return nil
 	}
@@ -308,6 +311,10 @@ func (c *Collector) write(urls []string) error {
 	w := bufio.NewWriter(f)
 	for _, u := range urls {
 		w.WriteString(u)
+		if c.opts.OutFrom {
+			w.WriteByte('\t')
+			w.WriteString(from[u])
+		}
 		w.WriteByte('\n')
 	}
 	if err := w.Flush(); err != nil {

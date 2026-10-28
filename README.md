@@ -111,7 +111,8 @@ Every command prints results on stdout, and a summary on stderr: what failed and
 
 | What | How | When |
 | --- | --- | --- |
-| Pages, scripts, API descriptions (at the root and under each API base), 32 built-in paths, archived URL templates | GET | every run |
+| Pages, scripts, API descriptions (at the root and under each API base), archived URL templates | GET | every run |
+| 32 built-in path checks per web service (`robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `backup`, `admin`, …) | GET | every run; `-no-paths` turns them off |
 | Path and parameter guesses, ports, GraphQL introspection | GET, a TCP connect and one `HEAD /`, POST | `-dirs`, `-params`, `-ports`, `-graphql` (need a scope) |
 | Chrome | GET, HEAD and CORS preflights, and the sign-in form; a page's own writes are refused and mapped, unless `-browser-writes` | `-browser`, `-login`, `shots` |
 | Other roles' writes | POST, PUT, PATCH, DELETE | `roles -replay-writes` (needs a scope) |
