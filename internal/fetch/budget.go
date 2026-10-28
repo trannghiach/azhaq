@@ -73,6 +73,22 @@ type refusedKey struct{}
 type watch struct {
 	refused atomic.Bool
 	used    atomic.Int64
+
+	mu   sync.Mutex
+	down error // the first request refused for an origin that stopped answering
+}
+
+// Stopped is the refusal a request made with ctx (marked by WatchBudget)
+// got because its origin stopped answering, or nil: the task is not done,
+// and azhaq resume runs it again.
+func Stopped(ctx context.Context) error {
+	w, _ := ctx.Value(refusedKey{}).(*watch)
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.down
 }
 
 // WatchBudget marks ctx so that refused reports whether the budget refused

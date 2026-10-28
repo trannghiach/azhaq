@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -127,6 +128,23 @@ var HostParallel = 4
 // Delay is a pause before each uncached GET.
 var Delay time.Duration
 
+// OriginTrips is how many connects or timeouts in a row, with no answer
+// between them, stop an origin for the rest of the run: its remaining
+// requests are refused with neterr.ErrOriginDown, and the work waits for
+// azhaq resume. A dead host would otherwise take every request the run
+// has for it, each a timeout long.
+var OriginTrips = 5
+
+var (
+	originMu sync.Mutex
+	origins  = map[string]*origin{} // scheme://host:port → how it has been answering
+)
+
+type origin struct {
+	silent int  // unanswered requests in a row
+	down   bool // stopped: OriginTrips reached
+}
+
 // Reset clears the process GET cache and host gates. Tests and bench call this.
 func Reset() {
 	cacheMu.Lock()
@@ -140,8 +158,93 @@ func Reset() {
 	Memos = nil
 	Delay = 0
 	cacheMu.Unlock()
+	originMu.Lock()
+	origins = map[string]*origin{}
+	originMu.Unlock()
 	resetProbes()
 	resetBudget()
+}
+
+// originOf is the origin raw is requested from: scheme://host:port.
+func originOf(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return strings.ToLower(u.Scheme) + "://" + net.JoinHostPort(strings.ToLower(u.Hostname()), port)
+}
+
+// originRefused is the refusal for raw when its origin has stopped
+// answering, else nil. It is noted on ctx (Stopped) so the task that
+// asked ends capped rather than failed.
+func originRefused(ctx context.Context, raw string) error {
+	o := originOf(raw)
+	if o == "" {
+		return nil
+	}
+	originMu.Lock()
+	st := origins[o]
+	down := st != nil && st.down
+	originMu.Unlock()
+	if !down {
+		return nil
+	}
+	err := &neterr.OriginDown{Origin: o, Failures: OriginTrips}
+	if w, _ := ctx.Value(refusedKey{}).(*watch); w != nil {
+		w.mu.Lock()
+		if w.down == nil {
+			w.down = err
+		}
+		w.mu.Unlock()
+	}
+	return err
+}
+
+// noteOrigin counts how raw's origin answered: an answer of any kind
+// starts its count over; a connect or a timeout, with the run still
+// going, brings it closer to being stopped.
+func noteOrigin(ctx context.Context, raw string, err error) {
+	o := originOf(raw)
+	if o == "" {
+		return
+	}
+	originMu.Lock()
+	defer originMu.Unlock()
+	st := origins[o]
+	if st == nil {
+		st = &origin{}
+		origins[o] = st
+	}
+	switch {
+	case err == nil:
+		st.silent = 0
+	case ctx.Err() == nil && neterr.Unanswered(err):
+		st.silent++
+		if OriginTrips > 0 && st.silent >= OriginTrips {
+			st.down = true
+		}
+	}
+}
+
+// OriginsDown lists the origins the run stopped sending to, sorted.
+func OriginsDown() []string {
+	originMu.Lock()
+	defer originMu.Unlock()
+	var out []string
+	for o, st := range origins {
+		if st.down {
+			out = append(out, o)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 type cacheEnt struct {
@@ -349,6 +452,10 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		cacheMu.Unlock()
 		return e.res, true, e.err
 	}
+	if err := originRefused(ctx, raw); err != nil {
+		cacheMu.Unlock()
+		return Result{}, false, err // not cached: the origin may answer again in a later run
+	}
 	wait := make(chan struct{})
 	inflight[raw] = wait
 	cacheMu.Unlock()
@@ -367,6 +474,17 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	}
 	release, err := acquireHost(ctx, raw)
 	if err != nil {
+		cacheMu.Lock()
+		cache[raw] = cacheEnt{err: err}
+		delete(inflight, raw)
+		close(wait)
+		cacheMu.Unlock()
+		return Result{}, false, err
+	}
+	if err := originRefused(ctx, raw); err != nil {
+		// The origin was stopped while this request waited for its turn
+		// on the host: whoever waits on this URL gets the refusal too.
+		release()
 		cacheMu.Lock()
 		cache[raw] = cacheEnt{err: err}
 		delete(inflight, raw)
@@ -393,6 +511,7 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	res, err := do(ctx, c, raw)
 	done()
 	release()
+	noteOrigin(ctx, raw, err)
 	cacheMu.Lock()
 	cache[raw] = cacheEnt{res: res, err: err}
 	var hops []Result

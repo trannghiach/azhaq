@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -178,7 +179,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		status[s.name] = row
 	}
 	tmpl, assets := templates(all)
-	payload := map[string]any{"domain": domain, "count": len(all), "templates": len(tmpl), "assets": assets, "sources": status}
+	nAssets := 0
+	for _, t := range assets {
+		nAssets += t.count
+	}
+	payload := map[string]any{"domain": domain, "count": len(all), "templates": len(tmpl), "assets": nAssets, "sources": status}
 	if c.opts.Out != "" {
 		payload["file"] = c.opts.Out
 	}
@@ -196,13 +201,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}); err != nil {
 		return meta, err
 	}
-	for i, t := range rank(tmpl) {
+	// Pages first; the static assets an archive holds are listed after
+	// them, as hints only: an image or a font is never worth a request.
+	for i, t := range append(rank(tmpl), rank(assets)...) {
 		if i >= maxEmit {
 			break
 		}
 		row := map[string]any{"url": t.example, "via": "archive", "count": t.count}
 		if t.count > 1 {
 			row["template"] = t.key
+		}
+		if t.asset {
+			row["asset"] = true
 		}
 		raw, _ := json.Marshal(row)
 		if err := emit(types.Observation{
@@ -211,8 +221,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return meta, err
 		}
 		meta.EmitCount++
-		if len(meta.NextHints) < maxHints && webextract.Hintable(t.example) {
-			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": t.example}})
+		if !t.asset && len(meta.NextHints) < maxHints && webextract.Hintable(t.example) {
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": t.example, types.ViaKey: types.ViaArchive}})
 		}
 	}
 	return meta, nil
@@ -239,28 +249,82 @@ type template struct {
 	key, example string
 	count        int
 	score        int
+	asset        bool // a static file: listed, never requested
 }
 
-// templates groups URLs that differ only by an ID or a value; static
-// assets are counted and left out.
-func templates(urls []string) ([]template, int) {
+// templates groups URLs that differ only by an ID or a value: pages, and
+// the static assets apart.
+func templates(urls []string) (pages, assets []template) {
 	idx := map[string]int{}
 	var out []template
-	assets := 0
 	for _, u := range urls {
-		if webextract.ClassifyURL(u) == "asset" {
-			assets++
-			continue
-		}
 		k := webextract.Template(u)
 		if i, ok := idx[k]; ok {
 			out[i].count++
 			continue
 		}
 		idx[k] = len(out)
-		out = append(out, template{key: k, example: u, count: 1, score: score(u)})
+		out = append(out, template{key: k, example: u, count: 1, score: score(u), asset: static(u)})
 	}
-	return out, assets
+	for _, t := range out {
+		if t.asset {
+			assets = append(assets, t)
+		} else {
+			pages = append(pages, t)
+		}
+	}
+	return pages, assets
+}
+
+// mediaHosts are the words in a hostname that say it serves files, not
+// pages: an archive's URLs on such a host are images and the like.
+var mediaHosts = map[string]bool{
+	"img": true, "image": true, "images": true, "photo": true, "photos": true, "static": true,
+	"assets": true, "media": true, "font": true, "fonts": true, "cdn": true, "thumb": true,
+	"thumbs": true, "thumbnails": true, "avatar": true, "avatars": true,
+}
+
+// mediaExt are the extensions of files that are never a route, where they
+// end a segment that is not the last (an image served under a variant
+// path: /x_original.png/<hash>).
+var mediaExt = []string{
+	".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".ico", ".bmp", ".avif",
+	".woff", ".woff2", ".ttf", ".otf", ".eot", ".css", ".mp4", ".webm", ".mp3", ".ogg",
+}
+
+// static says whether an archived URL is a file no route sits behind: an
+// asset by its extension, one whose extension sits on an earlier path
+// segment, one an archive cut short of its extension (a segment ending in
+// a bare dot), or any URL on a host whose name says it serves media.
+func static(raw string) bool {
+	if webextract.ClassifyURL(raw) == "asset" {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	first, _, _ := strings.Cut(strings.ToLower(u.Hostname()), ".")
+	for _, word := range strings.Split(first, "-") {
+		if mediaHosts[word] {
+			return true
+		}
+	}
+	segs := strings.Split(strings.ToLower(u.Path), "/")
+	for i, seg := range segs {
+		if seg == "" {
+			continue
+		}
+		if i == len(segs)-1 && strings.HasSuffix(seg, ".") {
+			return true
+		}
+		for _, ext := range mediaExt {
+			if i < len(segs)-1 && strings.HasSuffix(seg, ext) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // score ranks what is worth a look: parameters, APIs and server-side

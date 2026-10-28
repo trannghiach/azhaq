@@ -178,3 +178,55 @@ func TestBrokenNameIsNotAFailure(t *testing.T) {
 		t.Fatalf("no answer at all %+v", got[0])
 	}
 }
+
+// One resolver's NODATA or NXDOMAIN is checked with another before the
+// name is called dead: a public resolver answers NODATA now and then for
+// a name every other one resolves.
+func TestSecondResolverBeforeDead(t *testing.T) {
+	var flakyAsked atomic.Int32
+	flaky := serve(t, func(w dns.ResponseWriter, r *dns.Msg) {
+		flakyAsked.Add(1)
+		m := new(dns.Msg)
+		m.SetReply(r)
+		if strings.HasPrefix(r.Question[0].Name, "api.") {
+			m.Rcode = dns.RcodeNameError
+		}
+		_ = w.WriteMsg(m) // NODATA for everything else
+	})
+	good := serve(t, testZone)
+	p := New(Options{Resolvers: []string{flaky, good}, PerSecond: -1, Timeout: time.Second})
+	ctx := context.Background()
+	if a := p.Resolve(ctx, "www.example.org"); a.Status != StatusOK || a.A[0] != "192.0.2.10" {
+		t.Fatalf("nodata from one resolver: %+v", a)
+	}
+	if a := p.Resolve(ctx, "api.example.org"); a.Status != StatusOK || len(a.CNAME) != 1 {
+		t.Fatalf("nxdomain from one resolver: %+v", a)
+	}
+	if flakyAsked.Load() == 0 {
+		t.Fatal("the flaky resolver was never asked")
+	}
+}
+
+// Two resolvers agreeing cost one extra query per dead-looking name, and
+// a wildcard probe gets none.
+func TestDeadNameAgreedByTwo(t *testing.T) {
+	var n atomic.Int32
+	count := func(w dns.ResponseWriter, r *dns.Msg) { n.Add(1); testZone(w, r) }
+	p := New(Options{Resolvers: []string{serve(t, count), serve(t, count)}, PerSecond: -1, Timeout: time.Second})
+	ctx := context.Background()
+	if a := p.Resolve(ctx, "dead.example.org"); a.Status != StatusNXDomain {
+		t.Fatalf("%+v", a)
+	}
+	if n.Load() != 2 {
+		t.Fatalf("queries %d, want 2 (one per resolver)", n.Load())
+	}
+	n.Store(0)
+	if a := p.Resolve(ctx, probePrefix+"abc.example.org"); a.Status != StatusNXDomain || n.Load() != 1 {
+		t.Fatalf("probe %+v asked %d resolvers", a, n.Load())
+	}
+	n.Store(0)
+	p.wildcard("example.org")
+	if a := p.Resolve(ctx, "gone.example.org"); a.Status != StatusNXDomain || n.Load() != 1 {
+		t.Fatalf("under a wildcard zone %+v asked %d resolvers", a, n.Load())
+	}
+}

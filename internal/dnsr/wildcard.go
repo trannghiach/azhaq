@@ -68,6 +68,7 @@ func (w *Wildcards) zone(ctx context.Context, name string) *zone {
 				continue
 			}
 			z.on = true
+			w.pool.wildcard(name)
 			for _, ip := range a.IPs() {
 				z.ips[ip] = true
 			}
@@ -105,8 +106,11 @@ func parent(name string) string {
 	return name[i+1:]
 }
 
+// probePrefix starts every random label: the pool knows a probe by it.
+const probePrefix = "azhaq-"
+
 func randomLabel() string {
 	var b [6]byte
 	_, _ = rand.Read(b[:])
-	return "azhaq-" + hex.EncodeToString(b[:])
+	return probePrefix + hex.EncodeToString(b[:])
 }
