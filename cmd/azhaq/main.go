@@ -42,6 +42,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/internal/timing"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -226,6 +227,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
 	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
+	getWords := fs.String("get-words", "", "request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets")
 	var cookies, headers, allow, deny, domains stringsFlag
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
 	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable; sent as one Cookie header)")
@@ -420,6 +422,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	budgets.Skip = map[string]bool{}
 	if *noPaths {
 		budgets.Skip["azhaq-paths"] = true
+	}
+	for _, w := range splitList(*getWords) {
+		webextract.AllowedWords[strings.ToLower(w)] = true
 	}
 	for _, name := range splitList(*skip) {
 		budgets.Skip[name] = true

@@ -44,3 +44,14 @@ func TestStateChanging(t *testing.T) {
 		}
 	}
 }
+
+func TestAllowedWords(t *testing.T) {
+	AllowedWords["exec"] = true
+	defer delete(AllowedWords, "exec")
+	if w := StateChanging("http://dvwa/vulnerabilities/exec/"); w != "" {
+		t.Errorf("an allowed word left alone: %q", w)
+	}
+	if w := StateChanging("http://app/logout"); w != "logout" {
+		t.Errorf("logout requested: %q", w)
+	}
+}

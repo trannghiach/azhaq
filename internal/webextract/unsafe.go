@@ -37,7 +37,7 @@ func StateChanging(raw string) string {
 		return ""
 	}
 	for _, seg := range strings.Split(u.Path, "/") {
-		if w := verbOf(seg); w != "" {
+		if w := verbOf(seg); w != "" && !AllowedWords[w] {
 			return w
 		}
 	}
@@ -49,13 +49,17 @@ func StateChanging(raw string) string {
 			if !actionKeys[strings.ToLower(k)] {
 				continue
 			}
-			if w := verbOf(v); w != "" {
+			if w := verbOf(v); w != "" && !AllowedWords[w] {
 				return w
 			}
 		}
 	}
 	return ""
 }
+
+// AllowedWords are the words the user lets be requested (-get-words exec):
+// a URL they name is asked like any other; the rest stay left alone.
+var AllowedWords = map[string]bool{}
 
 // toggles are query values that switch something: unless the key filters
 // or shapes what is read, the request sets it.

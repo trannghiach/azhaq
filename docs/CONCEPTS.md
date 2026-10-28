@@ -30,7 +30,7 @@ URL http://localhost:3000/rest/2fa/verify  target  hint  api  POST
 | `error` | Requested; no answer (timeout, refused, reset, TLS). | `azhaq query -db W -failed`, then try again. |
 | `gone` | Requested; it answered 404 or 410. Usually an archived URL. | Try older API versions near it. |
 | `hint` | Known (from a script, an API description, an archive, a link), not proven by a GET: not requested, or a route scripts call with another method. | Send the method in its operations yourself. |
-| `skipped` | Not requested on purpose: its name says a GET would change something (`word` says which). Listed under "left alone". | `-all-gets` if you accept the side effect. |
+| `skipped` | Not requested on purpose: its name says a GET would change something (`word` says which). Listed under "left alone". | `-get-words WORD` (or `-all-gets`) if you accept the side effect. |
 | `capped` | Not requested: a limit (budget, depth, items) ran out first. | `azhaq resume -db W`. |
 
 ## Kinds of URL
