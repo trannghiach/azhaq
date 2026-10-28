@@ -12,6 +12,11 @@
 
 ### Changed
 
+- Chrome downloads nothing: a download a page starts is refused before it is saved, and listed under "left alone" (`Chrome would download it`). Before, `-browser` let the target's files land in `~/Downloads`.
+- Links in `javascript:` hrefs, `on*` handlers and `data-*-url` attributes are read (DVWA's `view_source.php`, `view_help.php`).
+- Routes a script builds as `this.host + "/orders"` are no longer also listed at the site's root (`/orders`); paths that are keys of an API description embedded in a script are left to the description.
+- `-browser` renders pages without images, fonts, media and socket polling (half of Chrome's requests on Juice Shop); screenshots and the sign-in still load everything.
+- A scanner's own test files (`acunetix_…`, `bxss.me` hosts) and random-named executables from archives never enter the map.
 - `roles -replay-writes` claims a write on another role's object only when it is proven: the owner's object is read as the owner before and after, and must have changed the way the write asks (or be gone). A 2xx that changed nothing is `answered 2xx but changed nothing of the owner's`; a POST to a collection is `creates in another role's collection`; both are listed with `-all` only. Routes that only take a write (`PUT /users/v1/{username}/email`) are filled with each role's identifiers without a HAR.
 - A static document (a PDF, an image) no longer tops `roles` as the same answer for a session that did not find it.
 - A name is called dead only when a second resolver, of another operator, agrees.
