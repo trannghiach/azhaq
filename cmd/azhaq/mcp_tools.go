@@ -48,7 +48,7 @@ var (
 	pTargets   = strs1("targets, each a URL, host, host:port or IP address")
 	pScope     = prop("boolean", "seed from the program scope the server was started with")
 	pPassive   = prop("boolean", "send nothing to the targets: third-party sources and DNS only")
-	pBrowser   = prop("boolean", "also load pages in Chrome to see the requests their scripts make (needs Chrome on the machine)")
+	pBrowser   = prop("boolean", "also load pages in Chrome to see the requests their scripts make (needs Chrome on the machine); Chrome sends GET, HEAD and OPTIONS only, and maps the writes pages would send without sending them")
 	pDepth     = whole(0, "how many steps from the targets to follow; 0 maps the targets alone (default 4)")
 	pTimeout   = whole(1, "stop after this many seconds and keep what was found")
 	pHeaders   = strs1("request headers for every request, \"Name: value\" (a session cookie, an Authorization token, a bug bounty identification header)")

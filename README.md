@@ -4,7 +4,7 @@ Azhaq is a reconnaissance engine for security research, written in Go. Point it 
 
 It is built to be driven by scripts and assistants as much as by people: every command prints its results on stdout, a summary of what failed, what was skipped and why on stderr, and an exit code that says whether the work is complete. `azhaq mcp` serves it to MCP clients with the scope and the request budget locked.
 
-By default it maps and does not attack: no payloads, no vulnerability checks. HTTP requests are GETs, except Chrome signing in when you give it an account, GraphQL introspection with `-graphql`, the one `HEAD /` a port scan sends a port that says nothing to learn whether it speaks HTTP, and the writes `roles -replay-writes` sends when you ask for them (they change data on the target, inside the scope you name). Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`, a query that switches something on or off such as `?phpids=on`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
+By default it maps and does not attack: no payloads, no vulnerability checks. HTTP requests are GETs, except Chrome signing in when you give it an account, GraphQL introspection with `-graphql`, the one `HEAD /` a port scan sends a port that says nothing to learn whether it speaks HTTP, and the writes `roles -replay-writes` sends when you ask for them (they change data on the target, inside the scope you name). Chrome (`-browser`, `-screenshots`) sends GET, HEAD and OPTIONS only: what a page or its scripts would send besides (a `POST` that tracks or saves on load, a `DELETE`, a beacon, a form posted by a script) is refused before it leaves, mapped on its route with its method and the names it carries (never the values), and listed as left alone (`a page's script would send a write: POST …/api/track, DELETE …/api/items/7`); `-browser-writes` lets pages send them as a user's browser would, which changes data on the target. Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`, a query that switches something on or off such as `?phpids=on`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
 
 ## At a glance
 
@@ -174,7 +174,8 @@ claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000
 
 | Option | Effect |
 | --- | --- |
-| `-browser` | also load pages in Chrome: the requests their scripts send and the links and forms of the rendered page (Chrome is held to the scope like every request) |
+| `-browser` | also load pages in Chrome: the requests their scripts send and the links and forms of the rendered page (Chrome is held to the scope like every request, and sends GET, HEAD and OPTIONS only) |
+| `-browser-writes` | let pages in Chrome send their writes (POST, PUT, DELETE…) as a user's browser would, inside the scope and the budget: it changes data on the target (`run`, `crawl`, `shots`, and the runs inside `roles`) |
 | `-login URL -login-user U -login-pass P` | sign in with Chrome first (password also from `$AZHAQ_LOGIN_PASS`) |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have; add headers |
 | `-screenshots DIR` | a screenshot of each web service, look-alikes grouped in the HTML report (Chrome on the machine; `AZHAQ_CHROME` to point at one) |

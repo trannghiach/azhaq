@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -88,5 +89,35 @@ func TestPlanRequests(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
+	}
+}
+
+// A plan with Chrome says it sends GET, HEAD and OPTIONS only, or, with
+// -browser-writes, that pages send their writes; -browser-writes without
+// a Chrome that renders is refused.
+func TestPlanChromeWrites(t *testing.T) {
+	has := func(sends []string, prefix string) bool {
+		for _, s := range sends {
+			if strings.HasPrefix(s, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+	if s := planJSON(t, "-url", "http://127.0.0.1:3001/", "-browser").Sends; !has(s, "Chrome sends GET, HEAD and OPTIONS only") || has(s, "Chrome lets pages send") {
+		t.Errorf("-browser: %q", s)
+	}
+	if s := planJSON(t, "-url", "http://127.0.0.1:3001/", "-browser", "-browser-writes").Sends; !has(s, "Chrome lets pages send their writes") {
+		t.Errorf("-browser-writes: %q", s)
+	}
+	if s := planJSON(t, "-url", "http://127.0.0.1:3001/").Sends; has(s, "Chrome") {
+		t.Errorf("no Chrome: %q", s)
+	}
+	_, _, err := captureBoth(t, func() error {
+		return cmdPlan([]string{"-url", "http://127.0.0.1:3001/", "-browser-writes", "-json"})
+	})
+	var ue usageErr
+	if !errors.As(err, &ue) {
+		t.Errorf("-browser-writes alone: %v", err)
 	}
 }

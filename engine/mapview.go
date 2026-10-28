@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -242,6 +243,9 @@ func ownObs(e types.Entity, obs []types.StoredObservation) []types.StoredObserva
 	for _, o := range obs {
 		if o.Collector == "azhaq-js" || o.Collector == "azhaq-crawl" || o.Collector == "azhaq-render" {
 			continue
+		}
+		if o.Collector == "azhaq-shots" && o.Kind == "url" {
+			continue // a write the page sent, to itself too: its route's
 		}
 		if u := payloadURL(o); u != "" && !sameRoute(u, e.Key) {
 			continue
@@ -822,11 +826,21 @@ func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 			if x.Source == "" {
 				x.Source = p.Via
 			}
-			op.ops = append(op.ops, x)
+			// Every page Chrome renders sends the app's same write, and
+			// two scripts may make the same call: the operation once.
+			if !slices.ContainsFunc(op.ops, func(y Op) bool { return sameOp(x, y) }) {
+				op.ops = append(op.ops, x)
+			}
 		}
 		out[u] = op
 	}
 	return out
+}
+
+func sameOp(a, b Op) bool {
+	return a.Method == b.Method && a.Source == b.Source && a.BodyType == b.BodyType && a.Auth == b.Auth &&
+		a.Summary == b.Summary && a.OperationID == b.OperationID && slices.Equal(a.Query, b.Query) &&
+		slices.Equal(a.Path, b.Path) && slices.Equal(a.Header, b.Header) && slices.Equal(a.Cookie, b.Cookie) && slices.Equal(a.Body, b.Body)
 }
 
 // pageForms collects the forms found on a page (crawled, rendered, or

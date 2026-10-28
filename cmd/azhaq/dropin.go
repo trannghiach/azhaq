@@ -773,7 +773,7 @@ func cmdCrawl(args []string) error {
 	var urls stringsFlag
 	fs.Var(&urls, "u", "start URL (repeatable)")
 	list := fs.String("l", "", "file of start URLs (- for stdin)")
-	given := inherit(fs, append([]string{"depth", "max-items", "parallel", "host-parallel", "delay", "paths", "browser", "login", "login-user", "login-pass"}, targetFlags...)...)
+	given := inherit(fs, append([]string{"depth", "max-items", "parallel", "host-parallel", "delay", "paths", "browser", "browser-writes", "login", "login-user", "login-pass"}, targetFlags...)...)
 	assets := fs.Bool("assets", false, "also list scripts, styles and images")
 	noShell := fs.Bool("no-catchall", false, "leave out URLs that answer with the page every unknown path gets (client-side routes of a single-page app)")
 	if err := parse(fs, args); err != nil {
@@ -1309,7 +1309,7 @@ func cmdShots(args []string) error {
 	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
 	list := fs.String("l", "", "file of targets (- for stdin)")
 	dir := fs.String("dir", "screenshots", "directory for the PNG files")
-	given := inherit(fs, append([]string{"tabs"}, targetFlags...)...)
+	given := inherit(fs, append([]string{"tabs", "browser-writes"}, targetFlags...)...)
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1330,8 +1330,8 @@ func cmdShots(args []string) error {
 		return err
 	}
 	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector != "azhaq-shots" {
-			return
+		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
+			return // what Chrome refused, and the writes it mapped, are the summary's
 		}
 		p := payloadOf(o)
 		if w.json {
