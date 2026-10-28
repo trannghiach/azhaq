@@ -295,19 +295,31 @@ func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.T
 		return
 	}
 	var p struct {
-		URL string `json:"url"`
+		URL  string `json:"url"`
+		Role string `json:"role"`
+		From string `json:"from"`
 	}
 	if err := json.Unmarshal(o.Payload, &p); err != nil || p.URL == "" {
 		return
 	}
-	u, err := normalize.URL(p.URL)
+	u, err := FoundKey(p.URL, p.Role)
 	if err != nil || webextract.JunkURL(u) {
 		return
 	}
-	u = e.onHTTPS(u)
+	base, frag, _ := strings.Cut(u, "#")
+	u = e.onHTTPS(base)
+	if frag != "" {
+		u += "#" + frag
+	}
 	to, err := e.Store.UpsertEntity(types.TypeURL, u, now)
 	if err != nil {
 		return
+	}
+	// A route a script on another host names is found by that script.
+	if f, err := normalize.URL(p.From); err == nil && p.From != "" && f != u {
+		if s, err := e.Store.UpsertEntity(types.TypeURL, e.onHTTPS(f), now); err == nil {
+			from = s
+		}
 	}
 	_ = e.Store.AddEdge(from.ID, to.ID, "FOUND", now)
 	if host := normalize.HostFromURL(u); host != "" {

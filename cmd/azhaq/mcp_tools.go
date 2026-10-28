@@ -38,7 +38,7 @@ func with(s map[string]any, k string, v any) map[string]any {
 }
 
 // queryColumns are the fields of a query row, what fields picks from.
-var queryColumns = []string{"key", "type", "role", "coverage", "status", "title", "methods", "params", "body", "ops", "forms", "found_in", "template", "count", "folded", "proof", "scope", "first_seen"}
+var queryColumns = []string{"key", "type", "role", "coverage", "status", "title", "methods", "params", "body", "ops", "forms", "found_in", "guard", "protocol", "namespace", "template", "count", "folded", "proof", "scope", "first_seen"}
 
 var (
 	pWorkspace = prop("string", "workspace name (a database in the server's directory); default \"default\". Runs into the same workspace can be compared with azhaq_diff.")
@@ -110,7 +110,7 @@ func mcpTools() []map[string]any {
 			"inputSchema": obj(map[string]any{"hosts": strs1("hosts or addresses"), "ports": prop("string", "top-100 (default), top-1000, full, or a list such as 22,80,8000-8100"), "limit": pLimit}, "hosts"),
 			"annotations": annotations(false, true, "Scan ports")},
 		{"name": "azhaq_query", "title": "Query a workspace",
-			"description": "The rows of a workspace's map that match, best first: by entity type (URL, Hostname, IPAddress, Domain), role (app, auth, forbidden, api, page, live, sibling, unresolved, dead), coverage (visited, hint, catchall, error, skipped), status (200, 401, 4xx), method (GET, POST), host, text, what the last run saw first (new). fields picks the columns: " +
+			"description": "The rows of a workspace's map that match, best first: by entity type (URL, Hostname, IPAddress, Domain), role (app, auth, forbidden, api, page, client-route, websocket, live, sibling, unresolved, dead), coverage (visited, hint, catchall, error, skipped), status (200, 401, 4xx), method (GET, POST), host, text, what the last run saw first (new). fields picks the columns: " +
 				strings.Join(queryColumns, ", ") + " (default " + strings.ReplaceAll(queryFields, ",", ", ") + ").",
 			"inputSchema": obj(map[string]any{"workspace": pWorkspace, "type": strs1("entity types"), "role": strs1("roles"), "coverage": strs1("coverage values"),
 				"status": strs1("statuses: 200, 401, 4xx"), "method": prop("string", "routes with this method"), "host": prop("string", "on this host or under this domain"),

@@ -136,6 +136,20 @@ func formAction(page, base *url.URL, action string) string {
 	return u
 }
 
+// AppRoot is where a single-page app's router takes its paths from: the
+// folder of the page's <base href>, or the root of its origin.
+func AppRoot(body []byte, page *url.URL) *url.URL {
+	root := &url.URL{Scheme: page.Scheme, Host: page.Host, Path: "/"}
+	if b := docBase(body, page); b != page {
+		root.Scheme, root.Host = b.Scheme, b.Host
+		root.Path = b.Path[:strings.LastIndex(b.Path, "/")+1]
+		if root.Path == "" {
+			root.Path = "/"
+		}
+	}
+	return root
+}
+
 // docBase is what a page's relative URLs resolve against: its first
 // <base href>, itself resolved against the page's URL, or the page's URL.
 func docBase(body []byte, page *url.URL) *url.URL {

@@ -15,22 +15,25 @@ import (
 
 // MapEntry is one line of the ranked recon map (confirmed vs hint).
 type MapEntry struct {
-	Entity   types.Entity
-	Scope    string // target, fanout
-	Coverage string // visited, catchall, error, hint, capped (URLs)
-	Role     string // live, app, auth, forbidden, api, page, script, sibling, …
-	Proof    string
-	Status   int      // the URL's own answer (first hop), 0 if not fetched
-	Title    string   // the page title, if any
-	Template string   // URL template; set on every templated URL row
-	Count    int      // URLs folded into this row by GroupTemplates
-	Folded   int      // hostnames folded into a summary row (dead, wildcard)
-	Methods  []string // from API descriptions and the calls scripts make
-	Params   []string // query, form and API parameter names
-	Body     []string // names scripts send in request bodies
-	Ops      []Op     // per method: what is sent, from API descriptions and scripts
-	Forms    []MapForm
-	Found    []webextract.Site // where scripts name the route, calls first
+	Entity    types.Entity
+	Scope     string // target, fanout
+	Coverage  string // visited, catchall, error, hint, capped (URLs)
+	Role      string // live, app, auth, forbidden, api, page, script, sibling, …
+	Proof     string
+	Status    int      // the URL's own answer (first hop), 0 if not fetched
+	Title     string   // the page title, if any
+	Template  string   // URL template; set on every templated URL row
+	Count     int      // URLs folded into this row by GroupTemplates
+	Folded    int      // hostnames folded into a summary row (dead, wildcard)
+	Methods   []string // from API descriptions and the calls scripts make
+	Params    []string // query, form and API parameter names
+	Body      []string // names scripts send in request bodies
+	Ops       []Op     // per method: what is sent, from API descriptions and scripts
+	Forms     []MapForm
+	Found     []webextract.Site // where scripts name the route, calls first
+	Guard     string            // client-route: what the app's router checks before it draws the view
+	Protocol  string            // websocket: socket.io, or "" for a plain WebSocket
+	Namespace string            // websocket: socket.io's namespace, when known
 }
 
 // maxFound caps the places a row lists for where scripts name it.
@@ -81,6 +84,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	apiOps := apiOperations(obs)
 	probes := pathProbes(obs)
 	finds := findings(obs)
+	decl := declaredRoles(obs)
 	secured := securedHosts(obs)
 	out := make([]MapEntry, 0, len(ents))
 	for _, e := range ents {
@@ -100,6 +104,18 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 				continue // its https URL is the row
 			}
 			m.Status, m.Title = answerOf(rows)
+			if d, ok := decl[e.Key]; ok {
+				// What a GET does not tell: a view the app's router draws
+				// (the server answers it with the app's shell), a
+				// WebSocket endpoint, a source map, a build manifest.
+				if m.Coverage != "visited" && m.Role != "auth" && m.Role != "forbidden" {
+					m.Role = d.role
+				}
+				m.Guard, m.Protocol, m.Namespace = d.guard, d.protocol, d.namespace
+				if m.Proof == "" {
+					m.Proof = d.proof()
+				}
+			}
 			if webextract.Templated(e.Key) {
 				m.Template = webextract.Template(e.Key)
 			}
@@ -161,6 +177,9 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 		ri, rj := mapRank(out[i], hosts, domains, ips), mapRank(out[j], hosts, domains, ips)
 		if ri != rj {
 			return ri < rj
+		}
+		if vi, vj := drawn(out[i]), drawn(out[j]); vi != vj {
+			return vj // the server's routes before the app's views and sockets
 		}
 		if out[i].Entity.Type != out[j].Entity.Type {
 			return out[i].Entity.Type < out[j].Entity.Type
@@ -528,6 +547,10 @@ func mapRank(m MapEntry, hosts, domains, ips map[string]bool) int {
 	}
 }
 
+// drawn: a view the app's router draws, or a socket; no page of the
+// server's.
+func drawn(m MapEntry) bool { return m.Role == "client-route" || m.Role == "websocket" }
+
 func (m MapEntry) Line() string {
 	var b strings.Builder
 	b.WriteString(string(m.Entity.Type))
@@ -696,6 +719,76 @@ type apiOp struct {
 	ops     []Op
 }
 
+// FoundKey is the map's key for a URL a collector found: a view of a
+// single-page app keeps its hash route (/#/administration), the only part
+// that tells it from the app's front page.
+func FoundKey(raw, role string) (string, error) {
+	if role == "client-route" {
+		return normalize.ClientURL(raw)
+	}
+	return normalize.URL(raw)
+}
+
+// declared is what a script says a URL is, where a GET would not tell.
+type declared struct {
+	role, guard, protocol, namespace string
+}
+
+func (d declared) proof() string {
+	var parts []string
+	for _, kv := range [][2]string{{"guard", d.guard}, {"protocol", d.protocol}, {"namespace", d.namespace}} {
+		if kv[1] != "" {
+			parts = append(parts, kv[0]+"="+kv[1])
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// declaredRoles indexes the URLs azhaq-js read as views of the app's
+// router, WebSocket endpoints, source maps and build manifests.
+func declaredRoles(obs []types.StoredObservation) map[string]declared {
+	out := map[string]declared{}
+	for _, o := range obs {
+		if o.Collector != "azhaq-js" || o.Kind != "url" {
+			continue
+		}
+		var p struct {
+			URL       string `json:"url"`
+			Role      string `json:"role"`
+			Guard     string `json:"guard"`
+			Protocol  string `json:"protocol"`
+			Namespace string `json:"namespace"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" {
+			continue
+		}
+		switch p.Role {
+		case "client-route", "websocket", "sourcemap", "manifest":
+		default:
+			continue
+		}
+		u, err := FoundKey(p.URL, p.Role)
+		if err != nil {
+			continue
+		}
+		d, ok := out[u]
+		if !ok {
+			d.role = p.Role
+		}
+		if d.guard == "" {
+			d.guard = p.Guard
+		}
+		if d.protocol == "" {
+			d.protocol = p.Protocol
+		}
+		if d.namespace == "" {
+			d.namespace = p.Namespace
+		}
+		out[u] = d
+	}
+	return out
+}
+
 // finding is how a URL was found: named in a script's strings or in a
 // JSON document, called by a script, or anything else (a link, a form,
 // an archive, an API description, a wordlist, the browser); and where
@@ -723,12 +816,13 @@ func findings(obs []types.StoredObservation) map[string]finding {
 		var p struct {
 			URL     string            `json:"url"`
 			Via     string            `json:"via"`
+			Role    string            `json:"role"`
 			FoundIn []webextract.Site `json:"found_in"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" {
 			continue
 		}
-		u, err := normalize.URL(p.URL)
+		u, err := FoundKey(p.URL, p.Role)
 		if err != nil {
 			continue
 		}

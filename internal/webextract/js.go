@@ -23,6 +23,10 @@ var (
 	scriptRef = regexp.MustCompile(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/\[\]-]{0,200}\.m?js)['"\x60]`)
 	// brackets is a path segment with a file-system router's parameter.
 	brackets = regexp.MustCompile(`\[\[?(?:\.\.\.)?[A-Za-z_$][\w$]*\]\]?`)
+	// nameTemplate is a bundler's file name template: a placeholder next
+	// to a dot ([name].[contenthash].js, [id].js). A page's chunk has a
+	// hash after a dash ([userId]-9f8e.js).
+	nameTemplate = regexp.MustCompile(`\][.]|[.]\[`)
 )
 
 // bracketPath maps a file-system router's parameters to the map's:
@@ -110,7 +114,7 @@ func ScriptRefs(script string, scriptURL *url.URL) []string {
 		if strings.Contains(ref, "//") || strings.HasPrefix(ref, "@") {
 			continue
 		}
-		if strings.ContainsAny(ref, "[]") && strings.ContainsAny(brackets.ReplaceAllString(ref, ""), "[]") {
+		if strings.ContainsAny(ref, "[]") && (strings.ContainsAny(brackets.ReplaceAllString(ref, ""), "[]") || nameTemplate.MatchString(ref)) {
 			continue // a name template ([name].[contenthash].js), not a file
 		}
 		base := scriptURL

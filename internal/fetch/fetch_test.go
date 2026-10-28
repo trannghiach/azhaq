@@ -262,3 +262,18 @@ func TestFollowableSite(t *testing.T) {
 		}
 	}
 }
+
+// SameSite is what a page may load from other hosts: the scope's hosts
+// with one, the page's site without.
+func TestSameSiteScope(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	const www, api, cdn = "https://www.example.com/", "https://api.example.com/v1/users", "https://cdn.example.net/app.js"
+	if !SameSite(www, api) || SameSite(www, cdn) {
+		t.Error("without a scope: the registrable domain")
+	}
+	Allow = func(h string) bool { return h == "www.example.com" || h == "cdn.example.net" }
+	if SameSite(www, api) || !SameSite(www, cdn) {
+		t.Error("with a scope: its hosts")
+	}
+}

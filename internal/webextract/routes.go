@@ -44,12 +44,31 @@ var (
 	guardName = regexp.MustCompile(`\b([A-Z][\w$]{3,}|[a-z][\w$]*Guard)\b`)
 	routeSeg  = regexp.MustCompile(`^[\w.~@$%+-]+$`)
 	// hashRouting: the app keeps its routes after # (/#/administration).
-	hashRouting = regexp.MustCompile(`useHash\s*:\s*(?:!0|true)\b|<HashRouter\b|\bmode\s*:\s*["'\x60]hash["'\x60]|\b(?:withHashLocation|createWebHashHistory|createHashRouter|createHashHistory)\s*\(`)
+	// React Router's own HashRouter calls createHashHistory, so that name
+	// says nothing of the app.
+	hashRouting = regexp.MustCompile(`useHash\s*:\s*(?:!0|true)\b|<HashRouter\b|[.(]\s*HashRouter\s*,\s*\{|\bmode\s*:\s*["'\x60]hash["'\x60]|\b(?:withHashLocation|createWebHashHistory|createHashRouter)\s*\(`)
 )
 
 // viewKeys make an object with a path a route: it draws something, holds
 // routes, or loads them. A cookie's or a socket's options have a path too.
 var viewKeys = []string{"component", "components", "loadComponent", "loadChildren", "children", "element", "Component", "lazy", "render"}
+
+// drawsView says whether a route-like object draws something: a view key
+// whose value is code or routes, not a string or a number.
+func drawsView(props []prop) bool {
+	for _, p := range props {
+		for _, k := range viewKeys {
+			if p.key != k {
+				continue
+			}
+			v := strings.TrimSpace(p.val)
+			if v != "" && !strings.ContainsRune("\"'`0123456789", rune(v[0])) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 // guardKeys are Angular's guards, in the order they are named.
 var guardKeys = []string{"canActivate", "canMatch", "canLoad", "canActivateChild"}
@@ -89,7 +108,7 @@ func ClientRoutes(script string) []ClientRoute {
 			continue
 		}
 		props := objectProps(obj)
-		if !hasAny(props, viewKeys) {
+		if !drawsView(props) {
 			continue
 		}
 		seen[open] = true
@@ -204,8 +223,9 @@ func jsxRoutes(script string) []ClientRoute {
 
 // HashRouting says the app keeps its routes after # (/#/administration):
 // Angular's useHash or withHashLocation, Vue's hash mode or
-// createWebHashHistory, React Router's HashRouter or createHashRouter. A
-// library's own definition of those functions does not count.
+// createWebHashHistory, React Router's HashRouter (as written, or as a
+// development build compiles it) or createHashRouter. A library's own
+// definition of those functions does not count.
 func HashRouting(script string) bool {
 	for _, m := range hashRouting.FindAllStringIndex(script, 64) {
 		if strings.HasSuffix(strings.TrimRight(script[max(0, m[0]-12):m[0]], " \t"), "function") {

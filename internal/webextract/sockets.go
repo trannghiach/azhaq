@@ -62,25 +62,18 @@ func WebSockets(script string) []Socket {
 		}
 	}
 	lib := ioLib.FindStringIndex(script)
+	// Without the library in the same script (the app's chunk, the
+	// library in a vendor one), a call by the bare name io must pass
+	// socket.io's options.
 	named := lib != nil || strings.Contains(script, "socket.io-client")
-	var calls [][]int
-	if named {
-		calls = ioName.FindAllStringIndex(script, -1)
-	} else if strings.Contains(script, "io") {
-		for _, m := range ioName.FindAllStringIndex(script, -1) {
-			if strings.Contains(script[m[0]:m[1]], "connect") || strings.Contains(script[m[0]:m[1]], "socketIOClient") {
-				calls = append(calls, m) // a name no minifier gives
-			}
-		}
-	}
-	calls = append(calls, ioESM.FindAllStringIndex(script, -1)...)
+	calls := append(ioName.FindAllStringIndex(script, -1), ioESM.FindAllStringIndex(script, -1)...)
 	explicit := false
 	for _, m := range calls {
 		args := callArgs(script, m[1]-1)
 		end := closeParen(script, m[1]-1) + 1
 		call := script[m[0]:m[1]]
 		bare := !strings.Contains(call, "connect") && !strings.Contains(call, "socketIOClient") && !ioESM.MatchString(call)
-		if s, ok := ioTarget(script, m[0], args, bare); ok {
+		if s, ok := ioTarget(script, m[0], args, bare, bare && !named); ok {
 			s.Start, s.End = m[0], end
 			add(s)
 			explicit = true
@@ -198,8 +191,8 @@ func socketURL(v string) (Socket, bool) {
 // ioTarget reads a socket.io client call: io(), io("/chat"),
 // io("https://api.example.com/admin",{path:"/rt/socket.io"}). A call by
 // the bare name io, which a minifier may give any function, must pass a
-// namespace, a URL or socket.io's options.
-func ioTarget(script string, pos int, args []string, bare bool) (Socket, bool) {
+// namespace, a URL or socket.io's options; strict, socket.io's options.
+func ioTarget(script string, pos int, args []string, bare, strict bool) (Socket, bool) {
 	host, path, ns := "", "/socket.io", "/"
 	opts := ""
 	ev := evaluator{src: script}
@@ -233,15 +226,24 @@ func ioTarget(script string, pos int, args []string, bare bool) (Socket, bool) {
 	if !strings.HasPrefix(opts, "{") {
 		opts = ""
 	}
+	if strict && opts == "" {
+		return Socket{}, false
+	}
 	if opts != "" {
 		props := objectProps(opts)
 		if !hasAny(props, []string{"path", "transports", "query", "auth", "reconnection", "forceNew", "withCredentials", "extraHeaders", "timeout", "autoConnect"}) {
 			return Socket{}, false
 		}
+		given := false
 		if p := strings.TrimSpace(propOf(props, "path")); p != "" {
 			if v, ok := ev.eval(p, pos, 0); ok && strings.HasPrefix(v, "/") && pathChars.MatchString(v) {
-				path = v
+				path, given = v, true
 			}
+		}
+		// Options any client takes (timeout, query) do not make a call
+		// socket.io's; its transports or its handshake path do.
+		if strict && !hasAny(props, []string{"transports"}) && !(given && SocketPath(path)) {
+			return Socket{}, false
 		}
 	}
 	return Socket{URL: host + path, Namespace: ns, SocketIO: true}, true

@@ -23,7 +23,7 @@ func cmdQuery(args []string) error {
 	fs := newFlags("query")
 	db := fs.String("db", "", "the database (default: the last run's)")
 	typ := fs.String("type", "", "entity types, comma-separated: URL, Hostname, Domain, IPAddress, …")
-	roleF := fs.String("role", "", "roles, comma-separated: app, auth, forbidden, api, page, live, sibling, unresolved, dead, …")
+	roleF := fs.String("role", "", "roles, comma-separated: app, auth, forbidden, api, page, client-route, websocket, live, sibling, unresolved, dead, …")
 	cov := fs.String("coverage", "", "coverage, comma-separated: visited, catchall, error, gone, hint, skipped, capped")
 	status := fs.String("status", "", "statuses, comma-separated: 200, 401, 4xx, 5xx")
 	method := fs.String("method", "", "routes with this method: GET, POST, …")
@@ -33,7 +33,7 @@ func cmdQuery(args []string) error {
 	scopeF := fs.String("scope", "", "target (what was asked about) or fanout (found on the way)")
 	isNew := fs.Bool("new", false, "only what the last run saw that the run before it did not (a workspace)")
 	since := fs.Duration("since", 0, "only what was first seen within this long")
-	fields := fs.String("fields", "", "print only these fields, comma-separated: key, type, role, coverage, status, title, methods, params, body, scope, first_seen, found_in")
+	fields := fs.String("fields", "", "print only these fields, comma-separated: key, type, role, coverage, status, title, methods, params, body, scope, first_seen, found_in, guard, protocol, namespace")
 	limit := fs.Int("limit", 0, "rows at most, best first (default 0: all)")
 	asJSON := fs.Bool("json", false, "one JSON object per row, and the summary as JSON on stderr")
 	failed := fs.Bool("failed", false, "list every target whose work failed (timeouts, refusals, a source's errors): the list to retry")
@@ -295,8 +295,14 @@ func cmdShow(args []string) error {
 	}
 	want := fs.Arg(0)
 	var keys []string
-	if n, err := normalize.URL(want); err == nil && strings.Contains(want, "://") {
-		keys = append(keys, n)
+	if strings.Contains(want, "://") {
+		// A view of the app's router is its hash route's row first.
+		if n, err := normalize.ClientURL(want); err == nil {
+			keys = append(keys, n)
+		}
+		if n, err := normalize.URL(want); err == nil {
+			keys = append(keys, n)
+		}
 	}
 	keys = append(keys, normalize.Hostname(want), want)
 	var row *engine.MapEntry
