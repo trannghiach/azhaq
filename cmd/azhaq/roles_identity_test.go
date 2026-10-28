@@ -942,3 +942,22 @@ func TestRoleOddFields(t *testing.T) {
 		}
 	}
 }
+
+func TestNoteCapMarksReplayMaxStopped(t *testing.T) {
+	rep := newReport("roles")
+	// A plain error is a note, not a stop.
+	noteCap(rep, "controls", errors.New("a transient failure"))
+	if rep.Stopped != "" {
+		t.Fatalf("a plain error set Stopped: %q", rep.Stopped)
+	}
+	// A -replay-max cap stops the run (exit 4).
+	capped := fmt.Errorf("%w: 12 URLs were not asked of every role", errReplayMax)
+	noteCap(rep, "replay", capped)
+	if rep.Stopped == "" {
+		t.Fatal("a -replay-max cap did not mark the run stopped")
+	}
+	rep.settle()
+	if rep.Exit != exitLimit || rep.Complete {
+		t.Fatalf("exit=%d complete=%v, want exit 4 and not complete", rep.Exit, rep.Complete)
+	}
+}

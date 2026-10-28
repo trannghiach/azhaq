@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math/rand/v2"
@@ -73,7 +72,7 @@ func askControls(roles []role, rows []roleRow, own map[string]bool, pages []refu
 			a, ok := asked[k]
 			if !ok {
 				if sent >= budget {
-					return sent, errors.New("the replay's request budget is spent: some cross reads were not checked with a made-up identifier")
+					return sent, fmt.Errorf("%w: some cross reads were not checked with a made-up identifier", errReplayMax)
 				}
 				var body []byte
 				var err error

@@ -7,7 +7,7 @@
 - `-get-words exec,import` requests the URLs left alone for these words only (finer than `-all-gets`).
 - A JSON listing's first item is asked at the route a REST API reads it at (`/api/Challenges` → `/api/Challenges/1`): the item route is proved by its answer, and `roles` gets an object to replay across sessions.
 - `-no-paths` turns off the built-in path checks; `plan` counts them.
-- `urls -urls-source` (and `-json`) says which source gave each URL.
+- `urls -json` says which source gave each URL (`source`); `run -urls-source` adds it to the url rows.
 - A site with a sign-in form and no session given suggests `-login` in a `next:` line.
 
 ### Changed
@@ -26,6 +26,8 @@
 
 ### Fixed
 
+- An answer of 401 or 403 is never a catch-all: a route that exists but is gated (`/api/Feedbacks/1`, which answers 401 like every id under it) is kept and marked `auth`/`forbidden`, and its coverage no longer flips between `visited` and `catchall` from one run to the next (which made `diff` and `watch` report phantom changes).
+- `roles` whose replay was cut short by `-replay-max` reports it: exit 4, `complete:false`, and a `stopped:` line, instead of a clean exit 0 that hid an access-control comparison left unfinished.
 - A path in a directory past the 24 whose unknown-path answer is asked is compared with the nearest directory above it, not the site's root: Juice Shop's `/rest/…` error page for unknown paths is no longer taken for a route.
 - `params -rate 0` (`-params-rate 0`) sends without a pace, as arjun does: five lab pages and 6,453 names in 0.9 s; 0 used to mean the default 20 a second.
 - MCP tools take a single string where a list of strings is expected.

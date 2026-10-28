@@ -135,7 +135,10 @@ func TestCatchAllPlain404Server(t *testing.T) {
 		t.Error("404 is not a catch-all")
 	}
 	catchAll(t, srv, "/admin")
-	if probes.Load() != 1 {
-		t.Errorf("baseline probes %d, want 1 per directory", probes.Load())
+	// 401, 403, 404 and 410 are decided by their status alone (a gated or
+	// absent route, never the page an unknown path gets), so no baseline is
+	// fetched for them.
+	if probes.Load() != 0 {
+		t.Errorf("baseline probes %d, want 0 (status decides these)", probes.Load())
 	}
 }

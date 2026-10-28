@@ -95,9 +95,15 @@ func resetProbes() {
 
 // CatchAll reports whether res is the origin's generic answer rather than a
 // page of its own. The site root is never a catch-all, and 404/410 are
-// already a "no".
+// already a "no". An auth challenge (401) or a refusal (403) is the server
+// distinguishing a route that exists but is gated, not the page an unknown
+// path gets: never a catch-all, so an item route like /api/Feedbacks/1 that
+// answers 401 (as every id under it does, unauthenticated) is kept, not
+// dismissed as the shell, and its answer does not depend on how many
+// directories were probed before it.
 func CatchAll(ctx context.Context, c *http.Client, res Result) bool {
-	if res.Status == 0 || res.Status == http.StatusNotFound || res.Status == http.StatusGone {
+	switch res.Status {
+	case 0, http.StatusNotFound, http.StatusGone, http.StatusUnauthorized, http.StatusForbidden:
 		return false
 	}
 	u, err := url.Parse(res.RequestURL)

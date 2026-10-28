@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -337,9 +338,7 @@ func cmdRoles(args []string) error {
 		rep.Requests += int64(n)
 		replayed = n
 		rep.Notes = append(rep.Notes, watch.notes...)
-		if err != nil {
-			rep.Notes = append(rep.Notes, "replay: "+err.Error())
-		}
+		noteCap(rep, "replay", err)
 	}
 	// A 200 "Access denied" page is a refusal: each origin's, as the
 	// anonymous role got it, and what -refusal says.
@@ -363,9 +362,7 @@ func cmdRoles(args []string) error {
 		fetch.Reset()
 		rep.Requests += int64(n)
 		replayed += n
-		if err != nil {
-			rep.Notes = append(rep.Notes, "controls: "+err.Error())
-		}
+		noteCap(rep, "controls", err)
 		rep.Notes = append(rep.Notes, bothWays(rows)...)
 		sortRows(rows)
 	}
@@ -405,9 +402,8 @@ func cmdRoles(args []string) error {
 			var n int
 			wrows, n, err = replayWrites(roles, reqs, answers, own, rate, max(0, *replayMax-replayed))
 			rep.Requests += int64(n)
-			if err != nil {
-				rep.Notes = append(rep.Notes, "write replay: "+err.Error())
-			}
+			replayed += n
+			noteCap(rep, "write replay", err)
 		}
 		if len(reqs) == 0 {
 			rep.Notes = append(rep.Notes, "-replay-writes: no write to replay (no -har, and no PUT, PATCH or DELETE on a route with a role's own object)")
@@ -652,6 +648,24 @@ func size(n int) string {
 	}
 }
 
+// errReplayMax wraps the error a replay stage returns when -replay-max
+// stopped it with work left: the run is incomplete and resumable (exit 4),
+// not a clean pass.
+var errReplayMax = errors.New("replay stopped by -replay-max")
+
+// noteCap records a replay stage's error as a note, and when it is a
+// -replay-max cap marks the run stopped by a limit (exit 4) so a clean
+// exit 0 does not hide an access-control comparison that was cut short.
+func noteCap(rep *report, prefix string, err error) {
+	if err == nil {
+		return
+	}
+	rep.Notes = append(rep.Notes, prefix+": "+err.Error())
+	if errors.Is(err, errReplayMax) && rep.Stopped == "" {
+		rep.Stopped = err.Error()
+	}
+}
+
 // replayAll asks each URL some role reached, and each object URL made
 // from the roles' answers, with every role that has no answer for it,
 // through that role's session. Only GETs that change nothing, on the
@@ -714,7 +728,7 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 					asks[r.name]--
 				}
 			}
-			stopped = fmt.Errorf("stopped after -replay-max %d requests; %d URLs were not asked of every role", budget, len(urls)-i)
+			stopped = fmt.Errorf("%w: stopped after -replay-max %d requests; %d URLs were not asked of every role (raise -replay-max to compare them)", errReplayMax, budget, len(urls)-i)
 			urls = urls[:i]
 			break
 		}

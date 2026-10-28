@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -233,7 +232,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	sent := 0
 	send := func(r role, w writeReq) (answer, error) {
 		if sent >= budget {
-			return answer{}, errors.New("the replay's request budget is spent")
+			return answer{}, fmt.Errorf("%w: some writes were not replayed", errReplayMax)
 		}
 		sent++
 		return sendWrite(ctx, &client, r, w)
