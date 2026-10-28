@@ -30,7 +30,7 @@ azhaq run -url https://app.example.com/ -login https://app.example.com/login -lo
 azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Authorization: Bearer $TB" -- -url https://app.example.com/
 ```
 
-Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] proved` are the findings, worst first; `proved` rows first, `guess` rows need a look. The evidence after the route says why the object is alice's and what a made-up identifier got. Check one by hand with bob's token before you report it: `azhaq roles show -dir DIR URL` prints each role's answer, how it differs from alice's, and a curl line to run with `BOB_TOKEN` set.
+Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] proved` are the findings, worst first: `proved` rows need the least checking, `guess` rows the most. The evidence after the route says why the object is alice's, and what the same route returned for a made-up identifier (a route that answers any ID is flagged `answers any identifier`, not a finding). Check one by hand with bob's token before you report it: `azhaq roles show -dir DIR URL` prints each role's answer, how it differs from alice's, and a curl line to run with `BOB_TOKEN` set.
 
 Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3); see recipe 4.
 
@@ -67,7 +67,7 @@ azhaq run -scope hackerone -program acme -max-requests 5000 -rate 5 -db acme.db
 azhaq resume -db acme.db
 ```
 
-A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where it stopped, without asking again what it asked. Drop-ins given `-db` resume too.
+A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where it stopped, without asking again what it already asked. The single-job commands (`subs`, `probe`, `dirs`, …) resume the same way when they were given a `-db`; without one their workspace is temporary and gone.
 
 ## 8. Watch a program and get alerts
 

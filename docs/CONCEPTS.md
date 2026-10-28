@@ -30,12 +30,12 @@ URL http://localhost:3000/rest/2fa/verify  target  hint  api  POST
 | `error` | Requested; no answer (timeout, refused, reset, TLS). | `azhaq query -db W -failed`, then try again. |
 | `gone` | Requested; it answered 404 or 410. Usually an archived URL. | Try older API versions near it. |
 | `hint` | Known (from a script, an API description, an archive, a link), not proven by a GET: not requested, or a route scripts call with another method. | Send the method in its operations yourself. |
-| `skipped` | Not requested on purpose: its name says a GET would change something (`word` says which). Listed under "left alone". | `-get-words WORD` (or `-all-gets`) if you accept the side effect. |
+| `skipped` | Not requested on purpose: its name says a GET would change something (the `word` field names the verb, such as `logout` or `delete`). Listed under "left alone". | `-get-words WORD` (or `-all-gets`) if you accept the side effect. |
 | `capped` | Not requested: a limit (budget, depth, items) ran out first. | `azhaq resume -db W`. |
 
 ## Kinds of URL
 
-`app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest), `client-route` (a view a single-page app's router draws, such as `http://host/#/administration`, with the `guard` that keeps it), `websocket` (an endpoint scripts open a WebSocket to). Views after the hash and sockets are never requested: `hint`. A view in the path (`http://host/admin`) is asked for once: what the server answers stands (`auth`, `page`), the guard noted beside it; the shell leaves it a `client-route`.
+`app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest), `client-route` (a view a single-page app's router draws, such as `http://host/#/administration`, with the `guard` that keeps it), `websocket` (an endpoint scripts open a WebSocket to). Views after the hash and sockets are never requested, so they stay `hint`. A view in the path (`http://host/admin`) is asked for once. If the server answers it (`auth`, `page`), that answer stands, with the guard noted beside it. If the app's shell answers instead, it stays a `client-route`.
 
 ## Names
 
@@ -58,7 +58,7 @@ Rows of the kinds `domain` (a domain you gave) and `addr` (an address) carry no 
 | budget | `-max-requests`: requests to targets the run may send. Port connects count too. |
 | pace | `-rate`: requests per second to targets, over all hosts. Chrome's requests too. |
 | fanout failure | A failure about something you did not ask about (a name found on the way). Listed with `"fanout": true`; the exit code stays 0. |
-| partial | One source failed while others answered for the same domain. Listed with `"partial": true`; the exit code stays 0, except for crt.sh. |
+| partial | One source failed while others answered for the same domain. Listed with `"partial": true`; the exit code stays 0, except for crt.sh (no other source holds as many names, so its failure counts). |
 | degraded | Every source or archive failed, so an empty answer is not an honest zero. |
 | left alone | URLs not requested because a GET there would change something. |
 | takeover candidate | A name whose CNAME points at something gone (a service name anyone may create, a domain nobody holds), or whose front page is a hosting service's page for an unclaimed name. Confirm by hand. |
@@ -73,7 +73,7 @@ Exit codes: `0` complete, `1` error, `2` usage (nothing was sent), `3` finished 
 | role | A session: anonymous, headers (`-role`), headers from a command (`-role-cmd`), or a Chrome sign-in (`-role-login`). |
 | replay | Every URL any role reached, asked with every other role. GETs only, unless `-replay-writes`. |
 | reads | Answered 2xx, and not with an error shaped as data. |
-| refused | Any 4xx, an error answered 2xx, the site's own `200 Access denied` page (or what `-refusal` matches), a redirect to a sign-in page, or to the front page while another role reads it. |
+| refused | Any 4xx, an error served with a 2xx status, the site's own `200 Access denied` page (or what `-refusal` matches), a redirect to a sign-in page, or a redirect to the front page when another role reads the endpoint directly. |
 | owner, `owner_by` | Whose object it is, and the evidence (a token's claim, a list only that role sees, the object's own owner field). |
 | `confidence`, `evidence` | How surely the object is the owner's (`proved`: the session or the owner's own list, and the object's answer; `likely`: one of them; `guess`), and why, in one line. |
 | control | A made-up identifier of the same shape on the same route: a route that answers it like a real object answers any identifier. |
