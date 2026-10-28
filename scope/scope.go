@@ -69,7 +69,15 @@ func hostMatch(host, rule string) bool {
 		return err == nil && ip != nil && n.Contains(ip)
 	}
 	exact := strings.HasPrefix(rule, "=")
-	rule = normalize.Hostname(strings.TrimPrefix(strings.TrimPrefix(rule, "="), "*."))
+	rule = strings.TrimPrefix(strings.TrimPrefix(rule, "="), "*.")
+	// A user often copies a URL's authority into -allow (-allow
+	// 127.0.0.1:5013): scope is matched by host, so drop the port. Only a
+	// real host:port is split — a bare IPv6 address (::1) and a bare host
+	// are left as they are.
+	if h, p, err := net.SplitHostPort(rule); err == nil && allDigits(p) {
+		rule = h
+	}
+	rule = normalize.Hostname(rule)
 	if rule == "" {
 		return false
 	}
@@ -80,4 +88,17 @@ func hostMatch(host, rule string) bool {
 		return false
 	}
 	return strings.HasSuffix(host, "."+rule)
+}
+
+// allDigits is true for a non-empty string of ASCII digits (a port number).
+func allDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }

@@ -48,3 +48,27 @@ func TestRuleForms(t *testing.T) {
 		}
 	}
 }
+
+// A port copied into -allow/-deny (from a URL's authority) is ignored:
+// scope is matched by host. A bare IPv6 address keeps its colons.
+func TestRulePortStripped(t *testing.T) {
+	r := Rules{
+		Allow: []string{"127.0.0.1:5013", "app.example.com:8443", "[2001:db8::1]:443"},
+		Deny:  []string{"admin.example.com:8080"},
+	}
+	for host, want := range map[string]bool{
+		"127.0.0.1":         true,
+		"app.example.com":   true,
+		"2001:db8::1":       true,
+		"admin.example.com": false,
+		"other.example.com": false,
+	} {
+		if got := r.Allows(host); got != want {
+			t.Errorf("%s: %v, want %v", host, got, want)
+		}
+	}
+	// A bare IPv6 in -allow (no port) still matches itself.
+	if !(Rules{Allow: []string{"::1"}}).Allows("::1") {
+		t.Error("bare IPv6 ::1 should match itself")
+	}
+}

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.7.4
+
+### Changed
+
+- A crt.sh failure no longer makes `subs` exit 3 on its own: when the other sources returned the domain's names, a crt.sh timeout or gateway 5xx is listed (`partial`) and the exit code stays 0, like any other source. crt.sh is flaky, and a run that got its names should not fail a CI gate over it; `-fail-on-errors` still turns every source failure into exit 3.
+- `-allow` and `-deny` accept a `host:port` copied from a URL's authority (`-allow 127.0.0.1:5013`): the scope is matched by host, so the port is ignored. A run whose only target was excluded by a mistyped scope already prints why; the port no longer silently leaves the target out of scope.
+
 ## v0.7.3
 
 ### Fixed

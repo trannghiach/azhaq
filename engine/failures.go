@@ -377,10 +377,14 @@ func MarkPartial(fs []Failure, ents []types.Entity, obs []types.StoredObservatio
 	return fs
 }
 
-// coreSources are the sources whose failure is never partial: crt.sh
-// holds the most names of any certificate log, and the others do not
-// make up for it.
-var coreSources = map[string]bool{"crtsh": true}
+// coreSources are the sources whose failure is never partial — its results
+// are not counted as made up for by the others, so it alone makes the exit
+// code 3. None now: crt.sh is valuable but flaky (gateway 5xx are common),
+// and a run that still got its names from the other sources should not
+// signal failure to a CI gate for a transient crt.sh blip. A crt.sh failure
+// is still listed in the summary, and `-fail-on-errors` still makes any
+// source failure exit 3.
+var coreSources = map[string]bool{}
 
 // thirdParty collectors ask others about a domain (archives, CT, RDAP):
 // what they fail to say is part of a map only when the domain itself was
