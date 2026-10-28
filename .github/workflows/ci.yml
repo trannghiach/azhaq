@@ -21,7 +21,13 @@ jobs:
       - name: vet
         run: go vet ./...
       - name: test
-        run: go test -race ./...
+        # The failing tests are annotations too: they read without a login.
+        run: |
+          set -o pipefail
+          go test -race ./... 2>&1 | tee test.log || {
+            grep -E -- '--- FAIL|^FAIL|panic:|_test.go:[0-9]+:' test.log | head -40 | while IFS= read -r l; do echo "::error::$l"; done
+            exit 1
+          }
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: licenses
