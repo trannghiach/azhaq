@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -19,7 +20,8 @@ var skipExt = map[string]bool{
 	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".svg": true,
 	".ico": true, ".webp": true, ".woff": true, ".woff2": true, ".ttf": true,
 	".eot": true, ".css": true, ".map": true, ".js": true, ".mjs": true, ".cjs": true,
-	".mp4": true, ".webm": true,
+	".mp4": true, ".webm": true, ".avif": true, ".apng": true, ".bmp": true, ".heic": true,
+	".otf": true, ".mp3": true, ".ogg": true, ".wav": true,
 }
 
 type Form struct {
@@ -240,14 +242,54 @@ func Links(body []byte, base *url.URL) []string {
 			continue
 		}
 		tok := z.Token()
-		attr := hrefAttr(tok.Data, tok.Attr)
-		if attr == "" {
-			continue
-		}
-		if u, ok := resolve(base, attr); ok {
-			if !seen[u] {
+		if attr := hrefAttr(tok.Data, tok.Attr); attr != "" {
+			if u, ok := resolve(base, attr); ok && !seen[u] {
 				seen[u] = true
 				out = append(out, u)
+			}
+		}
+		// What the tag's scripts would open: the page's own only, as
+		// a handler opening another site is not a link of the page.
+		for _, ref := range handlerRefs(tok.Attr) {
+			if u, ok := resolve(base, ref); ok && !seen[u] && SameOrigin(base.String(), u) {
+				seen[u] = true
+				out = append(out, u)
+			}
+		}
+	}
+	return out
+}
+
+var (
+	quoted   = regexp.MustCompile(`['"]([^'"\s<>]{1,512})['"]`)
+	dataLink = regexp.MustCompile(`(?:url|href|link|src|action|endpoint|api)$`)
+	// handlerURL is a string that names a page: a path, or a file with a
+	// page's extension or a query (view_source.php?id=xss_r).
+	handlerURL = regexp.MustCompile(`^(?:https?://[^/\s]+/|\.{0,2}/)[^\s'"<>]*$|^[\w.-]+(?:/[\w.-]+)*(?:\.(?:php|jsp|jspx|asp|aspx|ashx|do|action|cgi|pl|html?)(?:\?[^\s'"<>]*)?|\?[\w%&=.+-]+)$`)
+)
+
+// handlerRefs are the pages a tag's scripts name: the strings of a
+// javascript: link and of its on* handlers that look like a URL
+// (href="javascript:popUp('view_source.php?id=xss_r')",
+// onclick="location.href='/admin'"), and a data-* attribute named as one
+// (data-help-url='../view_help.php?id=brute', data-href), which a script
+// reads to open it; a data-path is a label (Swagger UI's for each
+// operation), not a link. Resolved against the page, like a link.
+func handlerRefs(attrs []html.Attribute) []string {
+	var out []string
+	for _, a := range attrs {
+		k, v := strings.ToLower(a.Key), strings.TrimSpace(a.Val)
+		switch {
+		case strings.HasPrefix(k, "data-"):
+			if dataLink.MatchString(k) && handlerURL.MatchString(v) {
+				out = append(out, v)
+			}
+		case strings.HasPrefix(k, "on") && len(k) > 2,
+			(k == "href" || k == "action") && strings.HasPrefix(strings.ToLower(v), "javascript:"):
+			for _, m := range quoted.FindAllStringSubmatch(v, -1) {
+				if handlerURL.MatchString(m[1]) {
+					out = append(out, m[1])
+				}
 			}
 		}
 	}

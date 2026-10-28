@@ -131,3 +131,42 @@ func TestPayloadKeepsLegitimateURLs(t *testing.T) {
 		}
 	}
 }
+
+// A scanner's own files and tags, and its random executables, kept by
+// an archive, never enter the map; a product page or a file a person
+// named does.
+func TestJunkURLScannerArtifacts(t *testing.T) {
+	for _, raw := range []string{
+		"http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl",
+		"http://a.test/acunetix-wvs-test-for-some-inexistent-file",
+		"http://a.test/netsparker(0).txt",
+		"http://a.test/x?invicti=1",
+		"http://a.test/search?q=bxss.me/t/xss.html",
+		"http://a.test/x?name=appscan_fingerprint",
+		"http://a.test/nessus_test.php",
+		"http://a.test/qualystest",
+		"http://a.test/x?u=http://xss.rocks/x.js",
+		"http://testphp.vulnweb.com/7zSo1DIz.exe",
+		"http://testphp.vulnweb.com/NhYzAp8A.exe",
+		"http://a.test/aB3dEf.dll",
+	} {
+		if !JunkURL(raw) {
+			t.Errorf("JunkURL(%s) = false", raw)
+		}
+	}
+	for _, raw := range []string{
+		"http://tenable.test/products/nessus",
+		"http://a.test/nessus",
+		"http://a.test/docs/qualys-integration",
+		"http://a.test/blog/appscan",
+		"http://a.test/downloads/Setup64.exe",
+		"http://a.test/winrar.exe",
+		"http://a.test/files/7zSo1DIz.exe",
+		"http://a.test/putty.exe",
+		"http://a.test/x?q=netsparker",
+	} {
+		if JunkURL(raw) {
+			t.Errorf("JunkURL(%s) = true", raw)
+		}
+	}
+}

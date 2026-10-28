@@ -318,9 +318,9 @@ addEventListener('visibilitychange', () => navigator.sendBeacon('`+o+`/vis', 'x'
 	if p.Left != o+"/landing" || !slices.Contains(p.Blocked, o+"/landing") {
 		t.Errorf("with %d refusals held, a redirect out gives Left %q, Blocked %q", held(), p.Left, p.Blocked)
 	}
-	fetch.MaxRequests = fetch.Sent() + 2 // the page and one image
+	fetch.MaxRequests = fetch.Sent() + 2 // the page and one image (fetched for a screenshot)
 	_ = fetch.Spend(ctx)
-	if p, _ := b.Load(ctx, own.URL+"/p9", false); !p.Capped {
+	if p, _ := b.Load(ctx, own.URL+"/p9", true); !p.Capped {
 		t.Errorf("with %d refusals held, a page the budget cut is not capped", held())
 	}
 	if n := held(); n > maxHeld {
@@ -347,7 +347,7 @@ func TestCappedLeftover(t *testing.T) {
 	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
 	fetch.MaxRequests = 2
 	_ = fetch.Spend(ctx)
-	p, _ := b.Load(ctx, own.URL+"/", false)
+	p, _ := b.Load(ctx, own.URL+"/", true) // a screenshot: the images are fetched
 	if !p.Capped || len(p.Blocked) > 0 {
 		t.Errorf("capped %v, blocked %q", p.Capped, p.Blocked)
 	}
@@ -378,7 +378,7 @@ func TestPaced(t *testing.T) {
 	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
 	fetch.SetRate(4)
 	_ = fetch.Spend(ctx)
-	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
+	if _, err := b.Load(ctx, own.URL+"/", true); err != nil { // a screenshot: the images are fetched
 		t.Fatal(err)
 	}
 	mu.Lock()
@@ -396,7 +396,7 @@ func TestPaced(t *testing.T) {
 // page's: claiming waits for what is being decided.
 func TestSettleWaits(t *testing.T) {
 	b := startChrome(t)
-	tb := b.open(b.root, "MAIN", false)
+	tb := b.open(b.root, "MAIN", false, false)
 	if b.begin("MAIN") != tb {
 		t.Fatal("the frame is not the tab's")
 	}

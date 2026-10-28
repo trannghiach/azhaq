@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // Chrome is held to where plain HTTP may go: every request a page, a frame
@@ -44,6 +45,9 @@ type refusal struct {
 	doc    bool // a page's or a frame's document: a navigation
 	sends  bool // a script's request with a body (a login's call)
 	budget bool // refused for the request budget, not for where it went
+
+	download bool   // refused for being a download, not for where it went (downloads.go)
+	name     string // what Chrome would have saved it as
 }
 
 // tab is an open page's share of what Chrome refuses, by the frames it is
@@ -60,7 +64,30 @@ type tab struct {
 	pending int  // requests of its frames being decided
 	read    bool // claimed: what comes later is counted only
 	signin  bool // the sign-in's: its writes are sent, and not kept
+	lean    bool // read, not shot: its images, fonts and media are not fetched
 	writes  []Write
+}
+
+// decoration: a request that draws the page and names no route: an
+// image, a font, a sound or a video. A page read for its requests and
+// its document does without them; a screenshot needs them.
+func decoration(rt network.ResourceType) bool {
+	switch rt {
+	case network.ResourceTypeImage, network.ResourceTypeFont, network.ResourceTypeMedia:
+		return true
+	}
+	return false
+}
+
+// chatter: a request every tab repeats that names no route of its own:
+// socket.io's polling (its socket is a row of the map already, from the
+// script that opens it) and the tab's icon.
+func chatter(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return webextract.SocketPath(u.Path) || strings.HasSuffix(strings.ToLower(u.Path), "/favicon.ico")
 }
 
 func (t *tab) add(r refusal) {
@@ -224,7 +251,13 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.fail(root, ev.RequestID) // a window a page opened, being closed
 		return
 	case !b.allowed(raw):
-		r.url, r.host = listable(raw)
+		r.url, r.host = listable(raw) // an image on a third party's host is listed: its query may carry the page's data
+	case t != nil && t.lean && !write && (decoration(ev.ResourceType) || chatter(raw)):
+		// Not sent, not counted, not listed: the page is read without
+		// what only draws it, and without the socket's polling.
+		b.done(t)
+		b.fail(root, ev.RequestID)
+		return
 	case write && !b.Writes:
 		// Not sent, nor counted: what it would have sent is mapped.
 		b.wrote(t, ev.FrameID, writeOf(ev.Request))
@@ -395,9 +428,10 @@ func (b *Browser) closePopups(ctx context.Context, main cdp.FrameID) {
 }
 
 // open makes main's page one whose refusals are kept for it; signin
-// makes it the sign-in's, whose writes are sent.
-func (b *Browser) open(ctx context.Context, main cdp.FrameID, signin bool) *tab {
-	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}, signin: signin}
+// makes it the sign-in's, whose writes are sent; lean one read without
+// its images, fonts and media.
+func (b *Browser) open(ctx context.Context, main cdp.FrameID, signin, lean bool) *tab {
+	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}, signin: signin, lean: lean}
 	b.addFrame(t, main)
 	return t
 }
@@ -481,7 +515,7 @@ func (b *Browser) settle(t *tab) {
 func (b *Browser) refuse(t *tab, r refusal) {
 	b.refMu.Lock()
 	defer b.refMu.Unlock()
-	if !r.budget {
+	if !r.budget && !r.download {
 		b.refused++
 	}
 	if t == nil {
@@ -494,7 +528,7 @@ func (b *Browser) refuse(t *tab, r refusal) {
 		// Its page was read (a beacon sent as the tab closes): listed with
 		// no page, a budget refusal counted only.
 		if !r.budget {
-			b.hold(refusal{url: r.url, host: r.host})
+			b.hold(refusal{url: r.url, host: r.host, download: r.download, name: r.name})
 		}
 	default:
 		b.hold(r) // a worker's, or a frame no open page has made known yet
@@ -557,18 +591,20 @@ func (b *Browser) leave(rs []refusal) {
 	defer b.refMu.Unlock()
 	for _, r := range rs {
 		if !r.budget && r.url != "" {
-			b.hold(refusal{url: r.url, host: r.host})
+			b.hold(refusal{url: r.url, host: r.host, download: r.download, name: r.name})
 		}
 	}
 }
 
-// list is the URLs of rs a run lists: the first maxListed of the run.
+// list is the URLs of rs a run lists as refused for where they went: the
+// first maxListed of the run. The downloads among them are listed apart
+// (downloads).
 func (b *Browser) list(rs []refusal) []string {
 	b.refMu.Lock()
 	defer b.refMu.Unlock()
 	var out []string
 	for _, r := range rs {
-		if r.budget || r.url == "" || b.listed[r.url] {
+		if r.budget || r.download || r.url == "" || b.listed[r.url] {
 			continue
 		}
 		if len(b.listed) >= maxListed {
@@ -587,15 +623,23 @@ func (b *Browser) list(rs []refusal) []string {
 // Leftover is the refused URLs no page listed: a service worker's
 // requests, a beacon sent as a tab closed, a capped page's.
 func (b *Browser) Leftover() []string {
+	return b.list(b.takeHeld(false))
+}
+
+// takeHeld takes the refusals no page has that are downloads, or that are
+// not, sorted by URL.
+func (b *Browser) takeHeld(downloads bool) []refusal {
 	b.refMu.Lock()
 	var rs []refusal
 	for r := range b.held {
-		rs = append(rs, r)
+		if r.download == downloads {
+			rs = append(rs, r)
+			delete(b.held, r)
+		}
 	}
-	b.held = nil
 	b.refMu.Unlock()
 	sort.Slice(rs, func(i, j int) bool { return rs[i].url < rs[j].url })
-	return b.list(rs)
+	return rs
 }
 
 // Refused is how many requests Chrome was not let send for where they

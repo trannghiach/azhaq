@@ -1645,12 +1645,15 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 }
 
 // chromeRefused lists in rep what Chrome was refused that no page claimed
-// (a service worker's requests, WebSockets, a beacon as a tab closed), and
-// how many requests there were when more URLs were refused than are
-// listed.
+// (a service worker's requests, WebSockets, a beacon as a tab closed, a
+// download the sign-in began), and how many requests there were when
+// more URLs were refused than are listed.
 func chromeRefused(rep *report, b *browser.Browser) {
 	for _, u := range b.Leftover() {
 		rep.Skipped = append(rep.Skipped, engine.Skip{Target: u, Reason: browser.Reason()})
+	}
+	for _, u := range b.LeftoverDownloads() {
+		rep.Skipped = append(rep.Skipped, engine.Skip{Target: u, Reason: browser.DownloadReason})
 	}
 	for _, w := range b.LeftoverWrites() {
 		if s := (engine.Skip{Target: w, Reason: browser.WriteReason}); !slices.Contains(rep.Skipped, s) {

@@ -22,6 +22,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -493,55 +494,11 @@ func addName(xs []string, n string) []string {
 	return append(xs, n)
 }
 
-// embedded finds a description written into a script, as Swagger UI's
-// swagger-ui-init.js does with "swaggerDoc": {...}, or into an HTML page.
-// It returns the JSON object or "".
+// embedded finds a description written into a script or an HTML page
+// (webextract.EmbeddedSpec), and returns the JSON object or "".
 func embedded(src string) string {
-	for _, key := range []string{`"swaggerDoc"`, `swaggerDoc`, `"spec"`, `spec`} {
-		for from := 0; ; {
-			i := strings.Index(src[from:], key)
-			if i < 0 {
-				break
-			}
-			i += from + len(key)
-			from = i
-			rest := strings.TrimLeft(src[i:], " \t\r\n")
-			if !strings.HasPrefix(rest, ":") {
-				continue
-			}
-			rest = strings.TrimLeft(rest[1:], " \t\r\n")
-			if obj := jsonObject(rest); obj != "" && (strings.Contains(obj, `"openapi"`) || strings.Contains(obj, `"swagger"`)) {
-				return obj
-			}
-		}
-	}
-	return ""
-}
-
-// jsonObject returns the balanced {...} that s starts with, or "".
-func jsonObject(s string) string {
-	if !strings.HasPrefix(s, "{") {
-		return ""
-	}
-	depth, inStr, esc := 0, false, false
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		switch {
-		case esc:
-			esc = false
-		case inStr && ch == '\\':
-			esc = true
-		case ch == '"':
-			inStr = !inStr
-		case inStr:
-		case ch == '{':
-			depth++
-		case ch == '}':
-			depth--
-			if depth == 0 {
-				return s[:i+1]
-			}
-		}
+	if i, j := webextract.EmbeddedSpec(src); i >= 0 {
+		return src[i:j]
 	}
 	return ""
 }

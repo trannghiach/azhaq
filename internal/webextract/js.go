@@ -55,10 +55,13 @@ func JSURLs(script string, base *url.URL) []string {
 }
 
 // Ref is a URL a script names, and where: Start and End are the byte
-// offsets of what names it.
+// offsets of what names it. Joined says the string is the right operand
+// of a +: what it is joined to (this.host+`/orders`) is its base, and the
+// path is a tail of a route, not one of the root's.
 type Ref struct {
 	URL        string
 	Start, End int
+	Joined     bool
 }
 
 // JSURLRefs is JSURLs with every place each URL is named, in the order
@@ -70,7 +73,7 @@ func JSURLRefs(script string, base *url.URL) []Ref {
 	var out []Ref
 	add := func(raw string, start, end int) {
 		if u, ok := resolve(base, raw); ok && !StringNoise(u) {
-			out = append(out, Ref{URL: u, Start: start, End: end})
+			out = append(out, Ref{URL: u, Start: start, End: end, Joined: joined(script, start)})
 		}
 	}
 	for _, m := range absURL.FindAllStringIndex(script, -1) {
@@ -91,6 +94,70 @@ func JSURLRefs(script string, base *url.URL) []Ref {
 		add(script[m[2]:m[3]], m[0], m[1])
 	}
 	return out
+}
+
+// joined says whether the string at i is the right operand of a +.
+func joined(script string, i int) bool {
+	for i--; i >= 0 && (script[i] == ' ' || script[i] == '\t' || script[i] == '\n' || script[i] == '\r'); i-- {
+	}
+	return i >= 0 && script[i] == '+'
+}
+
+// EmbeddedSpec finds an API description written into a script, as Swagger
+// UI's swagger-ui-init.js does with "swaggerDoc": {...}, or into an HTML
+// page: the JSON object's byte offsets, or -1. The paths it names are the
+// description's, under its servers, not the script's.
+func EmbeddedSpec(src string) (start, end int) {
+	for _, key := range []string{`"swaggerDoc"`, `swaggerDoc`, `"spec"`, `spec`} {
+		for from := 0; ; {
+			i := strings.Index(src[from:], key)
+			if i < 0 {
+				break
+			}
+			i += from + len(key)
+			from = i
+			for i < len(src) && strings.ContainsRune(" \t\r\n", rune(src[i])) {
+				i++
+			}
+			if i >= len(src) || src[i] != ':' {
+				continue
+			}
+			for i++; i < len(src) && strings.ContainsRune(" \t\r\n", rune(src[i])); i++ {
+			}
+			if n := jsonObject(src[i:]); n > 0 && (strings.Contains(src[i:i+n], `"openapi"`) || strings.Contains(src[i:i+n], `"swagger"`)) {
+				return i, i + n
+			}
+		}
+	}
+	return -1, -1
+}
+
+// jsonObject is the length of the balanced {...} that s starts with, or 0.
+func jsonObject(s string) int {
+	if !strings.HasPrefix(s, "{") {
+		return 0
+	}
+	depth, inStr, esc := 0, false, false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		switch {
+		case esc:
+			esc = false
+		case inStr && ch == '\\':
+			esc = true
+		case ch == '"':
+			inStr = !inStr
+		case inStr:
+		case ch == '{':
+			depth++
+		case ch == '}':
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return 0
 }
 
 // ScriptRefs returns the scripts a script imports or loads as chunks,

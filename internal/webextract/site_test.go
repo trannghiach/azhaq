@@ -1,10 +1,35 @@
 package webextract
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
 )
+
+func TestJSURLRefsJoined(t *testing.T) {
+	base, _ := url.Parse("http://a.test/")
+	script := "a=this.host+`/orders`;b=\"/login\";c=root +\n '/me';d=\"/api/\"+id"
+	var got []string
+	for _, r := range JSURLRefs(script, base) {
+		got = append(got, fmt.Sprintf("%s %v", r.URL, r.Joined))
+	}
+	want := []string{"http://a.test/orders true", "http://a.test/login false", "http://a.test/me true", "http://a.test/api/ false"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got  %q\nwant %q", got, want)
+	}
+}
+
+func TestEmbeddedSpec(t *testing.T) {
+	src := `var options = {"swaggerDoc": {"openapi": "3.0.0", "paths": {"/a": {"get": {"summary": "x}"}}}}, "x": 1}`
+	i, j := EmbeddedSpec(src)
+	if i < 0 || src[i:j] != `{"openapi": "3.0.0", "paths": {"/a": {"get": {"summary": "x}"}}}}` {
+		t.Errorf("span %d:%d %q", i, j, src[max(i, 0):max(j, 0)])
+	}
+	if i, _ := EmbeddedSpec(`var spec = {"paths": {}}; swaggerDoc = 1`); i >= 0 {
+		t.Errorf("not a description: %d", i)
+	}
+}
 
 func TestLocator(t *testing.T) {
 	src := "var a=1;\nfunction go(){\n  fetch('/api/x')\n}"

@@ -142,7 +142,7 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 	// What Chrome refused for the sign-in's frames: a sign-in that went to
 	// an identity provider outside the scope fails, and says so.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main, true)
+	t := b.open(tab, main, true, false)
 	watched = b.watch(tab, t, nil)
 	var mine []refusal
 	claimed := false
@@ -263,6 +263,11 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 		s.URL, _ = chromedp.Run(tab, chromedp.Location())
 	}
 	s.Blocked = b.list(refused())
+	for _, r := range refused() {
+		if r.download {
+			b.leave([]refusal{r}) // listed with no page, with the run's leftovers
+		}
+	}
 	jar, err := chromedp.Call(tab, network.GetCookies, network.GetCookiesParams{URLs: []string{loginURL, s.URL}})
 	if err != nil {
 		return s, err

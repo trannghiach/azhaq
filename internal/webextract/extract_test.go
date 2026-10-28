@@ -159,3 +159,31 @@ func contains(xs []string, want string) bool {
 	}
 	return false
 }
+
+// Pages a tag's scripts open are links: the URL-like strings of a
+// javascript: href and of an inline handler, and a data-* attribute that
+// is one, resolved against the page; nothing that is not one, and
+// nothing on another site.
+func TestLinksFromHandlers(t *testing.T) {
+	base, _ := url.Parse("http://app.test/vulnerabilities/xss_r/")
+	page := []byte(`<a href="javascript:popUp('../../vulnerabilities/view_source.php?id=xss_r&amp;security=low')">src</a>
+<input type="button" onclick="popUp('view_help.php?id=xss_r'); track('click', 'help')" data-help-url='../view_help.php?id=brute&security=low'>
+<li onclick="location.href='/admin/'" data-id="42" data-page="home" data-target="#modal" data-path="/orders">a</li>
+<a href="javascript:void(0)" onclick="window.open('https://twitter.com/share?u=1')">t</a>
+<a href="javascript:go('api/items')">i</a>`)
+	got := Links(page, base)
+	want := []string{
+		"http://app.test/vulnerabilities/view_source.php?id=xss_r&security=low",
+		"http://app.test/vulnerabilities/xss_r/view_help.php?id=xss_r",
+		"http://app.test/vulnerabilities/view_help.php?id=brute&security=low",
+		"http://app.test/admin/",
+	}
+	for _, w := range want {
+		if !contains(got, w) {
+			t.Errorf("%s missing from %q", w, got)
+		}
+	}
+	if len(got) != len(want) {
+		t.Errorf("got %q, want %d links", got, len(want))
+	}
+}
