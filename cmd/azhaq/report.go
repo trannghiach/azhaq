@@ -114,7 +114,11 @@ func (r *report) print(w io.Writer) {
 	if len(r.Counts) > 0 {
 		var parts []string
 		for _, k := range sortedCountKeys(r.Counts) {
-			parts = append(parts, fmt.Sprintf("%d %s", r.Counts[k], k))
+			name := k
+			if r.Counts[k] == 1 && (k == "websockets" || k == "client routes") {
+				name = strings.TrimSuffix(k, "s")
+			}
+			parts = append(parts, fmt.Sprintf("%d %s", r.Counts[k], name))
 		}
 		head[0] += " (" + strings.Join(parts, ", ") + ")"
 	}

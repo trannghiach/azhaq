@@ -58,8 +58,9 @@ $ azhaq run -url http://localhost:3000/ -db juice.db
   URL http://localhost:3000/b2b/v2/orders  target  hint  api  POST
       POST  body cid orderLines orderLinesData
   URL http://localhost:3000/api/Users  target  visited  auth  POST  status=401
+  URL http://localhost:3000/#/administration  target  hint  client-route  guard=canActivate
   …
-azhaq run: 181 map rows (156 URLs, 71 api, 11 auth, 1 forbidden) · 221 requests · 5.3 s · db juice.db
+azhaq run: 193 map rows (124 URLs, 71 api, 43 client routes, 11 auth, 1 forbidden, 1 websocket) · 202 requests · 4.5 s · db juice.db
   next: azhaq query -db juice.db -role auth,forbidden   (what needs a session)
   next: azhaq export -db juice.db -format openapi > api.json   (for Burp, Postman, ZAP)
 ```
@@ -157,28 +158,28 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets, and prints the numbers, losses included. Latest full run (2026-10-27; the Wayback Machine and Common Crawl refuse the bench machine and its security software removes naabu, so those comparisons run on GitHub's network):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. Latest run (2026-10-28, v0.7.0; 44 of 45 checks pass: this machine's security software removes naabu, so the port comparison runs on GitHub's network):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 555, in 37 s | 527, in 93 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 54 s | 3 in 69 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 540, in 42 s | 505, in 71 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 52 s | 3 in 71 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 576 live hosts | httpx | 410 answered; status, title and technologies agree on 399 of 402 shared (redirects out of the site compared by their own status: Azhaq does not report a third party's page as the host's); 107 s | 403 answered, 146 s |
+| Probing 559 live hosts | httpx | 397 answered; status, title and technologies agree on 387 of 388 shared (redirects out of the site compared by their own status); 106 s | 389 answered, 144 s |
 | Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
 | VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 13 s, 32/40 in 17 s | 6/77 in 7 s, 0/40 in 44 s |
-| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,104, including 2,335 of gau's 2,340 | 2,340 |
-| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 49 s | 36 hits, 4 false positives, 53 s |
+| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 12 s, 32/40 in 17 s | 6/77 in 6 s, 0/40 in 44 s |
+| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,108, including 2,341 of gau's 2,346 | 2,346 |
+| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 49 s | 36 hits, 4 false positives, 52 s |
 | Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
-| Screenshots, 4 front pages | gowitness | 4 | 3 |
+| Screenshots, 4 front pages | gowitness | 4 in 15 s | 3 in 34 s |
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 180 URLs as one run each time; 207 requests over the capped run and its resumes, one run 202 | |
-| Memory, Juice Shop | katana | 97 MB | 59 MB |
+| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 192 URLs as one run each time; 208 requests over the capped run and its resumes, one run 202 | |
+| Memory, Juice Shop | katana | 93 MB | 60 MB |
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's plain `-jc` crawl, 59 MB; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (68 s against arjun's 26 s), memory (above katana's plain `-jc` crawl; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
 
 [bench/README.md](bench/README.md) has what is measured and the caveats.
 
