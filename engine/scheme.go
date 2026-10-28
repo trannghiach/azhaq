@@ -288,7 +288,7 @@ func nothingListens(err error) bool {
 	if errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrOutOfScope) || errors.Is(err, neterr.ErrEndsSession) {
 		return false
 	}
-	if neterr.UnknownHost(err) || dialTimeout(err) {
+	if neterr.UnknownHost(err) || dialTimeout(err) || errors.Is(err, neterr.ErrOriginDown) {
 		return true
 	}
 	for _, no := range []error{syscall.ECONNREFUSED, syscall.EHOSTUNREACH, syscall.ENETUNREACH, syscall.EHOSTDOWN} {

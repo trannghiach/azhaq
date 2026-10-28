@@ -19,7 +19,9 @@ import (
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
 
-// DefaultResolvers are used when none are configured.
+// DefaultResolvers are used when none are configured: three operators,
+// two addresses each, in pairs (pick asks half the list away for a
+// second opinion, so it lands on another operator).
 var DefaultResolvers = []string{
 	"1.1.1.1", "1.0.0.1", "8.8.8.8", "8.8.4.4", "9.9.9.9", "149.112.112.112",
 }
@@ -74,6 +76,7 @@ type Pool struct {
 	mu    sync.Mutex
 	cache map[string]*entry
 	six   map[string]*entry // AAAA asked for names that have A records
+	wild  map[string]bool   // zones that answer for any label (Wildcards)
 
 	// Exchange replaces the network call (tests).
 	Exchange func(ctx context.Context, m *dns.Msg, server string) (*dns.Msg, error)
@@ -127,6 +130,7 @@ func New(o Options) *Pool {
 		tcp:     &dns.Client{Net: "tcp", Timeout: o.Timeout},
 		cache:   map[string]*entry{},
 		six:     map[string]*entry{},
+		wild:    map[string]bool{},
 	}
 }
 
@@ -242,7 +246,8 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 		// know them, but /etc/hosts or the local resolver may.
 		return p.system(ctx, name)
 	}
-	m, err := p.Query(ctx, name, dns.TypeA)
+	q := question(name, dns.TypeA)
+	m, from, err := p.query(ctx, q, "")
 	if err != nil {
 		a.Status, a.Err = StatusFailed, err.Error()
 		if errors.Is(err, errBroken) {
@@ -250,7 +255,31 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 		}
 		return a
 	}
+	// One resolver's NXDOMAIN or empty answer is not the name dead: a
+	// public resolver answers NODATA now and then for a name every other
+	// one resolves (a stale negative cache, an edge that lost the zone).
+	// A second resolver is asked once before the name is called dead, and
+	// its addresses win. Names under a wildcard zone and wildcard probes
+	// are not worth the query: they answer alike everywhere.
+	second := func() bool {
+		if !p.confirms(name) {
+			return false
+		}
+		m2, _, err := p.query(ctx, q, from)
+		if err != nil || m2.Rcode != dns.RcodeSuccess {
+			return false
+		}
+		if addrs, chain := records(m2, dns.TypeA); len(addrs) > 0 {
+			a.A, a.CNAME = addrs, chain
+			return true
+		}
+		return false
+	}
 	if m.Rcode == dns.RcodeNameError {
+		if second() {
+			a.Status = StatusOK
+			return a
+		}
 		// A CNAME chain the resolver followed to a name that does not exist
 		// says where the name points: a dangling one.
 		_, a.CNAME = records(m, dns.TypeA)
@@ -266,6 +295,9 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 				a.CNAME = chain
 			}
 		}
+	}
+	if !a.Live() {
+		second()
 	}
 	switch {
 	case a.Live():
@@ -300,18 +332,29 @@ func (p *Pool) system(ctx context.Context, name string) Answer {
 // Query sends one question, moving to another resolver on a timeout,
 // SERVFAIL or REFUSED, and retrying over TCP when the answer is truncated.
 func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, error) {
-	if len(p.servers) == 0 {
-		return nil, errors.New("no resolvers")
-	}
+	m, _, err := p.query(ctx, question(name, qtype), "")
+	return m, err
+}
+
+func question(name string, qtype uint16) *dns.Msg {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	q.RecursionDesired = true
+	return q
+}
+
+// query is Query naming the resolver that answered; avoid, when the pool
+// has another, is one that is not asked (a second opinion).
+func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, string, error) {
+	if len(p.servers) == 0 {
+		return nil, "", errors.New("no resolvers")
+	}
 	var last error
 	servfail := map[string]int{} // resolver → attempts it answered SERVFAIL
 	for attempt := 0; attempt <= p.retries; attempt++ {
-		server := p.servers[int(p.next.Add(1)-1)%len(p.servers)]
+		server := p.pick(attempt, avoid)
 		if err := p.limit.Wait(ctx, server); err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		in, err := p.exchange(ctx, q, server)
 		if err != nil {
@@ -325,16 +368,60 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 			last = errors.New(server + ": " + dns.RcodeToString[in.Rcode])
 			continue
 		}
-		return in, nil
+		return in, server, nil
 	}
 	n := 0
 	for _, c := range servfail {
 		n += c
 	}
 	if n == p.retries+1 && len(servfail) >= 2 {
-		return nil, fmt.Errorf("%w (last %v)", errBroken, last)
+		return nil, "", fmt.Errorf("%w (last %v)", errBroken, last)
 	}
-	return nil, last
+	return nil, "", last
+}
+
+// pick is the resolver for an attempt: round robin, or, first, for a
+// second opinion on what avoid answered, the resolver half the list away
+// from it. The list pairs an operator's addresses (1.1.1.1 and 1.0.0.1
+// share a cache), so the next one would often answer alike.
+func (p *Pool) pick(attempt int, avoid string) string {
+	n := len(p.servers)
+	if avoid != "" && n > 1 && attempt == 0 {
+		for i, s := range p.servers {
+			if s == avoid {
+				return p.servers[(i+n/2)%n]
+			}
+		}
+	}
+	s := p.servers[int(p.next.Add(1)-1)%n]
+	if s == avoid && n > 1 {
+		s = p.servers[int(p.next.Add(1)-1)%n]
+	}
+	return s
+}
+
+// confirms says whether a dead-looking answer for name is worth a second
+// resolver's opinion: the pool has one, and the name is neither a
+// wildcard probe nor under a zone known to answer for any label.
+func (p *Pool) confirms(name string) bool {
+	if len(p.servers) < 2 || strings.HasPrefix(name, probePrefix) {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for z := parent(name); z != ""; z = parent(z) {
+		if p.wild[z] {
+			return false
+		}
+	}
+	return true
+}
+
+// wildcard records a zone that answers for any label.
+func (p *Pool) wildcard(zone string) {
+	p.mu.Lock()
+	p.wild[zone] = true
+	p.mu.Unlock()
 }
 
 func (p *Pool) exchange(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {

@@ -39,6 +39,14 @@ const DerivedKey = "derived"
 // -depth.
 const SameTargetKey = "same"
 
+// ViaKey on a URL hint says where it was found when that sets what it is
+// worth: ViaArchive for a URL an archive listed, which a run under a
+// budget requests after what the application itself serves and names.
+const (
+	ViaKey     = "via"
+	ViaArchive = "archive"
+)
+
 // Derived reports whether the engine derived s from another seed.
 func (s Seed) Derived() bool { return s.Keys[DerivedKey] != "" }
 

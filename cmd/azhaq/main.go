@@ -760,6 +760,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			rep.Stopped = fmt.Sprintf("interrupted with %d tasks known and not done", left)
 		case fetch.Spent():
 			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done", fetch.MaxRequests, left)
+		case len(fetch.OriginsDown()) > 0:
+			rep.Stopped = fmt.Sprintf("%s stopped answering after %d timeouts, %d tasks known and not done", strings.Join(fetch.OriginsDown(), ", "), fetch.OriginTrips, left)
 		default:
 			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -94,6 +95,7 @@ type task struct {
 	seed  types.Seed
 	depth int
 	prio  int // 0: the seed's own host or IP; 1: fan-out
+	tier  int // within a prio, what it is worth under a budget (tierOf)
 }
 
 type finished struct {
@@ -340,7 +342,45 @@ func (s *scheduler) enqueue(t task) {
 		s.batch[t.col] = append(s.batch[t.col], t)
 		return
 	}
-	s.queue[t.prio] = append(s.queue[t.prio], t)
+	// Worth first, arrival order within a tier: a front page found late
+	// goes ahead of the archived URLs an archive listed before it, so a
+	// budget is spent on what the application serves before on what it
+	// once served.
+	t.tier = tierOf(t.seed)
+	q := s.queue[t.prio]
+	i := len(q)
+	for i > 0 && q[i-1].tier > t.tier {
+		i--
+	}
+	q = append(q, task{})
+	copy(q[i+1:], q[i:])
+	q[i] = t
+	s.queue[t.prio] = q
+}
+
+// tierOf orders a host's work by what it is worth under a budget: a
+// service and its front page first, then its API and description paths,
+// then the pages links and scripts name, and what only an archive lists
+// last. An archive's static assets are never hints (urlcol lists them).
+func tierOf(seed types.Seed) int {
+	if seed.Type != types.TypeURL {
+		return 0
+	}
+	if seed.Keys[types.ViaKey] == types.ViaArchive {
+		return 3
+	}
+	u, err := url.Parse(seed.Key())
+	if err != nil {
+		return 2
+	}
+	switch {
+	case u.Path == "" || u.Path == "/":
+		return 0
+	case webextract.ClassifyURL(seed.Key()) == "api":
+		return 1
+	default:
+		return 2
+	}
 }
 
 // allowed applies the run's policy: -passive keeps only collectors that do

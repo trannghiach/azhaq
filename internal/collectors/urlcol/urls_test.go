@@ -101,13 +101,39 @@ func TestSourcesMergeAndReport(t *testing.T) {
 	if summary["assets"].(float64) != 1 || summary["templates"].(float64) != 4 {
 		t.Errorf("templates %v assets %v", summary["templates"], summary["assets"])
 	}
-	// Parameters and APIs first; the product pages are one template.
-	if len(rows) != 4 || !strings.Contains(rows[0]["url"].(string), "?") {
+	// Parameters and APIs first; the product pages are one template; the
+	// asset is listed last and is never a hint.
+	if len(rows) != 5 || !strings.Contains(rows[0]["url"].(string), "?") || rows[4]["asset"] != true {
 		t.Fatalf("rows %v", rows)
 	}
 	for _, r := range rows {
 		if strings.Contains(r["url"].(string), "product") && r["count"].(float64) != 2 {
 			t.Errorf("product template %v", r)
+		}
+	}
+	if len(meta.NextHints) != 4 {
+		t.Fatalf("hints %v", meta.NextHints)
+	}
+	for _, h := range meta.NextHints {
+		if h.Keys[types.ViaKey] != types.ViaArchive || strings.HasSuffix(h.Key(), ".png") {
+			t.Errorf("hint %v", h)
+		}
+	}
+}
+
+// What an archive lists on a media host, or with its extension hidden,
+// is a file: listed, not requested.
+func TestStaticArchivedURLs(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"https://photos.example.org/000/061/abc_xtralarge.?1439954730":            true,
+		"https://profile-photos.example-content.org/variants/0/a_original.png/0f": true,
+		"https://www.example.org/img/logo.png":                                    true,
+		"https://www.example.org/api/photos?id=1":                                 false,
+		"https://www.example.org/products/42":                                     false,
+		"https://www.example-images.org/products/42":                              false,
+	} {
+		if got := static(raw); got != want {
+			t.Errorf("%s: static=%v, want %v", raw, got, want)
 		}
 	}
 }

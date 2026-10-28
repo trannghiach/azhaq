@@ -146,6 +146,15 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		e.markCapped()
 		return meta, neterr.ErrBudget
 	}
+	if down := fetch.Stopped(ctx); down != nil {
+		// Its origin stopped answering: not done either, listed as left
+		// alone with the reason, and azhaq resume tries it again.
+		meta.Status, meta.Error, meta.Drop = types.StatusCapped, down.Error(), false
+		meta.Requests, meta.EmitCount = used(), 0
+		e.noteError(ent.ID, col.Name(), down)
+		e.markCapped()
+		return meta, down
+	}
 	if err := release(); err != nil {
 		return types.RunMeta{ItemID: item.ID, Status: types.StatusError, Error: err.Error()}, err
 	}
