@@ -5,7 +5,6 @@
 ### New
 
 - `-get-words exec,import` requests the URLs left alone for these words only (finer than `-all-gets`).
-- A JSON listing's first item is asked at the route a REST API reads it at (`/api/Challenges` → `/api/Challenges/1`): the item route is proved by its answer, and `roles` gets an object to replay across sessions.
 - `-no-paths` turns off the built-in path checks; `plan` counts them.
 - `urls -json` says which source gave each URL (`source`); `run -urls-source` adds it to the url rows.
 - A site with a sign-in form and no session given suggests `-login` in a `next:` line.
