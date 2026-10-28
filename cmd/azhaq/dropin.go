@@ -337,6 +337,30 @@ func liveNames(st *store.Store) map[string]map[string]any {
 	return out
 }
 
+// dnsFields puts a live name's answer on its row with dnsx's names: the
+// IPv4 addresses in a, the IPv6 ones in aaaa, the CNAME chain in cname,
+// and the CDN or WAF in front.
+func dnsFields(row, p map[string]any) {
+	var a, aaaa []string
+	for _, ip := range strs(p["ips"]) {
+		if strings.Contains(ip, ":") {
+			aaaa = append(aaaa, ip)
+		} else {
+			a = append(a, ip)
+		}
+	}
+	row["a"] = a
+	if len(aaaa) > 0 {
+		row["aaaa"] = aaaa
+	}
+	if cn := strs(p["cnames"]); len(cn) > 0 {
+		row["cname"] = cn
+	}
+	if cdn, _ := p["cdn"].(string); cdn != "" {
+		row["cdn"] = cdn
+	}
+}
+
 // live: a DNS payload with addresses that are not a wildcard's.
 func live(p map[string]any) bool {
 	ips, ok := p["ips"].([]any)
@@ -475,7 +499,7 @@ func cmdSubs(args []string) error {
 				row["source"], row["sources"] = by[0], by
 			}
 			if alive != nil {
-				row["a"] = strs(alive[name]["ips"])
+				dnsFields(row, alive[name])
 			}
 			w.obj(row)
 		}
@@ -496,7 +520,7 @@ func cmdSubs(args []string) error {
 				}
 				row := map[string]any{"host": name, "input": apexOf(name, apexes), "source": g.source, "sources": []string{g.source}}
 				if alive != nil {
-					row["a"] = strs(alive[name]["ips"])
+					dnsFields(row, alive[name])
 				}
 				w.obj(row)
 			}
