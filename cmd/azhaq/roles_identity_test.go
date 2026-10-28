@@ -293,6 +293,10 @@ func TestRolesOwnObjectsWithoutIDs(t *testing.T) {
 		list = append(list, fmt.Sprintf(`{"book_title":"a%d","user":"u%d"}`, i, i))
 	}
 	list = append(list, `{"book_title":"z-alice","user":"alice"}`, `{"book_title":"z-bob","user":"bob"}`)
+	books := map[string]string{"z-alice": "alice", "z-bob": "bob"}
+	for i := 1; i <= 8; i++ {
+		books[fmt.Sprintf("a%d", i)] = fmt.Sprintf("u%d", i)
+	}
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		user := users[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
@@ -309,9 +313,10 @@ func TestRolesOwnObjectsWithoutIDs(t *testing.T) {
 			fmt.Fprint(w, `{"status":"fail","message":"Invalid token."}`)
 		case p == "/api/me":
 			fmt.Fprintf(w, `{"data":{"username":%q,"email":"%s@x.test"},"status":"success"}`, user, user)
-		case strings.HasPrefix(p, "/api/books/"):
+		case strings.HasPrefix(p, "/api/books/") && books[strings.TrimPrefix(p, "/api/books/")] != "":
+			// Any signed-in user reads any book there is.
 			title := strings.TrimPrefix(p, "/api/books/")
-			owner := strings.TrimPrefix(title, "z-") // any signed-in user reads any book
+			owner := books[title]
 			fmt.Fprintf(w, `{"book_title":%q,"owner":%q,"secret":"secret of %s"}`, title, owner, owner)
 		default:
 			w.WriteHeader(http.StatusNotFound)
