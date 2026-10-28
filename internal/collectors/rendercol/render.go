@@ -149,6 +149,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	seen := map[string]string{} // URL → how it was seen
 	for _, r := range p.Requests {
 		if n, err := normalize.URL(r); err == nil && webextract.SameOrigin(raw, n) {
+			if u, err := url.Parse(n); err == nil && webextract.SocketPath(u.Path) {
+				continue // socket.io's polling: the socket's, not a page
+			}
 			if _, ok := seen[n]; !ok {
 				seen[n] = "request"
 			}
