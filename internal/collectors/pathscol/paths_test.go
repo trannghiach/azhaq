@@ -145,3 +145,19 @@ func TestOncePerHost(t *testing.T) {
 		t.Fatalf("second seed re-probed: %v", hits)
 	}
 }
+
+func TestAPIBase(t *testing.T) {
+	for p, want := range map[string]string{
+		"/identity/api/v2/user/dashboard": "/identity/api/v2/",
+		"/workshop/api/shop/products":     "/workshop/api/",
+		"/api/v1/users/7":                 "/api/v1/",
+		"/v2/orders":                      "/v2/",
+		"/rest/products/search":           "/rest/",
+		"/about/team":                     "",
+		"/":                               "",
+	} {
+		if got := apiBase(p); got != want {
+			t.Errorf("%s: %q, want %q", p, got, want)
+		}
+	}
+}

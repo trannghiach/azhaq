@@ -4,7 +4,7 @@ Azhaq is a reconnaissance engine for security research, written in Go. Point it 
 
 It is built to be driven by scripts and assistants as much as by people: every command prints its results on stdout, a summary of what failed, what was skipped and why on stderr, and an exit code that says whether the work is complete. `azhaq mcp` serves it to MCP clients with the scope and the request budget locked.
 
-By default it maps and does not attack: no payloads, no vulnerability checks. HTTP requests are GETs, except Chrome signing in when you give it an account, GraphQL introspection with `-graphql`, the one `HEAD /` a port scan sends a port that says nothing to learn whether it speaks HTTP, and the writes `roles -replay-writes` sends when you ask for them (they change data on the target, inside the scope you name). Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`, a query that switches something on or off such as `?phpids=on`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
+By default it maps and does not attack: no payloads, no vulnerability checks. HTTP requests are GETs, except Chrome signing in when you give it an account, GraphQL introspection with `-graphql`, the one `HEAD /` a port scan sends a port that says nothing to learn whether it speaks HTTP, and the writes `roles -replay-writes` sends when you ask for them (they change data on the target, inside the scope you name). Chrome (`-browser`, `-screenshots`) sends GET, HEAD and OPTIONS only: what a page or its scripts would send besides (a `POST` that tracks or saves on load, a `DELETE`, a beacon, a form posted by a script) is refused before it leaves, mapped on its route with its method and the names it carries (never the values), and listed as left alone (`a page's script would send a write: POST …/api/track, DELETE …/api/items/7`); `-browser-writes` lets pages send them as a user's browser would, which changes data on the target. Found URLs whose names say a GET would do something (`/logout`, `/rest/saveLoginIp`, `/createdb`, a query that switches something on or off such as `?phpids=on`) are listed, not requested; with a session, path and parameter guesses that read that way are not sent either. URLs that carry a scanner's payload (an archive keeps `/etc/passwd`, `;curl …oast.live`, `<script>`) never enter the map, so nothing replays them.
 
 ## At a glance
 
@@ -61,7 +61,7 @@ azhaq run: 181 map rows (156 URLs, 71 api, 11 auth, 1 forbidden) · 202 requests
 
 That is OWASP Juice Shop: the routes come from the calls its Angular bundle makes (`this.http.post(\`${host}/rest/2fa/verify\`, {tmpToken, totpToken})`), which string matching does not see. `azhaq show -db juice.db http://localhost:3000/rest/2fa/verify` says where each was found: `` main.js:6472:88  this.http.post(`${F$.hostServer}/rest/2fa/verify`,{tmpToken:…,totpToken:t}) ``. Each URL row says whether it was `visited`, only found (`hint`), answered with the page every unknown path gets (`catchall`, a single-page app's shell), failed (`error`), answered 404 (`gone`, often an archived URL), or was deliberately not requested (`skipped`), then its role: `app`, `auth` (401), `forbidden` (403), `api`, `page`, `script`. Pages that differ only by an ID fold into one template row (`/catalog/product?productId={n}  (18 urls)`); forms and the operations of a route are indented below it.
 
-What a default run sends to a target: a GET to each target, to the 32 built-in paths of each web service (`robots.txt`, sitemaps, `.well-known/*`, API description locations, `admin`, `backup`, `.git/HEAD`, …), to the routes its pages, scripts and API descriptions name (GETs only, parameterless ones only, none that look state-changing), and to up to 40 URL templates per domain from web archives. `azhaq plan` with the same flags prints this for your targets without sending anything: the collectors each target gets, the queries to third-party sources about them, counted (the subdomain sources, the archives, RDAP, keyed scan engines), and a bound on the requests to the targets. That bound is not a count: how many names resolve and answer is known only by asking, so the plan gives what each web service costs before its links are followed (about 34 requests: its page, the favicon, the built-in paths) and the cap that applies, `-max-requests` or `-daily-requests`.
+What a default run sends to a target: a GET to each target, to the 32 built-in paths of each web service (`robots.txt`, sitemaps, `.well-known/*`, API description locations, `admin`, `backup`, `.git/HEAD`, …) and the API description locations under each API base its routes reveal (`/identity/api/v2/openapi.json`, `v3/api-docs`, `swagger-resources`; up to 8 bases per origin), to the routes its pages, scripts and API descriptions name (GETs only, parameterless ones only, none that look state-changing), and to up to 40 URL templates per domain from web archives. `azhaq plan` with the same flags prints this for your targets without sending anything: the collectors each target gets, the queries to third-party sources about them, counted (the subdomain sources, the archives, RDAP, keyed scan engines), and a bound on the requests to the targets. That bound is not a count: how many names resolve and answer is known only by asking, so the plan gives what each web service costs before its links are followed (about 34 requests: its page, the favicon, the built-in paths) and the cap that applies, `-max-requests` or `-daily-requests`.
 
 Requests carry a current browser's User-Agent, as httpx and katana do: CDN bot managers hold other requests open without an answer. `-header 'User-Agent: …'` replaces it, and `-header 'X-Bug-Bounty: me'` adds a program's identification header.
 
@@ -174,7 +174,8 @@ claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000
 
 | Option | Effect |
 | --- | --- |
-| `-browser` | also load pages in Chrome: the requests their scripts send and the links and forms of the rendered page (Chrome is held to the scope like every request) |
+| `-browser` | also load pages in Chrome: the requests their scripts send and the links and forms of the rendered page (Chrome is held to the scope like every request, and sends GET, HEAD and OPTIONS only) |
+| `-browser-writes` | let pages in Chrome send their writes (POST, PUT, DELETE…) as a user's browser would, inside the scope and the budget: it changes data on the target (`run`, `crawl`, `shots`, and the runs inside `roles`) |
 | `-login URL -login-user U -login-pass P` | sign in with Chrome first (password also from `$AZHAQ_LOGIN_PASS`) |
 | `-cookie N=V`, `-header 'K: V'` | reuse a session you already have; add headers |
 | `-screenshots DIR` | a screenshot of each web service, look-alikes grouped in the HTML report (Chrome on the machine; `AZHAQ_CHROME` to point at one) |
@@ -238,12 +239,17 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 | A run capped at 100 requests and resumed; killed and resumed; with two workers | – | the same 180 URLs as one run each time; 207 requests over the capped run and its resumes, one run 202 | |
 | Memory, Juice Shop | katana | 97 MB | 59 MB |
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's), and one path of ffuf's 36.
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (several times arjun's), memory (above katana's plain `-jc` crawl, 59 MB; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
 
 [bench/README.md](bench/README.md) has what is measured, every table and the caveats.
 
 ## Documentation
 
+Also offline: `azhaq docs TOPIC`.
+
+- [Recipes](docs/RECIPES.md): how do I map an app, log in, find IDOR, test writes, map a program, resume, watch, export, read GraphQL, hand it to an assistant
+- [Concepts](docs/CONCEPTS.md): what a map row says, coverage states, kinds, exit codes, roles verdicts, what Azhaq sends
+- [Troubleshooting](docs/TROUBLESHOOTING.md): why is my URL `hint`, the map looks thin, exit 3, exit 4, Chrome
 - [Output](docs/OUTPUT.md): what every command prints, the summary, exit codes
 - [MCP](docs/MCP.md): serving Azhaq to assistants
 - [Architecture](docs/ARCHITECTURE.md): data model, scheduling, identity rules, limitations

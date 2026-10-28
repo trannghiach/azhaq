@@ -53,6 +53,10 @@ type Browser struct {
 	Timeout       time.Duration // per page; default 30 s
 	UserAgent     string
 	Header        map[string]any // added to every request (-cookie, -header)
+	// Writes lets pages and their scripts send what they send besides
+	// GET, HEAD and OPTIONS, as a user's browser would (-browser-writes):
+	// it changes data on the target. Otherwise only the sign-in does.
+	Writes bool
 
 	once   sync.Once
 	err    error
@@ -78,6 +82,7 @@ type Browser struct {
 	gone     map[cdp.FrameID]bool // frames of pages already read
 	popups   map[cdp.FrameID]bool // windows pages opened, closed as they open
 	held     map[refusal]bool     // refused for no open page, to list at the end
+	heldW    []heldWrite          // writes of no open page
 	listed   map[string]bool      // refused URLs handed out to be listed
 	refused  int                  // requests refused for where they went
 	unlisted bool                 // more URLs were refused than are listed
@@ -171,10 +176,11 @@ type Page struct {
 	Title    string
 	PNG      []byte
 	HTML     string
-	Requests []string // every URL the page asked for while loading, sent or not
+	Requests []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not
 	Blocked  []string // URLs it asked for outside the scope, to list (Reason); not sent
+	Writes   []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
 	Left     string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
-	Capped   bool     // the request budget refused some of its requests; what it was refused is then in Leftover, not Blocked
+	Capped   bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -223,11 +229,17 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	// The page's requests, from the moment the tab opens, and the frames
 	// they came from: what Chrome refuses those is this page's.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main)
-	defer func() { b.leave(b.claim(t)) }() // a page not read: its refusals listed with none
+	t := b.open(tab, main, false)
+	defer func() { // a page not read: its refusals listed with none
+		b.leave(b.claim(t))
+		b.leaveWrites(b.writesOf(t))
+	}()
 	var mu sync.Mutex
 	var reqs []string
 	watched = b.watch(tab, t, func(ev *network.EventRequestWillBeSent) {
+		if ev.Request == nil || !reads(ev.Request.Method) {
+			return // a write: the request paused says more of it (Writes)
+		}
 		mu.Lock()
 		reqs = append(reqs, ev.Request.URL)
 		mu.Unlock()
@@ -271,6 +283,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Requests = append([]string(nil), reqs...)
 	mu.Unlock()
 	mine := b.claim(t)
+	writes := b.writesOf(t)
 	for _, r := range mine {
 		p.Capped = p.Capped || r.budget
 		if r.frame == main && r.doc && !r.budget && p.Left == "" {
@@ -281,8 +294,10 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		// Its caller drops what a capped page gave, to load it again after
 		// azhaq resume: the run lists its refusals.
 		b.leave(mine)
+		b.leaveWrites(writes)
 	} else {
 		p.Blocked = b.list(mine)
+		p.Writes = writes
 	}
 	return p, err
 }

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
@@ -58,9 +59,10 @@ var DefaultWordlist = []string{
 }
 
 type Collector struct {
-	Client   *http.Client
-	Wordlist []string
-	probed   sync.Map // scheme://host → the URL whose task sweeps it; one sweep per origin
+	Client    *http.Client
+	Wordlist  []string
+	probed    sync.Map // scheme://host (or scheme://host/api/v2/) → the URL whose task sweeps it; one sweep each
+	baseCount sync.Map // scheme://host → API bases swept
 }
 
 func New(client *http.Client) *Collector {
@@ -82,8 +84,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
-// Skip declines every URL on an origin but the one whose task sweeps it:
-// the first one asked, in this process or before azhaq resume.
+// Skip declines every URL on an origin but the one whose task sweeps it
+// (the first one asked, in this process or before azhaq resume), and the
+// first one under each API base it has not swept.
 func (c *Collector) Skip(seed types.Seed) bool {
 	raw, err := normalize.URL(seed.Keys["url"])
 	if err != nil {
@@ -93,7 +96,49 @@ func (c *Collector) Skip(seed types.Seed) bool {
 	if err != nil {
 		return false
 	}
-	return c.owner(u.Scheme+"://"+u.Host, raw) != raw
+	origin := u.Scheme + "://" + u.Host
+	if c.owner(origin, raw) == raw {
+		return false
+	}
+	b := apiBase(u.Path)
+	return b == "" || c.owner(origin+b, raw) != raw
+}
+
+// specWords are where an API's description sits under its base
+// (/identity/api/v2/openapi.json): servers that mount several APIs serve
+// each one's there, not at the site's root.
+var specWords = []string{"openapi.json", "openapi.yaml", "swagger.json", "swagger.yaml", "api-docs", "v3/api-docs",
+	"v2/api-docs", "v3/api-docs/swagger-config", "swagger-resources", "swagger/v1/swagger.json"}
+
+// maxBases bounds the API bases swept per origin.
+const maxBases = 8
+
+var versionSeg = regexp.MustCompile(`^v\d+(\.\d+)?$`)
+
+// apiBase is the base of the API a path is under (/api/, /api/v2/,
+// /identity/api/v2/), or "" for a path under none, or under the root.
+func apiBase(p string) string {
+	segs := strings.Split(strings.Trim(p, "/"), "/")
+	end := -1
+	for i, seg := range segs[:min(len(segs), 5)] {
+		low := strings.ToLower(seg)
+		switch {
+		case low == "api" || low == "rest" || low == "apis":
+			end = i
+		case versionSeg.MatchString(low) && (end == i-1 || i == 0):
+			end = i
+		}
+	}
+	if end < 0 {
+		return ""
+	}
+	return "/" + strings.Join(segs[:end+1], "/") + "/"
+}
+
+// bases counts the API bases of origin swept so far, this one included.
+func (c *Collector) bases(origin string) int {
+	v, _ := c.baseCount.LoadOrStore(origin, new(atomic.Int32))
+	return int(v.(*atomic.Int32).Add(1))
 }
 
 // owner is the URL whose task sweeps origin, claiming it for raw when
@@ -121,13 +166,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	prefix := probePrefix(base.Path)
 	origin := base.Scheme + "://" + base.Host
-	if c.owner(origin, raw) != raw {
+	var list []string
+	switch b := apiBase(base.Path); {
+	case c.owner(origin, raw) == raw:
+		list = c.Wordlist
+		if len(list) == 0 {
+			list = DefaultWordlist
+		}
+	case b != "" && b != "/api/" && c.owner(origin+b, raw) == raw && c.bases(origin) <= maxBases:
+		// The root sweep asks /api/swagger.json and /api/openapi.json.
+		prefix, list = b, specWords
+	default:
 		return types.RunMeta{Status: types.StatusOK}, nil
-	}
-
-	list := c.Wordlist
-	if len(list) == 0 {
-		list = DefaultWordlist
 	}
 	meta := types.RunMeta{Status: types.StatusOK}
 	var mu sync.Mutex

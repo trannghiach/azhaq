@@ -142,7 +142,7 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 	// What Chrome refused for the sign-in's frames: a sign-in that went to
 	// an identity provider outside the scope fails, and says so.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main)
+	t := b.open(tab, main, true)
 	watched = b.watch(tab, t, nil)
 	var mine []refusal
 	claimed := false
@@ -160,6 +160,8 @@ func (b *Browser) Login(ctx context.Context, loginURL, user, pass string) (_ Ses
 			b.leave(mine) // listed with no page: the sign-in's error names the one that matters
 		}
 		b.claim(t) // later ones of its frames are counted only
+		// A frame not yet known as the sign-in's had its write refused.
+		b.leaveWrites(b.writesOf(t))
 	}()
 	if len(b.Header) > 0 {
 		if _, err := chromedp.Call(tab, network.SetExtraHTTPHeaders, network.SetExtraHTTPHeadersParams{Headers: network.Headers(b.Header)}); err != nil {

@@ -12,6 +12,9 @@ import (
 // topics are the documents azhaq docs prints, in the order it lists them.
 var topics = []struct{ name, file, about string }{
 	{"readme", "", "what Azhaq does, install, examples, benchmarks"},
+	{"recipes", "RECIPES.md", "how do I…: map an app, log in, find IDOR, test writes, map a program, resume, watch, export, GraphQL, MCP"},
+	{"concepts", "CONCEPTS.md", "what the words mean: a map row, coverage, kinds, exit codes, roles verdicts, what Azhaq sends"},
+	{"troubleshooting", "TROUBLESHOOTING.md", "why is my URL hint, the map looks thin, exit 3, exit 4, Chrome, where is my database"},
 	{"output", "OUTPUT.md", "what every command prints: fields, the summary, exit codes"},
 	{"mcp", "MCP.md", "serving Azhaq to MCP clients: tools, scope lock, budget"},
 	{"connector", "CONNECTOR.md", "feeding other tools' results in: facts and connectors"},
@@ -26,7 +29,7 @@ func cmdDocs(args []string) error {
 	if fs.NArg() == 0 {
 		fmt.Println("azhaq docs TOPIC prints one of:")
 		for _, t := range topics {
-			fmt.Printf("  %-13s %s\n", t.name, t.about)
+			fmt.Printf("  %-16s %s\n", t.name, t.about)
 		}
 		return nil
 	}

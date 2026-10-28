@@ -198,6 +198,14 @@ func (p *Pool) ResolveMany(ctx context.Context, names []string, workers int) []A
 	return out
 }
 
+// Registered says whether a registrable domain exists in DNS: its SOA is
+// answered, or anything but NXDOMAIN is (a failure is taken as existing,
+// so nothing is called free that may not be).
+func (p *Pool) Registered(ctx context.Context, domain string) bool {
+	m, err := p.Query(ctx, domain, dns.TypeSOA)
+	return err != nil || m.Rcode != dns.RcodeNameError
+}
+
 // forget drops a cached answer so the next Resolve asks again.
 func (p *Pool) forget(name string) {
 	p.mu.Lock()
@@ -243,6 +251,9 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 		return a
 	}
 	if m.Rcode == dns.RcodeNameError {
+		// A CNAME chain the resolver followed to a name that does not exist
+		// says where the name points: a dangling one.
+		_, a.CNAME = records(m, dns.TypeA)
 		a.Status = StatusNXDomain
 		return a
 	}

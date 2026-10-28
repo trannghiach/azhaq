@@ -83,9 +83,30 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	row := map[string]any{"url": raw, "role": "graphql", "status": res.Status}
 	if ide := ideName(res.Body); ide != "" {
 		row["ide"] = ide
+	} else if answersGET(ctx, c.Client, raw) {
+		// It runs queries sent with GET: they can be asked as any GET is,
+		// by every session, with no POST.
+		row["get_queries"] = true
 	}
 	return one(emit, raw, "graphql", row)
 }
+
+// answersGET asks the endpoint {__typename} with GET, the cheapest query
+// there is, which changes nothing: a server that answers it runs queries
+// sent with GET.
+func answersGET(ctx context.Context, client *http.Client, raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	q := u.Query()
+	q.Set("query", "{__typename}")
+	u.RawQuery = q.Encode()
+	res, _, err := fetch.Do(ctx, client, u.String())
+	return err == nil && res.Status == http.StatusOK && typename.Match(res.Body)
+}
+
+var typename = regexp.MustCompile(`"data"\s*:\s*\{\s*"__typename"\s*:\s*"`)
 
 func ideName(body []byte) string {
 	b := bytes.ToLower(body)
@@ -153,7 +174,9 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 		full = nil
 	}
 	if !ok {
-		return types.RunMeta{Status: types.StatusOK}, nil
+		// Introspection is off or refused: the fields the server's errors
+		// name are what can still be read.
+		return s.recoverSchema(ctx, raw, status, emit)
 	}
 	row := summary(sc)
 	if full != nil {
@@ -164,6 +187,31 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 		}
 	}
 	row["url"], row["role"], row["status"] = raw, "graphql", status
+	return one(emit, raw, "graphql", row)
+}
+
+// recoverSchema reads the root fields of the query and mutation types
+// from the server's validation errors, when introspection gave nothing.
+func (s *Schema) recoverSchema(ctx context.Context, raw string, status int, emit func(types.Observation) error) (types.RunMeta, error) {
+	q, err := s.recoverType(ctx, raw, "query")
+	if err != nil {
+		return failed(err)
+	}
+	if q == nil {
+		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	m, err := s.recoverType(ctx, raw, "mutation")
+	if err != nil {
+		return failed(err)
+	}
+	row := map[string]any{"url": raw, "role": "graphql", "status": status, "introspection": false, "recovered": "suggestions",
+		"queries": q.names(), "types": typeNames(q, m)}
+	sigs := map[string]any{"queries": q.signatures()}
+	if m != nil {
+		row["mutations"] = m.names()
+		sigs["mutations"] = m.signatures()
+	}
+	row["signatures"] = sigs
 	return one(emit, raw, "graphql", row)
 }
 
@@ -252,7 +300,7 @@ func one(emit func(types.Observation) error, source, kind string, row map[string
 }
 
 func kindName(row map[string]any) string {
-	if row["introspection"] == true {
+	if row["introspection"] == true || row["recovered"] != nil {
 		return SchemaName
 	}
 	return Name

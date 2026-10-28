@@ -297,7 +297,9 @@ func TestOpenAPISkippedRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"get /api/cache/clear ", "get /api/items get_api_items", "post /api/logout post_api_logout"}
+	// /api/reset, its method unknown, is described as a guessed POST; a
+	// URL left alone for its query (?action=delete) adds nothing.
+	want := []string{"get /api/cache/clear ", "get /api/items get_api_items", "post /api/logout post_api_logout", "post /api/reset post_api_reset"}
 	if got := operations(t, doc); !slices.Equal(got, want) {
 		t.Errorf("operations %q, want %q", got, want)
 	}

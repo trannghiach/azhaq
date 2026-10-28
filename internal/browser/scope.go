@@ -3,6 +3,7 @@ package browser
 import (
 	"context"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -27,6 +28,7 @@ import (
 // the machine. What connects without a request the Fetch domain sees
 // (WebSockets, preconnects, Chrome's own services) is refused by the guard.
 // A window a page opens is closed as it opens: it would outlive its page.
+// Only GET, HEAD and OPTIONS are sent, outside the sign-in (writes.go).
 
 const (
 	maxListed = 100     // refused URLs a run lists; the rest are counted
@@ -57,6 +59,8 @@ type tab struct {
 	capped  bool
 	pending int  // requests of its frames being decided
 	read    bool // claimed: what comes later is counted only
+	signin  bool // the sign-in's: its writes are sent, and not kept
+	writes  []Write
 }
 
 func (t *tab) add(r refusal) {
@@ -205,13 +209,12 @@ func (b *Browser) fail(root context.Context, id cdpfetch.RequestID) {
 // was known to be of when it was paused, or nil.
 func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t *tab) {
 	r := refusal{frame: ev.FrameID, doc: ev.ResourceType == network.ResourceTypeDocument}
-	raw := ""
+	raw, write := "", false
 	if ev.Request != nil {
 		raw = ev.Request.URL
-		switch ev.Request.Method {
-		case "GET", "HEAD", "OPTIONS":
-		default:
+		if !reads(ev.Request.Method) {
 			r.sends = ev.ResourceType == network.ResourceTypeXHR || ev.ResourceType == network.ResourceTypeFetch
+			write = t == nil || !t.signin // the sign-in posts its form
 		}
 	}
 	paid, refuse := false, true
@@ -222,6 +225,19 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		return
 	case !b.allowed(raw):
 		r.url, r.host = listable(raw)
+	case write && !b.Writes:
+		// Not sent, nor counted: what it would have sent is mapped.
+		b.wrote(t, ev.FrameID, writeOf(ev.Request))
+		b.done(t)
+		if r.doc {
+			// A form posted: stopped as a user stops it, the page stays
+			// as it was. Blocked, Chrome would show its error instead,
+			// to read and to screenshot as the page.
+			_, _ = chromedp.CallBrowser(root, cdpfetch.FailRequest, cdpfetch.FailRequestParams{RequestID: ev.RequestID, ErrorReason: network.ErrorReasonAborted})
+			return
+		}
+		b.fail(root, ev.RequestID)
+		return
 	case r.doc && b.paidFor(ev.FrameID):
 		paid, refuse = true, false // the page itself: its caller counted and paced it (fetch.Spend)
 	case fetch.Take() != nil:
@@ -234,6 +250,11 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.done(t)
 		b.fail(root, ev.RequestID)
 		return
+	}
+	if write {
+		w := writeOf(ev.Request)
+		w.Sent = true
+		b.wrote(t, ev.FrameID, w)
 	}
 	b.done(t)
 	if !paid {
@@ -373,9 +394,10 @@ func (b *Browser) closePopups(ctx context.Context, main cdp.FrameID) {
 	}
 }
 
-// open makes main's page one whose refusals are kept for it.
-func (b *Browser) open(ctx context.Context, main cdp.FrameID) *tab {
-	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}}
+// open makes main's page one whose refusals are kept for it; signin
+// makes it the sign-in's, whose writes are sent.
+func (b *Browser) open(ctx context.Context, main cdp.FrameID, signin bool) *tab {
+	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}, signin: signin}
 	b.addFrame(t, main)
 	return t
 }
@@ -401,6 +423,15 @@ func (b *Browser) addFrame(t *tab, frame cdp.FrameID) {
 			delete(b.held, r)
 		}
 	}
+	if t.signin {
+		return
+	}
+	b.heldW = slices.DeleteFunc(b.heldW, func(h heldWrite) bool {
+		if h.frame == frame {
+			t.addWrite(h.w)
+		}
+		return h.frame == frame
+	})
 }
 
 // begin notes that a request of frame is being decided, and returns the

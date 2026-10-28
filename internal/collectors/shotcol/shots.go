@@ -21,6 +21,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/collectors/rendercol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -100,6 +101,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if len(p.Blocked) > 0 {
 			payload, _ := json.Marshal(map[string]any{"skipped": browser.Reason(), "urls": p.Blocked})
 			if err := emit(types.Observation{Collector: Name, Source: t, Kind: "skipped", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+				return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
+			}
+		}
+		for _, o := range rendercol.WriteFacts(Name, t, p.Writes) {
+			if err := emit(o); err != nil {
 				return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 			}
 		}

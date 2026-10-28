@@ -396,7 +396,7 @@ func TestPaced(t *testing.T) {
 // page's: claiming waits for what is being decided.
 func TestSettleWaits(t *testing.T) {
 	b := startChrome(t)
-	tb := b.open(b.root, "MAIN")
+	tb := b.open(b.root, "MAIN", false)
 	if b.begin("MAIN") != tb {
 		t.Fatal("the frame is not the tab's")
 	}

@@ -109,3 +109,19 @@ func TestMapBodyFromEveryOperation(t *testing.T) {
 		t.Errorf("body %q, ops %+v", got, rows[0].Ops)
 	}
 }
+
+// The same write sent from every page Chrome renders is one operation;
+// another method, or other names, another.
+func TestMapOpsOnce(t *testing.T) {
+	key := "https://shop.test/api/track"
+	ents := []types.Entity{{ID: "t", Type: types.TypeURL, Key: key}}
+	write := func(page, body string) types.StoredObservation {
+		return types.StoredObservation{EntityID: page, Observation: types.Observation{Collector: "azhaq-render", Kind: "url", Payload: json.RawMessage(
+			`{"url":"` + key + `","via":"browser","methods":["POST"],"ops":[{"method":"POST","body":` + body + `,"source":"browser"}]}`)}}
+	}
+	obs := []types.StoredObservation{write("a", `["event"]`), write("b", `["event"]`), write("c", `["event","user"]`)}
+	rows := engine.BuildMap(ents, []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": "https://shop.test/"}}}, obs, nil, false)
+	if len(rows) != 1 || len(rows[0].Ops) != 2 || rows[0].Coverage != "hint" {
+		t.Errorf("rows %+v", rows)
+	}
+}
