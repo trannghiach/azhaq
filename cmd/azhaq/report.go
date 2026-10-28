@@ -330,6 +330,8 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("ops", r.Ops, len(r.Ops) > 0)
 	set("forms", r.Forms, len(r.Forms) > 0)
 	set("found_in", r.Found, len(r.Found) > 0)
+	w := engine.Watch(r)
+	set("watch", w, len(w) > 0)
 	set("template", r.Template, r.Template != "")
 	set("count", r.Count, r.Count > 1)
 	set("folded", r.Folded, r.Folded > 0)

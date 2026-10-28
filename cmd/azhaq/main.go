@@ -842,6 +842,9 @@ func printMap(rows []engine.MapEntry) {
 		for _, d := range row.Details() {
 			fmt.Printf("      %s\n", d)
 		}
+		if w := engine.Watch(row); len(w) > 0 {
+			fmt.Printf("      watch: %s\n", strings.Join(w, ", "))
+		}
 	}
 }
 
