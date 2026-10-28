@@ -21,22 +21,28 @@ import (
 	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
-// Write verdicts, listed before every read verdict.
+// Write verdicts. A proved cross write is listed above every read; a write
+// that was answered but changed nothing of the owner's ranks below the
+// proved reads.
 const (
-	verdictWriteAnyone  = "anyone writes another role's object"
-	verdictWriteCross   = "writes another role's object"
-	verdictWriteOwner   = "only its owner writes it"
-	verdictWriteVoid    = "the owner's own write was refused"
-	verdictWriteRefused = "the other roles were refused"
-	verdictWriteDry     = "would be sent (-dry-writes)"
+	verdictWriteAnyone   = "anyone writes another role's object"
+	verdictWriteCross    = "writes another role's object"
+	verdictWriteCreate   = "creates in another role's collection"
+	verdictWriteNoChange = "answered 2xx but changed nothing of the owner's"
+	verdictWriteOwner    = "only its owner writes it"
+	verdictWriteVoid     = "the owner's own write was refused"
+	verdictWriteRefused  = "the other roles were refused"
+	verdictWriteDry      = "would be sent (-dry-writes)"
 )
 
 func init() {
 	verdictOrder[verdictWriteAnyone] = -2
 	verdictOrder[verdictWriteCross] = -1
+	verdictOrder[verdictWriteDry] = -3
+	verdictOrder[verdictWriteNoChange] = 15
+	verdictOrder[verdictWriteCreate] = 16
 	verdictOrder[verdictWriteOwner] = 20
 	verdictOrder[verdictWriteVoid] = 21
-	verdictOrder[verdictWriteDry] = -3
 	verdictOrder[verdictWriteRefused] = 20
 }
 
@@ -206,12 +212,16 @@ func routePath(raw string) string {
 	return raw
 }
 
-// replayWrites sends each write with the other roles' sessions, and a map
-// write with its owner's first: the owner must be let to write it, and
-// its object must not have changed, before the others are asked. A DELETE
-// goes to the others alone, the anonymous role first, and stops at the
-// first that is let: the object is gone then, and its owner is asked
-// whether it is. Every write counts against budget.
+// replayWrites sends each write with the other roles' sessions and proves
+// a cross-role write before it claims one: the owner's object is read as
+// the owner before and after the write, and "X writes Y's object" is kept
+// only when that object changed the way the write asks (or was deleted). A
+// 2xx that left the owner's object unchanged is answered-but-changed-
+// nothing, not a finding. A POST to a collection is a create, never a
+// cross write. A map write (empty body) is sent first with its owner's
+// session: the owner must be let, and its own object must not change. A
+// DELETE goes to the others alone, the anonymous role first, and stops at
+// the first proven. Every request counts against budget.
 func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]answer, own map[string]bool, rate float64, budget int) ([]roleRow, int, error) {
 	ctx := context.Background()
 	fetch.Reset()
@@ -228,6 +238,16 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		sent++
 		return sendWrite(ctx, &client, r, w)
 	}
+	// read gets the owner's object again, to see whether a write changed
+	// it; a budget spent or a failed read leaves the write unproven.
+	read := func(r role, u string) (answer, bool) {
+		if sent >= budget {
+			return answer{}, false
+		}
+		sent++
+		a, err := readAs(ctx, &client, r, u)
+		return a, err == nil
+	}
 	byName := map[string]role{}
 	for _, r := range roles {
 		byName[r.name] = r
@@ -241,9 +261,33 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		}
 		row := roleRow{URL: w.url, Method: w.method, Status: map[string]int{}, Answers: map[string]answer{}, FoundBy: []string{w.owner},
 			Owner: w.owner, OwnerBy: w.from, reqBody: w.body, reqType: w.header.Get("Content-Type")}
-		ownerLet := w.status >= 200 && w.status < 300
 		if w.status != 0 {
 			row.Answers[w.owner] = answer{Status: w.status}
+		}
+		// A POST to a collection makes a new object: never another role's
+		// object written.
+		if w.method == http.MethodPost {
+			if err := replayCollection(&row, roles, w, send); err != nil {
+				stop = err
+				rows = append(rows, finishWriteRow(row))
+				break
+			}
+			rows = append(rows, finishWriteRow(row))
+			continue
+		}
+		vu := verifyURL(w, answers)
+		ownerLet := w.status >= 200 && w.status < 300
+		// The owner's object before any write: the one the owner's run
+		// already read when its body is at hand, else read fresh, so its
+		// values are there to compare against.
+		var before answer
+		haveBefore := false
+		if vu != "" {
+			if b := answers[w.owner][vu]; len(b.held) > 0 && reads(b) {
+				before, haveBefore = b, true
+			} else if b, ok := read(owner, vu); ok {
+				before, haveBefore = b, true
+			}
 		}
 		if w.empty {
 			a, err := send(owner, w)
@@ -253,41 +297,106 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 			}
 			row.Answers[w.owner] = a
 			ownerLet = reads(a)
-			checked := ownerLet && sent < budget
-			if checked {
-				sent++ // the owner's GET of its object, after the write
-			}
-			if checked && changedBy(owner, w.url, answers[w.owner][w.url]) {
-				row.Verdict = verdictWriteVoid
-				row.OwnerBy += "; the empty write changed the owner's object: no other role was asked"
-				rows = append(rows, finishWriteRow(row))
-				continue
+			if ownerLet && haveBefore {
+				if after, ok := read(owner, vu); ok {
+					if changed(before, after) {
+						row.Verdict = verdictWriteVoid
+						row.OwnerBy += "; the empty write changed the owner's object: no other role was asked"
+						rows = append(rows, finishWriteRow(row))
+						continue
+					}
+					before = after
+				}
 			}
 		}
-		others := otherRoles(roles, w.owner)
-		for _, r := range others {
+		var let, proven []string
+		anon := map[string]bool{}
+		for _, r := range otherRoles(roles, w.owner) {
 			a, err := send(r, w)
 			if err != nil {
 				stop = err
 				break
 			}
 			row.Answers[r.name] = a
-			if w.method == "DELETE" && reads(a) {
-				if gone, err := send(owner, writeReq{method: http.MethodGet, url: w.url, header: http.Header{}}); err == nil {
-					row.OwnerBy += fmt.Sprintf("; afterwards its owner got %d for it", gone.Status)
-				}
-				break
+			if !reads(a) {
+				continue
 			}
+			let = append(let, r.name)
+			if r.anonymous() {
+				anon[r.name] = true
+			}
+			if vu == "" {
+				continue // the owner's object cannot be read: let, but unproven
+			}
+			after, ok := read(owner, vu)
+			if !ok {
+				continue
+			}
+			if provesCross(w, before, after) {
+				proven = append(proven, r.name)
+				row.OwnerBy += "; " + writeProof(w, r.name, after)
+				if w.method == http.MethodDelete {
+					break // the object is gone
+				}
+			}
+			before = after
 		}
 		if stop != nil {
 			break
 		}
 		// A map DELETE is never asked of its owner: it would delete it.
 		ownerAsked := w.status != 0 || w.empty
-		row.Verdict = writeVerdict(roles, &row, ownerLet, ownerAsked)
+		row.Verdict = writeVerdict(&row, let, proven, anon, ownerLet, ownerAsked, vu != "")
 		rows = append(rows, finishWriteRow(row))
 	}
 	return rows, sent, stop
+}
+
+// replayCollection replays a POST, which creates a new object in a
+// collection. It is sent with the other roles, and a role that is let can
+// create there, but a create is never another role's object written.
+func replayCollection(row *roleRow, roles []role, w writeReq, send func(role, writeReq) (answer, error)) error {
+	var let []string
+	for _, r := range otherRoles(roles, w.owner) {
+		a, err := send(r, w)
+		if err != nil {
+			return err
+		}
+		row.Answers[r.name] = a
+		if reads(a) {
+			let = append(let, r.name)
+		}
+	}
+	row.Readers = let
+	if len(let) > 0 {
+		row.Verdict = verdictWriteCreate
+	} else {
+		row.Verdict = verdictWriteRefused
+	}
+	return nil
+}
+
+// provesCross: the owner's object changed the way the write asks. A DELETE
+// is proven when the object is gone; a PUT or PATCH with a body when one
+// of its values is now in the object and was not before; an empty PUT or
+// PATCH when any value the object held changed (timestamps aside).
+func provesCross(w writeReq, before, after answer) bool {
+	if w.method == http.MethodDelete {
+		return !reads(after)
+	}
+	if w.empty {
+		return changed(before, after)
+	}
+	return wroteInto(before, after, w.body)
+}
+
+// writeProof says, for owner_by, what the owner's object showed after the
+// cross write.
+func writeProof(w writeReq, reader string, after answer) string {
+	if w.method == http.MethodDelete {
+		return "after " + reader + "'s DELETE the owner's object is gone (" + answerCell(after) + ")"
+	}
+	return "after " + reader + "'s " + w.method + " the owner's object changed to match it"
 }
 
 // otherRoles are the roles a write of owner's is asked with: the
@@ -306,20 +415,10 @@ func otherRoles(roles []role, owner string) []role {
 	return append(anon, signed...)
 }
 
-// changedBy asks url again as its owner after an empty write: the object
-// changed when a value it held is gone or new, timestamps aside.
-func changedBy(owner role, u string, before answer) bool {
-	if before.Hash == "" {
-		return false // nothing to compare with
-	}
-	fetch.Extra = owner.session.Clone()
-	res, _, err := fetch.Do(context.Background(), fetch.Client(nil), u)
-	fetch.Extra = nil
-	if err != nil {
-		return false
-	}
-	after, _ := resultAnswer(res)
-	if after.Hash == before.Hash {
+// changed: after differs from before in a value the object held, timestamps
+// aside.
+func changed(before, after answer) bool {
+	if before.Hash == "" || after.Hash == "" || after.Hash == before.Hash {
 		return false
 	}
 	for v := range before.held {
@@ -333,6 +432,105 @@ func changedBy(owner role, u string, before answer) bool {
 		}
 	}
 	return false
+}
+
+// wroteInto: the owner's object now holds a value the write's body asks
+// for and did not hold before. An empty body names nothing, so any change
+// counts.
+func wroteInto(before, after answer, body []byte) bool {
+	vals := bodyValues(body)
+	if len(vals) == 0 {
+		return changed(before, after)
+	}
+	for _, v := range vals {
+		if after.held[v] && !before.held[v] {
+			return true
+		}
+	}
+	return false
+}
+
+// bodyValues are the scalar values a JSON write body sets, timestamps aside.
+func bodyValues(body []byte) []string {
+	var m map[string]any
+	if json.Unmarshal(body, &m) != nil {
+		return nil
+	}
+	var out []string
+	for _, x := range m {
+		if s, ok := scalarString(x); ok && len(s) <= 64 && !timeLike.MatchString(s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// verifyURL is the owner's readable object a write is checked against: the
+// write's own URL when the owner reads it (PUT, PATCH, DELETE on an
+// object), else a readable ancestor (/users/v1/alice for a write to
+// /users/v1/alice/email). "" when none is found.
+func verifyURL(w writeReq, answers map[string]map[string]answer) string {
+	ownerReads := func(u string) (string, bool) {
+		if a, ok := answers[w.owner][u]; ok && reads(a) {
+			return u, true
+		}
+		if n, err := normalize.URL(u); err == nil {
+			if a, ok := answers[w.owner][n]; ok && reads(a) {
+				return n, true
+			}
+		}
+		return "", false
+	}
+	if u, ok := ownerReads(w.url); ok {
+		return u
+	}
+	pu, err := url.Parse(w.url)
+	if err != nil {
+		return ""
+	}
+	path := strings.TrimRight(pu.Path, "/")
+	for strings.Count(path, "/") > 1 {
+		path = path[:strings.LastIndex(path, "/")]
+		cand := *pu
+		cand.Path, cand.RawQuery, cand.Fragment = path, "", ""
+		if u, ok := ownerReads(cand.String()); ok {
+			return u
+		}
+	}
+	return ""
+}
+
+// readAs reads u as role r, past the cache, inside the scope and pace,
+// without following a redirect; the body is kept as evidence.
+func readAs(ctx context.Context, client *http.Client, r role, u string) (answer, error) {
+	pu, err := url.Parse(u)
+	if err != nil || fetch.Allow != nil && !fetch.Allow(pu.Hostname()) {
+		return answer{}, fmt.Errorf("%s is outside the scope", u)
+	}
+	if err := fetch.Spend(ctx); err != nil {
+		return answer{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return answer{}, err
+	}
+	fetch.Extra = r.session.Clone()
+	fetch.ApplyHeaders(req)
+	fetch.Extra = nil
+	resp, err := client.Do(req)
+	if err != nil {
+		return answer{}, err
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	a, _ := readAnswer(resp.StatusCode, body, resp.Header.Get("Content-Type"))
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		a.Location = bareLocation(resp.Header.Get("Location"))
+	}
+	keepBody(a.Hash, resp.Header.Get("Content-Type"), body)
+	return a, nil
 }
 
 var timeLike = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\d{10,13}$`)
@@ -374,27 +572,35 @@ func sendWrite(ctx context.Context, client *http.Client, r role, w writeReq) (an
 	return a, nil
 }
 
-// writeVerdict: who besides the owner was let to write. A write is let
-// when it is answered 2xx and not with an error shaped as data.
-func writeVerdict(roles []role, row *roleRow, ownerLet, ownerAsked bool) string {
-	var anyone, signed []string
-	for _, r := range roles {
-		a, ok := row.Answers[r.name]
-		if !ok || r.name == row.Owner || !reads(a) {
-			continue
-		}
-		if r.anonymous() {
-			anyone = append(anyone, r.name)
+// writeVerdict reads the replay's result. A cross write is claimed only
+// when it was proven (the owner's object changed), and anyone-writes when
+// the anonymous role proved it. A role answered 2xx whose write changed
+// nothing of the owner's is listed apart, below the proved reads, not as a
+// finding.
+func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, ownerLet, ownerAsked, canVerify bool) string {
+	var provenAnon, provenSigned []string
+	for _, n := range proven {
+		if anon[n] {
+			provenAnon = append(provenAnon, n)
 		} else {
-			signed = append(signed, r.name)
+			provenSigned = append(provenSigned, n)
 		}
 	}
-	row.Readers = append(anyone, signed...)
 	switch {
-	case len(anyone) > 0:
+	case len(provenAnon) > 0:
+		row.Readers = append(provenAnon, provenSigned...)
 		return verdictWriteAnyone
-	case len(signed) > 0:
+	case len(provenSigned) > 0:
+		row.Readers = provenSigned
 		return verdictWriteCross
+	case len(let) > 0:
+		row.Readers = let
+		if canVerify {
+			row.OwnerBy += "; the owner's object was unchanged after the write"
+		} else {
+			row.OwnerBy += "; the owner's object could not be read to verify the write"
+		}
+		return verdictWriteNoChange
 	case ownerLet:
 		return verdictWriteOwner
 	case !ownerAsked:

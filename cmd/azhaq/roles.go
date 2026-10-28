@@ -116,7 +116,7 @@ func cmdRoles(args []string) error {
 	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session, and each role's objects with the others (GETs that change nothing only)")
 	replayMax := fs.Int("replay-max", 2000, "requests the replay may send, over all roles")
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
-	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target; needs -allow or -scope in the run options. The writes are each role's own from -har, and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects")
+	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target; needs -allow or -scope in the run options. The writes are each role's own from -har, and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
 	fs.Var(&hars, "har", "NAME=FILE: the requests role NAME sent, as a browser or Burp saved them (HAR): its writes are replayed with -replay-writes")
 	fs.Var(&canarySpecs, "canary", "[ROLE:]URL[=REGEX]: what checks a session during the replay: a URL only a live session reads, and what its body holds (default: the role's own /me-like answer, or a page the anonymous role is refused)")
@@ -277,13 +277,30 @@ func cmdRoles(args []string) error {
 		// and those given with -id: whose objects can the others read?
 		rank := map[string]int{}
 		who = identities(roles, answers, seen, signedIn)
-		for u, in := range instances(roles, templates, seen, answers, given, who) {
+		// Routes that only take writes (PUT /users/v1/{username}/email) get
+		// no GET instance; fill them too, from each role's own identifiers,
+		// so -replay-writes has something to send. They are not read-replayed.
+		allTemplates := map[string]bool{}
+		for t := range templates {
+			allTemplates[t] = true
+		}
+		for _, s := range seen {
+			for k, ops := range s.writes {
+				if len(ops) > 0 {
+					allTemplates[k] = true
+				}
+			}
+		}
+		for u, in := range instances(roles, allTemplates, seen, answers, given, who) {
+			made[u] = in
+			if !templates[in.template] {
+				continue // a write-only route: filled for writes, not read-replayed
+			}
 			if _, ok := found[u]; ok {
 				rank[u] = min(in.rank, 2)
 			} else {
 				found[u], rank[u] = in.holders, in.rank
 			}
-			made[u] = in
 		}
 		for _, g := range given {
 			if !g.used {
@@ -608,6 +625,10 @@ func (row roleRow) label() string {
 		return who + " writes " + row.Owner + "'s object"
 	case row.Verdict == verdictWriteCross:
 		return who + " write " + row.Owner + "'s object"
+	case row.Verdict == verdictWriteCreate && len(row.Readers) > 0:
+		return who + " can create in the collection " + row.Owner + " wrote to"
+	case row.Verdict == verdictWriteNoChange && len(row.Readers) > 0:
+		return who + " answered 2xx but changed nothing of " + row.Owner + "'s"
 	case row.Verdict == verdictCross && len(row.Readers) == 1:
 		return who + " reads " + row.Owner + "'s object"
 	case row.Verdict == verdictCross && len(row.Readers) > 1:
@@ -950,9 +971,11 @@ func verdict(roles []role, row *roleRow) string {
 		// The same secret values for several sessions: not their own.
 		row.Sensitive, row.Readers = shared, holders
 		return verdictSecrets
-	case same && stranger && !public(row.URL):
+	case same && stranger && !public(row.URL) && !staticDoc(row.URL):
 		// A role that never reached the URL gets the answer the role
-		// that found it got: another user's basket, an order.
+		// that found it got: another user's basket, an order. A static
+		// document (a PDF, an image) is the same file for everyone, not
+		// one session's private data.
 		return verdictShared
 	}
 	allRead := len(readers) == len(row.Answers)
@@ -1051,6 +1074,30 @@ func alike(a, b answer, id string) bool {
 func public(u string) bool {
 	p, err := url.Parse(u)
 	return err == nil && (p.Path == "" || p.Path == "/")
+}
+
+// staticDocExt are document and media extensions a crawler finds and every
+// visitor downloads the same: not one session's private data. Scripts,
+// images, CSS and fonts are classed as assets already (ClassifyURL) and
+// never reach a verdict; these carry no such class.
+var staticDocExt = map[string]bool{".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true,
+	".ppt": true, ".pptx": true, ".csv": true, ".txt": true, ".rtf": true, ".zip": true, ".gz": true,
+	".tar": true, ".7z": true, ".rar": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+	".svg": true, ".webp": true, ".ico": true, ".mp4": true, ".webm": true, ".woff": true, ".woff2": true,
+	".ttf": true, ".eot": true, ".css": true}
+
+// staticDoc: a URL whose path ends in a static document or media
+// extension.
+func staticDoc(u string) bool {
+	p, err := url.Parse(u)
+	if err != nil {
+		return false
+	}
+	path := strings.ToLower(p.Path)
+	if i := strings.LastIndex(path, "."); i >= 0 && i > strings.LastIndex(path, "/") {
+		return staticDocExt[path[i:]]
+	}
+	return false
 }
 
 func parseRoles(specs []string) ([]role, error) {

@@ -320,11 +320,9 @@ func explain(rows []roleRow, made map[string]instance, roles []role, who map[str
 				row.Confidence = confGuess
 			}
 		case verdictWriteCross, verdictWriteAnyone:
-			if in, ok := made[row.URL]; ok && in.owner == row.Owner {
-				row.Confidence = confidenceOf(in)
-			} else {
-				row.Confidence = harConfidence(*row, roles, who)
-			}
+			// The cross write is proved: the owner's object changed as the
+			// write asked.
+			row.Confidence = confProved
 			row.Evidence = writeEvidence(*row)
 		}
 	}
@@ -345,23 +343,6 @@ func confidenceOf(in instance) string {
 		return confProved
 	case filled, in.told != toldNone:
 		return confLikely
-	}
-	return confGuess
-}
-
-// harConfidence: a write from the owner's HAR is likely the owner's own
-// object's when its body names the owner (its user id, its BasketId);
-// else a guess, as many writes are anyone's to send (a review, a
-// feedback).
-func harConfidence(row roleRow, roles []role, who map[string]identity) string {
-	var v any
-	if json.Unmarshal(row.reqBody, &v) == nil {
-		if m, ok := v.(map[string]any); ok {
-			o := objectOf(m)
-			if owner, _, _, _ := whose(&o, roles, who, "", ""); owner == row.Owner {
-				return confLikely
-			}
-		}
 	}
 	return confGuess
 }
