@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.2
+
+### New
+
+- `-get-words exec,import` requests the URLs left alone for these words only (finer than `-all-gets`).
+- `-no-paths` turns off the built-in path checks; `plan` counts them.
+- `urls -urls-source` (and `-json`) says which source gave each URL.
+- A site with a sign-in form and no session given suggests `-login` in a `next:` line.
+
+### Fixed
+
+- MCP tools take a single string where a list of strings is expected.
+- The release archives carry the recipes, concepts and troubleshooting pages and the benchmark's README.
+
 ## v0.7.1
 
 ### Fixed
