@@ -27,6 +27,8 @@ func TestBodyFields(t *testing.T) {
 		{`{"event":"view"}`, "text/plain;charset=UTF-8", []string{"event"}, "text/plain", "view"},
 		{`{"alice@x.test":1,"id":2}`, "", []string{"id"}, "application/json", "alice"},
 		{"sid=abc&t=1", "application/x-www-form-urlencoded;charset=UTF-8", []string{"sid", "t"}, "application/x-www-form-urlencoded", "abc"},
+		{"a=1&b=2&secretval", "application/x-www-form-urlencoded", []string{"a", "b"}, "application/x-www-form-urlencoded", "secretval"}, // a bare token is a value, not a name
+		{"secretval", "application/x-www-form-urlencoded", nil, "", "secretval"},
 		{multipart, "multipart/form-data; boundary=XX", []string{"file", "title"}, "multipart/form-data", "secret"},
 		{"x", "text/plain;charset=UTF-8", nil, "", ""},
 		{"40", "text/plain;charset=UTF-8", nil, "", ""}, // socket.io's polling

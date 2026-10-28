@@ -20,8 +20,15 @@ type ClientRoute struct {
 	Start, End int    // where the route's path is written
 }
 
-// maxClientRoutes caps the routes read from one script.
-const maxClientRoutes = 500
+const (
+	// maxClientRoutes caps the routes read from one script.
+	maxClientRoutes = 500
+	// maxRouteObjects caps the path: values whose object is read for one
+	// script; maxOpenObjects the ones that never close, each a 64 KiB
+	// scan: a one-line bundle of them is no route table.
+	maxRouteObjects = 5000
+	maxOpenObjects  = 64
+)
 
 var (
 	// routePath is a path key with a literal value, as route objects have.
@@ -86,8 +93,9 @@ type routeObj struct {
 func ClientRoutes(script string) []ClientRoute {
 	var objs []routeObj
 	seen := map[int]bool{}
+	read, unclosed := 0, 0
 	for _, m := range routePath.FindAllStringIndex(script, -1) {
-		if len(objs) >= maxClientRoutes {
+		if len(objs) >= maxClientRoutes || read >= maxRouteObjects || unclosed >= maxOpenObjects {
 			break
 		}
 		q := m[1] - 1
@@ -103,8 +111,10 @@ func ClientRoutes(script string) []ClientRoute {
 		if open < 0 || seen[open] {
 			continue
 		}
+		read++
 		obj := balanced(script[open:])
 		if obj == "" {
+			unclosed++
 			continue
 		}
 		props := objectProps(obj)

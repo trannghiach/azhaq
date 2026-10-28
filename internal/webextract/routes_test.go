@@ -1,8 +1,10 @@
 package webextract
 
 import (
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 )
 
 func routeMap(rs []ClientRoute) map[string]string {
@@ -204,5 +206,31 @@ func TestHashRoutingReact(t *testing.T) {
 	dev := `(0,react_jsx_dev_runtime.jsxDEV)(react_router_dom__WEBPACK_IMPORTED_MODULE_2__.HashRouter, {children:(0,r.jsxDEV)(App,{})})`
 	if !HashRouting(dev) {
 		t.Error("a development build's HashRouter")
+	}
+}
+
+// A one-line bundle of route objects that never close (each a 64 KiB
+// scan for the brace that is not there) is read for a bounded number of
+// them, not for every path: it is no route table.
+func TestClientRoutesUnclosedObjects(t *testing.T) {
+	var b strings.Builder
+	for i := 0; b.Len() < 4<<20; i++ {
+		fmt.Fprintf(&b, `{path:"/v%d",component:C%d,x:[`, i, i)
+	}
+	start := time.Now()
+	rs := ClientRoutes(b.String())
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("%v for 4 MB of unclosed objects", d)
+	}
+	if len(rs) != 0 {
+		t.Errorf("routes %v", rs)
+	}
+	// Many closed objects past the cap: the first maxClientRoutes are kept.
+	b.Reset()
+	for i := 0; i < 2*maxRouteObjects; i++ {
+		fmt.Fprintf(&b, `{path:"/p%d",component:C},`, i)
+	}
+	if rs := ClientRoutes(b.String()); len(rs) != maxClientRoutes {
+		t.Errorf("%d routes, want %d", len(rs), maxClientRoutes)
 	}
 }

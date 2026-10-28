@@ -108,13 +108,19 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			if d, ok := decl[e.Key]; ok {
 				// What a GET does not tell: a view the app's router draws
 				// (the server answers it with the app's shell), a
-				// WebSocket endpoint, a source map, a build manifest.
+				// WebSocket endpoint, a source map, a build manifest. A
+				// view in the path the server answered itself (a sign-in,
+				// a page it renders) keeps the server's role, with what
+				// the router checks noted beside it.
 				if m.Coverage != "visited" && m.Role != "auth" && m.Role != "forbidden" {
 					m.Role = d.role
 				}
 				m.Guard, m.Protocol, m.Namespace = d.guard, d.protocol, d.namespace
-				if m.Proof == "" {
-					m.Proof = d.proof()
+				switch p := d.proof(); {
+				case m.Proof == "":
+					m.Proof = p
+				case p != "" && !strings.Contains(m.Proof, p):
+					m.Proof += " " + p
 				}
 			}
 			if webextract.Templated(e.Key) {

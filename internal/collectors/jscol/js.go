@@ -314,6 +314,9 @@ func inRoutes(rs []webextract.ClientRoute, i int) bool {
 // www.example.com). Other links to other hosts are left to their own
 // pages.
 func keepString(page, link string) bool {
+	if partial(link) {
+		return false
+	}
 	if webextract.SameOrigin(page, link) {
 		return true
 	}
@@ -417,13 +420,19 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 					queue = c.load(ctx, raw, u.String(), true, queue, &fetched)
 				}
 			}
+			// A map the manifest lists is asked for out of the origin's
+			// budget for maps no script named: a build that left forty
+			// .map entries behind and none of the files costs ten GETs.
 			for _, f := range m.Maps {
 				u, err := mb.Parse(f)
 				if err != nil || len(maps) >= maxMaps {
 					continue
 				}
+				if _, done := c.parsed.Load(u.String()); done {
+					continue
+				}
 				js, err := url.Parse(strings.TrimSuffix(u.String(), ".map"))
-				if err != nil {
+				if err != nil || !c.mapTry(u.Scheme+"://"+u.Host) {
 					continue
 				}
 				if sm, sources := c.readMap(ctx, raw, u.String(), js, false); sm.url != "" {
@@ -665,14 +674,17 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return meta, err
 		}
 	}
-	// The views the app's router draws: rows of their own, never
-	// requested (the server answers each with the app's shell). A string
-	// that names one is a link to it.
+	// The views the app's router draws: rows of their own. A string that
+	// names one is a link to it. A view after the hash is never requested
+	// (the server answers each with the app's shell); one in the path is
+	// asked for once, as the server may answer it itself (a sign-in, a
+	// page it renders), and a shell answer leaves the row as it is.
 	for _, p := range views.order {
 		if meta.EmitCount >= maxEmit {
 			break
 		}
-		row := map[string]any{"url": clientURL(appRoot, hash, p), "via": "js", "role": "client-route"}
+		view := clientURL(appRoot, hash, p)
+		row := map[string]any{"url": view, "via": "js", "role": "client-route"}
 		if g := views.guard[p]; g != "" {
 			row["guard"] = g
 		}
@@ -689,6 +701,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		if err := emitRow(row, 0.8); err != nil {
 			return meta, err
+		}
+		if !hash && !strings.Contains(p, "{") && webextract.Hintable(view) {
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": view}})
 		}
 	}
 	// WebSocket endpoints: not pages, never requested. socket.io's
@@ -803,7 +818,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		if v, ok := viewOf(appRoot, link); ok {
 			if _, ok := views.match(v); ok {
-				continue // a link to one of the app's views: its row is above
+				continue // a link to one of the app's views: its row, and its hint, are above
 			}
 		}
 		if u, err := url.Parse(link); err == nil && (webextract.SocketPath(u.Path) || webextract.NextInternal(u.Path)) {
@@ -883,17 +898,25 @@ func (c *Collector) guessMap(scriptURL *url.URL) string {
 	if _, done := c.parsed.Load(ref); done {
 		return ""
 	}
-	origin := u.Scheme + "://" + u.Host
+	if !c.mapTry(u.Scheme + "://" + u.Host) {
+		return ""
+	}
+	return ref
+}
+
+// mapTry takes one of the maxGuessedMaps requests an origin has for maps
+// no script of its own named: guessed by name, or listed by a manifest.
+func (c *Collector) mapTry(origin string) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.guessed == nil {
 		c.guessed = map[string]int{}
 	}
 	if c.guessed[origin] >= maxGuessedMaps {
-		return ""
+		return false
 	}
 	c.guessed[origin]++
-	return ref
+	return true
 }
 
 // readManifest fetches a JSON build manifest on the page's site, once
@@ -932,11 +955,27 @@ func callRoute(c webextract.Call, origin, page string) (string, bool) {
 	if strings.HasPrefix(link, "/") {
 		link = origin + link
 	}
+	if partial(link) {
+		return "", false
+	}
 	n, err := normalize.URL(link)
 	if err != nil || !fetch.SameSite(page, n) {
 		return "", false
 	}
 	return webextract.RouteKey(n), true
+}
+
+// partial says whether a URL a script builds was worked out only as far
+// as its authority: 'http://127.0.0.1:' + port + '/x' with the port
+// unknown reads "http://127.0.0.1:", a route of no host. An authority
+// that ends in : or . is one, and so is a scheme with no host.
+func partial(link string) bool {
+	u, err := url.Parse(link)
+	if err != nil || u.Scheme == "" {
+		return false // a path: whatever it is, it is the page's
+	}
+	h := u.Host
+	return h == "" || strings.HasSuffix(h, ":") || strings.HasSuffix(h, ".") || u.Hostname() == ""
 }
 
 func addAll(xs []string, ys ...string) []string {
