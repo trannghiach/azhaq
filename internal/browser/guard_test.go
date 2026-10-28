@@ -148,12 +148,12 @@ func TestGuardResolver(t *testing.T) {
 	u, _ := url.Parse(own.URL)
 	fetch.Reset()
 	fetch.Allow = func(h string) bool { return h == "app.azhaq.test" }
-	fetch.Resolver = func(_ context.Context, host string) []string {
+	fetch.SetResolver(func(_ context.Context, host string) []string {
 		if host == "app.azhaq.test" {
 			return []string{"127.0.0.1"}
 		}
 		return nil
-	}
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	_ = fetch.Spend(ctx)

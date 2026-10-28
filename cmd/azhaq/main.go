@@ -560,7 +560,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
 	// HTTP connects to the addresses azhaq-dns found: one answer per name.
-	fetch.Resolver = func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() }
+	fetch.SetResolver(func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() })
 	if *bruteFile != "" {
 		if opts.BruteWords, err = loadLines(*bruteFile); err != nil {
 			return err

@@ -577,8 +577,8 @@ func (p *probeOut) see(ent types.Entity, o types.Observation) {
 			return
 		}
 		var addrs []string
-		if net.ParseIP(host) == nil && fetch.Resolver != nil {
-			addrs = fetch.Resolver(context.Background(), host) // the answer HTTP connected with
+		if net.ParseIP(host) == nil {
+			addrs = fetch.Resolve(context.Background(), host) // the answer HTTP connected with
 		}
 		if !known {
 			for _, a := range append([]string{r.IP}, addrs...) {

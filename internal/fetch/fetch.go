@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -67,10 +68,29 @@ var Extra http.Header
 // requested, not even as a redirect target.
 var Allow func(host string) bool
 
-// Resolver, when set, gives the addresses to connect to for a name: the
+// resolver, when set, gives the addresses to connect to for a name: the
 // run's own DNS answers, so a service is reached at the address its
-// names were seen to resolve to. Nil, or no answer: the system resolver.
-var Resolver func(ctx context.Context, host string) []string
+// names were seen to resolve to. Unset, or no answer: the system
+// resolver. It is swapped whole: a request a finished run left behind
+// (a source past its deadline) may still dial while the next run sets it.
+var resolver atomic.Pointer[func(ctx context.Context, host string) []string]
+
+// SetResolver sets the run's resolver; nil goes back to the system's.
+func SetResolver(f func(ctx context.Context, host string) []string) {
+	if f == nil {
+		resolver.Store(nil)
+		return
+	}
+	resolver.Store(&f)
+}
+
+// Resolve is the run's answer for host, or nil without a resolver.
+func Resolve(ctx context.Context, host string) []string {
+	if f := resolver.Load(); f != nil {
+		return (*f)(ctx, host)
+	}
+	return nil
+}
 
 var (
 	cacheMu  sync.Mutex
@@ -115,7 +135,7 @@ func Reset() {
 	hostSem = map[string]chan struct{}{}
 	Extra = nil
 	Allow = nil
-	Resolver = nil
+	SetResolver(nil)
 	Keep = nil
 	Memos = nil
 	Delay = 0
@@ -164,23 +184,23 @@ func Client(c *http.Client) *http.Client {
 	}
 }
 
-// Dial connects to addr as the run's HTTP client does: through Resolver's
+// Dial connects to addr as the run's HTTP client does: through the resolver's
 // addresses for a name.
 func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	return dial(ctx, network, addr)
 }
 
-// dial connects through Resolver's addresses when it has an answer, the
+// dial connects through the resolver's addresses when it has an answer, the
 // way the system would: IPv6 first where the machine has a route for it,
 // IPv4 tried too after a short head start (RFC 8305). Some edges answer
 // only one family from a given network.
 func dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	d := &net.Dialer{Timeout: 5 * time.Second}
 	host, port, err := net.SplitHostPort(addr)
-	if err != nil || Resolver == nil || net.ParseIP(host) != nil {
+	if err != nil || net.ParseIP(host) != nil {
 		return d.DialContext(ctx, network, addr)
 	}
-	ips := Resolver(ctx, host)
+	ips := Resolve(ctx, host)
 	if len(ips) == 0 {
 		return d.DialContext(ctx, network, addr) // /etc/hosts, special-use names
 	}
