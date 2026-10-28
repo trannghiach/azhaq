@@ -32,8 +32,12 @@ const Name = "azhaq-subdomains"
 var fanoutTimeout = 15 * time.Second
 
 const (
-	maxNames      = 20000
-	sourceTimeout = 45 * time.Second
+	maxNames = 20000
+	// sourceTimeout bounds a source on a direct `subs -d` run. crt.sh is
+	// the slow one: 30 s is normal for a large domain and it can take
+	// longer, so the bound sits well above that; a source that truly fails
+	// or times out past it is still reported, and makes the exit code 3.
+	sourceTimeout = 60 * time.Second
 	maxBody       = 32 << 20
 )
 
@@ -44,7 +48,7 @@ func init() {
 
 // Options choose sources and supply keys.
 type Options struct {
-	Client  *http.Client        // for sources; default: 30 s timeout, proxy from env
+	Client  *http.Client        // for sources; default: 60 s timeout, proxy from env
 	Keys    map[string][]string // per source, from the provider file
 	Only    []string            // run only these sources
 	Exclude []string            // never run these
@@ -64,7 +68,7 @@ type Collector struct {
 
 func New(o Options) *Collector {
 	if o.Client == nil {
-		o.Client = &http.Client{Timeout: 30 * time.Second, Transport: http.DefaultTransport.(*http.Transport).Clone()}
+		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: http.DefaultTransport.(*http.Transport).Clone()}
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = sourceTimeout

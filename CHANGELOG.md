@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.3
+
+### Fixed
+
+- `subs` gives a slow source the time it needs: crt.sh takes about 30 seconds for a large domain (hackerone.com, tesla.com) and the 30-second request limit cut it off before it answered, so a direct `subs -d` run reported it as a timeout and exited 3 most of the time. The limit is now 60 seconds; a source that genuinely fails or stays slow past it is still reported and still makes the exit code 3.
+
 ## v0.7.2
 
 ### New
