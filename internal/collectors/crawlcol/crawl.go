@@ -233,5 +233,17 @@ func (c *Collector) jsonLinks(raw string, body []byte, base *url.URL, emit func(
 			})
 		}
 	}
+	// A listing's first item: the route the API reads one at.
+	if item := webextract.ListingItem(body, base); item != "" && webextract.SameOrigin(raw, item) && webextract.StateChanging(item) == "" {
+		payload, _ := json.Marshal(map[string]string{"url": item, "via": "listing"})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "url",
+			Payload: payload, Confidence: 0.6, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+		meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": item}})
+	}
 	return meta, nil
 }

@@ -21,8 +21,8 @@ import (
 // gets. CatchAll compares a response with the origin's answer for a random
 // path in the same directory.
 
-// maxProbeDirs caps baseline requests per origin; deeper directories fall
-// back to the root baseline.
+// maxProbeDirs caps baseline requests per origin; further directories fall
+// back to the nearest one above them that was asked.
 const maxProbeDirs = 24
 
 var probeToken = RandomName()
@@ -133,8 +133,11 @@ func baselineFor(ctx context.Context, c *http.Client, origin, dir string) *basel
 	b, ok := baselines[key]
 	if !ok {
 		if dir != "/" && probeDirs[origin] >= maxProbeDirs {
+			// The nearest directory above it that was asked: /rest/memories/
+			// answers like /rest/ (an error page), not like the site's root
+			// (a single-page app's shell).
 			probeMu.Unlock()
-			return baselineFor(ctx, c, origin, "/")
+			return baselineFor(ctx, c, origin, parentDir(dir))
 		}
 		b = &baseline{}
 		baselines[key] = b
