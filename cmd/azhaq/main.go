@@ -753,6 +753,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}); hint != "" {
 		rep.Next = append(rep.Next, hint)
 	}
+	if *login == "" && len(cookies) == 0 && len(headers) == 0 {
+		if hint := engine.LoginHint(rows); hint != "" {
+			rep.Next = append(rep.Next, hint)
+		}
+	}
 	rep.RunID = stats.RunID
 	rep.Requests = fetch.Sent()
 	if left := st.TasksLeft(); left > 0 {

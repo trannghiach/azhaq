@@ -161,3 +161,15 @@ func TestBrowserHint(t *testing.T) {
 		t.Errorf("Markdown read as text, rich map: %q", h)
 	}
 }
+
+func TestLoginHint(t *testing.T) {
+	row := func(key, scope string, fields ...string) engine.MapEntry {
+		return engine.MapEntry{Entity: types.Entity{Type: types.TypeURL, Key: key}, Scope: scope, Forms: []engine.MapForm{{Method: "POST", Fields: fields}}}
+	}
+	if h := engine.LoginHint([]engine.MapEntry{row("http://app.test/search", "target", "q"), row("http://app.test/login.php", "target", "username", "password", "Login")}); !strings.Contains(h, "-login http://app.test/login.php") {
+		t.Errorf("sign-in form: %q", h)
+	}
+	if h := engine.LoginHint([]engine.MapEntry{row("http://idp.test/login", "fanout", "user", "pass")}); h != "" {
+		t.Errorf("a form found on the way: %q", h)
+	}
+}

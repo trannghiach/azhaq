@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -164,4 +165,32 @@ func originOf(raw string) string {
 		return raw
 	}
 	return u.Scheme + "://" + u.Host
+}
+
+// passwordField: a form field that takes a password.
+var passwordField = regexp.MustCompile(`(?i)^(pass|passwd|password|pwd|passphrase|pin)$|password`)
+
+// LoginHint is the command to map again signed in, or "": a run without a
+// session whose target sites show a sign-in form (a page of the target's
+// origin whose form takes a password) has mapped what a visitor sees.
+func LoginHint(rows []MapEntry) string {
+	for _, r := range rows {
+		if r.Entity.Type != types.TypeURL || r.Scope != "target" {
+			continue
+		}
+		for _, f := range r.Forms {
+			for _, field := range f.Fields {
+				if !passwordField.MatchString(field) {
+					continue
+				}
+				page, host := r.Entity.Key, ""
+				if u, err := url.Parse(page); err == nil {
+					host = u.Hostname()
+				}
+				return fmt.Sprintf("azhaq run -url %s/ -login %s -login-user USER -login-pass PASS -allow %s …   (%s asks to sign in: what a visitor sees is mapped; signed in, the rest)",
+					originOf(page), page, host, page)
+			}
+		}
+	}
+	return ""
 }
