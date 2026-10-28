@@ -30,7 +30,7 @@ azhaq run -url https://app.example.com/ -login https://app.example.com/login -lo
 azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Authorization: Bearer $TB" -- -url https://app.example.com/
 ```
 
-Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object]` are the findings, worst first. `owner_by` says why the object is alice's. Check one by hand with bob's token before you report it.
+Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] proved` are the findings, worst first; `proved` rows first, `guess` rows need a look. The evidence after the route says why the object is alice's and what a made-up identifier got. Check one by hand with bob's token before you report it: `azhaq roles show -dir DIR URL` prints each role's answer, how it differs from alice's, and a curl line to run with `BOB_TOKEN` set.
 
 Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3); see recipe 4.
 
@@ -40,7 +40,7 @@ Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3);
 azhaq roles -role anon -role-cmd 'alice=./token.sh alice' -role-cmd 'bob=./token.sh bob' -- -url https://app.example.com/
 ```
 
-The command prints `Header: value` lines, or a bare token (sent as `Authorization: Bearer`). It runs before each role's run and again before the replay.
+The command prints `Header: value` lines, or a bare token (sent as `Authorization: Bearer`). It runs before each role's run, again before the replay, and whenever the role's canary (its `/me`, or `-canary URL`) says the session died during the replay; what was asked since the last good check is asked again.
 
 ## 5. Test writes across accounts
 

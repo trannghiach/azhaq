@@ -31,8 +31,9 @@ type role struct {
 	name       string
 	headers    []string
 	user, pass string
-	cmd        string      // prints its headers: run before its run and again before the replay
-	session    http.Header // what its requests carried, once its run signed in
+	cmd        string        // prints its headers: run before its run and again before the replay
+	session    http.Header   // what its requests carried, once its run signed in
+	past       []http.Header // the sessions it had before the replay renewed it
 }
 
 func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" && r.cmd == "" }
@@ -50,9 +51,23 @@ type roleRow struct {
 	Readers   []string          `json:"readers,omitempty"`   // the roles the verdict says read it
 	Sensitive []string          `json:"sensitive,omitempty"` // the sensitive fields the verdict is about
 	Verdict   string            `json:"verdict"`
+	// For a role reading or writing another role's object: why, in one
+	// line, and how surely the object is the owner's (proved, likely,
+	// guess).
+	Evidence   string   `json:"evidence,omitempty"`
+	Confidence string   `json:"confidence,omitempty"`
+	Control    *control `json:"control,omitempty"`   // what the readers got for a made-up identifier on the same route
+	BothWays   bool     `json:"both_ways,omitempty"` // the owner reads one of its reader's objects on the same route too
+	// SessionSuspect: an answer was asked after its role's session last
+	// proved alive, and its session did not prove alive again.
+	SessionSuspect bool `json:"session_suspect,omitempty"`
 
-	given bool   // Owner was given with -id
-	value string // the identifier filled into the route
+	given   bool     // Owner was given with -id
+	value   string   // the identifier filled into the route
+	reqBody []byte   // a write's body
+	reqType string   // and its Content-Type
+	mutual  []string // the readers whose objects on the route the owner reads too
+	suspect []string // the roles whose answers are suspect
 }
 
 // Verdicts, in the order rows are listed.
@@ -85,8 +100,11 @@ var verdictOrder = map[string]int{verdictAnyoneSecrets: 0, verdictCross: 1, verd
 //	azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url https://app/
 //	azhaq roles -login https://app/login -role anon -role-login 'alice=a@x.test:pw' -role-login 'bob=b@x.test:pw' -- -url https://app/
 func cmdRoles(args []string) error {
+	if len(args) > 0 && args[0] == "show" {
+		return cmdRolesShow(args[1:])
+	}
 	fs := newFlags("roles")
-	var specs, logins, cmds, idSpecs, hars stringsFlag
+	var specs, logins, cmds, idSpecs, hars, canarySpecs stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: …")
 	fs.Var(&cmds, "role-cmd", "NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left")
@@ -101,6 +119,9 @@ func cmdRoles(args []string) error {
 	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target; needs -allow or -scope in the run options. The writes are each role's own from -har, and the PUT, PATCH (an empty object, which changes nothing) and DELETE the runs' routes take, on each role's objects")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
 	fs.Var(&hars, "har", "NAME=FILE: the requests role NAME sent, as a browser or Burp saved them (HAR): its writes are replayed with -replay-writes")
+	fs.Var(&canarySpecs, "canary", "[ROLE:]URL[=REGEX]: what checks a session during the replay: a URL only a live session reads, and what its body holds (default: the role's own /me-like answer, or a page the anonymous role is refused)")
+	canaryEvery := fs.Int("canary-every", 50, "replay requests between two checks of a role's session (0: no checks)")
+	refusalSpec := fs.String("refusal", "", "REGEX: a 2xx answer whose body matches is a refusal, for every role (a 200 \"Access denied\" page); each origin's own refusal page is learned besides")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -125,12 +146,27 @@ func cmdRoles(args []string) error {
 	if len(roles) < 2 {
 		return usagef("need at least two -role, for example -role anon -role 'user=Cookie: session=…'")
 	}
+	for _, r := range roles {
+		if r.name+".db" == evidenceFile {
+			return usagef("a role may not be named %s: %s in -dir keeps the answers behind the rows", r.name, evidenceFile)
+		}
+	}
 	given, err := parseIDs(idSpecs, roles)
 	if err != nil {
 		return err
 	}
 	if len(runArgs) == 0 {
 		return usagef("give the run options after --, for example -- -url https://app.example.com/")
+	}
+	canaries, err := parseCanaries(canarySpecs, roles)
+	if err != nil {
+		return err
+	}
+	var refusalRE *regexp.Regexp
+	if *refusalSpec != "" {
+		if refusalRE, err = regexp.Compile(*refusalSpec); err != nil {
+			return usagef("-refusal: %v", err)
+		}
 	}
 	var methods map[string]bool
 	harOf := map[string]string{}
@@ -169,6 +205,12 @@ func cmdRoles(args []string) error {
 	rep := newReport("roles")
 	rep.what = "endpoints listed"
 	rep.DB = *dir
+	bodies = newBodyKeep()
+	defer func() { bodies = nil }()
+	rate := 0.0
+	if fs := flagsOf("run"); fs != nil && fs.Parse(runArgs) == nil {
+		rate, _ = strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64)
+	}
 
 	stale, soon, expired := expiryNotes(roles, time.Now())
 	if !*asJSON {
@@ -214,6 +256,7 @@ func cmdRoles(args []string) error {
 		if err != nil {
 			return err
 		}
+		keepRunBodies(got, raw)
 		readBodies(got, raw, s, hostSet(hosts))
 		rep.Requests += fetch.Sent() // the run's requests, and any the cache could not answer
 		absorb(rep, r.name, sub)
@@ -227,11 +270,13 @@ func cmdRoles(args []string) error {
 		scopeHosts = append(scopeHosts, hosts...)
 	}
 	replayed := 0 // requests the read replay sent, of -replay-max
+	own := hostSet(scopeHosts)
+	var who map[string]identity
 	if *replay {
 		// /books/v1/{book_title} with the titles each role's answers held
 		// and those given with -id: whose objects can the others read?
 		rank := map[string]int{}
-		who := identities(roles, answers, seen, signedIn)
+		who = identities(roles, answers, seen, signedIn)
 		for u, in := range instances(roles, templates, seen, answers, given, who) {
 			if _, ok := found[u]; ok {
 				rank[u] = min(in.rank, 2)
@@ -263,12 +308,28 @@ func cmdRoles(args []string) error {
 				roles[i].session[k] = v
 			}
 		}
-		n, err := replayAll(roles, answers, found, rank, scopeHosts, runArgs, *replayMax)
+		watch := &replayWatch{every: *canaryEvery, canaries: pickCanaries(roles, answers, made, canaries, own), renew: renewer(roles, *loginURL, *asJSON), refusal: refusalRE}
+		if watch.every > 0 {
+			for _, r := range roles {
+				if !r.anonymous() && watch.canaries[r.name] == nil {
+					rep.Notes = append(rep.Notes, fmt.Sprintf("role %s: nothing only its session reads was found to check it by during the replay; -canary URL gives one", r.name))
+				}
+			}
+		}
+		n, err := replayAll(roles, answers, found, rank, own, rate, *replayMax, watch)
 		rep.Requests += int64(n)
 		replayed = n
+		rep.Notes = append(rep.Notes, watch.notes...)
 		if err != nil {
 			rep.Notes = append(rep.Notes, "replay: "+err.Error())
 		}
+	}
+	// A 200 "Access denied" page is a refusal: each origin's, as the
+	// anonymous role got it, and what -refusal says.
+	pages := learnRefusals(roles, answers)
+	_, byRE := markRefusals(answers, pages, refusalRE)
+	rep.Notes = append(rep.Notes, refusalNotes(pages, byRE, refusalRE)...)
+	if *replay {
 		// Whose each object is, as its own answer says (UserId, owner,
 		// BasketId), over what the identifier that filled its route said.
 		settleOwners(roles, made, answers, who)
@@ -276,7 +337,22 @@ func cmdRoles(args []string) error {
 
 	markRedirects(answers, *loginURL)
 	rows := roleRows(roles, answers, found, made)
-	notes, warn, asked := sessionNotes(roles, rows, expired, hostSet(scopeHosts))
+	if *replay {
+		// A made-up identifier on each cross read's route: a route that
+		// answers it alike answers anything.
+		fetch.Reset()
+		fetch.SetRate(rate)
+		n, err := askControls(roles, rows, own, pages, refusalRE, max(0, *replayMax-replayed))
+		fetch.Reset()
+		rep.Requests += int64(n)
+		replayed += n
+		if err != nil {
+			rep.Notes = append(rep.Notes, "controls: "+err.Error())
+		}
+		rep.Notes = append(rep.Notes, bothWays(rows)...)
+		sortRows(rows)
+	}
+	notes, warn, asked := sessionNotes(roles, rows, expired, own)
 	rep.Notes = append(rep.Notes, notes...)
 	rep.warned = rep.warned || warn
 	rep.Requests += int64(asked)
@@ -302,19 +378,15 @@ func cmdRoles(args []string) error {
 			}
 		}
 		reqs = append(reqs, mapWrites(made, writes, methods)...)
-		rate := 0.0
-		if fs := flagsOf("run"); fs != nil && fs.Parse(runArgs) == nil {
-			rate, _ = strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64)
-		}
 		var wrows []roleRow
 		if *dryWrites {
 			for _, w := range reqs {
 				wrows = append(wrows, roleRow{URL: w.url, Method: w.method, Status: map[string]int{}, Answers: map[string]answer{},
-					FoundBy: []string{w.owner}, Owner: w.owner, OwnerBy: w.from, Verdict: verdictWriteDry})
+					FoundBy: []string{w.owner}, Owner: w.owner, OwnerBy: w.from, Verdict: verdictWriteDry, reqBody: w.body, reqType: w.header.Get("Content-Type")})
 			}
 		} else {
 			var n int
-			wrows, n, err = replayWrites(roles, reqs, answers, hostSet(scopeHosts), rate, max(0, *replayMax-replayed))
+			wrows, n, err = replayWrites(roles, reqs, answers, own, rate, max(0, *replayMax-replayed))
 			rep.Requests += int64(n)
 			if err != nil {
 				rep.Notes = append(rep.Notes, "write replay: "+err.Error())
@@ -326,6 +398,7 @@ func cmdRoles(args []string) error {
 		rows = append(wrows, rows...)
 		sort.SliceStable(rows, func(i, j int) bool { return verdictOrder[rows[i].Verdict] < verdictOrder[rows[j].Verdict] })
 	}
+	explain(rows, made, roles, who)
 	counts, hidden := map[string]int{}, map[string]int{}
 	public := map[string]bool{} // routes with an object anyone reads listed already: one says it
 	var shown []roleRow
@@ -350,6 +423,11 @@ func cmdRoles(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d more endpoints compared and not listed (%s); -all lists them", n, strings.Join(parts, ", ")))
 	}
 	rep.Results, rep.Counts = len(shown), counts
+	if err := saveEvidence(*dir, roles, shown); err != nil {
+		rep.Notes = append(rep.Notes, "the answers behind the rows could not be kept: "+err.Error())
+	} else if len(shown) > 0 {
+		rep.Next = append(rep.Next, "azhaq roles show -dir "+*dir+" URL   (a listed row's answers side by side, with curl lines)")
+	}
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		for _, row := range shown {
@@ -427,7 +505,7 @@ func rolesFailed(rep *report, asJSON bool, err error) error {
 // listed: the verdicts worth a reader's time by default.
 func listed(v string) bool {
 	switch v {
-	case verdictWriteAnyone, verdictWriteCross, verdictWriteDry, verdictAnyoneSecrets, verdictCross, verdictObject, verdictSecrets, verdictShared, verdictSignedIn, verdictOnly,
+	case verdictWriteAnyone, verdictWriteCross, verdictWriteDry, verdictAnyoneSecrets, verdictCross, verdictAnyID, verdictObject, verdictSecrets, verdictShared, verdictSignedIn, verdictOnly,
 		verdictRoleGated, verdictFields, verdictPublicObj, verdictStatus:
 		return true
 	}
@@ -443,17 +521,7 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 	for _, row := range rows {
 		cells := make([]string, len(roles))
 		for i, r := range roles {
-			a, ok := row.Answers[r.name]
-			switch {
-			case !ok || a.Status == 0:
-				cells[i] = "-"
-			case a.Error && ok2xx(a.Status):
-				cells[i] = fmt.Sprintf("%d:err", a.Status) // a refusal answered as success
-			case a.Status >= 200 && a.Status < 300:
-				cells[i] = fmt.Sprintf("%d:%s", a.Status, size(a.Length))
-			default:
-				cells[i] = strconv.Itoa(a.Status)
-			}
+			cells[i] = answerCell(row.Answers[r.name])
 		}
 		target := row.URL
 		if row.Method != "" {
@@ -463,21 +531,52 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 		switch row.Verdict {
 		case verdictShared:
 			line += " found by " + strings.Join(row.FoundBy, ", ")
-		case verdictWriteAnyone, verdictWriteCross, verdictWriteDry:
+		case verdictWriteAnyone, verdictWriteCross:
+			line += " " + row.Confidence + " · " + row.Evidence
+		case verdictWriteDry:
 			line += " · " + row.Owner + "'s, by " + row.OwnerBy
-		case verdictCross, verdictObject, verdictPublicObj, verdictOnly:
+		case verdictCross, verdictAnyID, verdictObject, verdictPublicObj, verdictOnly:
+			if row.Confidence != "" {
+				line += " " + row.Confidence
+			}
 			if row.From != "" {
 				line += " from " + row.From
 			}
-			if row.Verdict == verdictCross && row.OwnerBy != "" {
-				line += " · " + row.Owner + "'s by " + shortBy(row.OwnerBy)
+			if row.Evidence != "" {
+				line += " · " + row.Evidence
 			}
 		}
 		if len(row.Sensitive) > 0 && row.Verdict != verdictAnyoneSecrets && row.Verdict != verdictSecrets {
 			line += " · sensitive: " + strings.Join(row.Sensitive, ", ")
 		}
+		if row.SessionSuspect {
+			line += " · session suspect: " + strings.Join(row.suspect, ", ")
+		}
 		fmt.Println(line)
 	}
+}
+
+// answerCell is an answer as the text table prints it: 200:1.2k, 401, 200:err (a
+// refusal answered as success), 200:refused (the origin's refusal page, or
+// -refusal), with ? when its session is suspect.
+func answerCell(a answer) string {
+	var c string
+	switch {
+	case a.Status == 0:
+		return "-"
+	case a.Error && ok2xx(a.Status):
+		c = fmt.Sprintf("%d:err", a.Status)
+	case a.Refusal && ok2xx(a.Status):
+		c = fmt.Sprintf("%d:refused", a.Status)
+	case ok2xx(a.Status) && a.Hash != "":
+		c = fmt.Sprintf("%d:%s", a.Status, size(a.Length))
+	default: // a status without its body: what a HAR recorded
+		c = strconv.Itoa(a.Status)
+	}
+	if a.SessionSuspect {
+		c += "?"
+	}
+	return c
 }
 
 // shortBy is owner_by as the text table prints it: without the route,
@@ -513,6 +612,8 @@ func (row roleRow) label() string {
 		return who + " reads " + row.Owner + "'s object"
 	case row.Verdict == verdictCross && len(row.Readers) > 1:
 		return who + " read " + row.Owner + "'s object"
+	case row.Verdict == verdictAnyID && row.Control != nil:
+		return "answers any identifier: " + strings.Join(row.Control.Alike, ", ") + " read " + row.Owner + "'s object and a made-up " + row.Control.Value + " alike"
 	case row.Verdict == verdictOnly && len(row.Readers) == 1:
 		return "only " + who + " reads it"
 	}
@@ -536,9 +637,11 @@ func size(n int) string {
 // run's own hosts, are sent. URLs go by rank (objects given with -id,
 // the roles' own objects, what the runs reached, other objects), then
 // name, and one is taken only while the budget holds every role's
-// request for it.
-func replayAll(roles []role, answers map[string]map[string]answer, found map[string][]string, rank map[string]int, hosts, runArgs []string, budget int) (int, error) {
-	own := hostSet(hosts)
+// request for it, and the checks of each role's session (w) besides.
+func replayAll(roles []role, answers map[string]map[string]answer, found map[string][]string, rank map[string]int, own map[string]bool, rate float64, budget int, w *replayWatch) (int, error) {
+	if w == nil {
+		w = &replayWatch{}
+	}
 	rankOf := func(u string) int {
 		if r, ok := rank[u]; ok {
 			return r
@@ -568,45 +671,64 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 	})
 	var stopped error
 	total := 0
+	asks := map[string]int{} // role → URLs taken that it is asked
+	checks := func() int {
+		n := 0
+		for name, k := range asks {
+			if w.canaries[name] != nil && w.every > 0 && k > 0 {
+				n += 2 + k/w.every // before, every so many, after
+			}
+		}
+		return n
+	}
 	for i, u := range urls {
-		if total+need(u) > budget {
+		for _, r := range roles {
+			if _, ok := answers[r.name][u]; !ok {
+				asks[r.name]++
+			}
+		}
+		if total+need(u)+checks() > budget {
+			for _, r := range roles {
+				if _, ok := answers[r.name][u]; !ok {
+					asks[r.name]--
+				}
+			}
 			stopped = fmt.Errorf("stopped after -replay-max %d requests; %d URLs were not asked of every role", budget, len(urls)-i)
 			urls = urls[:i]
 			break
 		}
 		total += need(u)
 	}
-	rate := 0.0
-	if fs := flagsOf("run"); fs != nil && fs.Parse(runArgs) == nil {
-		rate, _ = strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64)
-	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	client := fetch.Client(nil)
+	defer fetch.Reset()
 	sent := 0
-	for _, r := range roles {
-		fetch.Reset()
-		fetch.SetRate(rate)
-		fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
-		fetch.Extra = r.session.Clone()
+	for i, r := range roles {
+		var todo []string
 		for _, u := range urls {
-			if _, ok := answers[r.name][u]; ok {
-				continue
+			if _, ok := answers[r.name][u]; !ok {
+				todo = append(todo, u)
 			}
-			if ctx.Err() != nil {
-				fetch.Reset()
-				return sent, ctx.Err()
-			}
-			res, _, err := fetch.Do(ctx, client, u)
-			sent++
-			if err != nil {
-				continue
-			}
-			answers[r.name][u], _ = resultAnswer(res)
+		}
+		if len(todo) == 0 {
+			continue
+		}
+		rr := &roleReplay{ctx: ctx, roles: roles, i: i, answers: answers, own: own, rate: rate, w: w, sent: &sent, budget: budget}
+		if err := rr.run(todo); err != nil {
+			return sent, err
 		}
 	}
-	fetch.Reset()
 	return sent, stopped
+}
+
+// sortRows orders rows by verdict, worst first, then URL.
+func sortRows(rows []roleRow) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		if a, b := verdictOrder[rows[i].Verdict], verdictOrder[rows[j].Verdict]; a != b {
+			return a < b
+		}
+		return rows[i].URL < rows[j].URL
+	})
 }
 
 // contentType is the type of the body a fetch kept: the last hop's.
@@ -618,12 +740,13 @@ func contentType(res fetch.Result) string {
 }
 
 // resultAnswer is readAnswer for a fetch, with where a redirect sends
-// the role.
+// the role; the body is kept as evidence.
 func resultAnswer(res fetch.Result) (answer, *jsonFacts) {
 	a, f := readAnswer(res.Status, res.Body, contentType(res))
 	if res.Status >= 300 && res.Status < 400 {
 		a.Location = bareLocation(res.Header.Get("Location"))
 	}
+	keepBody(a.Hash, contentType(res), res.Body)
 	return a, f
 }
 
@@ -714,16 +837,15 @@ func roleRows(roles []role, answers map[string]map[string]answer, found map[stri
 			if a.Status != 0 {
 				row.Answers[r.name] = a
 			}
+			if a.SessionSuspect {
+				row.SessionSuspect = true
+				row.suspect = append(row.suspect, r.name)
+			}
 		}
 		row.Verdict = verdict(roles, &row)
 		rows = append(rows, row)
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if a, b := verdictOrder[rows[i].Verdict], verdictOrder[rows[j].Verdict]; a != b {
-			return a < b
-		}
-		return rows[i].URL < rows[j].URL
-	})
+	sortRows(rows)
 	return rows
 }
 

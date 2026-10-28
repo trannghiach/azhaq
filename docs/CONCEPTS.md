@@ -73,11 +73,15 @@ Exit codes: `0` complete, `1` error, `2` usage (nothing was sent), `3` finished 
 | role | A session: anonymous, headers (`-role`), headers from a command (`-role-cmd`), or a Chrome sign-in (`-role-login`). |
 | replay | Every URL any role reached, asked with every other role. GETs only, unless `-replay-writes`. |
 | reads | Answered 2xx, and not with an error shaped as data. |
-| refused | Any 4xx, an error answered 2xx, a redirect to a sign-in page, or to the front page while another role reads it. |
+| refused | Any 4xx, an error answered 2xx, the site's own `200 Access denied` page (or what `-refusal` matches), a redirect to a sign-in page, or to the front page while another role reads it. |
 | owner, `owner_by` | Whose object it is, and the evidence (a token's claim, a list only that role sees, the object's own owner field). |
+| `confidence`, `evidence` | How surely the object is the owner's (`proved`: the session or the owner's own list, and the object's answer; `likely`: one of them; `guess`), and why, in one line. |
+| control | A made-up identifier of the same shape on the same route: a route that answers it like a real object answers any identifier. |
+| canary | An endpoint only a role's live session reads, checked during the replay; a session that dies is renewed, or its answers are `session_suspect`. |
+| evidence | The answers behind the listed rows, secrets taken out, in `roles.db`: `azhaq roles show -dir DIR URL`. |
 | dead session | A role refused wherever a session matters: its token expired or is wrong. Said in a note; the exit code is 3. |
 
-Verdicts, worst first: anyone reads sensitive fields · reads another role's object · every signed-in role reads the same object · roles read the same sensitive fields · same answer for a session that did not find it · signed-in only · only one role reads it · some roles refused · different fields per role · anyone reads the same object · status differs. With `-replay-writes`, two come before them all: anyone writes another role's object · writes another role's object.
+Verdicts, worst first: anyone reads sensitive fields · reads another role's object · answers any identifier · every signed-in role reads the same object · roles read the same sensitive fields · same answer for a session that did not find it · signed-in only · only one role reads it · some roles refused · different fields per role · anyone reads the same object · status differs. With `-replay-writes`, two come before them all: anyone writes another role's object · writes another role's object.
 
 ## What Azhaq sends
 

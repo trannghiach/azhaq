@@ -407,9 +407,19 @@ type instance struct {
 	owner    string   // the role whose own object it is, when that is known
 	by       string   // what says it is the owner's
 	sure     sureness // how surely by says so
+	told     told     // what the object's own answer said of its owner
 	given    bool     // given with -id
 	rank     int      // replay order: given, a role's own, then the rest
 }
+
+// told is what an object's own answer said of whose it is.
+type told int
+
+const (
+	toldNone     told = iota // nothing, or nothing all its readers agree on
+	toldConfirms             // it names the owner what filled the route named
+	toldNames                // it names the owner, in place of what filled the route
+)
 
 // sureness is how surely what filled a route names the object's owner,
 // weakest first.

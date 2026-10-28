@@ -129,6 +129,15 @@ type cacheEnt struct {
 	err error
 }
 
+// Cached is the answer the process cache holds for raw, without sending
+// anything: azhaq roles keeps the bodies a role's run got.
+func Cached(raw string) (Result, bool) {
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	e, ok := cache[raw]
+	return e.res, ok && e.err == nil
+}
+
 func Client(c *http.Client) *http.Client {
 	if c != nil {
 		return c

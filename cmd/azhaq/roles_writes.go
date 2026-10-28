@@ -235,7 +235,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 			continue
 		}
 		row := roleRow{URL: w.url, Method: w.method, Status: map[string]int{}, Answers: map[string]answer{}, FoundBy: []string{w.owner},
-			Owner: w.owner, OwnerBy: w.from}
+			Owner: w.owner, OwnerBy: w.from, reqBody: w.body, reqType: w.header.Get("Content-Type")}
 		ownerLet := w.status >= 200 && w.status < 300
 		if w.status != 0 {
 			row.Answers[w.owner] = answer{Status: w.status}
@@ -362,6 +362,7 @@ func sendWrite(ctx context.Context, client *http.Client, r role, w writeReq) (an
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		a.Location = bareLocation(resp.Header.Get("Location"))
 	}
+	keepBody(a.Hash, resp.Header.Get("Content-Type"), body)
 	return a, nil
 }
 
