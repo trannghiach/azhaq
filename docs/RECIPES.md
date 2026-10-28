@@ -52,7 +52,7 @@ Save alice's traffic as a HAR (browser developer tools, or Burp). Her POST, PUT 
 
 A cross-role write is reported only when it is proven. Azhaq reads the owner's object as the owner before and after the write, and lists `[bob writes alice's object]` only when that object changed the way the write asks (or was deleted); it looks for a readable object even when the write's own URL is not one (`/users/v1/alice/email` is checked against `/users/v1/alice`). A write that answers 2xx but leaves the owner's object unchanged — an app that writes the caller's own object whatever the path says — is listed as `answered 2xx but changed nothing of the owner's` under `-all`, not as a finding; a POST to a collection is `creates in another role's collection`, never a cross write. So add `-id alice:username=…` when identifiers are not in the answers, and check the `owner_by` line, which quotes what proved the write.
 
-Catch: writes change data on the target. Add `delete` only if deleting test data is fine.
+Catch: writes change data on the target. A HAR write replayed with another session changes *that* session's own object to the HAR's value when the app writes the caller's object whatever the path says (replaying bob's `PUT …/email` with alice's session sets alice's email to bob's). Replay in accounts whose data you may change. Add `delete` only if deleting test data is fine.
 
 ## 6. Map a bug bounty program inside its scope and a budget
 
