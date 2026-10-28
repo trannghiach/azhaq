@@ -32,7 +32,15 @@ func TestStateChanging(t *testing.T) {
 		"http://app/search?q=shoes&exact=on&page=2": "",
 		"http://app/search?safe=off":                "",
 		"http://app/api/jobs/42/execute":            "execute",
-		"http://dvwa/vulnerabilities/exec/":         "exec",
+		"http://dvwa/vulnerabilities/exec/":         "",
+		"http://dvwa/vulnerabilities/exec/x.php":    "",
+		"http://app/exec":                           "exec",
+		"http://app/import_paste":                   "import",
+		"http://app/admin/auth/user/add/":           "",
+		"http://app/api/jobs/run/":                  "run",
+		"http://app/v2/jobs/start/":                 "start",
+		"http://app/logout/":                        "logout",
+		"http://app/account/delete/":                "delete",
 		"http://app/api/cache/refresh":              "refresh",
 		"http://app/runtime":                        "",
 		"http://app/started":                        "",
@@ -48,7 +56,7 @@ func TestStateChanging(t *testing.T) {
 func TestAllowedWords(t *testing.T) {
 	AllowedWords["exec"] = true
 	defer delete(AllowedWords, "exec")
-	if w := StateChanging("http://dvwa/vulnerabilities/exec/"); w != "" {
+	if w := StateChanging("http://dvwa/exec"); w != "" {
 		t.Errorf("an allowed word left alone: %q", w)
 	}
 	if w := StateChanging("http://app/logout"); w != "logout" {

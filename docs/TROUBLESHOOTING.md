@@ -6,7 +6,7 @@
 
 **Why is a live endpoint `gone`?** It answered 404 or 410 to a GET. If scripts call it with another method, it is a `hint` instead; if it is `gone`, nothing Azhaq read says it takes another method. Archived URLs are often gone.
 
-**Why was `/exec/` (or `/logout`, `/createdb`) not requested?** Its name says a GET there could change something. It is listed under "left alone" with the word. `-get-words exec` requests the URLs left alone for that word only, `-all-gets` all of them, if you accept the side effect.
+**Why was `/exec` (or `/logout`, `/createdb`) not requested?** Its name says a GET there could change something. A directory named after a verb (`/vulnerabilities/exec/`, `/admin/user/add/`) is a section with a form and is requested; one under an API path (`/api/jobs/run/`) is not. It is listed under "left alone" with the word. `-get-words exec` requests the URLs left alone for that word only, `-all-gets` all of them, if you accept the side effect.
 
 **The map looks thin.** The app may draw its links with scripts. The summary suggests `-browser` when a page leaves its links to its scripts. Behind a login, give a session (`-cookie`, `-header`, `-login`).
 

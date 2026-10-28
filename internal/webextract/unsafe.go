@@ -36,7 +36,11 @@ func StateChanging(raw string) string {
 	if c := ClassifyURL(raw); c == "script" || c == "asset" {
 		return ""
 	}
-	for _, seg := range strings.Split(u.Path, "/") {
+	segs := strings.Split(u.Path, "/")
+	for i, seg := range segs {
+		if i < len(segs)-1 && sectionWords[strings.ToLower(seg)] && !apiPath(segs[:i]) {
+			continue // DVWA's /vulnerabilities/exec/ is a page with a form
+		}
 		if w := verbOf(seg); w != "" && !AllowedWords[w] {
 			return w
 		}
@@ -55,6 +59,25 @@ func StateChanging(raw string) string {
 		}
 	}
 	return ""
+}
+
+// sectionWords name a section of a site when they are a directory of
+// their own (/exec/, /import/, /checkout/): the page there shows a form,
+// and the form's POST does the work. /exec, /import_paste and
+// /api/jobs/run/ stay left alone.
+var sectionWords = map[string]bool{"exec": true, "execute": true, "run": true, "import": true, "create": true, "add": true,
+	"generate": true, "send": true, "start": true, "checkout": true}
+
+// apiPath says the segments before a word are an API's (/api/, /rest/,
+// /v2/): a directory there is an endpoint, not a page.
+func apiPath(segs []string) bool {
+	for _, s := range segs {
+		s = strings.ToLower(s)
+		if s == "api" || s == "rest" || s == "graphql" || len(s) > 1 && s[0] == 'v' && strings.Trim(s[1:], "0123456789") == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // AllowedWords are the words the user lets be requested (-get-words exec):

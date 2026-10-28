@@ -9,6 +9,10 @@
 - `urls -urls-source` (and `-json`) says which source gave each URL.
 - A site with a sign-in form and no session given suggests `-login` in a `next:` line.
 
+### Changed
+
+- A directory named after a verb (`/vulnerabilities/exec/`, `/admin/user/add/`) is a section with a form, and is requested; `/exec`, `/import_paste` and a directory under an API path (`/api/jobs/run/`) are still left alone.
+
 ### Fixed
 
 - MCP tools take a single string where a list of strings is expected.
