@@ -51,7 +51,7 @@ Any client that takes a JSON configuration:
 | `azhaq_diff` | what the last run into a workspace added and lost |
 | `azhaq_workspaces` | the workspaces written so far |
 
-Results are one text block of compact JSON (not repeated as `structuredContent`), carry at most `limit` rows (100 by default, never more than 1000) and say when there are more, so a client's context does not fill with one call: ask `azhaq_query` the next question instead. Summaries speak in tool calls: a run a limit stopped says `"resume":"azhaq_resume {\"workspace\":\"juice\"} continues it"`, and its next steps are `azhaq_query` and `azhaq_export` calls.
+Results are one text block of compact JSON (not repeated as `structuredContent`). A result carries at most `limit` rows (100 by default, never more than 1000) and says when there are more, so one call does not fill a client's context: ask `azhaq_query` the next question instead. A summary names its next steps as tool calls rather than shell commands: a run a limit stopped says `"resume":"azhaq_resume {\"workspace\":\"juice\"} continues it"`, and its `next` entries are `azhaq_query` and `azhaq_export` calls.
 
 For example, `azhaq_roles {"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"user","header":["Authorization: Bearer …"]}]}` compares an anonymous session with a token's.
 

@@ -1,11 +1,11 @@
 # Azhaq
 
-Azhaq maps what an application or a bug bounty program exposes, and who may read and write it. It is one Go binary: subdomains, probing, crawling, the routes an app's JavaScript calls, API descriptions, GraphQL schemas, ports, archives, and an access matrix across your accounts. Everything lands in one SQLite workspace you can query, export and diff.
+Azhaq maps what an application or a bug bounty program exposes, and who may read and write it. It is one Go binary: subdomains, probing, crawling, the routes an app's JavaScript calls, API descriptions, GraphQL schemas, ports, archives, and a map of who may read and write what across your accounts. Everything lands in one SQLite workspace you can query, export and diff.
 
-- **Routes other crawlers miss.** On OWASP Juice Shop it finds 75 of the 90 routes the server defines, with methods and body fields, and says the line of the script that calls each. katana with jsluice finds 1 to 7.
-- **Access control with evidence.** `azhaq roles` signs in as each of your accounts, swaps their sessions, and reports `[bob reads alice's object]` with why the object is alice's. With `-replay-writes` it does the same for writes.
+- **Routes other crawlers miss.** On OWASP Juice Shop it finds 70 of the 77 routes the server defines that its frontend calls, with methods and body fields, and names the line of the script that calls each. katana with jsluice finds 1.
+- **Access control with evidence.** `azhaq roles` signs in as each of your accounts, reuses each session against the others, and reports `[bob reads alice's object]` with why the object is alice's. `-replay-writes` extends this to writes: it replays each account's own writes (from a saved HAR, or empty-body probes of the routes it found) with the other sessions.
 - **Safe to hand to an assistant.** `azhaq mcp` locks the scope, the request budget and the pace when it starts; no tool argument can widen them.
-- **Takeover candidates flagged.** A CNAME to a cloud name that no longer exists, a domain nobody holds, or a service's page for an unclaimed name is listed with its evidence, from `subs -live` on.
+- **Takeover candidates flagged.** A CNAME to a cloud name that no longer exists, a domain nobody holds, or a hosting service's page for an unclaimed name is listed with its evidence. Even a plain `subs -live` flags them.
 - **The usual chain, at parity or faster.** `subs`, `probe`, `ports`, `dirs`, `params` and `urls` stand in for subfinder, httpx, naabu, ffuf, arjun and gau, with their JSON field names.
 
 ## At a glance
@@ -70,8 +70,10 @@ azhaq run: 193 map rows (124 URLs, 71 api, 43 client routes, 11 auth, 1 forbidde
 ```
 $ azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Authorization: Bearer $TB" -- -url http://localhost:5000/
   401 → 200:79 → 200:79  http://localhost:5000/books/v1/aliceBook  [bob reads alice's object] · sensitive: secret
-  200:1.1k ×3  http://localhost:5000/users/v1/_debug  [anyone reads sensitive fields: password]
+  200:1.1k → 200:1.1k → 200:1.1k  http://localhost:5000/users/v1/_debug  [anyone reads sensitive fields: password]
 ```
+
+Each column is one role's answer as `status:bytes`, in the order the roles were given (`-` for a role never asked).
 
 **Map a program inside its scope and a budget.**
 
@@ -116,7 +118,7 @@ Every command prints results on stdout, and a summary on stderr: what failed and
 | Chrome | GET, HEAD and CORS preflights, and the sign-in form; a page's own writes are refused and mapped, unless `-browser-writes` | `-browser`, `-login`, `shots` |
 | Other roles' writes | POST, PUT, PATCH, DELETE | `roles -replay-writes` (needs a scope) |
 
-URLs whose names say a GET would change something (`/logout`, `/createdb`, `?phpids=on`) are listed, not requested. URLs carrying a scanner's payload never enter the map. No request to a target goes to a host outside the scope, Chrome's included; without a scope, they stay on the site. Third-party sources (subdomain lists, archives, RDAP) are asked about your domains; `-passive` sends nothing to the targets. `-rate` paces it, `-max-requests` caps it, and `azhaq plan` prints it before anything is sent.
+URLs whose names say a GET would change something (`/logout`, `/createdb`, `?phpids=on`) are listed, not requested. A URL that carries a scanner's payload in its path or query (`<script>`, `../../etc/passwd`, `union select`), as archives often keep them, never enters the map. No request to a target goes to a host outside the scope, Chrome's included; without a scope, they stay on the site. Third-party sources (subdomain lists, archives, RDAP) are asked about your domains; `-passive` sends nothing to the targets. `-rate` paces it, `-max-requests` caps it, and `azhaq plan` prints it before anything is sent.
 
 ## A workspace
 
@@ -133,7 +135,7 @@ Runs into the same workspace add to it; `diff` and `watch` say what changed. `in
 
 ## Access control
 
-`azhaq roles` maps the target once per role, asks every endpoint any role reached with every other role, fills `{id}` routes with each role's own objects, and compares the answers. Roles are anonymous, carry headers, get them from a command (`-role-cmd`, for tokens that live minutes), or sign in with Chrome (`-role-login`). A session that dies is caught and quoted (`the site said "Signature expired"`), and a canary renews it during the replay. Each cross read says how sure it is (`proved`, `likely`, `guess`) and why; a route that answers a made-up identifier like a real one is listed as `answers any identifier`, not as a finding. `azhaq roles show -dir DIR URL` prints the answers side by side, a field-level diff, and a curl per role with its session as a shell variable. With `-replay-writes post,put,patch` and `-har alice=alice.har`, alice's writes are asked with bob's session too; PUT and PATCH on routes the map found are sent with an empty body, the owner's first: PATCH changes nothing, and a server that replaces on PUT may clear the owner's own object, which is read again before anyone else is asked. [docs/OUTPUT.md](docs/OUTPUT.md#roles) lists the verdicts and fields.
+`azhaq roles` maps the target once per role, then asks every endpoint any role reached with every other role's session, fills `{id}` routes with each role's own objects, and compares the answers. A role is anonymous, carries headers you give it, gets them from a command (`-role-cmd`, for tokens that live minutes), or signs in with Chrome (`-role-login`). A session that dies mid-run is caught and quoted (`the site said "Signature expired"`), and a canary (an endpoint only a live session reads) renews it during the replay. Each cross-read is scored `proved`, `likely` or `guess`, with the reason. A route that answers a made-up identifier like a real one is listed as `answers any identifier`, not as a finding. `azhaq roles show -dir DIR URL` prints the answers side by side, a field-level diff, and a curl per role with its session held in a shell variable. With `-replay-writes post,put,patch` and `-har alice=alice.har`, alice's own writes are replayed with bob's session; PUT and PATCH on routes the map found are sent with an empty body, the owner first (a server that replaces on PUT may clear the owner's object, so it is read again before anyone else is asked). [docs/OUTPUT.md](docs/OUTPUT.md#roles) lists the verdicts and fields.
 
 ## In a pipeline
 
