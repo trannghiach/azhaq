@@ -117,7 +117,7 @@ func cmdRoles(args []string) error {
 	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session, and each role's objects with the others (GETs that change nothing only)")
 	replayMax := fs.Int("replay-max", 2000, "requests the replay may send, over all roles")
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
-	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target; needs -allow or -scope in the run options. The writes are each role's own from -har, and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
+	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har, and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
 	fs.Var(&hars, "har", "NAME=FILE: the requests role NAME sent, as a browser or Burp saved them (HAR): its writes are replayed with -replay-writes")
 	fs.Var(&canarySpecs, "canary", "[ROLE:]URL[=REGEX]: what checks a session during the replay: a URL only a live session reads, and what its body holds (default: the role's own /me-like answer, or a page the anonymous role is refused)")
@@ -176,7 +176,14 @@ func cmdRoles(args []string) error {
 			return err
 		}
 		if !hasFlag(runArgs, "allow", "scope") {
-			return usagef("-replay-writes changes data on the target: name the scope with -allow or -scope in the run options")
+			// The apps given are the scope: no write goes to a host their scripts name.
+			hosts := urlHosts(runArgs)
+			if len(hosts) == 0 {
+				return usagef("-replay-writes changes data on the target: give -url in the run options, or -allow / -scope")
+			}
+			for _, h := range hosts {
+				runArgs = append(runArgs, "-allow", h)
+			}
 		}
 	}
 	for _, h := range hars {
@@ -1341,4 +1348,22 @@ func endpointAnswers(db string) (map[string]answer, map[string]string, []string,
 		}
 	}
 	return out, raw, hosts, seen, nil
+}
+
+// urlHosts are the hosts of the -url values in args.
+func urlHosts(args []string) []string {
+	var out []string
+	for i, a := range args {
+		k, v, eq := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(a, "-") || k != "url" {
+			continue
+		}
+		if !eq && i+1 < len(args) {
+			v = args[i+1]
+		}
+		if h := normalize.HostFromURL(v); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
 }

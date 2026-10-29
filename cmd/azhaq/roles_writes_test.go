@@ -320,7 +320,7 @@ func TestWriteOnlyTemplateReplayed(t *testing.T) {
 
 func TestReplayWritesFlags(t *testing.T) {
 	for _, args := range [][]string{
-		{"-replay-writes", "put", "-role", "anon", "-role", "a=A: 1", "--", "-url", "http://127.0.0.1:1/"},
+		{"-replay-writes", "put", "-role", "anon", "-role", "a=A: 1", "--", "-domain", "example.test"},
 		{"-har", "a=x.har", "-role", "anon", "-role", "a=A: 1", "--", "-url", "http://127.0.0.1:1/", "-allow", "127.0.0.1"},
 		{"-replay-writes", "put", "-har", "anon=x.har", "-role", "anon", "-role", "a=A: 1", "--", "-url", "http://127.0.0.1:1/", "-allow", "127.0.0.1"},
 		{"-replay-writes", "get", "-role", "anon", "-role", "a=A: 1", "--", "-url", "http://127.0.0.1:1/", "-allow", "127.0.0.1"},
@@ -328,6 +328,13 @@ func TestReplayWritesFlags(t *testing.T) {
 		if err := cmdRoles(append([]string{"-dir", t.TempDir()}, args...)); exitCode(err) != exitUsage {
 			t.Errorf("%q: %v", args, err)
 		}
+	}
+}
+
+func TestURLHostsAreTheWriteScope(t *testing.T) {
+	got := urlHosts([]string{"-url", "http://127.0.0.1:5002/", "-depth", "2", "--url=https://App.example.org/x"})
+	if strings.Join(got, ",") != "127.0.0.1,app.example.org" {
+		t.Fatalf("%v", got)
 	}
 }
 

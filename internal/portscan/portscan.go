@@ -84,7 +84,7 @@ type Open struct {
 
 // Scanner connects to ports at a set total rate.
 type Scanner struct {
-	Rate    float64       // connection attempts per second, all hosts together; 0 means 300, loopback unpaced
+	Rate    float64       // connection attempts per second, all hosts together; 0 means 1000 (naabu's), loopback unpaced
 	Workers int           // connects in flight; 0 means 100
 	Timeout time.Duration // per connect; 0 means 1.5 s
 	Banner  time.Duration // how long to wait for a service to speak (and, with Timeout, for the answer to a probe); 0 means 1.5 s; <0 skips both
@@ -105,7 +105,7 @@ func (s *Scanner) init() {
 	s.once.Do(func() {
 		s.loopPaced = s.Rate > 0
 		if s.Rate <= 0 {
-			s.Rate = 300
+			s.Rate = 1000
 		}
 		if s.Workers <= 0 {
 			s.Workers = 100

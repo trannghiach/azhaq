@@ -425,3 +425,14 @@ func TestInheritedHelpNamesLocalFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestSeedScope(t *testing.T) {
+	got := seedScope([]types.Seed{
+		{Type: types.TypeURL, Keys: map[string]string{"url": "http://127.0.0.1:3001/"}},
+		{Type: types.TypeDomain, Keys: map[string]string{"domain": "Example.org"}},
+		{Type: types.TypeASN, Keys: map[string]string{"asn": "AS64500"}},
+	})
+	if strings.Join(got, ",") != "127.0.0.1,example.org" {
+		t.Fatalf("%v", got)
+	}
+}

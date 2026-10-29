@@ -198,7 +198,7 @@ With `-json`, stderr holds the summary only: the runs of the roles print nothing
 
 ### Writes (`-replay-writes`)
 
-`-replay-writes METHODS` (`post`, `put`, `patch`, `delete`, comma-separated) also asks each role's writes with every other role's session, after the reads. It needs `-allow` or `-scope` in the run options: writes change data on the target. The writes are:
+`-replay-writes METHODS` (`post`, `put`, `patch`, `delete`, comma-separated) also asks each role's writes with every other role's session, after the reads. Writes change data on the target: they go only to the hosts of the run options' `-url` values, or to the scope `-allow` or `-scope` names. The writes are:
 
 - the ones a role sent, from a HAR (`-har NAME=FILE`, as a browser's developer tools or Burp save it): its requests with those methods on the run's hosts, one each, with their bodies and `Content-Type`, `Accept` and `X-Requested-With`, never the session that sent them (cookies, `Authorization`, a CSRF token); a logout is never replayed;
 - the PUT, PATCH and DELETE that the routes the runs found take (from API descriptions and scripts), on each role's own objects, filled with each role's own identifiers (the same identity the read replay uses: JWT claims, `/me` answers, list items, `-id`) — including routes that only take a write and have no GET (`PUT /users/v1/{username}/email`): PATCH with an empty JSON object, which asks for the write and changes nothing; PUT with an empty JSON object, which changes nothing on a server that updates the fields sent but may clear the owner's own object on one that replaces it on PUT; DELETE with no body. A route whose write takes a form, and a POST (which creates in a collection), are left to the HAR.

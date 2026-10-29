@@ -203,28 +203,28 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
-	hostParallel := fs.Int("host-parallel", 0, "requests in flight per host (default 4)")
+	hostParallel := fs.Int("host-parallel", 0, "requests in flight per host (default 10, as katana)")
 	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
 	sourceTimeout := fs.Duration("source-timeout", subcol.DefaultSourceTimeout, "give each subdomain source this long; a slower one (crt.sh) is abandoned, listed as failed, and the names the others gave are kept (not -timeout, the run's bound)")
 	providersFile := fs.String("providers", "", "API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml)")
 	resolversFile := fs.String("resolvers", "", "DNS resolvers, one per line (default: public resolvers)")
-	dnsRate := fs.Float64("dns-rate", 100, "DNS queries per second per resolver")
-	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active: needs -allow)")
-	permute := fs.Bool("permute", false, "resolve variations of found names (active: needs -allow)")
-	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list such as 22,80,8000-8100 (active: needs -allow)")
-	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 300, and 127.0.0.1 unpaced)")
-	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active: needs -allow)")
+	dnsRate := fs.Float64("dns-rate", 0, "DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx)")
+	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow)")
+	permute := fs.Bool("permute", false, "resolve variations of found names (active; the targets given are the scope unless -allow)")
+	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list such as 22,80,8000-8100 (active; the targets given are the scope unless -allow)")
+	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1000, as naabu, and 127.0.0.1 unpaced)")
+	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active; the targets given are the scope unless -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
 	dirsThreads := fs.Int("dirs-threads", 40, "path guesses in flight per service (as ffuf)")
-	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
-	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active: needs -allow)")
+	dirsRate := fs.Float64("dirs-rate", 0, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
+	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active; the targets given are the scope unless -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
-	paramsRate := fs.Float64("params-rate", 20, "parameter requests per second per host (0: no limit, as arjun)")
+	paramsRate := fs.Float64("params-rate", 0, "parameter requests per second per host (0: no limit, as arjun)")
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
-	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active: needs -allow)")
+	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
 	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
@@ -331,6 +331,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	// Everything that can make this a usage error is checked before a
 	// database is created.
+	active := *bruteFile != "" || *permute || *graphql || *portsSpec != "" || *dirsFile != "" || *paramsFile != ""
+	if active && len(allow) == 0 {
+		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
+	}
 	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
 	if !rules.Empty() {
 		// What the scope excludes is never touched, even when it was given
@@ -348,8 +352,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
 		}
 	}
-	if (*bruteFile != "" || *permute || *graphql || *portsSpec != "" || *dirsFile != "" || *paramsFile != "") && len(allow) == 0 {
-		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params are active: name the scope with -allow DOMAIN or -scope")
+	if active && len(allow) == 0 {
+		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params need a target that names a host, domain or address (an ASN or organisation does not), or -allow / -scope")
 	}
 	ports, err := parsePorts(*webPorts)
 	if err != nil {
@@ -766,11 +770,20 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	rep.RunID = stats.RunID
 	rep.Requests = fetch.Sent()
+	// Work the -timeout cut short (a source still asking) is not done:
+	// resume runs it again.
+	cut := 0
+	for _, f := range rep.Failed {
+		if f.Error == types.CutShort {
+			n, _ := st.Reopen(f.Collector, f.Targets)
+			cut += n
+		}
+	}
 	if left := st.TasksLeft(); left > 0 {
 		// Tasks left counts what is known so far: the pages a resume reads
 		// lead to more, so it can grow between resumes.
 		switch {
-		case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		case errors.Is(ctx.Err(), context.DeadlineExceeded) || cut > 0:
 			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks known and not done", *timeout, left)
 		case ctx.Err() != nil:
 			rep.Stopped = fmt.Sprintf("interrupted with %d tasks known and not done", left)
@@ -782,6 +795,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}
 		rep.Resume = "azhaq resume -db " + path
+		if cut > 0 {
+			rep.Resume += " -timeout 0" // a cut task runs again whole: the same bound cuts it again
+		}
 		if *login != "" {
 			// The sign-in is not stored (no password on disk); resume signs
 			// in again, so the hint carries the credential flags.
@@ -1759,4 +1775,20 @@ func compact(raw json.RawMessage) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// seedScope is the scope the targets themselves name. An ASN or an
+// organisation names none.
+func seedScope(seeds []types.Seed) []string {
+	var out []string
+	for _, s := range seeds {
+		s = normalize.Seed(s)
+		switch s.Type {
+		case types.TypeURL:
+			out = append(out, normalize.HostFromURL(s.Key()))
+		case types.TypeHostname, types.TypeDomain, types.TypeIPAddress, types.TypePrefix:
+			out = append(out, s.Key())
+		}
+	}
+	return out
 }

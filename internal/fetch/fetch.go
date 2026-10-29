@@ -124,7 +124,7 @@ type Memo interface {
 var Memos Memo
 
 // HostParallel caps in-flight uncached GETs per host (-host-parallel).
-var HostParallel = 4
+var HostParallel = 10
 
 // Delay is a pause before each uncached GET.
 var Delay time.Duration

@@ -130,7 +130,7 @@ type entry struct {
 // Options configure a Pool. Zero values take the defaults.
 type Options struct {
 	Resolvers []string      // host or host:port; default DefaultResolvers
-	PerSecond float64       // queries per second per resolver; default 100
+	PerSecond float64       // queries per second per resolver; 0 is no pace but the callers' workers
 	Timeout   time.Duration // per query; default 2s
 	Retries   int           // extra attempts on other resolvers; default 2
 }
@@ -151,9 +151,6 @@ func New(o Options) *Pool {
 			s = net.JoinHostPort(s, "53")
 		}
 		norm = append(norm, s)
-	}
-	if o.PerSecond == 0 {
-		o.PerSecond = 100
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 2 * time.Second
