@@ -106,7 +106,8 @@ func Register(cat *catalog.Catalog, o Options) {
 				ask = append(ask, n)
 			}
 		}
-		for _, a := range pool.ResolveMany(ctx, ask, 128) {
+		// Mostly made-up names: one resolver's NXDOMAIN is enough, as in brute.
+		for _, a := range pool.ResolveMany(dnsr.Bulk(ctx), ask, 128) {
 			switch {
 			case a.Status == dnsr.StatusFailed || ctx.Err() != nil:
 				unchecked++

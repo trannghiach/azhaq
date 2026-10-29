@@ -66,6 +66,7 @@ func (a Answer) IPs() []string { return append(append([]string(nil), a.A...), a.
 // for the life of the pool.
 type Pool struct {
 	servers []string
+	health  map[string]*health // fixed at New: read without p.mu
 	limit   *limit.Limiter
 	timeout time.Duration
 	retries int
@@ -80,6 +81,33 @@ type Pool struct {
 
 	// Exchange replaces the network call (tests).
 	Exchange func(ctx context.Context, m *dns.Msg, server string) (*dns.Msg, error)
+}
+
+// health counts a resolver's recent attempts and the ones that got no
+// answer, halved as they grow so it can recover.
+type health struct {
+	mu           sync.Mutex
+	tries, fails int
+}
+
+func (h *health) note(failed bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.tries++; failed {
+		h.fails++
+	}
+	if h.tries >= 200 {
+		h.tries, h.fails = h.tries/2, h.fails/2
+	}
+}
+
+// sick: a third of its recent queries went unanswered. Quad9 drops about
+// half the queries for names a CDN zone serves (2026-10-29), each costing a
+// full timeout; the pool stops leaning on it.
+func (h *health) sick() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.tries >= 20 && h.fails*3 > h.tries
 }
 
 type entry struct {
@@ -121,8 +149,13 @@ func New(o Options) *Pool {
 	if o.Retries == 0 {
 		o.Retries = 2
 	}
+	hs := map[string]*health{}
+	for _, s := range norm {
+		hs[s] = &health{}
+	}
 	return &Pool{
 		servers: norm,
+		health:  hs,
 		limit:   limit.New(o.PerSecond, max(1, int(o.PerSecond/5))),
 		timeout: o.Timeout,
 		retries: o.Retries,
@@ -361,6 +394,9 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 			return nil, "", err
 		}
 		in, err := p.exchange(ctx, q, server)
+		if h := p.health[server]; h != nil && ctx.Err() == nil {
+			h.note(err != nil)
+		}
 		if err != nil {
 			last = err
 			continue
@@ -397,11 +433,25 @@ func (p *Pool) pick(attempt int, avoid string) string {
 			}
 		}
 	}
-	s := p.servers[int(p.next.Add(1)-1)%n]
-	if s == avoid && n > 1 {
-		s = p.servers[int(p.next.Add(1)-1)%n]
+	// A sick resolver keeps one turn in sixteen, so it can show it is back.
+	var first string
+	for range n {
+		i := p.next.Add(1) - 1
+		s := p.servers[int(i)%n]
+		if s == avoid && n > 1 {
+			continue
+		}
+		if first == "" {
+			first = s
+		}
+		if h := p.health[s]; h == nil || !h.sick() || i%16 == 0 {
+			return s
+		}
 	}
-	return s
+	if first == "" {
+		first = p.servers[0]
+	}
+	return first
 }
 
 type bulkKey struct{}

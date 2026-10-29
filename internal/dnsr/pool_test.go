@@ -2,6 +2,8 @@ package dnsr
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -245,5 +247,32 @@ func TestBulkSkipsNXDOMAINSecondOpinion(t *testing.T) {
 	n.Store(0)
 	if a := p.Resolve(ctx, "www.example.org"); a.Status != StatusOK {
 		t.Fatalf("bulk real name %+v", a)
+	}
+}
+
+func TestSickResolverBenched(t *testing.T) {
+	var dropped atomic.Int32
+	p := New(Options{Resolvers: []string{"192.0.2.1:53", "192.0.2.2:53"}, PerSecond: -1})
+	p.Exchange = func(_ context.Context, m *dns.Msg, server string) (*dns.Msg, error) {
+		if server == "192.0.2.2:53" {
+			dropped.Add(1)
+			return nil, errors.New("i/o timeout")
+		}
+		r := new(dns.Msg)
+		r.SetRcode(m, dns.RcodeNameError)
+		return r, nil
+	}
+	names := make([]string, 400)
+	for i := range names {
+		names[i] = fmt.Sprintf("n%d.example.org", i)
+	}
+	for _, a := range p.ResolveMany(Bulk(context.Background()), names, 1) {
+		if a.Status != StatusNXDomain {
+			t.Fatalf("%+v", a)
+		}
+	}
+	// Half the first queries, then one turn in sixteen once it is sick.
+	if d := dropped.Load(); d > 60 {
+		t.Fatalf("a resolver that never answers got %d of 400 queries", d)
 	}
 }

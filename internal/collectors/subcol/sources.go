@@ -177,7 +177,7 @@ func allSources() []source {
 		pd(func() subscraping.Source { return &shodan.Source{} }, 1),
 		pd(func() subscraping.Source { return &shodanct.Source{} }, 0),
 		pd(func() subscraping.Source { return &sitedossier.Source{} }, 8*perMinute),
-		verified(pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0)),
+		sampled(verified(pd(func() subscraping.Source { return &subdomaincenter.Source{} }, 0))),
 		off(pd(func() subscraping.Source { return &submd.Source{} }, 0)),
 		on(pd(func() subscraping.Source { return &thc.Source{} }, 0)),
 		pd(func() subscraping.Source { return &threatbook.Source{} }, 0),
@@ -221,6 +221,60 @@ func verified(s source) source {
 	s.verify = true
 	return s
 }
+
+// sampled asks a keyless source again while its answers keep adding names:
+// subdomain.center answers a different random 500 per call (2026-10-29: five
+// calls gave 2135 tesla.com names, 49 live hosts one call missed). Rounds use
+// half the source's bound, leaving the rest for the DNS check.
+func sampled(s source) source {
+	collect := s.collect
+	s.collect = func(ctx context.Context, domain string, keys []string, sess *subscraping.Session) ([]string, error) {
+		if len(keys) > 0 {
+			return collect(ctx, domain, keys, sess) // a key pages the whole set
+		}
+		stop := time.Now().Add(sampleBudget)
+		if dl, ok := ctx.Deadline(); ok {
+			stop = time.Now().Add(time.Until(dl) / 2)
+		}
+		var names []string
+		seen := map[string]bool{}
+		for round := 0; round < sampleRounds; round++ {
+			got, err := collect(ctx, domain, nil, sess)
+			fresh := 0
+			for _, n := range got {
+				if !seen[n] {
+					seen[n] = true
+					names = append(names, n)
+					fresh++
+				}
+			}
+			switch {
+			case err == nil && fresh*10 >= len(got) && fresh > 0:
+			case err != nil && strings.Contains(err.Error(), "status code 429") && time.Until(stop) > samplePause:
+				select {
+				case <-ctx.Done():
+					return names, ctx.Err()
+				case <-time.After(samplePause):
+				}
+			case err != nil && (round == 0 || ctx.Err() != nil):
+				return names, err
+			default:
+				return names, nil // saturated, or later rounds refused
+			}
+			if time.Now().After(stop) {
+				break
+			}
+		}
+		return names, nil
+	}
+	return s
+}
+
+var (
+	sampleRounds = 12
+	sampleBudget = 30 * time.Second
+	samplePause  = 12 * time.Second
+)
 
 // keyed marks a source that has started to require a key.
 func keyed(s source) source {

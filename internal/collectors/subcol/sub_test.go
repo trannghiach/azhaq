@@ -333,3 +333,41 @@ func TestRunDeadlineSkipsSlowPaddingVerify(t *testing.T) {
 		t.Errorf("padding source should say its names were not checked: %q", msg)
 	}
 }
+
+func TestSampledGathersUntilSaturated(t *testing.T) {
+	samplePause = 10 * time.Millisecond
+	defer func() { samplePause = 12 * time.Second }()
+	answers := []struct {
+		names []string
+		err   error
+	}{
+		{[]string{"a", "b", "c", "d"}, nil},
+		{nil, errors.New("unexpected status code 429 received from x")},
+		{[]string{"c", "d", "e", "f"}, nil},
+		{[]string{"a", "b", "c", "d", "e", "f"}, nil}, // nothing new: stop
+		{[]string{"never"}, nil},
+		{nil, errors.New("unexpected status code 500 received from x")},
+	}
+	calls := 0
+	s := sampled(source{name: "s", collect: func(_ context.Context, _ string, keys []string, _ *subscraping.Session) ([]string, error) {
+		if len(keys) > 0 {
+			return []string{"keyed"}, nil
+		}
+		a := answers[calls]
+		calls++
+		return a.names, a.err
+	}})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	got, err := s.collect(ctx, "example.org", nil, nil)
+	if err != nil || calls != 4 || strings.Join(got, ",") != "a,b,c,d,e,f" {
+		t.Fatalf("got %v %v after %d calls", got, err, calls)
+	}
+	if got, _ := s.collect(ctx, "example.org", []string{"k"}, nil); len(got) != 1 || got[0] != "keyed" {
+		t.Fatalf("a key should page once: %v", got)
+	}
+	calls = 5 // a failed first call is the source's failure
+	if _, err := s.collect(ctx, "example.org", nil, nil); err == nil {
+		t.Fatal("first-round error swallowed")
+	}
+}
