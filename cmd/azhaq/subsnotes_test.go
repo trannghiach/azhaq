@@ -64,3 +64,20 @@ func TestSubsNotesQuietWithoutEstimate(t *testing.T) {
 		t.Errorf("history error: %q", n)
 	}
 }
+
+func TestSlowSourceNamesTheOneThatSetTheTime(t *testing.T) {
+	srcs := map[string]any{
+		"crtsh":           map[string]any{"seconds": 4.2},
+		"subdomaincenter": map[string]any{"seconds": 31.0},
+		"history":         map[string]any{"seconds": 0.0},
+		"chaos":           map[string]any{"skipped": "no key"},
+	}
+	n := slowSource("vulnweb.com", srcs)
+	if !strings.Contains(n, "subdomaincenter took 31 s, the next slowest source 4 s") {
+		t.Errorf("note %q", n)
+	}
+	srcs["crtsh"] = map[string]any{"seconds": 20.0}
+	if n := slowSource("vulnweb.com", srcs); n != "" {
+		t.Errorf("two sources near each other: %q", n)
+	}
+}

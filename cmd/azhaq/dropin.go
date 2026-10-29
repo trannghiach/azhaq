@@ -504,6 +504,8 @@ func cmdSubs(args []string) error {
 		}
 		if verbose {
 			rep.Notes = append(rep.Notes, sourceDetail(input, srcs))
+		} else if n := slowSource(input, srcs); n != "" {
+			rep.Notes = append(rep.Notes, n)
 		}
 		for name, by := range foundBy {
 			for _, s := range strs(by) {
@@ -1555,6 +1557,30 @@ func cmdShots(args []string) error {
 	}
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
+}
+
+// slowSource names the source that set the wall time, when one took far
+// longer than the rest: the user can drop it or give it less time.
+func slowSource(domain string, srcs map[string]any) string {
+	var slow string
+	var first, second float64
+	for name, v := range srcs {
+		row, _ := v.(map[string]any)
+		sec, ok := row["seconds"].(float64)
+		if !ok || row["skipped"] != nil {
+			continue
+		}
+		switch {
+		case sec > first:
+			slow, first, second = name, sec, first
+		case sec > second:
+			second = sec
+		}
+	}
+	if first < 20 || first < 2*second {
+		return ""
+	}
+	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s (-source-timeout bounds each source, -exclude-sources %s drops it, -v lists them all)", domain, slow, first, second, slow)
 }
 
 // sourceDetail is subs -v's line per domain: each source's names, time,
