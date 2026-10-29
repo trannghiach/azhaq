@@ -193,6 +193,7 @@ func allSources() []source {
 		certspotterSource(),
 		chaosSource(),
 		crtshSource(),
+		historySource(),
 	}
 }
 
@@ -242,6 +243,7 @@ func sampled(s source) source {
 		for round := 0; round < sampleRounds; round++ {
 			countCall(ctx)
 			got, err := collect(ctx, domain, nil, sess)
+			recordRound(ctx, got)
 			fresh := 0
 			for _, n := range got {
 				if !seen[n] {

@@ -63,6 +63,8 @@ type Options struct {
 	Only    []string            // run only these sources
 	Exclude []string            // never run these
 	All     bool                // also run sources outside the default set
+	// NoHistory neither reads nor writes the name history (-no-history).
+	NoHistory bool
 	// SourceTimeout bounds each source (-source-timeout; default
 	// DefaultSourceTimeout). It is not the run's -timeout: a source past it
 	// is abandoned and listed as failed, and the others' names are kept.
@@ -109,7 +111,8 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"subdomains"} }
 
-// Asks names the sources a run asks about a domain.
+// Asks names the third-party sources a run asks about a domain; the name
+// history is a local file.
 func (c *Collector) Asks(seed types.Seed) []string {
 	domain := normalize.Hostname(seed.Keys["domain"])
 	if domain == "" || normalize.SpecialUse(domain) {
@@ -118,7 +121,9 @@ func (c *Collector) Asks(seed types.Seed) []string {
 	run, _ := c.plan()
 	out := make([]string, 0, len(run))
 	for _, s := range run {
-		out = append(out, s.name)
+		if s.name != historyName {
+			out = append(out, s.name)
+		}
 	}
 	return out
 }
@@ -130,7 +135,7 @@ func (c *Collector) plan() (run []source, skipped map[string]string) {
 	skipped = map[string]string{}
 	for _, s := range c.sources {
 		switch {
-		case exclude[s.name]:
+		case exclude[s.name], s.name == historyName && c.opts.NoHistory:
 			continue
 		case len(only) > 0 && !only[s.name]:
 			continue
@@ -188,6 +193,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	results := make([]outcome, len(run))
 	calls := make([]atomic.Int32, len(run))
+	rounds := make([]roundLog, len(run))
 	var hintMu sync.Mutex
 	hinted := map[string]bool{}
 	early := true
@@ -222,6 +228,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			sctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 			sctx = context.WithValue(sctx, callsKey{}, &calls[i])
+			sctx = context.WithValue(sctx, roundsKey{}, &rounds[i])
 			sess := &subscraping.Session{
 				Extractor:           ext,
 				Client:              c.opts.Client,
@@ -315,6 +322,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if c := calls[i].Load(); c > 1 {
 			row["calls"] = c
 		}
+		if est, ok := schnabel(rounds[i].snapshot()); ok {
+			row["population_estimate"] = int(est + 0.5)
+		}
 		if r.err != nil {
 			row["error"] = shorten(r.err.Error())
 			failed = append(failed, s.name)
@@ -330,6 +340,20 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		sort.Strings(by)
 	}
 	payload := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status, "found_by": foundBy}
+	dep := map[string]bool{historyName: true}
+	for _, s := range run {
+		if s.verify {
+			dep[s.name] = true
+		}
+	}
+	if cov := coverage(foundBy, dep); cov != nil {
+		payload["coverage"] = cov
+	}
+	if !c.opts.NoHistory {
+		if err := remember(domain, names, foundBy, dep, c.opts.Verify == nil); err != nil {
+			payload["history_error"] = shorten(err.Error())
+		}
+	}
 	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
 	if len(failed) > 0 {
 		sort.Strings(failed)

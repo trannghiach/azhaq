@@ -208,6 +208,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
+	noHistory := fs.Bool("no-history", false, "do not read or write the name history (names earlier runs found, kept under $AZHAQ_DATA_DIR, else ~/.local/share/azhaq, and checked by DNS in each run)")
 	sourceTimeout := fs.Duration("source-timeout", subcol.DefaultSourceTimeout, "give each subdomain source this long; a slower one (crt.sh) is abandoned, listed as failed, and the names the others gave are kept (not -timeout, the run's bound)")
 	providersFile := fs.String("providers", "", "API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml)")
 	resolversFile := fs.String("resolvers", "", "DNS resolvers, one per line (default: public resolvers)")
@@ -593,7 +594,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("provider keys: %w", err)
 	}
-	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources, SourceTimeout: *sourceTimeout}
+	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources, NoHistory: *noHistory, SourceTimeout: *sourceTimeout}
 	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout}
 	if *urlsOut != "" && *resumeRun == "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends

@@ -411,7 +411,7 @@ func cmdSubs(args []string) error {
 	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out)")
 	words := fs.String("w", "", "also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live)")
 	permute := fs.Bool("permute", false, "also resolve variations of the names found (api → api-dev, api2, dev.api), like alterx | dnsx (active DNS)")
-	given := inherit(fs, "sources", "exclude-sources", "all-sources", "source-timeout", "providers", "resolvers", "dns-rate", "timeout", "v", "fail-on-errors")
+	given := inherit(fs, "sources", "exclude-sources", "all-sources", "no-history", "source-timeout", "providers", "resolvers", "dns-rate", "timeout", "v", "fail-on-errors")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -586,6 +586,7 @@ func cmdSubs(args []string) error {
 	if s := topSources(bySource, 8); s != "" {
 		rep.Notes = append(rep.Notes, "sources: "+s)
 	}
+	rep.Notes = append(rep.Notes, subsNotes(payloads(st, "azhaq-subdomains"), seen)...)
 	if c.db != "" {
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db+" -type Hostname")
 	}
