@@ -2,7 +2,7 @@
 
 Azhaq maps what an application or a bug bounty program exposes, and who may read and write it. It is one Go binary: subdomains, probing, crawling, the routes an app's JavaScript calls, API descriptions, GraphQL schemas, ports, archives, and a map of who may read and write what across your accounts. Everything lands in one SQLite workspace you can query, export and diff.
 
-- **Routes other crawlers miss.** On OWASP Juice Shop it finds 70 of the 77 routes the server defines that its frontend calls, with methods and body fields, and names the line of the script that calls each. katana with jsluice finds 1.
+- **Routes other crawlers miss.** On OWASP Juice Shop it finds 70 of the 77 routes the server defines that its frontend calls, with methods and body fields, and names the line of the script that calls each. katana with its jsluice parser (`-jc -jsl`) lists 1; grepping the scripts it fetched for quoted paths gives 37, as bare strings.
 - **Access control with evidence.** `azhaq roles` signs in as each of your accounts, reuses each session against the others, and reports `[bob reads alice's object]` with why the object is alice's. `-replay-writes` extends this to writes: it replays each account's own writes (from a saved HAR, or empty-body probes of the routes it found) with the other sessions.
 - **Safe to hand to an assistant.** `azhaq mcp` locks the scope, the request budget and the pace when it starts; no tool argument can widen them.
 - **Takeover candidates flagged.** A CNAME to a cloud name that no longer exists, a domain nobody holds, or a hosting service's page for an unclaimed name is listed with its evidence. Even a plain `subs -live` flags them.
@@ -161,28 +161,28 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. The subdomain comparison is on **live** names — the ones that resolve — not the raw count: most of what a passive collector returns does not resolve (stale certificate logs, wildcard noise), so a bigger raw number is not a better result. Latest run (2026-10-29, v0.8.0; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. The subdomain comparison is on **live** names — the ones that resolve — not the raw count: most of what a passive collector returns does not resolve (stale certificate logs, wildcard noise), so a bigger raw number is not a better result. Latest run (2026-10-29, v0.8.1; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 540 live, in 42 s (fewer raw names; the dead majority is dropped — `subs -live` shows the split) | 505 live, in 71 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 52 s | 3 in 71 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 562 live, in 97 s (fewer raw names; the dead majority is dropped — `subs -live` shows the split) | 529 live, in 128 s |
+| DNS brute force, 5,000 words | dnsx | 3 in 19 s | 3 in 91 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 559 live hosts | httpx | 397 answered; status, title and technologies agree on 387 of 388 shared (redirects out of the site compared by their own status); 106 s | 389 answered, 144 s |
-| Server routes Juice Shop's frontend calls (77) | katana + jsluice | 70 | 1 |
+| Probing 576 live hosts | httpx | 412 answered; status, title and technologies agree on 400 of 401 shared (redirects out of the site compared by their own status); 108 s | 401 answered, 150 s |
+| Server routes Juice Shop's frontend calls (77) | katana `-jc -jsl` + jsluice | 70, with methods and body fields | 1 (37 by grepping the scripts katana fetched for quoted paths) |
 | VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
 | With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 12 s, 32/40 in 17 s | 6/77 in 6 s, 0/40 in 44 s |
 | Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,108, including 2,341 of gau's 2,346 | 2,346 |
-| Paths, 4,750 words on 3 apps | ffuf `-ac` | 35 hits, 4 false positives, 49 s | 36 hits, 4 false positives, 52 s |
+| Paths, 4,750 words on Juice Shop and VAmPI | ffuf `-ac` | 22 hits, 2 false positives, 32 s | 22 hits, 2 false positives, 38 s |
 | Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
 | Screenshots, 4 front pages | gowitness | 4 in 15 s | 3 in 34 s |
 | Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
 | A run capped at 100 requests and resumed; killed and resumed; with two workers | – | each maps everything one run maps; 197 requests over the capped run and its resumes, one run 191 | |
-| Memory, Juice Shop | katana | 93 MB | 60 MB |
+| Memory, Juice Shop | katana `-jc -jsl` | 99 MB | 1.4 GB |
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. Azhaq loses on parameter discovery time (68 s against arjun's 26 s), memory (above katana's plain `-jc` crawl; katana `-jc -jsl` took 1.7 GB on the same app in a reviewer's test), and one path of ffuf's 36.
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md); katana runs as `katana -u URL -d 3 -jc -jsl -silent -nc -timeout 10 -c 10`. Parameter discovery, 6,453 names: on the local apps Azhaq is faster (1.9 s against arjun's 3.6 s for three pages; arjun also reports a `callback` VAmPI ignores); on ginandjuice.shop, both at 20 requests per second, Azhaq loses on time (74 s a page against 21–24 s), as it halves its groups for a site that refuses long query strings, but finds `category`, `searchTerm` and `search` where arjun finds nothing. On memory it loses to katana without `-jsl` (60 MB).
 
 [bench/README.md](bench/README.md) has what is measured and the caveats.
 

@@ -52,7 +52,13 @@ func benchParams(pages []string) *paramsRow {
 	row := &paramsRow{Pages: pages, Words: len(lines(must1(os.ReadFile(words))))}
 	az, aj := map[string]bool{}, map[string]bool{}
 	for _, p := range pages {
-		out, m := run(p, 10*time.Minute, dir, azhaq, "params", "-u", p, "-w", words, "-rate", "50", "-silent")
+		// Both at their defaults on the local apps; on a public test site
+		// both at the same low pace.
+		var azPace, ajPace []string
+		if !strings.Contains(p, "127.0.0.1") {
+			azPace, ajPace = []string{"-rate", "20"}, []string{"--rate-limit", "20"}
+		}
+		out, m := run(p, 10*time.Minute, dir, azhaq, append([]string{"params", "-u", p, "-w", words, "-silent"}, azPace...)...)
 		row.AzhaqSecs += m.Seconds
 		for _, l := range lines(out) {
 			u, names, _ := strings.Cut(l, " ")
@@ -64,7 +70,7 @@ func benchParams(pages []string) *paramsRow {
 		}
 		res := filepath.Join(dir, "arjun.json")
 		_ = os.Remove(res)
-		_, m = run(p, 10*time.Minute, dir, arjun, "-u", p, "-w", words, "-oJ", res, "-q", "--disable-redirects")
+		_, m = run(p, 10*time.Minute, dir, arjun, append([]string{"-u", p, "-w", words, "-oJ", res, "-q", "--disable-redirects"}, ajPace...)...)
 		row.ArjunSecs += m.Seconds
 		var got map[string]struct {
 			Params []string `json:"params"`

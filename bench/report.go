@@ -16,9 +16,9 @@ func printReport() {
 				a.Azhaq.Routes, known(a.Azhaq), a.Azhaq.Shell, a.Azhaq.Seconds, a.Azhaq.RSSMB,
 				a.Katana.Routes, known(a.Katana), a.Katana.Shell, a.Katana.Seconds, a.Katana.RSSMB)
 		}
-		fmt.Fprintln(w, "\nknown routes\tazhaq\tkatana\tjsluice\tkatana ∪ jsluice")
+		fmt.Fprintln(w, "\nknown routes\tazhaq\tkatana -jsl\tjsluice\tkatana ∪ jsluice\tbundle grep")
 		for _, a := range rec.Apps {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", a.Name, known(a.Azhaq), known(a.Katana), known(a.Jsluice), known(a.Union))
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n", a.Name, known(a.Azhaq), known(a.Katana), known(a.Jsluice), known(a.Union), known(a.Grep))
 		}
 		for _, a := range rec.Apps {
 			if b := a.Browser; b != nil {

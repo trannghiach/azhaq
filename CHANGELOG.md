@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.8.1
+
+### Changed
+
+- `subs` asks subdomain.center again while its answers keep adding names. Without a key it returns a different random 500 of a domain's names per call (about 5,500 for tesla.com, about 7% of them live), so one call is a lottery: subfinder's live names that azhaq lacked on tesla.com all came from it. Six calls in a run (it allows five, then one per ~12 s) gave 42 live tesla.com hosts subfinder lacked, against 16 the other way, all of them from subfinder's own draw; checked with two resolvers (azhaq and dnsx). A key pages the whole set in one call, as before. A longer `-source-timeout` buys more rounds.
+- DNS: a resolver that leaves a third of its queries unanswered is asked one turn in sixteen until it recovers. Quad9 dropped about half the queries for names under a CDN zone, each costing a two-second timeout: resolving 2,135 tesla.com names took 43 s, now 15–21 s with none failed (dnsx with the same resolvers: 24 s, 194 failed).
+- `ports` does not pace this machine's loopback unless `-rate` (`-port-rate`) is given: a full scan of 127.0.0.1 took 218 s at the default 300 per second, now 3.4 s, with the same 20 open ports `ss` lists.
+- Technology detection: a page that loads a library from cdnjs is no longer reported as behind Cloudflare (Wappalyzer's cdnjs → Cloudflare implication; DVNA on 127.0.0.1 was).
+- Defaults at full strength, as the strongest tool for each job: parameter and path guesses are not paced (as arjun and ffuf; `-params-rate` was 20/s, `-dirs-rate` 100/s), DNS is paced only by the queries in flight (as dnsx; `-dns-rate` was 100/s per resolver), ports go at 1000/s (naabu's; was 300), 10 requests in flight per host (katana's; was 4). Set `-rate`, `-max-requests` and the per-job rates to slow a run down.
+- The active options (`-ports`, `-dirs`, `-params`, `-dns-brute`, `-permute`, `-graphql`) take the targets given as their scope when no `-allow` or `-scope` names one, as the drop-in commands did; `roles -replay-writes` writes only to the `-url` hosts unless told otherwise.
+- `-timeout` stopping a passive source is the run hitting its limit, not a failure: exit 4 with `azhaq resume -db FILE -timeout 0`, which asks the cut sources again (was exit 3, and resume found nothing to do).
+- `subs -live` prints the live names DNS met as another name's CNAME target (tesla.com: 9 the workspace held and the output left out) and counts them in the summary; `dns` says how many names it asked and how many did not resolve.
+- Benchmark: katana runs with its jsluice parser (`-jc -jsl`, its strongest static setting), and a new "bundle grep" column counts the known routes among the quoted paths in the scripts katana fetched, the by-hand baseline a reviewer measured. Juice Shop: Azhaq 70/77, katana `-jc -jsl` 1/77 (1.4 GB), bundle grep 37/77 as bare strings. The README states the reference commands.
+- Benchmark: `params` runs at its defaults against arjun's on the local apps, and both at 20 requests per second on ginandjuice.shop (Azhaq alone was held to 50).
+- The v0.8.0 notes said `-source-timeout` defaults to 30s; it shipped at 60s.
+
 ## v0.8.0
 
 A raw subdomain count is a trap: most of the names a passive collector returns do not resolve (stale certificate logs, wildcard noise, numbered junk). Against a well-sourced subfinder, azhaq returns far fewer *raw* names but **more live ones** (hackerone.com: 14 live vs 12, from 42 names vs 529; tesla.com: 494 vs 480) — it was losing a comparison it actually wins, because the output did not show it. v0.8 makes the resolvable surface and its provenance visible, and fixes the reliability and speed rough edges found alongside it.
@@ -8,7 +24,7 @@ A raw subdomain count is a trap: most of the names a passive collector returns d
 
 - `subs` shows where its names came from and the live/dead split. A run prints a per-source credit line (`sources: crtname 32, rapiddns 20, anubis 15, …`), and `subs -live` reports `14 live names (42 collected, 28 did not resolve)` — so a thin-looking count is self-explaining and a raw total is read next to what it actually resolves to.
 - `subs` keeps what the sources gave when a limit cuts the run. A deadline (`-timeout`) now stops waiting on slow sources a moment early and emits the names collected so far (marked `partial`/`degraded`), instead of discarding everything: `subs -all-sources -timeout 60s` returns its by-then names, never zero.
-- `-source-timeout` (default 30s) bounds each passive source apart from the run's `-timeout`, so one slow source (crt.sh) cannot starve the rest; a source past it is listed and retryable, and when others answered it is only a warning. This replaces v0.7.3's fixed 60-second source limit, which the live-name set does not need (crt.sh's resolvable names come from the other certificate sources too); raise `-source-timeout` to wait for crt.sh's full raw output.
+- `-source-timeout` (default 60s, v0.7.3's fixed limit) bounds each passive source apart from the run's `-timeout`, so one slow source (crt.sh) cannot starve the rest; a source past it is listed and retryable, and when others answered it is only a warning.
 - `dirs` runs 40 path guesses in flight, as ffuf, so `-rate 0` matches ffuf's speed instead of running at half its threads; the default pace is still limited by `-dirs-rate`.
 - `export -format openapi` marks the operations the active mapper left alone as state-changing with `x-azhaq-skipped: true` and a reason, and `export -format openapi -safe` leaves them out — so importing the description into another tool does not turn `/createdb` back into an actionable request.
 - A capped run behind a sign-in prints a resume hint with the credential flags (`azhaq resume -db app.db -login-user me -login-pass …`): the session is not stored, so resume signs in again.

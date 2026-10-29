@@ -32,6 +32,7 @@ type appResult struct {
 	Katana  toolScore   `json:"katana"`
 	Jsluice toolScore   `json:"jsluice"`
 	Union   toolScore   `json:"katana_jsluice"` // routes either found
+	Grep    toolScore   `json:"bundle_grep"`    // quoted paths in the scripts katana fetched
 	Ffuf    *ffufRow    `json:"ffuf,omitempty"`
 	Roles   *rolesRow   `json:"roles,omitempty"`
 	Browser *browserRow `json:"browser,omitempty"`
@@ -131,7 +132,7 @@ func benchApps() []appResult {
 	g, _, m := runAzhaq(juiceURL, db("juice"))
 	shell := shellHash(juiceURL)
 	juice.Azhaq = scoreAzhaq(g, juiceURL, truth, shell, m)
-	juice.Katana, juice.Jsluice, juice.Union = runKatanaJsluice(juiceURL, truth, shell)
+	runKatanaJsluice(&juice, truth, shell)
 	juice.Ffuf = compareFfuf(juiceURL, g, shell)
 	addCheck("juice-shop: ≥ 90% of the server routes its frontend calls", juice.Azhaq.Truth*10 >= len(truth)*9, "azhaq %d/%d, katana %d/%d, jsluice %d/%d",
 		juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth), juice.Jsluice.Truth, len(truth))
@@ -153,7 +154,7 @@ func benchApps() []appResult {
 	vtruth := specPaths(vampiURL + "openapi.json")
 	g, _, m = runAzhaq(vampiURL, db("vampi"))
 	vampi.Azhaq = scoreAzhaq(g, vampiURL, vtruth, shellHash(vampiURL), m)
-	vampi.Katana, vampi.Jsluice, vampi.Union = runKatanaJsluice(vampiURL, vtruth, shellHash(vampiURL))
+	runKatanaJsluice(&vampi, vtruth, shellHash(vampiURL))
 	res = append(res, vampi)
 	addCheck("vampi: paths from /openapi.json", vampi.Azhaq.Truth == len(vtruth) && len(vtruth) > 0, "azhaq %d/%d, katana %d/%d", vampi.Azhaq.Truth, len(vtruth), vampi.Katana.Truth, len(vtruth))
 
@@ -176,7 +177,7 @@ func benchApps() []appResult {
 			gin.Azhaq.Truth++
 		}
 	}
-	gin.Katana, gin.Jsluice, gin.Union = runKatanaJsluice(ginURL, gtruth, shellHash(ginURL))
+	runKatanaJsluice(&gin, gtruth, shellHash(ginURL))
 	res = append(res, gin)
 	scripts := 0
 	for _, s := range []string{"stockCheck.js", "searchLogger.js", "subscribeNow.js", "xmlStockCheckPayload.js"} {
@@ -220,26 +221,32 @@ func scoreAzhaq(g graph, target string, truth map[string]bool, shell string, m r
 	return s
 }
 
-// runKatanaJsluice runs katana, then jsluice on the scripts katana found
-// (the usual pipeline), and scores each and their union.
-func runKatanaJsluice(target string, truth map[string]bool, shell string) (toolScore, toolScore, toolScore) {
-	k, urls := runKatana(target, truth, shell)
-	j, jurls := runJsluice(target, urls, truth)
-	origin := strings.TrimSuffix(target, "/")
+// runKatanaJsluice runs katana with its jsluice parser (-jsl), then jsluice
+// itself on the scripts katana found (the usual pipeline), and scores each,
+// their union, and a grep of those scripts for quoted paths: what a reader
+// gets from the bundles by hand.
+func runKatanaJsluice(a *appResult, truth map[string]bool, shell string) {
+	k, urls := runKatana(a.URL, truth, shell)
+	j, jurls, g := runJsluice(a.URL, urls, truth)
+	origin := strings.TrimSuffix(a.URL, "/")
 	found := routes(append(append([]string(nil), urls...), jurls...), origin)
-	u := toolScore{Routes: len(found), Truth: matched(found, truth), TruthOf: len(truth), Shell: k.Shell + j.Shell,
+	a.Katana, a.Jsluice, a.Grep = k, j, g
+	a.Union = toolScore{Routes: len(found), Truth: matched(found, truth), TruthOf: len(truth), Shell: k.Shell + j.Shell,
 		Seconds: k.Seconds + j.Seconds, RSSMB: max(k.RSSMB, j.RSSMB)}
-	return k, j, u
 }
+
+// quotedPath is a string literal that starts with a path: "/rest/user/login".
+var quotedPath = regexp.MustCompile("[\"'`](/[A-Za-z][A-Za-z0-9_.~/-]*)")
 
 // runJsluice downloads the same-origin scripts in urls and lists the URLs
 // jsluice finds in them, resolved against the app's root.
-func runJsluice(target string, urls []string, truth map[string]bool) (toolScore, []string) {
+func runJsluice(target string, urls []string, truth map[string]bool) (toolScore, []string, toolScore) {
 	dir, err := os.MkdirTemp(work, "jsluice-")
 	must(err)
 	defer os.RemoveAll(dir)
 	origin := strings.TrimSuffix(target, "/")
 	var files []string
+	var grepped []string
 	seen := map[string]bool{}
 	for _, u := range urls {
 		p := strings.SplitN(u, "?", 2)[0]
@@ -251,10 +258,15 @@ func runJsluice(target string, urls []string, truth map[string]bool) (toolScore,
 			f := filepath.Join(dir, fmt.Sprintf("%03d.js", len(files)))
 			must(os.WriteFile(f, body, 0o644))
 			files = append(files, f)
+			for _, m := range quotedPath.FindAllSubmatch(body, -1) {
+				grepped = append(grepped, origin+string(m[1]))
+			}
 		}
 	}
+	gr := routes(grepped, origin)
+	g := toolScore{Routes: len(gr), Truth: matched(gr, truth), TruthOf: len(truth)}
 	if len(files) == 0 {
-		return toolScore{TruthOf: len(truth)}, nil
+		return toolScore{TruthOf: len(truth)}, nil, g
 	}
 	out, m := run(target, 10*time.Minute, dir, ref("jsluice"), append([]string{"urls", "-R", origin + "/"}, files...)...)
 	var found []string
@@ -267,7 +279,7 @@ func runJsluice(target string, urls []string, truth map[string]bool) (toolScore,
 		}
 	}
 	r := routes(found, origin)
-	return toolScore{Routes: len(r), Truth: matched(r, truth), TruthOf: len(truth), Seconds: m.Seconds, RSSMB: m.RSSMB}, found
+	return toolScore{Routes: len(r), Truth: matched(r, truth), TruthOf: len(truth), Seconds: m.Seconds, RSSMB: m.RSSMB}, found, g
 }
 
 func download(u string) ([]byte, bool) {
@@ -281,7 +293,7 @@ func download(u string) ([]byte, bool) {
 }
 
 func runKatana(target string, truth map[string]bool, shell string) (toolScore, []string) {
-	s, urls, _ := runKatanaWith(target, truth, shell, 10*time.Minute)
+	s, urls, _ := runKatanaWith(target, truth, shell, 10*time.Minute, "-jsl")
 	return s, urls
 }
 

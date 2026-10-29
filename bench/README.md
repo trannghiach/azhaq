@@ -39,7 +39,7 @@ Downloaded to `bench/.work/bin` and verified against pinned SHA-256 sums (`bench
 
 | Tool | Version | Used for |
 | --- | --- | --- |
-| katana | 1.8.0 | crawling with JavaScript parsing (`-d 3 -jc`), and with Chrome (`-headless -system-chrome -no-sandbox`) |
+| katana | 1.8.0 | crawling with JavaScript parsing and its jsluice parser (`-d 3 -jc -jsl`), and with Chrome (`-headless -system-chrome -no-sandbox`) |
 | subfinder | 2.17.0 | passive subdomains, default sources, no API keys |
 | dnsx | 1.3.1 | deciding which names are live, for both tools; brute force with the same words and resolvers; reverse DNS (`-ptr`) |
 | alterx | 0.1.0 | permutations of the live names, resolved by dnsx |
@@ -60,6 +60,7 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 - **shell**: reported URLs whose response is the page the app returns for any path (the SPA index on Juice Shop). For Azhaq these are URLs marked `visited`; katana does not claim to have visited what it lists, so its number is how much of its output is that page.
 - **live**: names that dnsx resolves (A, AAAA or CNAME), out of the union of both tools' names. Each tool is credited with the live names it found.
 - **katana ∪ jsluice**: known routes that either tool found, katana crawling and jsluice reading the scripts katana listed.
+- **bundle grep**: known routes among the quoted strings that start with a path (`"/rest/user/login"`) in the same scripts: what reading the bundles by hand gives, without methods, bodies or the routes built from parts.
 - **probe agreement**: for hosts both Azhaq and httpx answered, the final status, the title (whitespace collapsed) and the technology list (names and versions) must all match.
 - **historical URLs**: distinct URLs on the domain or its subdomains, normalized the way Azhaq stores them, static assets left out; the share of gau's list that Azhaq's `-urls` file also holds.
 - **time** and **RSS**: wall time and peak resident memory of each run. Azhaq's app runs include its default domain fan-out (subdomain sources, archives, RDAP), which waits on third-party services, and technology fingerprints (about 30 MB; `-no-tech` leaves them out).
@@ -87,19 +88,22 @@ The command fails when one of these does not hold:
 
 ### Applications
 
+Juice Shop, VAmPI and ginandjuice.shop from 2026-10-29 (v0.8.1, `go run ./bench -domains=false -brute=false -ports=false -probe=false -network=false`), katana with `-jsl`.
+
+
 | App | Azhaq routes | known | shell | time | RSS | katana routes | known | shell | time | RSS |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Juice Shop | 157 | 70/77 | 0 | 5.5 s | 97 MB | 5 | 1/77 | 3 | 13.3 s | 59 MB |
-| VAmPI | 14 | 12/12 | 0 | 0.7 s | 72 MB | 1 | 1/12 | 0 | 10.9 s | 36 MB |
-| ginandjuice.shop | 14 | 3/3 | 0 | 22.3 s | 105 MB | 13 | 1/3 | 0 | 16.1 s | 66 MB |
-| crAPI | 85 | 32/40 | 0 | 4.5 s | 102 MB | 4 | 0/40 | 1 | 13.0 s | 59 MB |
+| Juice Shop | 110 | 70/77 | 0 | 5.4 s | 99 MB | 5 | 1/77 | 3 | 14.1 s | 1404 MB |
+| VAmPI | 14 | 12/12 | 0 | 0.6 s | 75 MB | 1 | 1/12 | 0 | 11.1 s | 36 MB |
+| ginandjuice.shop | 16 | 3/3 | 0 | 15.5 s | 99 MB | 14 | 2/3 | 0 | 18.5 s | 813 MB |
+| crAPI (2026-10-27, katana without `-jsl`) | 85 | 32/40 | 0 | 4.5 s | 102 MB | 4 | 0/40 | 1 | 13.0 s | 59 MB |
 
-| Known routes | Azhaq | katana | jsluice | katana ∪ jsluice |
-| --- | --- | --- | --- | --- |
-| Juice Shop | 70/77 | 1/77 | 0/77 | 1/77 |
-| VAmPI | 12/12 | 1/12 | 0/12 | 1/12 |
-| ginandjuice.shop | 3/3 | 1/3 | 1/3 | 2/3 |
-| crAPI | 32/40 | 0/40 | 0/40 | 0/40 |
+| Known routes | Azhaq | katana `-jsl` | jsluice | katana ∪ jsluice | bundle grep |
+| --- | --- | --- | --- | --- | --- |
+| Juice Shop | 70/77 | 1/77 | 0/77 | 1/77 | 37/77 |
+| VAmPI | 12/12 | 1/12 | 0/12 | 1/12 | 0/12 |
+| ginandjuice.shop | 3/3 | 2/3 | 1/3 | 2/3 | 1/3 |
+| crAPI (2026-10-27) | 32/40 | 0/40 | 0/40 | 0/40 | – |
 
 | With a browser | routes | known | shell | time |
 | --- | --- | --- | --- | --- |
