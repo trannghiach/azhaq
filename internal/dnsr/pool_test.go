@@ -250,29 +250,39 @@ func TestBulkSkipsNXDOMAINSecondOpinion(t *testing.T) {
 	}
 }
 
-func TestSickResolverBenched(t *testing.T) {
-	var dropped atomic.Int32
-	p := New(Options{Resolvers: []string{"192.0.2.1:53", "192.0.2.2:53"}, PerSecond: -1})
-	p.Exchange = func(_ context.Context, m *dns.Msg, server string) (*dns.Msg, error) {
-		if server == "192.0.2.2:53" {
-			dropped.Add(1)
-			return nil, errors.New("i/o timeout")
+func TestSickResolverBenchedAndRecovers(t *testing.T) {
+	for _, n := range []int{2, 6} {
+		var servers []string
+		for i := range n {
+			servers = append(servers, fmt.Sprintf("192.0.2.%d:53", i+1))
 		}
-		r := new(dns.Msg)
-		r.SetRcode(m, dns.RcodeNameError)
-		return r, nil
-	}
-	names := make([]string, 400)
-	for i := range names {
-		names[i] = fmt.Sprintf("n%d.example.org", i)
-	}
-	for _, a := range p.ResolveMany(Bulk(context.Background()), names, 1) {
-		if a.Status != StatusNXDomain {
-			t.Fatalf("%+v", a)
+		bad := servers[n-1] // an odd index: the turn it gets must not hang on it
+		var dropped, answered atomic.Int32
+		p := New(Options{Resolvers: servers, PerSecond: -1})
+		p.Exchange = func(_ context.Context, m *dns.Msg, server string) (*dns.Msg, error) {
+			if server == bad {
+				if dropped.Load() < 40 {
+					dropped.Add(1)
+					return nil, errors.New("i/o timeout")
+				}
+				answered.Add(1)
+			}
+			r := new(dns.Msg)
+			r.SetRcode(m, dns.RcodeNameError)
+			return r, nil
 		}
-	}
-	// Half the first queries, then one turn in sixteen once it is sick.
-	if d := dropped.Load(); d > 60 {
-		t.Fatalf("a resolver that never answers got %d of 400 queries", d)
+		names := make([]string, 4000)
+		for i := range names {
+			names[i] = fmt.Sprintf("n%d.example.org", i)
+		}
+		for _, a := range p.ResolveMany(Bulk(context.Background()), names, 1) {
+			if a.Status != StatusNXDomain {
+				t.Fatalf("%+v", a)
+			}
+		}
+		// Benched after its first drops, yet still asked now and then.
+		if a := answered.Load(); a < 20 {
+			t.Fatalf("%d resolvers: the one that came back was asked %d times after", n, a)
+		}
 	}
 }

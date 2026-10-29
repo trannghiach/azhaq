@@ -86,8 +86,8 @@ type Pool struct {
 // health counts a resolver's recent attempts and the ones that got no
 // answer, halved as they grow so it can recover.
 type health struct {
-	mu           sync.Mutex
-	tries, fails int
+	mu                  sync.Mutex
+	tries, fails, skips int
 }
 
 func (h *health) note(failed bool) {
@@ -108,6 +108,18 @@ func (h *health) sick() bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.tries >= 20 && h.fails*3 > h.tries
+}
+
+// pass says whether to pass a resolver over: it is sick, and this is not
+// the one time in sixteen it is asked anyway, to show it is back.
+func (h *health) pass() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.tries < 20 || h.fails*3 <= h.tries {
+		return false
+	}
+	h.skips++
+	return h.skips%16 != 0
 }
 
 type entry struct {
@@ -429,11 +441,13 @@ func (p *Pool) pick(attempt int, avoid string) string {
 	if avoid != "" && n > 1 && attempt == 0 {
 		for i, s := range p.servers {
 			if s == avoid {
-				return p.servers[(i+n/2)%n]
+				if o := p.servers[(i+n/2)%n]; p.health[o] == nil || !p.health[o].sick() {
+					return o
+				}
+				break
 			}
 		}
 	}
-	// A sick resolver keeps one turn in sixteen, so it can show it is back.
 	var first string
 	for range n {
 		i := p.next.Add(1) - 1
@@ -444,7 +458,7 @@ func (p *Pool) pick(attempt int, avoid string) string {
 		if first == "" {
 			first = s
 		}
-		if h := p.health[s]; h == nil || !h.sick() || i%16 == 0 {
+		if h := p.health[s]; h == nil || !h.pass() {
 			return s
 		}
 	}

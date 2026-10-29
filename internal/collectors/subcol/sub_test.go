@@ -370,4 +370,13 @@ func TestSampledGathersUntilSaturated(t *testing.T) {
 	if _, err := s.collect(ctx, "example.org", nil, nil); err == nil {
 		t.Fatal("first-round error swallowed")
 	}
+	// Refused every time until the time ran out: a failure, not an honest zero.
+	refused := sampled(source{name: "r", collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+		return nil, errors.New("unexpected status code 429 received from x")
+	}})
+	short, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel2()
+	if got, err := refused.collect(short, "example.org", nil, nil); err == nil {
+		t.Fatalf("a source refused throughout returned %v and no error", got)
+	}
 }

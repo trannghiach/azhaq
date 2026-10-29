@@ -256,7 +256,7 @@ func sampled(s source) source {
 					return names, ctx.Err()
 				case <-time.After(samplePause):
 				}
-			case err != nil && (round == 0 || ctx.Err() != nil):
+			case err != nil && (len(names) == 0 || ctx.Err() != nil):
 				return names, err
 			default:
 				return names, nil // saturated, or later rounds refused
