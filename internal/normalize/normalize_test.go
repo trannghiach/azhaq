@@ -38,6 +38,21 @@ func TestTenant(t *testing.T) {
 	}
 }
 
+func TestUnlisted(t *testing.T) {
+	for host, want := range map[string]bool{
+		"azqlab.lan":        true,
+		"www.corp.lan":      true,
+		"acme.github.io":    false,
+		"www.example.com":   false,
+		"api.example.co.uk": false,
+		"127.0.0.1":         false,
+	} {
+		if got := Unlisted(host); got != want {
+			t.Errorf("Unlisted(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
 // A hash route is the view's address; any other fragment is not.
 func TestClientURL(t *testing.T) {
 	for in, want := range map[string]string{

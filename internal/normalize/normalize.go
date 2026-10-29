@@ -121,6 +121,18 @@ func Tenant(host string) bool {
 	return !icann && strings.Contains(suf, ".")
 }
 
+// Unlisted says no registry runs host's TLD (azqlab.lan, corp.internal):
+// no public source can hold its names. A private suffix (github.io) is
+// listed, under a public TLD.
+func Unlisted(host string) bool {
+	host = Hostname(host)
+	if host == "" || net.ParseIP(host) != nil {
+		return false
+	}
+	suf, icann := publicsuffix.PublicSuffix(host)
+	return !icann && !strings.Contains(suf, ".")
+}
+
 // RegistrableDomain is eTLD+1, or empty for IPs and unknowns.
 // Shared PaaS hosts stop at the tenant (a.appspot.com, not appspot.com).
 func RegistrableDomain(host string) string {

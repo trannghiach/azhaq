@@ -491,3 +491,18 @@ func TestContractInvariantsOnDemo(t *testing.T) {
 		runContract(t, args...)
 	}
 }
+
+// A private suffix (github.io) sits under a public TLD: its names are in
+// the sources, which are asked. Only a TLD no registry runs skips them.
+func TestContractSubsAsksSourcesUnderAPrivateSuffix(t *testing.T) {
+	t.Chdir(t.TempDir())
+	defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true, Names: []string{"docs.acme.github.io"}})()
+	out, rep, code := runContract(t, "subs", "-d", "acme.github.io", "-no-history")
+	if code != exitOK || !reflect.DeepEqual(hosts(t, out), []string{"docs.acme.github.io"}) {
+		t.Fatalf("exit %d, printed %v\n%+v", code, hosts(t, out), rep)
+	}
+	out, rep, _ = runContract(t, "subs", "-d", "azqlab.lan", "-no-history")
+	if len(hosts(t, out)) != 0 || !strings.Contains(strings.Join(rep.Notes, " "), "not a public domain") {
+		t.Errorf("azqlab.lan: printed %v, notes %v", hosts(t, out), rep.Notes)
+	}
+}

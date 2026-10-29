@@ -98,8 +98,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if domain == "" {
 		return types.RunMeta{Status: types.StatusError, Error: "empty domain"}, nil
 	}
-	if normalize.SpecialUse(domain) {
-		payload, _ := json.Marshal(map[string]any{"domain": domain, "count": 0, "skipped": "reserved"})
+	if normalize.SpecialUse(domain) || normalize.Unlisted(domain) {
+		why := "reserved"
+		if !normalize.SpecialUse(domain) {
+			why = "not a public domain: the archives only hold names under public TLDs"
+		}
+		payload, _ := json.Marshal(map[string]any{"domain": domain, "count": 0, "skipped": why})
 		return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, emit(types.Observation{
 			Collector: Name, Source: "archives", Kind: "urls", Payload: payload, ObservedAt: time.Now().UTC(),
 		})

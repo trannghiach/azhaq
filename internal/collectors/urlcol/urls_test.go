@@ -154,6 +154,21 @@ func TestReservedDomain(t *testing.T) {
 	}
 }
 
+// A TLD no registry runs has no archived names: nothing is asked.
+func TestUnlistedDomain(t *testing.T) {
+	asked := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { asked++ }))
+	defer srv.Close()
+	c := New(Options{Client: srv.Client()})
+	var p map[string]any
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "azqlab.lan"}}, func(o types.Observation) error {
+		return json.Unmarshal(o.Payload, &p)
+	})
+	if err != nil || !strings.HasPrefix(fmt.Sprint(p["skipped"]), "not a public domain") || asked != 0 {
+		t.Fatalf("%v %v, %d asked", p, err, asked)
+	}
+}
+
 func TestCDXRowsKeepsWhatArrived(t *testing.T) {
 	var got []string
 	n, err := cdxRows(strings.NewReader("[[\"original\"],\n[\"http://a.test/1\"],\n[\"http://a.test/2\"],\n[\"http://a.te"), func(u []string) { got = append(got, u...) })
