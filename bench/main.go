@@ -21,6 +21,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 )
@@ -62,9 +63,17 @@ type runMeasure struct {
 	Seconds float64 `json:"seconds"`
 	RSSMB   float64 `json:"rss_mb"`
 	Error   string  `json:"error,omitempty"`
+	Cached  bool    `json:"cached,omitempty"` // replayed from today's run (refcache.go)
 }
 
+// sections are what -only picks from; dockerParts need the docker apps.
 var (
+	sections    = []string{"apps", "dropin", "dirs", "scope", "secrets", "tenants", "scale", "shots", "params", "domains", "brute", "ports", "network", "probe"}
+	dockerParts = []string{"dropin", "dirs", "scope", "scale", "shots", "params"}
+)
+
+var (
+	fresh   bool
 	work    string
 	binDir  string
 	azhaq   string
@@ -81,10 +90,32 @@ func main() {
 	network := flag.Bool("network", true, "compare ASN prefixes with RADb and reverse DNS with dnsx -ptr (needs the domain benchmark's DNS)")
 	crapi := flag.Bool("crapi", false, "also run OWASP crAPI (seven containers, about 2 GB of images)")
 	keep := flag.Bool("keep", false, "leave the docker apps running")
+	only := flag.String("only", "", "run only these sections, comma-separated: "+strings.Join(sections, ", ")+"; the default runs them all")
+	flag.BoolVar(&fresh, "fresh", false, "run the reference tools again instead of reusing today's cached results")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
 	flag.StringVar(&work, "work", "bench/.work", "scratch directory")
 	flag.BoolVar(&verbose, "v", false, "print each command")
 	flag.Parse()
+	sel := map[string]bool{}
+	for _, s := range strings.Split(*only, ",") {
+		if s = strings.TrimSpace(s); s == "" {
+			continue
+		}
+		if !slices.Contains(sections, s) {
+			fatal("-only: no section %q (sections: %s)", s, strings.Join(sections, ", "))
+		}
+		sel[s] = true
+	}
+	if sel["probe"] && !sel["domains"] {
+		logf("-only probe without domains: the hosts are the local apps and ginandjuice.shop only")
+	}
+	// on: the section runs; without -only, as its own flag says.
+	on := func(name string, def bool) bool {
+		if len(sel) == 0 {
+			return def
+		}
+		return sel[name]
+	}
 
 	if _, err := os.Stat("go.mod"); err != nil {
 		fatal("run from the repository root: go run ./bench")
@@ -107,11 +138,17 @@ func main() {
 	must(installTools(binDir))
 	must(installBuilt(binDir))
 
-	if *apps {
+	docker := on("apps", *apps)
+	for _, s := range dockerParts {
+		docker = docker || on(s, *apps)
+	}
+	if docker {
 		must(startApps())
 		if !*keep {
 			defer stopApps()
 		}
+	}
+	if on("apps", *apps) {
 		rec.Apps = benchApps()
 	}
 	if *crapi {
@@ -123,37 +160,53 @@ func main() {
 	}
 	if len(rec.Apps) > 0 {
 		appChecks(rec.Apps)
+	}
+	if on("dropin", *apps) {
 		rec.Dropin = benchDropin(*crapi)
+	}
+	if on("dirs", *apps) {
 		local := []string{juiceURL, vampiURL}
 		if *crapi {
 			local = append(local, crapiURL)
 		}
 		rec.Dirs = benchDirs(local)
+	}
+	if on("scope", *apps) {
 		rec.Scope = benchScope(juiceURL)
+	}
+	if on("secrets", *apps) {
 		rec.Secrets = benchSecrets()
+	}
+	if on("tenants", *apps) {
 		rec.Tenants = benchTenants()
+	}
+	if on("scale", *apps) {
 		rec.Scale = benchScale(juiceURL)
+	}
+	if on("shots", *apps) {
 		rec.Shots = benchShots([]string{juiceURL, vampiURL, ginURL, "http://rest.vulnweb.com/"})
+	}
+	if on("params", *apps) {
 		rec.Params = benchParams([]string{
 			juiceURL + "rest/products/search", juiceURL + "rest/user/whoami", vampiURL + "users/v1",
 			ginURL + "catalog", ginURL + "blog/",
 		})
 	}
-	if *domains {
+	if on("domains", *domains) {
 		rec.Domains = benchDomains()
 	}
-	if *brute {
+	if on("brute", *brute) {
 		rec.Brute = benchBrute()
 	}
-	if *ports {
+	if on("ports", *ports) {
 		rec.Ports = benchPorts()
 	}
-	if *domains && *network {
+	if on("network", *domains && *network) {
 		rec.Network = benchNetwork()
 	}
-	if *probe {
+	if on("probe", *probe) {
 		var local []string
-		if *apps {
+		if docker {
 			local = append(local, "127.0.0.1:3101", "127.0.0.1:5102")
 		}
 		if *crapi {
@@ -191,6 +244,20 @@ func commit() string {
 // stdin otherwise), records its wall time and peak memory, and returns
 // stdout.
 func run(target string, timeout time.Duration, dir string, name string, args ...string) ([]byte, runMeasure) {
+	var key string
+	var before map[string]bool
+	if refCacheable(name) {
+		key = refKey(target, dir, name, args)
+		if out, m, ok := replayRef(key); ok {
+			if verbose {
+				logf("$ %s %s (today's run, replayed)", filepath.Base(name), strings.Join(args, " "))
+			}
+			m.Target = target
+			rec.Runs = append(rec.Runs, m)
+			return out, m
+		}
+		before = existing(dir, args)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
@@ -218,6 +285,9 @@ func run(target string, timeout time.Duration, dir string, name string, args ...
 		m.Error = strings.ReplaceAll(strings.TrimSpace(err.Error()+" "+lastLine(stderr.String())), work, "bench/.work")
 	}
 	rec.Runs = append(rec.Runs, m)
+	if key != "" {
+		keepRef(key, dir, args, before, stdout.Bytes(), m)
+	}
 	return stdout.Bytes(), m
 }
 

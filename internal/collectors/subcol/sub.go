@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/projectdiscovery/gologger"
@@ -186,6 +187,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	results := make([]outcome, len(run))
+	calls := make([]atomic.Int32, len(run))
 	var hintMu sync.Mutex
 	hinted := map[string]bool{}
 	early := true
@@ -219,6 +221,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			defer wg.Done()
 			sctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
+			sctx = context.WithValue(sctx, callsKey{}, &calls[i])
 			sess := &subscraping.Session{
 				Extractor:           ext,
 				Client:              c.opts.Client,
@@ -309,6 +312,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 		row["count"] = n
+		if c := calls[i].Load(); c > 1 {
+			row["calls"] = c
+		}
 		if r.err != nil {
 			row["error"] = shorten(r.err.Error())
 			failed = append(failed, s.name)

@@ -436,3 +436,14 @@ func TestSeedScope(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestSourceDetail(t *testing.T) {
+	got := sourceDetail("example.org", map[string]any{
+		"crtsh":           map[string]any{"count": 0, "seconds": 60.1, "error": "timeout"},
+		"subdomaincenter": map[string]any{"count": 207, "seconds": 18.2, "calls": 6},
+		"chaos":           map[string]any{"skipped": "needs a key"},
+	})
+	if want := "example.org sources: crtsh 0 in 60.1s [timeout]; subdomaincenter 207 in 18.2s (6 calls)"; got != want {
+		t.Fatalf("%q", got)
+	}
+}

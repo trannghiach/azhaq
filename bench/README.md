@@ -15,6 +15,8 @@ go run ./bench -keep            # leave the docker apps running afterwards
 
 Run it from the repository root. It needs Docker, network access, a C compiler (jsluice uses cgo), Python 3 (arjun), Chrome (screenshots, `-browser`, `-login`) and linux/amd64 (the reference tools are pinned to their linux/amd64 release archives). It exits non-zero if a check fails, and writes a JSON record to `bench/history/`.
 
+`-only dirs,params` runs those sections alone (while working on one layer; the full run is for a release). The reference tools' runs are kept for the rest of the UTC day in `bench/.work/refcache` and replayed, with their times, when the same tool is run on the same target with the same arguments and input files; the report says how many were. `-fresh` runs them again.
+
 The Wayback Machine and Common Crawl refuse the reference machine's address, and its security software removes naabu, so the archive and port scan comparisons also run on GitHub's network: push a tag `bench-*` (workflow `bench-archives`: domains, archives and ports), and its results are readable as annotations without signing in.
 
 ## Targets

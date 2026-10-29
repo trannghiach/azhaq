@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/url"
 	"os"
@@ -473,6 +474,7 @@ func cmdSubs(args []string) error {
 	}
 	seen := map[string]bool{}
 	answered, ran := 0, 0
+	verbose := hasFlag(given(), "v")
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
 	for _, p := range payloads(st, "azhaq-subdomains") {
@@ -486,6 +488,9 @@ func cmdSubs(args []string) error {
 					answered++
 				}
 			}
+		}
+		if verbose {
+			rep.Notes = append(rep.Notes, sourceDetail(input, srcs))
 		}
 		for name, by := range foundBy {
 			for _, s := range strs(by) {
@@ -1469,4 +1474,25 @@ func cmdShots(args []string) error {
 	}
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
+}
+
+// sourceDetail is subs -v's line per domain: each source's names, time,
+// calls when it was asked more than once, and error.
+func sourceDetail(domain string, srcs map[string]any) string {
+	var parts []string
+	for _, name := range slices.Sorted(maps.Keys(srcs)) {
+		row, _ := srcs[name].(map[string]any)
+		if row["skipped"] != nil {
+			continue
+		}
+		p := fmt.Sprintf("%s %v in %vs", name, row["count"], row["seconds"])
+		if c, ok := row["calls"]; ok {
+			p += fmt.Sprintf(" (%v calls)", c)
+		}
+		if e, ok := row["error"]; ok {
+			p += fmt.Sprintf(" [%v]", e)
+		}
+		parts = append(parts, p)
+	}
+	return domain + " sources: " + strings.Join(parts, "; ")
 }

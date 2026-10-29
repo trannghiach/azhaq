@@ -380,3 +380,22 @@ func TestSampledGathersUntilSaturated(t *testing.T) {
 		t.Fatalf("a source refused throughout returned %v and no error", got)
 	}
 }
+
+func TestSampledRowCountsCalls(t *testing.T) {
+	answers := [][]string{{"a.example.org", "b.example.org"}, {"c.example.org", "d.example.org"}, {"a.example.org", "c.example.org"}}
+	var mu sync.Mutex
+	i := 0
+	s := sampled(source{name: "s", deflt: true, collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		a := answers[min(i, len(answers)-1)]
+		i++
+		return a, nil
+	}})
+	c := collector(Options{SourceTimeout: 5 * time.Second}, s)
+	payload, _ := run(t, c, context.Background())
+	row := payload["sources"].(map[string]any)["s"].(map[string]any)
+	if row["calls"] != float64(3) || row["count"] != float64(4) {
+		t.Fatalf("row %v", row)
+	}
+}

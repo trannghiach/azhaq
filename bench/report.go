@@ -9,6 +9,17 @@ import (
 
 func printReport() {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	defer func() {
+		n := 0
+		for _, r := range rec.Runs {
+			if r.Cached {
+				n++
+			}
+		}
+		if n > 0 {
+			fmt.Printf("\n%d reference runs replayed from today's (their times are that run's); -fresh runs them again\n", n)
+		}
+	}()
 	if len(rec.Apps) > 0 {
 		fmt.Fprintln(w, "\napps\tazhaq routes\tknown\tshell\ttime\tRSS\tkatana routes\tknown\tshell\ttime\tRSS")
 		for _, a := range rec.Apps {

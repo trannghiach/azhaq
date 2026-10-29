@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
@@ -239,6 +240,7 @@ func sampled(s source) source {
 		var names []string
 		seen := map[string]bool{}
 		for round := 0; round < sampleRounds; round++ {
+			countCall(ctx)
 			got, err := collect(ctx, domain, nil, sess)
 			fresh := 0
 			for _, n := range got {
@@ -268,6 +270,16 @@ func sampled(s source) source {
 		return names, nil
 	}
 	return s
+}
+
+type callsKey struct{}
+
+// countCall adds one to the calls Run counts for the source (its row's
+// "calls", shown by subs -v).
+func countCall(ctx context.Context) {
+	if n, ok := ctx.Value(callsKey{}).(*atomic.Int32); ok {
+		n.Add(1)
+	}
 }
 
 var (
