@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.8.0
+
+A raw subdomain count is a trap: most of the names a passive collector returns do not resolve (stale certificate logs, wildcard noise, numbered junk). Against a well-sourced subfinder, azhaq returns far fewer *raw* names but **more live ones** (hackerone.com: 14 live vs 12, from 42 names vs 529; tesla.com: 494 vs 480) — it was losing a comparison it actually wins, because the output did not show it. v0.8 makes the resolvable surface and its provenance visible, and fixes the reliability and speed rough edges found alongside it.
+
+### Changed
+
+- `subs` shows where its names came from and the live/dead split. A run prints a per-source credit line (`sources: crtname 32, rapiddns 20, anubis 15, …`), and `subs -live` reports `14 live names (42 collected, 28 did not resolve)` — so a thin-looking count is self-explaining and a raw total is read next to what it actually resolves to.
+- `subs` keeps what the sources gave when a limit cuts the run. A deadline (`-timeout`) now stops waiting on slow sources a moment early and emits the names collected so far (marked `partial`/`degraded`), instead of discarding everything: `subs -all-sources -timeout 60s` returns its by-then names, never zero.
+- `-source-timeout` (default 30s) bounds each passive source apart from the run's `-timeout`, so one slow source (crt.sh) cannot starve the rest; a source past it is listed and retryable, and when others answered it is only a warning. This replaces v0.7.3's fixed 60-second source limit, which the live-name set does not need (crt.sh's resolvable names come from the other certificate sources too); raise `-source-timeout` to wait for crt.sh's full raw output.
+- `dirs` runs 40 path guesses in flight, as ffuf, so `-rate 0` matches ffuf's speed instead of running at half its threads; the default pace is still limited by `-dirs-rate`.
+- `export -format openapi` marks the operations the active mapper left alone as state-changing with `x-azhaq-skipped: true` and a reason, and `export -format openapi -safe` leaves them out — so importing the description into another tool does not turn `/createdb` back into an actionable request.
+- A capped run behind a sign-in prints a resume hint with the credential flags (`azhaq resume -db app.db -login-user me -login-pass …`): the session is not stored, so resume signs in again.
+
 ## v0.7.4
 
 ### Changed

@@ -161,11 +161,11 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. Latest run (2026-10-28, v0.7.2; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. The subdomain comparison is on **live** names — the ones that resolve — not the raw count: most of what a passive collector returns does not resolve (stale certificate logs, wildcard noise), so a bigger raw number is not a better result. Latest run (2026-10-29, v0.8.0; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
 
 | Job | Replaces | Azhaq | Reference |
 | --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 540, in 42 s | 505, in 71 s |
+| Live subdomains, 3 domains, no keys | subfinder + dnsx | 540 live, in 42 s (fewer raw names; the dead majority is dropped — `subs -live` shows the split) | 505 live, in 71 s |
 | DNS brute force, 5,000 words | dnsx | 3 in 52 s | 3 in 71 s |
 | Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
 | Probing 559 live hosts | httpx | 397 answered; status, title and technologies agree on 387 of 388 shared (redirects out of the site compared by their own status); 106 s | 389 answered, 144 s |
