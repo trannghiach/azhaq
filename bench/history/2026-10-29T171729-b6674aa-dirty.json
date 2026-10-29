@@ -1,0 +1,106 @@
+{
+  "date": "2026-10-29T17:16:59Z",
+  "commit": "b6674aa-dirty",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "scale": {
+    "urls": 181,
+    "one_received": 148,
+    "budget": 100,
+    "processes": 2,
+    "most_received": 100,
+    "all_received": 153,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 1.7817322429999998,
+    "killed_same": true,
+    "worker_tasks": 25,
+    "workers_same": true,
+    "workers_seconds": 6.086304301,
+    "one_seconds": 5.3451967289999995
+  },
+  "checks": [
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "2 processes of at most 100 requests (Juice Shop received at most 100 from one); 183 URLs, one run 181, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "153 requests over 2 processes, one run 148"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "killed after 1.8s; 181 URLs, one run 181"
+    },
+    {
+      "name": "scale: a run shared with two workers maps everything one run maps",
+      "pass": true,
+      "detail": "181 URLs, one run 181; the workers ran 25 tasks"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 5.3451967289999995,
+      "rss_mb": 83.921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.844780752,
+      "rss_mb": 76.4921875,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.701853537,
+      "rss_mb": 77.390625
+    }
+  ]
+}
