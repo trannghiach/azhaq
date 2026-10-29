@@ -1199,7 +1199,7 @@ func cmdPorts(args []string) error {
 			}
 			n, _ := strconv.Atoi(port)
 			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "tcp", "tls": svc["tls"] == true, "timestamp": time.Now().Format(time.RFC3339Nano)}
-			for _, k := range []string{"service", "product", "version", "banner", "subject_cn", "subject_an"} {
+			for _, k := range []string{"service", "product", "version", "title", "banner", "subject_cn", "subject_an"} {
 				if v, ok := svc[k]; ok {
 					row[k] = v
 				}

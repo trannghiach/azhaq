@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
+	"html"
 	"net"
 	"regexp"
 	"strconv"
@@ -234,7 +235,8 @@ func (s *Scanner) greeted(o *Open, raw []byte) {
 
 // webProduct reads the product of an HTTP answer to the HEAD, and when
 // the head names none (or only Elasticsearch's header), asks GET / once
-// more for a body that does. https says the port speaks TLS.
+// more for a body that does, or for an HTML page's title and generator.
+// https says the port speaks TLS.
 func (s *Scanner) webProduct(ctx context.Context, o *Open, head []byte, status int, host, ip string, https bool) {
 	h, ok := parseHead(head)
 	if !ok {
@@ -249,11 +251,77 @@ func (s *Scanner) webProduct(ctx context.Context, o *Open, head []byte, status i
 		if p, v := bodyProduct(s.getBody(ctx, o.Port, host, ip, https)); p != "" {
 			o.Product, o.Version = p, v
 		}
+	} else if o.Product == "" && (status == 200 || status == 401) && strings.Contains(h.contentType, "text/html") {
+		// An app that names no product still says what it is in its title.
+		body := s.getBody(ctx, o.Port, host, ip, https)
+		o.Title = pageTitle(body)
+		if p, v := generatorProduct(body); p != "" {
+			o.Product, o.Version = p, v
+		}
 	}
 }
 
+var (
+	titleRe   = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	metaRe    = regexp.MustCompile(`(?is)<meta\b[^>]*>`)
+	attrRe    = regexp.MustCompile(`(?is)([a-z][a-z0-9:_-]*)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))`)
+	genNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_. \-]{0,39}$`)
+	genVerRe  = regexp.MustCompile(`^v?(\d[\w.+~\-]*)$`)
+)
+
+// pageTitle is the text of the first <title>: entities decoded, runs of
+// white space one space, at most 120 characters.
+func pageTitle(body []byte) string {
+	m := titleRe.FindSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	t := strings.Join(strings.Fields(html.UnescapeString(strings.ToValidUTF8(string(m[1]), ""))), " ")
+	if r := []rune(t); len(r) > 120 {
+		t = strings.TrimSpace(string(r[:120]))
+	}
+	return t
+}
+
+// generatorProduct reads <meta name="generator" content="WordPress 6.4.2">:
+// the product, and its version when the last word is one.
+func generatorProduct(body []byte) (product, version string) {
+	for _, tag := range metaRe.FindAll(body, -1) {
+		var name, content string
+		for _, a := range attrRe.FindAllSubmatch(tag, -1) {
+			val := string(a[2]) + string(a[3]) + string(a[4])
+			switch strings.ToLower(string(a[1])) {
+			case "name":
+				name = strings.ToLower(strings.TrimSpace(val))
+			case "content":
+				content = html.UnescapeString(val)
+			}
+		}
+		if name != "generator" {
+			continue
+		}
+		content, _, _ = strings.Cut(content, " (") // "Drupal 10 (https://www.drupal.org)"
+		f := strings.Fields(content)
+		if len(f) == 0 {
+			return "", ""
+		}
+		if len(f) == 1 && strings.ContainsAny(f[0], "/(") {
+			return serverProduct(f[0])
+		}
+		if m := genVerRe.FindStringSubmatch(f[len(f)-1]); m != nil && len(f) > 1 {
+			version, f = m[1], f[:len(f)-1]
+		}
+		if name := strings.Join(f, " "); genNameRe.MatchString(name) {
+			return name, version
+		}
+		return "", ""
+	}
+	return "", ""
+}
+
 // getBody is GET / on a new connection (paced, counted and recorded as a
-// connect), and the first 8 KiB of the body.
+// connect), and the first 64 KiB of the body: a page's title can come
+// after a long head.
 func (s *Scanner) getBody(ctx context.Context, port int, host, ip string, https bool) []byte {
 	if s.wait(ctx, ip) != nil || s.Take != nil && s.Take() != nil {
 		return nil
@@ -297,7 +365,7 @@ func (s *Scanner) getBody(ctx context.Context, port int, host, ip string, https 
 	}
 	var resp []byte
 	buf := make([]byte, 2048)
-	for len(resp) < 8192 {
+	for len(resp) < 64<<10 {
 		n, err := conn.Read(buf)
 		resp = append(resp, buf[:n]...)
 		if err != nil {

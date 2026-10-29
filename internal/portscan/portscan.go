@@ -103,6 +103,7 @@ type Open struct {
 	Service   string   `json:"service,omitempty"`
 	Banner    string   `json:"banner,omitempty"`
 	Product   string   `json:"product,omitempty"`
+	Title     string   `json:"title,omitempty"` // the HTML title of GET /, when the answer names no product
 	Version   string   `json:"version,omitempty"`
 	TLS       bool     `json:"tls,omitempty"`
 	SubjectCN string   `json:"subject_cn,omitempty"`
