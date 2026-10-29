@@ -66,6 +66,9 @@ Two reviews of v0.8.1 ended the same way: adopt azhaq for some jobs, keep anothe
 - `export -format hosts` lists addresses given as targets.
 - A screenshot directory that is a file is a usage error naming it.
 - A `redir` parameter is recognised as a redirect target.
+- A guessed name whose CNAME points at a name that no longer exists is found (`-w`, `-permute`), so its takeover check runs; with `-live` it is reported as a takeover candidate, not as a live name.
+- `fuzz` stopped by the kill file, the request budget or `-maxtime` says which, and gives the command that goes on from the first input not answered (`-start N`). With `-db`, `azhaq resume -db FILE` runs it.
+- `subs` asks no third-party source about a domain whose TLD has no registry (`corp.internal`, `azqlab.lan`), and says why.
 
 ## v0.8.1
 
