@@ -1279,7 +1279,14 @@ func cmdExport(args []string) error {
 		if path == "" {
 			return fmt.Errorf("need -db (no %s from a previous run)", lastDBFile)
 		}
-		return exportTo(path, *format, *origin, *safe, os.Stdout)
+		cw := &countWriter{w: os.Stdout}
+		if err := exportTo(path, *format, *origin, *safe, cw); err != nil {
+			return err
+		}
+		if cw.n == 0 {
+			fmt.Fprintf(os.Stderr, "azhaq export: nothing to write: %s\n", emptyExport(*format))
+		}
+		return nil
 	}
 	path := *dbPath
 	if path == "" {

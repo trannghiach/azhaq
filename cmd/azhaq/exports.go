@@ -80,6 +80,33 @@ func exportAs(path, format, origin string, w io.Writer) error {
 
 // exportTo writes one format; safe leaves the routes the run left alone
 // out of an OpenAPI description (see omitSkipped).
+// countWriter counts what passes through, so an empty export can say why.
+type countWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (c *countWriter) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// emptyExport says why a format found nothing in the workspace.
+func emptyExport(format string) string {
+	switch format {
+	case "names", "hosts":
+		return "the workspace holds no host names (a run of a URL or an address has none: subs, or run -domain, finds them)"
+	case "secrets":
+		return "no credential or key was found in the pages and scripts read"
+	case "targets":
+		return "the workspace holds no web service that answered"
+	case "openapi", "graphql", "sdl":
+		return "the workspace holds no API of that kind"
+	}
+	return "the workspace holds nothing of that kind"
+}
+
 func exportTo(path, format, origin string, safe bool, w io.Writer) error {
 	if safe && format != "openapi" {
 		return usagef("-safe is for -format openapi")
