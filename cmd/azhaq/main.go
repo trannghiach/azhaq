@@ -803,6 +803,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	rep.RunID = stats.RunID
+	if opts.Browser != nil {
+		// What Chrome still held waiting for the pace is given back first:
+		// never sent, it is not counted.
+		opts.Browser.Close()
+	}
 	rep.Requests = fetch.Sent()
 	// Work the -timeout cut short (a source still asking) is not done:
 	// resume runs it again.

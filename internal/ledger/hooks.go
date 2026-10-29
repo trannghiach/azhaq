@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 type collectorKey struct{}
@@ -38,8 +39,11 @@ func HTTP(req *http.Request) {
 		Rule: l.rule(host), Collector: collectorOf(req.Context())})
 }
 
-// Chrome records a request Chrome is let send. ctx may be nil.
-func Chrome(ctx context.Context, method, raw string) {
+// Chrome records a request Chrome sent. ctx may be nil.
+func Chrome(ctx context.Context, method, raw string) { ChromeAt(ctx, method, raw, time.Time{}) }
+
+// ChromeAt is Chrome for a request sent at a time already past; zero is now.
+func ChromeAt(ctx context.Context, method, raw string, at time.Time) {
 	l := Active()
 	if l == nil {
 		return
@@ -52,7 +56,7 @@ func Chrome(ctx context.Context, method, raw string) {
 	if method == "" {
 		method = http.MethodGet
 	}
-	l.Record(Entry{Kind: "chrome", Method: method, Target: raw, Host: host,
+	l.Record(Entry{Time: at, Kind: "chrome", Method: method, Target: raw, Host: host,
 		Rule: l.rule(host), Collector: collectorOf(ctx)})
 }
 

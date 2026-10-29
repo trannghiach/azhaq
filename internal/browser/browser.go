@@ -74,6 +74,9 @@ type Browser struct {
 	closing bool
 	working sync.WaitGroup // requests being decided
 
+	sendMu sync.Mutex
+	out    map[network.RequestID]letGo // let send, not yet seen leaving
+
 	mu      sync.Mutex
 	session map[string]string    // sessionStorage a login left, for every tab
 	sites   map[string]bool      // without a scope: the sites of the pages Chrome was pointed at
@@ -181,6 +184,7 @@ func (b *Browser) Close() {
 		b.guard.close()
 	}
 	b.working.Wait()
+	b.unheard(nil)
 }
 
 // Page is what loading a URL gave.

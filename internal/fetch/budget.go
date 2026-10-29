@@ -58,7 +58,14 @@ func Spend(ctx context.Context) error {
 	if w != nil {
 		w.used.Add(1)
 	}
-	return Pace(ctx)
+	if err := Pace(ctx); err != nil {
+		Refund() // never sent
+		if w != nil {
+			w.used.Add(-1)
+		}
+		return err
+	}
+	return nil
 }
 
 // Pace waits for the run's pace (-rate) without counting a request: for
@@ -120,6 +127,17 @@ func Take() error {
 		}
 		if sent.CompareAndSwap(n, n+1) {
 			return nil
+		}
+	}
+}
+
+// Refund gives back one request counted with Take or Spend that was not
+// sent after all (the page closed while it waited for the pace).
+func Refund() {
+	for {
+		n := sent.Load()
+		if n <= 0 || sent.CompareAndSwap(n, n-1) {
+			return
 		}
 	}
 }

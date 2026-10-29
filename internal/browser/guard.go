@@ -177,6 +177,7 @@ func (g *guard) handle(c net.Conn) {
 			return // the budget is spent
 		}
 		if fetch.Pace(g.ctx) != nil {
+			fetch.Refund() // never sent
 			return
 		}
 	}
@@ -185,18 +186,22 @@ func (g *guard) handle(c net.Conn) {
 		scheme = "https"
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	up, err := dialOut(ctx, scheme, addr)
+	cancel()
+	if err != nil {
+		if ws {
+			fetch.Refund()
+		}
+		return
+	}
 	if ws {
-		// A WebSocket handshake is no paused request: the connection is the entry.
+		// A WebSocket handshake is no paused request: the connection is
+		// the entry, once there is one to send it on.
 		wsScheme := "ws"
 		if tls {
 			wsScheme = "wss"
 		}
-		ledger.Chrome(g.ctx, http.MethodGet, wsScheme+"://"+addr)
-	}
-	up, err := dialOut(ctx, scheme, addr)
-	cancel()
-	if err != nil {
-		return
+		ledger.Chrome(g.ctx, http.MethodGet, wsScheme+"://"+addr+wsPath(r, tls))
 	}
 	defer up.Close()
 	stop := context.AfterFunc(g.ctx, func() { _ = up.Close() })
@@ -226,6 +231,20 @@ func sniff(r *bufio.Reader) (tls, ws bool, err error) {
 		return true, ok && len(alpn) > 0 && !slices.Contains(alpn, "h2"), nil
 	}
 	return false, upgrades(peekHead(r)), nil
+}
+
+// wsPath is the path and query of a plain WebSocket handshake r starts
+// with; one inside TLS shows none.
+func wsPath(r *bufio.Reader, tls bool) string {
+	if tls {
+		return ""
+	}
+	line, _, _ := bytes.Cut(peekHead(r), []byte("\r\n"))
+	f := bytes.Fields(line)
+	if len(f) < 2 || !bytes.HasPrefix(f[1], []byte("/")) {
+		return ""
+	}
+	return string(f[1])
 }
 
 // peekHead is the header of the request r starts with, as far as r's

@@ -18,7 +18,6 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
@@ -245,6 +244,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 			write = t == nil || !t.signin // the sign-in posts its form
 		}
 	}
+	b.pausedAgain(ev.NetworkID, raw)
 	paid, refuse := false, true
 	switch {
 	case b.isPopup(ev.FrameID):
@@ -297,6 +297,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 			ctx = t.ctx
 		}
 		if fetch.Pace(ctx) != nil {
+			fetch.Refund() // never sent: the page closed while it waited
 			b.fail(root, ev.RequestID)
 			return
 		}
@@ -305,7 +306,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 	if t != nil {
 		rctx = t.ctx
 	}
-	ledger.Chrome(rctx, ev.Request.Method, ev.Request.URL)
+	b.sending(ev.NetworkID, letGo{ctx: rctx, method: ev.Request.Method, url: ev.Request.URL, at: time.Now(), t: t})
 	_, _ = chromedp.CallBrowser(root, cdpfetch.ContinueRequest, cdpfetch.ContinueRequestParams{RequestID: ev.RequestID})
 }
 
@@ -339,6 +340,15 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 			b.addFrame(t, ev.FrameID)
 		}
 	})
+	gone := chromedp.Events(ctx, network.RequestWillBeSentExtraInfo)
+	wg.Go(func() {
+		for ev, err := range gone {
+			if err != nil {
+				return
+			}
+			b.sentOff(ev.RequestID)
+		}
+	})
 	sockets := chromedp.Events(ctx, network.WebSocketCreated)
 	wg.Go(func() {
 		for ev, err := range sockets {
@@ -357,7 +367,10 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 			b.refuse(t, r)
 		}
 	})
-	return wg.Wait
+	return func() {
+		wg.Wait()
+		b.unheard(t)
+	}
 }
 
 // listable is raw as a refusal lists it: without its query and fragment.
