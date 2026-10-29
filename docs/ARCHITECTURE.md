@@ -256,7 +256,7 @@ Chrome saves nothing to disk (`internal/browser/downloads.go`). Every download i
 
 ## Ports
 
-`-ports` (active, needs `-allow`) scans hosts in scope with full TCP connects, so it needs no root and leaves complete handshakes in the target's logs, like `naabu -scan-type c`. Lists are nmap's top 100 or top 1000 TCP ports (as naabu ships them), `full`, or ranges. Connection attempts share one rate across all hosts (`-port-rate`, default 300 per second), 100 at a time, 1.5 seconds each. A name resolves to at most two IPv4 addresses, and each address is scanned once however many names point to it. An address in a CDN or WAF range gets ports 80, 443, 8080 and 8443 only: the edge answers for thousands of customers.
+`-ports` (active, needs `-allow`) scans hosts in scope with full TCP connects, so it needs no root and leaves complete handshakes in the target's logs, like `naabu -scan-type c`. Lists are nmap's top 100 or top 1000 TCP ports (as naabu ships them), `full`, or ranges. Connection attempts share one rate across all hosts (`-port-rate`, default 300 per second; this machine's loopback is not paced unless it is given), 100 at a time, 1.5 seconds each. A name resolves to at most two IPv4 addresses, and each address is scanned once however many names point to it. An address in a CDN or WAF range gets ports 80, 443, 8080 and 8443 only: the edge answers for thousands of customers.
 
 An open port is read for 1.5 seconds: the first line a service sends (`SSH-2.0-…`, `220 … ESMTP`) names it; binary greetings are marked as such. Ports that stay silent or answer like HTTP become URLs for `azhaq-http`, HTTPS first.
 

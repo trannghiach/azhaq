@@ -84,7 +84,7 @@ type Open struct {
 
 // Scanner connects to ports at a set total rate.
 type Scanner struct {
-	Rate    float64       // connection attempts per second, all hosts together; 0 means 300
+	Rate    float64       // connection attempts per second, all hosts together; 0 means 300, loopback unpaced
 	Workers int           // connects in flight; 0 means 100
 	Timeout time.Duration // per connect; 0 means 1.5 s
 	Banner  time.Duration // how long to wait for a service to speak (and, with Timeout, for the answer to a probe); 0 means 1.5 s; <0 skips both
@@ -96,12 +96,14 @@ type Scanner struct {
 	// request without a browser's open.
 	UserAgent string
 
-	once    sync.Once
-	limiter *limit.Limiter
+	once      sync.Once
+	limiter   *limit.Limiter
+	loopPaced bool
 }
 
 func (s *Scanner) init() {
 	s.once.Do(func() {
+		s.loopPaced = s.Rate > 0
 		if s.Rate <= 0 {
 			s.Rate = 300
 		}
@@ -153,6 +155,15 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 	return r, err
 }
 
+// wait paces a connect. This machine's loopback is not paced unless a rate
+// was given: no network to spare (a full scan of 127.0.0.1 took 218 s at 300/s).
+func (s *Scanner) wait(ctx context.Context, ip string) error {
+	if a := net.ParseIP(ip); a != nil && a.IsLoopback() && !s.loopPaced {
+		return ctx.Err()
+	}
+	return s.limiter.Wait(ctx, "")
+}
+
 // retryFloor: up to this many silent ports are asked again whatever
 // share of the scan they are.
 const retryFloor = 64
@@ -164,7 +175,7 @@ func (s *Scanner) pass(ctx context.Context, host, ip string, ports []int) (open 
 	var wg sync.WaitGroup
 	var stop error
 	for _, p := range ports {
-		if err := s.limiter.Wait(ctx, ""); err != nil {
+		if err := s.wait(ctx, ip); err != nil {
 			break
 		}
 		if s.Take != nil {
@@ -278,7 +289,7 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 		o.Banner = text
 		return
 	}
-	if s.limiter.Wait(ctx, "") != nil || s.Take != nil && s.Take() != nil {
+	if s.wait(ctx, ip) != nil || s.Take != nil && s.Take() != nil {
 		return
 	}
 	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}

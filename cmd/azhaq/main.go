@@ -214,7 +214,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active: needs -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active: needs -allow)")
 	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list such as 22,80,8000-8100 (active: needs -allow)")
-	portRate := fs.Float64("port-rate", 300, "port connection attempts per second")
+	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 300, and 127.0.0.1 unpaced)")
 	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active: needs -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")

@@ -225,3 +225,22 @@ func TestLateGreeting(t *testing.T) {
 		t.Fatalf("late greeting %+v err %v", open, err)
 	}
 }
+
+func TestLoopbackUnpacedUnlessRateGiven(t *testing.T) {
+	ports := make([]int, 60)
+	for i := range ports {
+		ports[i] = 1 + i // closed on most machines; refused at once either way
+	}
+	for _, c := range []struct {
+		s    *Scanner
+		slow bool
+	}{{&Scanner{Banner: -1}, false}, {&Scanner{Rate: 20, Banner: -1}, true}} {
+		t0 := time.Now()
+		if _, err := c.s.Scan(context.Background(), "127.0.0.1", "127.0.0.1", ports); err != nil {
+			t.Fatal(err)
+		}
+		if took := time.Since(t0); (took > time.Second) != c.slow {
+			t.Fatalf("rate %v on loopback took %v", c.s.Rate, took)
+		}
+	}
+}
