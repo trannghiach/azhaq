@@ -39,6 +39,9 @@ Two reviews of v0.8.1 ended the same way: adopt azhaq for some jobs, keep anothe
 - `subs` keeps a per-user history of the names it found. Later runs ask it as a source, and its names count only if they still resolve (`-no-history` to skip).
 - `subs` estimates its coverage with Chao1, and gives a sampled source's population with Schnabel. A tesla.com run holds about 1,400 of the roughly 1,609 names the independent sources know.
 - Every map row says how it is known: answered, described, called, linked, archived or guessed (`query -evidence`; `evidence` in exports; `x-azhaq-evidence` in OpenAPI). A GraphQL schema recovered with introspection disabled is marked partial everywhere it is shown or exported.
+- `roles -har NAME=FILE` and `-burp NAME=FILE` take each account's saved browsing as the whole input. Its GETs are the pages it reached, its latest Authorization and Cookie headers its session; an anonymous role is added, and nothing is crawled without `--` run options. On VAmPI two HAR files alone gave the cross-account book reads (proved, both ways) and the debug endpoint's passwords.
+- A cross-role write answered 2xx whose change no GET of the owner's object can show (VAmPI's password change) is listed as `writes another role's object: accepted; the change cannot be read back to confirm`, instead of being hidden as "changed nothing". A write is proved in the field it sets.
+- The local DNS lab used by trials: `go run ./bench/labdns` serves azqlab.lan (real names, a wildcard subzone, CNAMEs to deleted cloud names) and forwards the rest.
 - `dns -d DOMAIN -w FILE` brute-forces as dnsx does.
 - `scripts/install.sh` installs a release after checking its sha256, and its cosign signature when cosign is present.
 

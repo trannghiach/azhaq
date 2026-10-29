@@ -32,14 +32,14 @@ const (
 	verdictWriteRefused  = "the other roles were refused"
 	verdictWriteDry      = "would be sent (-dry-writes)"
 	// A write another role sent was answered 2xx, and nothing the owner's
-	// object shows can tell whether it took. Not in verdictOrder (it ranks
-	// with the proved reads) until OUTPUT.md lists it.
+	// object shows can tell whether it took.
 	verdictWriteUnread = "writes another role's object: accepted; the change cannot be read back to confirm"
 )
 
 func init() {
 	verdictOrder[verdictWriteAnyone] = -2
 	verdictOrder[verdictWriteCross] = -1
+	verdictOrder[verdictWriteUnread] = 0
 	verdictOrder[verdictWriteDry] = -3
 	verdictOrder[verdictWriteNoChange] = 15
 	verdictOrder[verdictWriteCreate] = 16

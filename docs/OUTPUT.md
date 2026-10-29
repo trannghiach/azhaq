@@ -252,6 +252,15 @@ A role given with `-role` sends those headers and nothing else, so behaviour an 
 With `-json`, stderr holds the summary only: the runs of the roles print nothing, and what they did not finish is in it (`failed`, `unreachable`, `skipped`, `notes`; a role's run stopped by a limit is `stopped`, exit 4). A role whose run could not be done (a failed sign-in) ends roles with a summary whose `notes` say why.
 
 
+### History (`-har`, `-burp`)
+
+- `-har NAME=FILE`, `-burp NAME=FILE` (repeatable; the same NAME adds files): the requests account NAME sent, as a HAR (browser devtools, Caido, Burp) or a Burp "Save items" XML file. NAME is a `-role` of that name or a new role.
+- Session: a role with no `-role` headers (and no `-role-cmd` or `-role-login`) takes the Authorization and Cookie header of its most recent request to the target. `Bearer null` and `Bearer undefined` are no session; a role whose history carries none is anonymous.
+- Target origins: for each account, the origin most of its requests go to, and any other with a quarter of them; `-allow HOST` adds one. Requests to other origins (analytics, CDNs) are neither sent nor read from, and a note names them.
+- Pages: each GET on the target that does not look like it changes something is asked once, as the account, and its answer is the account's own, as if its run had found it. `/rest/basket/6` and `/rest/basket/7` in two histories are the route `/rest/basket/{id}`. Replay, identity, controls, evidence and `roles show` work as after a crawl.
+- Without `--` run options nothing is crawled and the target is the history's origins; with them, the crawl's pages are added. `-no-anon` leaves the anonymous role out; `-rate N` paces the history reads and the replay. The history reads count against `-replay-max`.
+- With `-replay-writes`, the history's writes of the methods named are replayed, to the target's origins only, never a logout, DELETE only when named. A write is proved in the field it sets, against the object as the owner's last write left it; a short 2xx answer that says no (`Only Admins may delete users!`, `forbidden`) is a refusal.
+
 ### Writes (`-replay-writes`)
 
 `-replay-writes METHODS` (`post`, `put`, `patch`, `delete`, comma-separated) also asks each role's writes with every other role's session, after the reads. Writes change data on the target: they go only to the hosts of the run options' `-url` values, or to the scope `-allow` or `-scope` names. The writes are:
@@ -267,6 +276,7 @@ A map write (empty body) is first sent with its owner's session; when the owner 
 | --- | --- | --- |
 | `anyone writes another role's object` | yes | the anonymous role's write changed the owner's object (proven) |
 | `writes another role's object` | yes | a signed-in role's write changed the owner's object (proven; `readers`) |
+| `writes another role's object: accepted; the change cannot be read back to confirm` | yes | another role's write on the owner's object was answered 2xx (the row says which, `accepted (204)`), and no GET of the owner's object shows the field it sets (VAmPI's `PUT /users/v1/{username}/password`: `/users/v1/alice` has no password), or the object cannot be read at all. Neither proved nor disproved: check it by hand. Never reported as "changed nothing" |
 | `would be sent (-dry-writes)` | yes | `-dry-writes`: nothing was sent |
 | `answered 2xx but changed nothing of the owner's` | `-all` | a role was answered 2xx, but the owner's object did not change the way the write asked, or could not be read to verify it: not a finding, check by hand |
 | `creates in another role's collection` | `-all` | a POST a role was let to send: a create, never another role's object written |

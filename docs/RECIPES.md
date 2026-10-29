@@ -36,6 +36,8 @@ Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] pr
 
 Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3); see recipe 4.
 
+**From what you browsed.** Sign in as each account in a browser (or through Burp or Caido), use the app as that account would, save each history (HAR, or Burp "Save items"), and run `azhaq roles -har alice=alice.har -har bob=bob.har`. No headers to copy, no crawl. Add `-replay-writes put,patch` to replay each account's writes with the other sessions (they change data: use accounts of your own).
+
 ## 4. Tokens that live a few minutes
 
 ```

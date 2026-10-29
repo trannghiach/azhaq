@@ -88,6 +88,13 @@ $ azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Auth
 
 Each column is one role's answer as `status:bytes`, in the order the roles were given (`-` for a role never asked).
 
+No headers to copy and no crawl: give each account's browsing as it was saved, one file per account (a HAR from the browser, Caido or Burp, or Burp's "Save items" XML). Each account's GETs are the pages it reached, its latest Authorization and Cookie headers its session, and an anonymous role is added.
+
+```
+$ azhaq roles -har alice=alice.har -har bob=bob.har
+$ azhaq roles -burp alice=alice.xml -burp bob=bob.xml -replay-writes put,patch
+```
+
 **Map a program inside its scope and a budget.**
 
 ```

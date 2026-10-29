@@ -101,7 +101,7 @@ Exit codes: `0` complete, `1` error, `2` usage (nothing was sent), `3` finished 
 | dead session | A role refused wherever a session matters: its token expired or is wrong. Said in a note; the exit code is 3. |
 | report | `azhaq report -dir DIR`: each listed finding written up from the evidence as a Markdown report to submit. It sends nothing. |
 
-Verdicts, worst first: anyone reads sensitive fields · reads another role's object · answers any identifier · every signed-in role reads the same object · roles read the same sensitive fields · same answer for a session that did not find it · signed-in only · only one role reads it · some roles refused · different fields per role · anyone reads the same object · status differs. With `-replay-writes`, two come before them all: anyone writes another role's object · writes another role's object.
+Verdicts, worst first: anyone reads sensitive fields · reads another role's object · answers any identifier · every signed-in role reads the same object · roles read the same sensitive fields · same answer for a session that did not find it · signed-in only · only one role reads it · some roles refused · different fields per role · anyone reads the same object · status differs. With `-replay-writes`, three come before them all: anyone writes another role's object · writes another role's object · writes another role's object: accepted; the change cannot be read back to confirm.
 
 ## What Azhaq sends
 
