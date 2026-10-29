@@ -21,22 +21,23 @@ import (
 // change set between the last two runs of a workspace, in the terms a
 // person watching a target cares about.
 type changes struct {
-	DB        string    `json:"db"`
-	Run       time.Time `json:"run"`
-	Previous  time.Time `json:"previous,omitempty"`
-	Baseline  bool      `json:"baseline,omitempty"` // the first run: everything is new
-	Hosts     []string  `json:"hosts,omitempty"`    // new names that resolve
-	Services  []string  `json:"services,omitempty"` // new web services, "url [status] title"
-	URLs      []string  `json:"urls,omitempty"`     // other new URLs
-	Ports     []string  `json:"ports,omitempty"`    // "host: 22,80,8443" where the open set changed
-	Changed   []string  `json:"changed,omitempty"`  // "url: [200] old title → [403] new title"
-	GoneHosts []string  `json:"gone_hosts,omitempty"`
-	GoneSvcs  []string  `json:"gone_services,omitempty"`
-	GoneURLs  []string  `json:"gone_urls,omitempty"`
+	DB        string        `json:"db"`
+	Run       time.Time     `json:"run"`
+	Previous  time.Time     `json:"previous,omitempty"`
+	Baseline  bool          `json:"baseline,omitempty"` // the first run: everything is new
+	Hosts     []string      `json:"hosts,omitempty"`    // new names that resolve
+	Services  []string      `json:"services,omitempty"` // new web services, "url [status] title"
+	URLs      []string      `json:"urls,omitempty"`     // other new URLs
+	Ports     []string      `json:"ports,omitempty"`    // "host: 22,80,8443" where the open set changed
+	Changed   []string      `json:"changed,omitempty"`  // "url: [200] old title → [403] new title"
+	GoneHosts []string      `json:"gone_hosts,omitempty"`
+	GoneSvcs  []string      `json:"gone_services,omitempty"`
+	GoneURLs  []string      `json:"gone_urls,omitempty"`
+	Routes    []routeChange `json:"routes,omitempty"` // API routes, methods and body names the scripts call that changed
 }
 
 func (c changes) any() bool {
-	return len(c.Hosts)+len(c.Services)+len(c.URLs)+len(c.Ports)+len(c.Changed)+len(c.GoneHosts)+len(c.GoneSvcs)+len(c.GoneURLs) > 0
+	return len(c.Hosts)+len(c.Services)+len(c.URLs)+len(c.Ports)+len(c.Changed)+len(c.GoneHosts)+len(c.GoneSvcs)+len(c.GoneURLs)+len(c.Routes) > 0
 }
 
 // cmdWatch runs the same target into a workspace again and again and
@@ -136,6 +137,11 @@ func diffRuns(path string) (changes, error) {
 	if err != nil {
 		return ch, err
 	}
+	if !ch.Baseline {
+		if ch.Routes, err = diffRoutes(old, neu); err != nil {
+			return ch, err
+		}
+	}
 	newFacts := factsByEntity(neu)
 	oldFacts := factsByEntity(old)
 	for _, e := range d.Added {
@@ -190,6 +196,8 @@ func diffRuns(path string) (changes, error) {
 			ch.Ports = append(ch.Ports, f.host+": "+strings.Join(f.ports, ","))
 		}
 	}
+	ch.URLs = withoutRoutes(ch.URLs, ch.Routes, "new")
+	ch.GoneURLs = withoutRoutes(ch.GoneURLs, ch.Routes, "gone")
 	for _, xs := range [][]string{ch.Hosts, ch.Services, ch.URLs, ch.Ports, ch.Changed, ch.GoneHosts, ch.GoneSvcs, ch.GoneURLs} {
 		sort.Strings(xs)
 	}
@@ -296,6 +304,7 @@ func (c changes) text() string {
 	section("+", "hostnames that resolve", c.Hosts)
 	section("+", "web services", c.Services)
 	section("+", "URLs", c.URLs)
+	section("~", "API routes", routeLines(c.Routes))
 	section("~", "hosts whose open ports changed", c.Ports)
 	section("~", "pages that answer differently", c.Changed)
 	section("-", "hostnames gone", c.GoneHosts)
