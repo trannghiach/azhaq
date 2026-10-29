@@ -75,6 +75,15 @@ func readGraph(path string) (*graphView, error) {
 }
 
 func exportAs(path, format, origin string, w io.Writer) error {
+	return exportTo(path, format, origin, false, w)
+}
+
+// exportTo writes one format; safe leaves the routes the run left alone
+// out of an OpenAPI description (see omitSkipped).
+func exportTo(path, format, origin string, safe bool, w io.Writer) error {
+	if safe && format != "openapi" {
+		return usagef("-safe is for -format openapi")
+	}
 	g, err := readGraph(path)
 	if err != nil {
 		return err
@@ -123,6 +132,9 @@ func exportAs(path, format, origin string, w io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if safe {
+			omitSkipped(doc)
+		}
 		enc := json.NewEncoder(w)
 		enc.SetIndent("", "  ")
 		return enc.Encode(doc)
@@ -160,7 +172,9 @@ var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 // description the target serves itself is the base, as it is; routes it
 // does not list are added from what scripts call (method, query, body
 // fields), from forms and from what answered. x-azhaq on each operation
-// says where it came from and how the route answered a GET.
+// says where it came from and how the route answered a GET; an operation
+// of a route the run left alone, from the served description or guessed,
+// carries x-azhaq-skipped and the reason (flagSkipped).
 func openAPI(g *graphView, origin string) (map[string]any, error) {
 	byOrigin := map[string][]engine.MapEntry{}
 	queried := map[string][]engine.MapEntry{}
@@ -218,8 +232,110 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 			s.addForm(origin, f)
 		}
 	}
+	s.flagSkipped(g, origin)
 	tidy(doc)
 	return doc, nil
+}
+
+// flagSkipped marks every operation of a route the run deliberately did
+// not request (coverage skipped: /createdb, /logout, a name that says a
+// GET there changes something). The served description lists such a
+// route like any other, and a tool importing the export would send it;
+// x-azhaq-skipped: true and x-azhaq-skipped-reason on the operation say
+// azhaq left it alone, and -safe (omitSkipped) drops it. A route the run
+// requested is never flagged, nor is a URL left alone for its query
+// (/items?action=delete): that is not the route's own operation.
+func (s *spec) flagSkipped(g *graphView, origin string) {
+	reasons := skipReasons(g.obs)
+	skipped := map[string]string{} // path key → why the run left it alone
+	asked := map[string]bool{}     // path keys the run has another URL of
+	for _, r := range g.rows {
+		if r.Entity.Type != types.TypeURL {
+			continue
+		}
+		u, err := url.Parse(r.Entity.Key)
+		if err != nil || u.Scheme+"://"+u.Host != origin {
+			continue
+		}
+		p := s.key(u.Path)
+		if r.Coverage != "skipped" {
+			asked[p] = true
+			continue
+		}
+		if _, done := skipped[p]; done || u.RawQuery != "" {
+			continue
+		}
+		why := reasons[r.Entity.ID]
+		if why == "" {
+			why = engine.SkipStateChanging
+		}
+		skipped[p] = why
+	}
+	for p, why := range skipped {
+		item, _ := s.paths[p].(map[string]any)
+		if asked[p] || item == nil {
+			continue
+		}
+		for _, m := range opMethods {
+			op, ok := item[m].(map[string]any)
+			if !ok {
+				continue
+			}
+			op["x-azhaq-skipped"] = true
+			op["x-azhaq-skipped-reason"] = why
+			if x, ok := op["x-azhaq"].(map[string]any); ok && x["coverage"] == nil {
+				x["coverage"] = "skipped"
+			}
+		}
+	}
+}
+
+// skipReasons is why each URL the run left alone was left alone, by
+// entity: the reason and the word in its name that decided it.
+func skipReasons(obs []types.StoredObservation) map[string]string {
+	out := map[string]string{}
+	for _, o := range obs {
+		if o.Kind != "skipped" || out[o.EntityID] != "" {
+			continue
+		}
+		var p struct {
+			Skipped string `json:"skipped"`
+			Word    string `json:"word"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.Skipped == "" {
+			continue
+		}
+		why := p.Skipped
+		if p.Word != "" {
+			why += " (" + p.Word + ")"
+		}
+		out[o.EntityID] = why
+	}
+	return out
+}
+
+// omitSkipped drops the operations flagSkipped marked, and a path left
+// with no operation, for a tool that must not touch those routes.
+func omitSkipped(doc map[string]any) {
+	paths, _ := doc["paths"].(map[string]any)
+	for p, v := range paths {
+		item, _ := v.(map[string]any)
+		ops := 0
+		for _, m := range opMethods {
+			op, ok := item[m].(map[string]any)
+			if !ok {
+				continue
+			}
+			if skipped, _ := op["x-azhaq-skipped"].(bool); skipped {
+				delete(item, m)
+				continue
+			}
+			ops++
+		}
+		if ops == 0 {
+			delete(paths, p)
+		}
+	}
 }
 
 // spec is the paths of a description being built. OpenAPI forbids two
@@ -240,6 +356,15 @@ func (s *spec) path(raw string) (string, []string) {
 	}
 	s.shapes[shape] = p
 	return p, names
+}
+
+// key is the path a URL path is under, if it is; it registers nothing.
+func (s *spec) key(raw string) string {
+	p, _ := openAPIPath(raw)
+	if k, ok := s.shapes[placeholder.ReplaceAllString(p, "{}")]; ok {
+		return k
+	}
+	return p
 }
 
 func templateNames(p string) []string {

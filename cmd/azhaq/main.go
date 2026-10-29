@@ -1211,6 +1211,7 @@ func cmdExport(args []string) error {
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
 	format := fs.String("format", "jsonl", "jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, graphql (introspection JSON), sdl (GraphQL schema), burp (the run's scope), html, graphml, secrets")
 	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes); graphql, sdl: the endpoints of an origin, or one endpoint's URL")
+	safe := fs.Bool("safe", false, "openapi: leave out the routes the run left alone as state-changing (otherwise they carry x-azhaq-skipped: true), for a tool that must not touch them")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1222,7 +1223,7 @@ func cmdExport(args []string) error {
 		if path == "" {
 			return fmt.Errorf("need -db (no %s from a previous run)", lastDBFile)
 		}
-		return exportAs(path, *format, *origin, os.Stdout)
+		return exportTo(path, *format, *origin, *safe, os.Stdout)
 	}
 	path := *dbPath
 	if path == "" {
