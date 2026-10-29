@@ -112,6 +112,23 @@ func exportTo(path, format, origin string, safe bool, w io.Writer) error {
 		for n := range g.live {
 			names = append(names, n)
 		}
+		// An address given as a target, or serving the web, is a host too.
+		ips := map[string]bool{}
+		for _, r := range g.rows {
+			if r.Entity.Type == types.TypeIPAddress && r.Scope == "target" {
+				ips[r.Entity.Key] = true
+			}
+		}
+		for _, r := range g.probe {
+			if u, err := url.Parse(r.URL); err == nil && net.ParseIP(u.Hostname()) != nil {
+				ips[u.Hostname()] = true
+			}
+		}
+		for ip := range ips {
+			if g.live[ip] == nil {
+				names = append(names, ip)
+			}
+		}
 		sort.Strings(names)
 		for _, n := range names {
 			fmt.Fprintln(w, n)

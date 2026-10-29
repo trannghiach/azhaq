@@ -21,6 +21,21 @@ var stateVerbs = map[string]bool{
 	"import": true, "generate": true, "rebuild": true, "restore": true, "migrate": true, "populate": true,
 	"deploy": true, "publish": true, "unpublish": true, "lock": true, "unlock": true, "ban": true, "unban": true,
 	"block": true, "unblock": true, "invite": true, "transfer": true, "pay": true, "checkout": true, "confirm": true,
+	"erasure": true,
+	// Written as one word: DVNA's /resetpw, Juice Shop's /dataerasure.
+	"resetpw": true, "resetpwd": true, "resetpass": true, "resetpassword": true, "dataerasure": true,
+	"deleteaccount": true, "deleteuser": true, "deleteme": true,
+}
+
+// oneTime: a query key holding a token a request may spend (a reset or
+// confirmation link: /resetpw?login=user&token=ee11cb…).
+func oneTime(k string) bool {
+	k = strings.ToLower(k)
+	if strings.Contains(k, "csrf") || strings.Contains(k, "page") || strings.Contains(k, "next") || strings.Contains(k, "continuation") {
+		return false
+	}
+	return k == "token" || strings.HasSuffix(k, "_token") || strings.HasSuffix(k, "-token") || k == "resettoken" ||
+		k == "reset_key" || k == "otp" || k == "magic"
 }
 
 // actionKeys are query keys whose value names what the request does.
@@ -46,6 +61,9 @@ func StateChanging(raw string) string {
 		}
 	}
 	for k, vs := range u.Query() {
+		if oneTime(k) {
+			return k + "=" // spent by the request, or by the next one
+		}
 		for _, v := range vs {
 			if toggles[strings.ToLower(v)] && !filterKeys[strings.ToLower(k)] {
 				return k + "=" + v // DVWA's security.php?phpids=on turns a filter on

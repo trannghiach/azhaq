@@ -1023,6 +1023,7 @@ func cmdDNS(args []string) error {
 	fs.Var(&names, "d", "name (repeatable)")
 	list := fs.String("l", "", "file of names (- for stdin)")
 	resp := fs.Bool("resp", false, "print the records after each name")
+	words := fs.String("w", "", "with -d DOMAIN: resolve WORD.DOMAIN for each word in this file instead, as dnsx -d -w (wildcard answers left out)")
 	given := inherit(fs, "resolvers", "dns-rate", "timeout", "v")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -1039,6 +1040,19 @@ func cmdDNS(args []string) error {
 		return err
 	}
 	defer rm()
+	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns")}
+	if *words != "" {
+		// The guesses are found by azhaq-dns-brute and resolved again by
+		// azhaq-dns for their records, one wave later.
+		run = []string{"-passive", "-depth", "2", "-skip", skipAllBut("azhaq-dns", "azhaq-dns-brute"), "-dns-brute", *words}
+		for _, d := range ns {
+			h := normalize.Hostname(d)
+			if h == "" || strings.ContainsAny(h, "/: ") {
+				return usagef("-w wants -d DOMAIN such as example.com, got %q", d)
+			}
+			run = append(run, "-domain", h, "-allow", h) // the domains given are the scope of the guesses
+		}
+	}
 	w, err := newWriter(&c)
 	if err != nil {
 		return err
@@ -1085,7 +1099,6 @@ func cmdDNS(args []string) error {
 	}
 	rep := newReport("dns")
 	rep.what = "live names"
-	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns")}
 	_, done, err := runPreset(&c, append(run, given()...), rep, see)
 	if err != nil {
 		return err
@@ -1100,6 +1113,9 @@ func cmdDNS(args []string) error {
 		if h := normalize.Hostname(n); h != "" {
 			asked[h] = true
 		}
+	}
+	if *words != "" {
+		return rep.finish(c.json, c.silent) // the words are the asked names
 	}
 	rep.Counts = map[string]int{"asked": len(asked)}
 	if d := len(asked) - rep.Results; d > 0 {

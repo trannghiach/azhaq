@@ -34,6 +34,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
+	"github.com/trannghiach/azhaq/internal/collectors/rendercol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/connector"
@@ -351,6 +352,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
 			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
 		}
+	}
+	if fi, err := os.Stat(*shots); *shots != "" && err == nil && !fi.IsDir() {
+		return usagef("the screenshot directory %s is a file", *shots)
 	}
 	if active && len(allow) == 0 {
 		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params need a target that names a host, domain or address (an ASN or organisation does not), or -allow / -scope")
@@ -754,6 +758,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	fillReport(rep, path, seeds, ents, obs, rows)
+	if *render {
+		if n, pages := browserOnly(obs); pages > 0 && n == 0 {
+			rep.Notes = append(rep.Notes, fmt.Sprintf("-browser: Chrome rendered %d pages and found no URL the static pass had not; a run without it maps the same with fewer requests", pages))
+		}
+	}
 	if opts.Browser != nil {
 		chromeRefused(rep, opts.Browser)
 	}
@@ -1791,4 +1800,33 @@ func seedScope(seeds []types.Seed) []string {
 		}
 	}
 	return out
+}
+
+// browserOnly counts the URLs only Chrome's rendering saw, and the pages
+// it rendered.
+func browserOnly(obs []types.StoredObservation) (only, pages int) {
+	byChrome, byOthers, rendered := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, o := range obs {
+		if o.Kind != "url" {
+			continue
+		}
+		var p struct {
+			URL string `json:"url"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil || p.URL == "" {
+			continue
+		}
+		if o.Collector == rendercol.Name {
+			byChrome[p.URL] = true
+			rendered[o.Source] = true
+		} else {
+			byOthers[p.URL] = true
+		}
+	}
+	for u := range byChrome {
+		if !byOthers[u] {
+			only++
+		}
+	}
+	return only, len(rendered)
 }

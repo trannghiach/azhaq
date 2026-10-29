@@ -142,6 +142,7 @@ Runs into the same workspace add to it; `diff` and `watch` say what changed. `in
 
 ```
 azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json      # subfinder | dnsx | httpx
+azhaq dns    -d example.com -w subdomains.txt -resp                            # dnsx -d -w (brute force)
 azhaq crawl  -u https://app.example.com/ -json                                 # katana + jsluice
 azhaq urls   -d example.com -silent                                            # gau
 azhaq ports  -host scanme.nmap.org -p top-1000 -json                           # naabu (connect scan)
@@ -149,7 +150,7 @@ azhaq dirs   -u https://app.example.com/ -w common.txt -e php,bak              #
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt     # arjun
 ```
 
-Each reads targets from flags, a file or stdin, prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` pace themselves (100 and 20 requests a second per host by default): `-rate 0` runs them as fast as ffuf and arjun. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
+Each reads targets from flags, a file or stdin, prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` run as fast as ffuf and arjun (40 guesses in flight, no pace); `-rate N` holds them to N requests a second. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
 
 ## For assistants: MCP
 
