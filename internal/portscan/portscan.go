@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/limit"
 )
 
@@ -222,7 +223,9 @@ const (
 
 func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, portState) {
 	d := net.Dialer{Timeout: s.Timeout}
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(port)))
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	ledger.TCP(ctx, host, addr)
+	conn, err := d.DialContext(ctx, "tcp", addr)
 	if err != nil {
 		if errors.Is(err, syscall.ECONNREFUSED) || ctx.Err() != nil {
 			return Open{}, portClosed
@@ -299,7 +302,9 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 	hctx, cancel := context.WithTimeout(ctx, s.Timeout+s.Banner)
 	defer cancel()
 	td := tls.Dialer{NetDialer: &net.Dialer{Timeout: s.Timeout}, Config: cfg}
-	c, err := td.DialContext(hctx, "tcp", net.JoinHostPort(ip, strconv.Itoa(o.Port)))
+	addr := net.JoinHostPort(ip, strconv.Itoa(o.Port))
+	ledger.TCP(ctx, host, addr)
+	c, err := td.DialContext(hctx, "tcp", addr)
 	if err != nil {
 		return
 	}

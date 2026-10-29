@@ -196,6 +196,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	perTmpl := fs.Int("per-template", 0, "URLs of one template (/product?id={n}) to request; the rest are listed (default 3)")
 	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
 	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
+	ledgerFlag := fs.String("ledger", "", ledgerHelp)
+	killFile := fs.String("kill-file", "", killFileHelp)
 	resumeRun := fs.String("resume-run", "", "internal: continue this run of -db (azhaq resume sets it)")
 	serve := fs.String("serve", "", "let azhaq worker processes take this run's work, at this address (127.0.0.1:7777)")
 	workerToken := fs.String("worker-token", os.Getenv("AZHAQ_WORKER_TOKEN"), "the token workers give (default $AZHAQ_WORKER_TOKEN, else a new one)")
@@ -515,6 +517,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
 	}
+	if !out.plan {
+		led, err := startLedger(*ledgerFlag, *killFile, path, out.scratch, rules)
+		if err != nil {
+			return err
+		}
+		defer led.close(rep)
+	}
 	if (*shots != "" || *render) && !out.plan {
 		if _, err := browser.Find(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -797,6 +806,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks known and not done", *timeout, left)
 		case ctx.Err() != nil:
 			rep.Stopped = fmt.Sprintf("interrupted with %d tasks known and not done", left)
+		case fetch.Killed() != nil:
+			rep.Stopped = killStopped(left)
 		case fetch.Spent():
 			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done", fetch.MaxRequests, left)
 		case len(fetch.OriginsDown()) > 0:
@@ -813,7 +824,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			// in again, so the hint carries the credential flags.
 			rep.Resume += " -login-user " + *loginUser + " -login-pass PASS"
 		}
-		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
+		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() && fetch.Killed() == nil {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
 		}
 	} else {

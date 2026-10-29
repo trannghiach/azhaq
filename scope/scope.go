@@ -46,6 +46,27 @@ func (r Rules) Allows(host string) bool {
 	return false
 }
 
+// Match is the allow rule that lets host through, as it was written, or ""
+// when none does: no rules, a host a deny rule excludes, or a host outside
+// the allow list.
+func (r Rules) Match(host string) string {
+	host = normalize.Hostname(host)
+	if host == "" || len(r.Allow) == 0 {
+		return ""
+	}
+	for _, d := range r.Deny {
+		if hostMatch(host, d) {
+			return ""
+		}
+	}
+	for _, a := range r.Allow {
+		if hostMatch(host, a) {
+			return a
+		}
+	}
+	return ""
+}
+
 func (r Rules) AllowsSeed(s types.Seed) bool {
 	if r.Empty() {
 		return true

@@ -131,7 +131,7 @@ var flagName = regexp.MustCompile(`\B-[a-z][a-z0-9-]*[a-z0-9]`)
 
 // targetFlags are the flags of every command that sends requests to
 // targets: scope, pace, budget, time, session.
-var targetFlags = []string{"scope", "program", "allow", "deny", "rate", "max-requests", "timeout", "H=header", "cookie", "v"}
+var targetFlags = []string{"scope", "program", "allow", "deny", "rate", "max-requests", "timeout", "H=header", "cookie", "v", "ledger", "kill-file"}
 
 // inputs gathers targets from repeatable flags, a file ("-" for stdin),
 // or stdin when it is a pipe and nothing else was given.
@@ -1135,7 +1135,7 @@ func cmdPorts(args []string) error {
 	fs.Var(&hosts, "host", "host or IP (repeatable)")
 	list := fs.String("l", "", "file of hosts (- for stdin)")
 	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full or a list such as 22,80,8000-8100")
-	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny")
+	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1242,7 +1242,7 @@ func cmdDirs(args []string) error {
 	list := fs.String("l", "", "file of services (- for stdin)")
 	words := fs.String("w", "", "wordlist (required)")
 	given := inherit(fs, "e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate", "mc=dirs-mc",
-		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny")
+		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1324,7 +1324,7 @@ func cmdParams(args []string) error {
 	fs.Var(&urls, "u", "page URL (repeatable)")
 	list := fs.String("l", "", "file of page URLs (- for stdin)")
 	words := fs.String("w", "", "parameter names, one per line (required)")
-	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny")
+	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
 	if err := parse(fs, args); err != nil {
 		return err
 	}

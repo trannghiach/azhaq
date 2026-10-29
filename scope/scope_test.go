@@ -72,3 +72,24 @@ func TestRulePortStripped(t *testing.T) {
 		t.Error("bare IPv6 ::1 should match itself")
 	}
 }
+
+func TestMatchNamesTheAllowRule(t *testing.T) {
+	r := Rules{Allow: []string{"*.example.com", "=api.other.test", "10.0.0.0/8"}, Deny: []string{"dev.example.com"}}
+	for host, want := range map[string]string{
+		"www.example.com":   "*.example.com",
+		"example.com":       "*.example.com",
+		"api.other.test":    "=api.other.test",
+		"www.other.test":    "",
+		"10.1.2.3":          "10.0.0.0/8",
+		"dev.example.com":   "",
+		"x.dev.example.com": "",
+		"evil.test":         "",
+	} {
+		if got := r.Match(host); got != want {
+			t.Errorf("Match(%q) = %q, want %q", host, got, want)
+		}
+	}
+	if got := (Rules{}).Match("a.test"); got != "" {
+		t.Errorf("no rules: %q", got)
+	}
+}

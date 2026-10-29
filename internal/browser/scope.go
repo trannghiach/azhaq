@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
@@ -300,6 +301,11 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 			return
 		}
 	}
+	rctx := root
+	if t != nil {
+		rctx = t.ctx
+	}
+	ledger.Chrome(rctx, ev.Request.Method, ev.Request.URL)
 	_, _ = chromedp.CallBrowser(root, cdpfetch.ContinueRequest, cdpfetch.ContinueRequestParams{RequestID: ev.RequestID})
 }
 

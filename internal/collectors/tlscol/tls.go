@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -67,6 +69,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		port = "443"
 	}
 	addr := net.JoinHostPort(host, port)
+	if err := fetch.Killed(); err != nil {
+		return types.RunMeta{Status: types.StatusCapped}, err
+	}
+	ledger.TCP(ctx, host, addr)
 	dctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	hs := timing.Start(ctx, "tls.handshake", host)

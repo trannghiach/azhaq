@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -275,7 +276,7 @@ func Cached(raw string) (Result, bool) {
 
 func Client(c *http.Client) *http.Client {
 	if c != nil {
-		return c
+		return recorded(c)
 	}
 	// InsecureSkipVerify: we are observing whatever cert is presented (same as azhaq-tls).
 	// Headers within 10 s, like httpx: CDN edges and bot managers often
@@ -283,7 +284,7 @@ func Client(c *http.Client) *http.Client {
 	// is not a dead host.
 	return &http.Client{
 		Timeout: 30 * time.Second,
-		Transport: &http.Transport{
+		Transport: ledger.Wrap(&http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           dial,
 			TLSHandshakeTimeout:   5 * time.Second,
@@ -292,11 +293,22 @@ func Client(c *http.Client) *http.Client {
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS12,
 			},
-		},
+		}),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+// recorded is c with its requests entered in the run's ledger: c itself when
+// it already is, else a copy.
+func recorded(c *http.Client) *http.Client {
+	if _, ok := c.Transport.(*ledger.Transport); ok {
+		return c
+	}
+	cp := *c
+	cp.Transport = ledger.Wrap(c.Transport)
+	return &cp
 }
 
 // Dial connects to addr as the run's HTTP client does: through the resolver's
@@ -694,7 +706,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 // viaProxy drops ip when the request went through a proxy: the address
 // is the proxy's, not the target's.
 func viaProxy(c *http.Client, raw, ip string) string {
-	rt := c.Transport
+	rt := ledger.Unwrap(c.Transport)
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
@@ -768,7 +780,7 @@ func noFollow(c *http.Client) *http.Client {
 	if c == nil {
 		c = Client(nil)
 	}
-	cp := *c
+	cp := *recorded(c)
 	cp.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}

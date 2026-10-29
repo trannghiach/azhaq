@@ -213,6 +213,10 @@ func cmdRoles(args []string) error {
 	rep := newReport("roles")
 	rep.what = "endpoints listed"
 	rep.DB = *dir
+	if !hasFlag(runArgs, "ledger") {
+		// One ledger for the role runs and the requests between them.
+		defer rolesLedger(*dir, rep)()
+	}
 	bodies = newBodyKeep()
 	defer func() { bodies = nil }()
 	rate := 0.0
@@ -243,7 +247,7 @@ func cmdRoles(args []string) error {
 			r = roles[i]
 		}
 		db := filepath.Join(*dir, r.name+".db")
-		args := append([]string{"-db", db, "-quiet"}, runArgs...)
+		args := append([]string{"-db", db, "-quiet", "-kill-file", filepath.Join(*dir, "roles.stop")}, runArgs...) // one stop file for every role
 		for _, h := range r.headers {
 			args = append(args, "-header", h)
 		}

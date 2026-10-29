@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // guard is a SOCKS5 proxy on loopback that Chrome makes every connection
@@ -184,6 +185,14 @@ func (g *guard) handle(c net.Conn) {
 		scheme = "https"
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	if ws {
+		// A WebSocket handshake is no paused request: the connection is the entry.
+		wsScheme := "ws"
+		if tls {
+			wsScheme = "wss"
+		}
+		ledger.Chrome(g.ctx, http.MethodGet, wsScheme+"://"+addr)
+	}
 	up, err := dialOut(ctx, scheme, addr)
 	cancel()
 	if err != nil {

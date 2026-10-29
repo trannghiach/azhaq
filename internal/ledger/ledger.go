@@ -1,0 +1,252 @@
+// Package ledger keeps a tamper-evident record of every request and
+// connection a run sends to a target: when, to what, and under which scope
+// rule. Each line of the file holds the hash of the one before it, so an
+// edited, removed or reordered line breaks the chain from there on.
+package ledger
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// Entry is one request or connection. Hash covers Prev and every other field.
+type Entry struct {
+	Seq       int64     `json:"seq"`
+	Time      time.Time `json:"time"`
+	Kind      string    `json:"kind"` // http, tcp or chrome
+	Method    string    `json:"method,omitempty"`
+	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
+	Host      string    `json:"host,omitempty"`
+	Rule      string    `json:"rule,omitempty"` // the scope rule that allowed it
+	Collector string    `json:"collector,omitempty"`
+	Prev      string    `json:"prev,omitempty"`
+	Hash      string    `json:"hash,omitempty"`
+}
+
+// sum is the entry's hash: sha256 over Prev and the JSON of the entry
+// without its Hash.
+func (e Entry) sum() string {
+	e.Hash = ""
+	raw, _ := json.Marshal(e)
+	h := sha256.New()
+	h.Write([]byte(e.Prev))
+	h.Write(raw)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// Ledger appends entries to a file. It is safe for concurrent use.
+type Ledger struct {
+	// Match names the scope rule that allows host, "" when none does or the
+	// run has no rules.
+	Match func(host string) string
+
+	mu   sync.Mutex
+	f    *os.File
+	path string
+	w    *bufio.Writer
+	seq  int64
+	prev string
+	err  error
+}
+
+// Open appends to the file at path, creating it, and continues the chain
+// of what it already holds.
+func Open(path string) (*Ledger, error) {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, err
+	}
+	l := &Ledger{f: f, path: path, w: bufio.NewWriter(f)}
+	last, err := lastLine(f)
+	if err == nil && len(last) > 0 {
+		var e Entry
+		if err = json.Unmarshal(last, &e); err == nil {
+			l.seq, l.prev = e.Seq, e.Hash
+		}
+	}
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("ledger %s: the last line is not an entry (%v): azhaq ledger -verify %s", path, err, path)
+	}
+	return l, nil
+}
+
+// lastLine is the final line of f, without its newline; none for an empty file.
+func lastLine(f *os.File) ([]byte, error) {
+	st, err := f.Stat()
+	if err != nil || st.Size() == 0 {
+		return nil, err
+	}
+	size := st.Size()
+	for n := int64(4096); ; n *= 4 {
+		n = min(n, size)
+		buf := make([]byte, n)
+		if _, err := f.ReadAt(buf, size-n); err != nil && err != io.EOF {
+			return nil, err
+		}
+		if buf[len(buf)-1] != '\n' {
+			return nil, errors.New("no newline at the end")
+		}
+		buf = buf[:len(buf)-1]
+		if i := bytes.LastIndexByte(buf, '\n'); i >= 0 {
+			return buf[i+1:], nil
+		}
+		if n == size {
+			return buf, nil
+		}
+	}
+}
+
+// Record adds e to the chain: it takes its Seq, Prev and Hash, and its
+// time unless e has one. The line is flushed before Record returns, so a
+// crash loses nothing that was sent.
+func (l *Ledger) Record(e Entry) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.f == nil {
+		return
+	}
+	if e.Time.IsZero() {
+		e.Time = time.Now()
+	}
+	e.Time = e.Time.UTC()
+	l.seq++
+	e.Seq, e.Prev = l.seq, l.prev
+	e.Hash = e.sum()
+	raw, _ := json.Marshal(e)
+	raw = append(raw, '\n')
+	_, err := l.w.Write(raw)
+	if err == nil {
+		err = l.w.Flush()
+	}
+	l.note(err)
+	l.prev = e.Hash
+}
+
+func (l *Ledger) note(err error) {
+	if err != nil && l.err == nil {
+		l.err = err
+	}
+}
+
+// Count is how many entries the file holds, those of earlier runs included.
+func (l *Ledger) Count() int64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.seq
+}
+
+// Path is the file the ledger writes.
+func (l *Ledger) Path() string { return l.path }
+
+// Close flushes and syncs the file, and returns the first write error.
+func (l *Ledger) Close() error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.f == nil {
+		return l.err
+	}
+	l.note(l.w.Flush())
+	l.note(l.f.Sync())
+	l.note(l.f.Close())
+	l.f = nil
+	return l.err
+}
+
+// Read calls fn with each entry of the file in order, without checking the chain.
+func Read(path string, fn func(e Entry) error) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<16)
+	for line := 1; ; line++ {
+		raw, err := r.ReadBytes('\n')
+		if len(bytes.TrimSpace(raw)) > 0 {
+			var e Entry
+			if jerr := json.Unmarshal(raw, &e); jerr != nil {
+				return fmt.Errorf("%s line %d: %w", path, line, jerr)
+			}
+			if ferr := fn(e); ferr != nil {
+				return ferr
+			}
+		}
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+}
+
+// Verify recomputes the chain of the file at path. n is how many entries
+// are intact; badLine is the first line that is not (1 is the first), 0
+// when the whole file is. err says what is wrong with that line, or why the
+// file could not be read.
+func Verify(path string) (n int, badLine int, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<16)
+	prev := ""
+	for line := 1; ; line++ {
+		raw, rerr := r.ReadBytes('\n')
+		if len(raw) == 0 && rerr == io.EOF {
+			return n, 0, nil
+		}
+		if rerr != nil && rerr != io.EOF {
+			return n, 0, rerr
+		}
+		bad := func(format string, a ...any) (int, int, error) {
+			return n, line, fmt.Errorf("line %d: "+format, append([]any{line}, a...)...)
+		}
+		if rerr == io.EOF {
+			return bad("cut short: no newline at the end")
+		}
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		var e Entry
+		if jerr := dec.Decode(&e); jerr != nil {
+			return bad("not an entry: %v", jerr)
+		}
+		switch {
+		case e.Seq != int64(n)+1:
+			return bad("seq %d, want %d (a line was removed, added or moved)", e.Seq, n+1)
+		case e.Prev != prev:
+			return bad("prev does not match the hash of the line before")
+		case e.Hash != e.sum():
+			return bad("hash does not match the content: the line was edited")
+		}
+		prev = e.Hash
+		n++
+	}
+}
+
+var active atomic.Pointer[Ledger]
+
+// Use makes l the ledger the hooks write to; nil turns them off.
+func Use(l *Ledger) { active.Store(l) }
+
+// Active is the ledger in use, or nil.
+func Active() *Ledger { return active.Load() }
+
+func (l *Ledger) rule(host string) string {
+	if l.Match == nil || host == "" {
+		return ""
+	}
+	return l.Match(host)
+}

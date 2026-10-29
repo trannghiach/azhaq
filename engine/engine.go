@@ -18,6 +18,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -135,7 +136,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	}
 
 	done := timing.Start(ctx, col.Name(), seed.Key())
-	ctx, refused, used := fetch.WatchBudget(ctx)
+	ctx, refused, used := fetch.WatchBudget(ledger.WithCollector(ctx, col.Name()))
 	got, err := col.Run(ctx, seed, emit)
 	done()
 	if errors.Is(err, neterr.ErrBudget) || refused() {

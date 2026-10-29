@@ -185,6 +185,15 @@ func init() {
 				"subfinder -d example.com -json | azhaq ingest -in - -db example.db",
 				"httpx -l hosts.txt -json | azhaq ingest -in - -db example.db && azhaq export -db example.db -format targets",
 			}},
+		{name: "ledger", group: groupWS, run: cmdLedger,
+			summary: "check, count or export the record of every request and connection a run sent to a target",
+			usage:   "-verify FILE | -summary FILE [-json] | -csv FILE",
+			output:  "verify: entries and whether the hash chain is intact (exit 3, naming the first bad line, when not); summary: counts by kind, host, method and scope rule, first and last time; csv: one row per entry",
+			examples: []string{
+				"azhaq ledger -verify app.db.ledger.jsonl",
+				"azhaq ledger -summary app.db.ledger.jsonl",
+				"azhaq ledger -csv app.db.ledger.jsonl > sent.csv",
+			}},
 		{name: "resume", group: groupWS, run: cmdResume,
 			summary:  "continue a run that was interrupted or stopped by a limit",
 			usage:    "-db FILE [run flags to add, such as -cookie or -max-requests]",
@@ -252,7 +261,7 @@ var exitCodes = []struct {
 	{exitError, "error: the command could not do its job"},
 	{exitUsage, "usage: bad flags or input, nothing was sent"},
 	{exitPartial, "finished, but some sources or requests failed: the results are usable, the summary on stderr lists what failed"},
-	{exitLimit, "stopped by a limit (-max-requests, -timeout, -daily-requests, -max-items) with work left: azhaq resume -db FILE continues"},
+	{exitLimit, "stopped by a limit (-max-requests, -timeout, -daily-requests, -max-items) or by the kill file (-kill-file) with work left: azhaq resume -db FILE continues"},
 }
 
 // exitErr carries an exit code out of a command whose summary already

@@ -33,10 +33,16 @@ func SetRate(perSecond float64) {
 
 // Spend accounts for one request to a target before it is sent: it waits
 // for the run's pace, and refuses with neterr.ErrBudget once the budget is
-// spent. Every request to a target goes through it (GETs, path and
+// spent, and with neterr.ErrKilled once the kill file exists. Every request to a target goes through it (GETs, path and
 // parameter guesses, GraphQL, pages loaded in Chrome).
 func Spend(ctx context.Context) error {
 	w, _ := ctx.Value(refusedKey{}).(*watch)
+	if err := Killed(); err != nil {
+		if w != nil {
+			w.refused.Store(true)
+		}
+		return err
+	}
 	for {
 		n := sent.Load()
 		if MaxRequests > 0 && n >= MaxRequests {
@@ -104,6 +110,9 @@ func WatchBudget(ctx context.Context) (_ context.Context, refused func() bool, u
 // request (a port scan's connect): it counts against the budget, which
 // may refuse it with neterr.ErrBudget, and is paced by its caller.
 func Take() error {
+	if err := Killed(); err != nil {
+		return err
+	}
 	for {
 		n := sent.Load()
 		if MaxRequests > 0 && n >= MaxRequests {
@@ -119,8 +128,8 @@ func Take() error {
 // process's): they count against the budget, which may then be spent.
 func Count(n int) { sent.Add(int64(n)) }
 
-// Spent says the budget allows no more requests.
-func Spent() bool { return MaxRequests > 0 && sent.Load() >= MaxRequests }
+// Spent says nothing more is sent: the budget is spent or a kill file exists.
+func Spent() bool { return MaxRequests > 0 && sent.Load() >= MaxRequests || Killed() != nil }
 
 // Sent is how many requests the run has sent to its targets.
 func Sent() int64 { return sent.Load() }

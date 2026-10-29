@@ -136,14 +136,14 @@ func keptArgs(args []string) []string {
 			}
 			out = append(out, "-header="+val)
 			continue
-		case "list", "in", "cloud", "facts", "paths", "providers", "resolvers", "dns-brute", "dirs", "params", "screenshots", "urls":
+		case "list", "in", "cloud", "facts", "paths", "providers", "resolvers", "dns-brute", "dirs", "params", "screenshots", "urls", "ledger", "kill-file":
 			// Files and directories, made absolute: azhaq resume may run
 			// from another directory.
 			if !inline && takesValue {
 				val = args[i+1]
 				i++
 			}
-			if val != "-" && val != "" {
+			if val != "-" && val != "" && !(name == "ledger" && val == "off") {
 				if abs, err := filepath.Abs(val); err == nil {
 					val = abs
 				}

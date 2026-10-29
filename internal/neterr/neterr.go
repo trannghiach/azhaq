@@ -23,6 +23,20 @@ var ErrOutOfScope = errors.New("not requested: outside the scope")
 // work is left for azhaq resume.
 var ErrBudget = errors.New("not requested: the request budget is spent")
 
+// ErrKilled is what a kill file refuses with: a file named by -kill-file
+// (default DB.stop) exists, so nothing more is sent. Killed carries the
+// path; like ErrBudget it leaves the work for azhaq resume, once the file
+// is removed.
+var ErrKilled = errors.New("stopped: kill file exists")
+
+// Killed is ErrKilled naming the file. It is also ErrBudget: every place
+// that stops on a spent budget stops on this.
+type Killed struct{ Path string }
+
+func (e *Killed) Error() string { return "stopped: kill file " + e.Path + " exists" }
+
+func (e *Killed) Is(target error) bool { return target == ErrKilled || target == ErrBudget }
+
 // ErrOriginDown is returned instead of requesting an origin that stopped
 // answering: connects or timeouts in a row with no answer between them.
 // The work is left for azhaq resume.
