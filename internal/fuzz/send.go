@@ -3,6 +3,7 @@ package fuzz
 import (
 	"bytes"
 	"context"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"io"
 	"net/http"
 	"net/http/httptrace"
@@ -40,14 +41,14 @@ type httpSender struct {
 // request, which applies the run's request budget and pace.
 func NewSender(o HTTPOptions) Sender {
 	base := fetch.Client(nil)
-	tr := base.Transport.(*http.Transport).Clone()
+	tr := ledger.Unwrap(base.Transport).(*http.Transport).Clone()
 	tr.ResponseHeaderTimeout = o.Timeout
 	tr.TLSHandshakeTimeout = o.Timeout
 	// One connection kept per thread: the default keeps two, and a sweep
 	// would open a connection for most requests.
 	tr.MaxIdleConnsPerHost = max(o.Threads, 2)
 	tr.MaxIdleConns = 2 * max(o.Threads, 2)
-	c := &http.Client{Transport: tr, Timeout: o.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	c := &http.Client{Transport: ledger.Wrap(tr), Timeout: o.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	if o.Follow {
 		c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 || (o.Allow != nil && !o.Allow(req.URL.Hostname())) {

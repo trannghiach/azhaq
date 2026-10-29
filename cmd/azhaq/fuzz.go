@@ -60,6 +60,8 @@ func cmdFuzz(args []string) error {
 	ic := fs.Bool("ic", false, "ignore comments in wordlists")
 	threads := fs.Int("t", 40, "requests in flight")
 	rate := fs.Float64("rate", 0, "requests per second, over all (0: no pace)")
+	ledgerFlag := fs.String("ledger", "", ledgerHelp)
+	killFile := fs.String("kill-file", "", killFileHelp)
 	timeout := fs.Float64("timeout", 10, "each request's timeout, in `seconds`")
 	maxtime := fs.Float64("maxtime", 0, "stop after this many `seconds` and say so (0: no limit)")
 	follow := fs.Bool("r", false, "follow redirects")
@@ -203,6 +205,11 @@ func cmdFuzz(args []string) error {
 		defer cancel()
 	}
 	rep := newReport("fuzz")
+	led, err := startLedger(*ledgerFlag, *killFile, c.db, c.db == "", rules)
+	if err != nil {
+		return err
+	}
+	defer led.close(rep)
 	rep.what = "matches"
 	if !c.json && !c.silent {
 		t0 := time.Now()

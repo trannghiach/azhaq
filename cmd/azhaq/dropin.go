@@ -1298,7 +1298,8 @@ func cmdDirs(args []string) error {
 	}
 	rep := newReport("dirs")
 	rep.what = "paths"
-	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", *words}
+	// Paths, not technologies: probe names those (the fingerprints are 40 MB to load).
+	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", *words}
 	extra := given()
 	if !hasFlag(extra, "allow", "scope") {
 		// The services given are the scope.
@@ -1370,7 +1371,7 @@ func cmdParams(args []string) error {
 	}
 	rep := newReport("params")
 	rep.what = "pages with parameters"
-	run := []string{"-list", path, "-depth", "1", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-params"),
+	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-params"),
 		"-params", *words, "-params-per-host", fmt.Sprint(len(targets))}
 	extra := given()
 	if !hasFlag(extra, "allow", "scope") {
