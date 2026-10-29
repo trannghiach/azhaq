@@ -20,6 +20,7 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
@@ -216,9 +217,12 @@ func cmdRoles(args []string) error {
 	rep := newReport("roles")
 	rep.what = "endpoints listed"
 	rep.DB = *dir
+	rearmKill := func() {}
 	if !hasFlag(runArgs, "ledger") {
 		// One ledger for the role runs and the requests between them.
-		defer rolesLedger(*dir, rep)()
+		closeLedger, rearm := rolesLedger(*dir, rep)
+		defer closeLedger()
+		rearmKill = rearm
 	}
 	bodies = newBodyKeep()
 	defer func() { bodies = nil }()
@@ -277,6 +281,7 @@ func cmdRoles(args []string) error {
 			}
 			browser.OnLogin = func(s browser.Session) { signedIn[r.name] = s }
 			sub, err := quietly(*asJSON, func() (*report, error) { return runEmbedded(args) })
+			rearmKill()
 			browser.OnLogin = nil
 			if err != nil {
 				return rolesFailed(rep, *asJSON, fmt.Errorf("role %s: %w", r.name, err))
@@ -476,6 +481,12 @@ func cmdRoles(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d more endpoints compared and not listed (%s); -all lists them", n, strings.Join(parts, ", ")))
 	}
 	rep.Results, rep.Counts = len(shown), counts
+	if k := fetch.Killed(); k != nil && rep.Stopped == "" {
+		// The replay's refusals are answers it could not get: the matrix is cut short.
+		var kf *neterr.Killed
+		errors.As(k, &kf)
+		rep.Stopped = "the kill switch: kill file " + kf.Path + " exists; the rows are what was compared before it (remove the file, then run roles again)"
+	}
 	if err := saveEvidence(*dir, roles, shown); err != nil {
 		rep.Notes = append(rep.Notes, "the answers behind the rows could not be kept: "+err.Error())
 	} else if len(shown) > 0 {

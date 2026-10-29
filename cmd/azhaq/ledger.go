@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	ledgerHelp   = "write every request and connection to a target to this file, a chain of hashes `azhaq ledger -verify` checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given)"
+	ledgerHelp   = "write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given)"
 	killFileHelp = "stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop)"
 )
 
@@ -63,16 +63,20 @@ func startLedger(ledgerFlag, killFlag, db string, scratch bool, rules scope.Rule
 
 // rolesLedger opens one ledger in dir for everything azhaq roles sends: the
 // run of each role, which finds it in use, and the requests between them.
-// The func returned closes it.
-func rolesLedger(dir string, rep *report) func() {
+// It returns the func that closes it, and rearm, which watches roles.stop
+// again after a role's run ended its own watch: the replay stops at it too.
+func rolesLedger(dir string, rep *report) (closeIt, rearm func()) {
+	kill := filepath.Join(dir, "roles.stop")
+	r := &runLedger{stopKill: fetch.SetKill(kill)}
+	rearm = func() { r.stopKill = fetch.SetKill(kill) }
 	l, err := ledger.Open(filepath.Join(dir, "roles.ledger.jsonl"))
 	if err != nil {
 		rep.Notes = append(rep.Notes, "no ledger: "+err.Error())
-		return func() {}
+		return func() { r.stopKill() }, rearm
 	}
 	ledger.Use(l)
-	r := &runLedger{l: l, owned: true, stopKill: func() {}}
-	return func() { r.close(rep) }
+	r.l, r.owned = l, true
+	return func() { r.close(rep) }, rearm
 }
 
 // killStopped is the run's `stopped` when the kill file ended it.
