@@ -19,6 +19,8 @@ import (
 
 // The server answers the handshake, lists its tools with schemas, keeps
 // the lock it was started with and refuses what it does not know.
+// contract C10: azhaq_subdomains for a domain outside the lock is refused
+// before any source is asked (the server here has no azhaq to run).
 func TestMCPProtocol(t *testing.T) {
 	s := &mcpServer{dir: t.TempDir(), lock: []string{"-allow", "example.com"}, locked: true, budget: 100, running: map[string]context.CancelFunc{}}
 	in := strings.Join([]string{

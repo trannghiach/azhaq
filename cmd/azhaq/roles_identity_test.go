@@ -943,6 +943,7 @@ func TestRoleOddFields(t *testing.T) {
 	}
 }
 
+// contract C12: a run stopped by -replay-max exits 4 and names it.
 func TestNoteCapMarksReplayMaxStopped(t *testing.T) {
 	rep := newReport("roles")
 	// A plain error is a note, not a stop.

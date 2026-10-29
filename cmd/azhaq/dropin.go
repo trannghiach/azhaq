@@ -473,7 +473,7 @@ func cmdSubs(args []string) error {
 		return err
 	}
 	seen := map[string]bool{}
-	answered, ran := 0, 0
+	answered, ran, failedOff := 0, 0, 0
 	verbose := hasFlag(given(), "v")
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
@@ -486,6 +486,8 @@ func cmdSubs(args []string) error {
 				ran++
 				if row["error"] == nil {
 					answered++
+				} else if row["default"] == false {
+					failedOff++ // -all-sources reaches for flaky ones: counted apart
 				}
 			}
 		}
@@ -567,7 +569,8 @@ func cmdSubs(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
-	rep.Counts = map[string]int{"sources asked": ran, "sources failed": ran - answered}
+	rep.Counts = map[string]int{"sources asked": ran, "sources answered": answered, "sources failed": ran - answered - failedOff, "off-by-default failed": failedOff}
+	rep.Degraded = rep.Counts["sources failed"] > 0
 	if active {
 		rep.Counts["found by guessing"] = guessed
 	}

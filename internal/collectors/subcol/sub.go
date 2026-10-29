@@ -89,6 +89,9 @@ func New(o Options) *Collector {
 		o.SourceTimeout = DefaultSourceTimeout
 	}
 	all := allSources()
+	if fake := testSourcesInUse(); fake != nil {
+		all = fake
+	}
 	l := limit.New(0, 1)
 	for _, s := range all {
 		if s.perSec > 0 {
@@ -297,6 +300,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var names []string
 	foundBy := map[string][]string{} // name → the sources that gave it
 	status := map[string]any{}
+	named := set(c.opts.Only)
 	var failed []string
 	for i, s := range run {
 		r := results[i]
@@ -319,6 +323,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 		row["count"] = n
+		if !s.deflt && !named[s.name] {
+			row["default"] = false // run by -all-sources: its failure is not the run's
+		}
 		if c := calls[i].Load(); c > 1 {
 			row["calls"] = c
 		}

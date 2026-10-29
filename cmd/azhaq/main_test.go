@@ -450,6 +450,7 @@ func TestSourceDetail(t *testing.T) {
 	}
 }
 
+// contract C1: the budget spent while Chrome signs in is a limit (exit 4).
 func TestBudgetErrorIsALimit(t *testing.T) {
 	err := fmt.Errorf("role alice: %w", fmt.Errorf("%w (Chrome was refused requests while signing in)", neterr.ErrBudget))
 	if got := exitCode(err); got != exitLimit {

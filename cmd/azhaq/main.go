@@ -66,6 +66,12 @@ func init() {
 
 func main() {
 	err := run(os.Args[1:])
+	reportError(os.Args[1:], err)
+	os.Exit(exitCode(err))
+}
+
+// reportError says on stderr why run failed, unless a summary already did.
+func reportError(args []string, err error) {
 	if err != nil && !errors.Is(err, flag.ErrHelp) {
 		var ee exitErr
 		switch {
@@ -73,25 +79,24 @@ func main() {
 			if ee.msg != "" {
 				fmt.Fprintf(os.Stderr, "azhaq: %s\n", ee.msg)
 			}
-		case wantsJSON(os.Args[1:]):
+		case wantsJSON(args):
 			// The caller reads stderr as JSON: the error is a summary too.
 			cmd := ""
-			if len(os.Args) > 1 {
-				cmd = os.Args[1]
+			if len(args) > 0 {
+				cmd = args[0]
 			}
 			raw, _ := json.Marshal(map[string]any{"type": "summary", "command": cmd, "version": version, "complete": false, "exit": exitCode(err), "error": err.Error()})
 			fmt.Fprintf(os.Stderr, "%s\n", raw)
 		default:
 			fmt.Fprintf(os.Stderr, "azhaq: %v\n", err)
 			var ue usageErr
-			if errors.As(err, &ue) && len(os.Args) > 1 {
-				if _, ok := lookup(os.Args[1]); ok {
-					fmt.Fprintf(os.Stderr, "azhaq: azhaq help %s shows its flags and examples\n", os.Args[1])
+			if errors.As(err, &ue) && len(args) > 0 {
+				if _, ok := lookup(args[0]); ok {
+					fmt.Fprintf(os.Stderr, "azhaq: azhaq help %s shows its flags and examples\n", args[0])
 				}
 			}
 		}
 	}
-	os.Exit(exitCode(err))
 }
 
 // wantsJSON says whether a command line asks for JSON output.

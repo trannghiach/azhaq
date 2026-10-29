@@ -39,6 +39,7 @@ type report struct {
 	Failed      []engine.Failure `json:"failed,omitempty"`
 	Skipped     []engine.Skip    `json:"skipped,omitempty"`
 	Takeover    []takeoverRow    `json:"takeover,omitempty"` // names another party may take over
+	Degraded    bool             `json:"degraded,omitempty"` // a source the run depends on failed (subs); the exit code is not changed
 	Stopped     string           `json:"stopped,omitempty"`  // the limit that stopped the work
 	Resume      string           `json:"resume,omitempty"`
 	Notes       []string         `json:"notes,omitempty"`
