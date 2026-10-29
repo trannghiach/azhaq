@@ -247,6 +247,9 @@ func newWriter(c *common) (*writer, error) {
 	var dst io.Writer = os.Stdout
 	var f *os.File
 	if c.out != "" {
+		if st, err := os.Stat(c.out); err == nil && st.IsDir() {
+			return nil, usagef("-o %s is a directory: -o names the file the results are written to", c.out)
+		}
 		var err error
 		if f, err = os.Create(c.out); err != nil {
 			return nil, err
@@ -1515,6 +1518,9 @@ func cmdShots(args []string) error {
 	}
 	if len(targets) == 0 {
 		return usagef("give -u TARGET, -l FILE or targets on stdin")
+	}
+	if st, err := os.Stat(c.out); c.out != "" && err == nil && st.IsDir() {
+		return usagef("-o %s is a directory: -o names the file the results are written to, the PNG files go to -dir", c.out)
 	}
 	path, rm, err := tempList(targets)
 	if err != nil {
