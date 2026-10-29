@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"regexp"
 	"slices"
 	"sort"
@@ -32,6 +31,10 @@ const (
 	verdictWriteVoid     = "the owner's own write was refused"
 	verdictWriteRefused  = "the other roles were refused"
 	verdictWriteDry      = "would be sent (-dry-writes)"
+	// A write another role sent was answered 2xx, and nothing the owner's
+	// object shows can tell whether it took. Not in verdictOrder (it ranks
+	// with the proved reads) until OUTPUT.md lists it.
+	verdictWriteUnread = "writes another role's object: accepted; the change cannot be read back to confirm"
 )
 
 func init() {
@@ -86,26 +89,6 @@ func writeMethods(spec string) (map[string]bool, error) {
 	return out, nil
 }
 
-// har is the part of an HTTP Archive a write replay reads.
-type har struct {
-	Log struct {
-		Entries []struct {
-			Request struct {
-				Method   string `json:"method"`
-				URL      string `json:"url"`
-				Headers  []struct{ Name, Value string }
-				PostData *struct {
-					MimeType string `json:"mimeType"`
-					Text     string `json:"text"`
-				} `json:"postData"`
-			} `json:"request"`
-			Response struct {
-				Status int `json:"status"`
-			} `json:"response"`
-		} `json:"entries"`
-	} `json:"log"`
-}
-
 // keptHeaders are the headers of a recorded request a replay sends: what
 // the body is and how the app is asked, never a session (cookies, tokens,
 // a CSRF token bound to the owner's session).
@@ -114,40 +97,40 @@ var keptHeaders = map[string]bool{"Content-Type": true, "Accept": true, "X-Reque
 // harWrites reads the writes a role sent, from a HAR its browser or proxy
 // saved: the methods asked for, on the run's own hosts, one each.
 func harWrites(owner, path string, methods map[string]bool, own map[string]bool) ([]writeReq, error) {
-	raw, err := os.ReadFile(path)
+	es, err := readHAR(path)
 	if err != nil {
 		return nil, err
 	}
-	var h har
-	if err := json.Unmarshal(raw, &h); err != nil {
-		return nil, fmt.Errorf("%s: not a HAR file: %w", path, err)
-	}
+	return writesFrom(owner, filepathBase(path), es, methods, own), nil
+}
+
+// writesFrom are the writes of a history's requests that a replay sends.
+func writesFrom(owner, from string, entries []histEntry, methods map[string]bool, own map[string]bool) []writeReq {
 	var out []writeReq
 	seen := map[string]bool{}
-	for _, e := range h.Log.Entries {
-		m := strings.ToUpper(e.Request.Method)
-		u, err := url.Parse(e.Request.URL)
-		if !methods[m] || err != nil || !own[normalize.Hostname(u.Hostname())] || endsSession(u) {
+	for _, e := range entries {
+		u, err := url.Parse(e.url)
+		if !methods[e.method] || err != nil || !own[normalize.Hostname(u.Hostname())] || endsSession(u) {
 			continue
 		}
-		w := writeReq{owner: owner, method: m, url: e.Request.URL, header: http.Header{}, from: filepathBase(path), status: e.Response.Status}
-		for _, hd := range e.Request.Headers {
-			if k := http.CanonicalHeaderKey(hd.Name); keptHeaders[k] {
-				w.header.Set(k, hd.Value)
+		w := writeReq{owner: owner, method: e.method, url: e.url, header: http.Header{}, from: from, status: e.status}
+		for k, vs := range e.header {
+			if kept := http.CanonicalHeaderKey(k); keptHeaders[kept] && len(vs) > 0 {
+				w.header.Set(kept, vs[0])
 			}
 		}
-		if e.Request.PostData != nil {
-			w.body = []byte(e.Request.PostData.Text)
-			if w.header.Get("Content-Type") == "" && e.Request.PostData.MimeType != "" {
-				w.header.Set("Content-Type", e.Request.PostData.MimeType)
+		if len(e.body) > 0 || e.mime != "" {
+			w.body = e.body
+			if w.header.Get("Content-Type") == "" && e.mime != "" {
+				w.header.Set("Content-Type", e.mime)
 			}
 		}
-		if key := m + " " + w.url + "\x00" + string(w.body); !seen[key] {
+		if key := e.method + " " + w.url + "\x00" + string(w.body); !seen[key] {
 			seen[key] = true
 			out = append(out, w)
 		}
 	}
-	return out, nil
+	return out
 }
 
 func filepathBase(p string) string {
@@ -230,6 +213,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	client := *fetch.Client(nil)
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	sent := 0
+	latest := map[string]answer{} // the owner's objects as last read: an earlier write may have changed what the run read
 	send := func(r role, w writeReq) (answer, error) {
 		if sent >= budget {
 			return answer{}, fmt.Errorf("%w: some writes were not replayed", errReplayMax)
@@ -245,6 +229,9 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		}
 		sent++
 		a, err := readAs(ctx, &client, r, u)
+		if err == nil {
+			latest[r.name+"\x00"+u] = a
+		}
 		return a, err == nil
 	}
 	byName := map[string]role{}
@@ -253,6 +240,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	}
 	var rows []roleRow
 	var stop error
+	live := map[string]bool{} // owner and URL → the owner could not read it
 	for _, w := range reqs {
 		owner, ok := byName[w.owner]
 		if !ok {
@@ -282,11 +270,17 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		var before answer
 		haveBefore := false
 		if vu != "" {
-			if b := answers[w.owner][vu]; len(b.held) > 0 && reads(b) {
+			if b, ok := latest[w.owner+"\x00"+vu]; ok {
+				before, haveBefore = b, reads(b)
+			} else if b := answers[w.owner][vu]; len(b.held) > 0 && reads(b) {
 				before, haveBefore = b, true
 			} else if b, ok := read(owner, vu); ok {
 				before, haveBefore = b, true
 			}
+		} else {
+			// The history did not read the owner's object: ask for the write's
+			// own URL, then its parents, as the owner.
+			vu, before, haveBefore = liveVerify(w, owner, live, read)
 		}
 		if w.empty {
 			a, err := send(owner, w)
@@ -308,6 +302,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 				}
 			}
 		}
+		already := haveBefore && !w.empty && w.method != http.MethodDelete && alreadySet(before, w.body)
 		var let, proven []string
 		anon := map[string]bool{}
 		for _, r := range otherRoles(roles, w.owner) {
@@ -345,7 +340,8 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		}
 		// A map DELETE is never asked of its owner: it would delete it.
 		ownerAsked := w.status != 0 || w.empty
-		row.Verdict = writeVerdict(&row, let, proven, anon, ownerLet, ownerAsked, vu != "")
+		why := unreadable(w, vu, before)
+		row.Verdict = writeVerdict(&row, let, proven, anon, ownerLet, ownerAsked, vu != "", why, already)
 		rows = append(rows, finishWriteRow(row))
 	}
 	return rows, sent, stop
@@ -433,34 +429,60 @@ func changed(before, after answer) bool {
 	return false
 }
 
-// wroteInto: the owner's object now holds a value the write's body asks
-// for and did not hold before. An empty body names nothing, so any change
-// counts.
+// wroteInto: the owner's object now holds a value the write's body sets
+// and did not hold before: in the field of that name when the object has
+// one (quantity 2, though a ProductId of 2 was there already), else
+// anywhere. An empty body names nothing, so any change counts.
 func wroteInto(before, after answer, body []byte) bool {
-	vals := bodyValues(body)
-	if len(vals) == 0 {
+	pairs := bodyPairs(body)
+	if len(pairs) == 0 {
 		return changed(before, after)
 	}
-	for _, v := range vals {
-		if after.held[v] && !before.held[v] {
+	for _, p := range pairs {
+		n := norm(p[0])
+		if b, a := before.vals[n], after.vals[n]; len(b) > 0 && len(a) > 0 {
+			if slices.Contains(a, p[1]) && !slices.Contains(b, p[1]) {
+				return true
+			}
+			continue
+		}
+		if after.held[p[1]] && !before.held[p[1]] {
 			return true
 		}
 	}
 	return false
 }
 
-// bodyValues are the scalar values a JSON write body sets, timestamps aside.
-func bodyValues(body []byte) []string {
+// alreadySet: the object holds every value the write's body sets, so the
+// write cannot be seen to change it.
+func alreadySet(obj answer, body []byte) bool {
+	pairs := bodyPairs(body)
+	for _, p := range pairs {
+		if v := obj.vals[norm(p[0])]; len(v) > 0 {
+			if !slices.Contains(v, p[1]) {
+				return false
+			}
+		} else if !obj.held[p[1]] {
+			return false
+		}
+	}
+	return len(pairs) > 0
+}
+
+// bodyPairs are the fields and scalar values a JSON write body sets,
+// timestamps aside.
+func bodyPairs(body []byte) [][2]string {
 	var m map[string]any
 	if json.Unmarshal(body, &m) != nil {
 		return nil
 	}
-	var out []string
-	for _, x := range m {
+	var out [][2]string
+	for k, x := range m {
 		if s, ok := scalarString(x); ok && len(s) <= 64 && !timeLike.MatchString(s) {
-			out = append(out, s)
+			out = append(out, [2]string{k, s})
 		}
 	}
+	sort.Slice(out, func(i, j int) bool { return out[i][0] < out[j][0] })
 	return out
 }
 
@@ -567,16 +589,22 @@ func sendWrite(ctx context.Context, client *http.Client, r role, w writeReq) (an
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
 		a.Location = bareLocation(resp.Header.Get("Location"))
 	}
+	if ok2xx(a.Status) && len(body) <= 300 && deniedText.Match(body) {
+		a.Refusal = true // a short 2xx answer that says no ("Only Admins may delete users!")
+	}
 	keepBody(a.Hash, resp.Header.Get("Content-Type"), body)
 	return a, nil
 }
+
+// deniedText: what a server says when it refuses a write and still answers 2xx.
+var deniedText = regexp.MustCompile(`(?i)\bonly\s+(admin|administrator|owner|moderator)s?\b|not\s+(authori[sz]ed|permitted|allowed)|permission\s+denied|access\s+denied|\bforbidden\b|\bunauthori[sz]ed\b|insufficient\s+(privileges|permissions)`)
 
 // writeVerdict reads the replay's result. A cross write is claimed only
 // when it was proven (the owner's object changed), and anyone-writes when
 // the anonymous role proved it. A role answered 2xx whose write changed
 // nothing of the owner's is listed apart, below the proved reads, not as a
 // finding.
-func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, ownerLet, ownerAsked, canVerify bool) string {
+func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, ownerLet, ownerAsked, canVerify bool, why string, already bool) string {
 	var provenAnon, provenSigned []string
 	for _, n := range proven {
 		if anon[n] {
@@ -592,9 +620,17 @@ func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, owne
 	case len(provenSigned) > 0:
 		row.Readers = provenSigned
 		return verdictWriteCross
+	case len(let) > 0 && why != "":
+		// Accepted, and no GET shows the change: neither proved nor
+		// disproved, so listed as what it is.
+		row.Readers = let
+		row.Evidence = fmt.Sprintf("%s's write was accepted (%d); %s", let[0], row.Answers[let[0]].Status, why)
+		return verdictWriteUnread
 	case len(let) > 0:
 		row.Readers = let
-		if canVerify {
+		if already {
+			row.OwnerBy += "; the owner's object already held what the write sets: no change could show"
+		} else if canVerify {
 			row.OwnerBy += "; the owner's object was unchanged after the write"
 		} else {
 			row.OwnerBy += "; the owner's object could not be read to verify the write"
@@ -606,6 +642,88 @@ func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, owne
 		return verdictWriteRefused
 	}
 	return verdictWriteVoid
+}
+
+// unreadable says why a write's change cannot be read back, or "" when it
+// can: no GET of the owner's object answers, or the object it shows has none
+// of the fields the write sets (a password is never in the user's answer).
+// An empty write sets nothing to read back.
+func unreadable(w writeReq, vu string, before answer) string {
+	if w.empty {
+		return ""
+	}
+	if vu == "" {
+		return "no GET of the owner's object can be read, to see it change"
+	}
+	if w.method == http.MethodDelete {
+		return ""
+	}
+	fields := setFields(w)
+	if len(fields) == 0 || len(before.Keys) == 0 {
+		return ""
+	}
+	have := map[string]bool{}
+	for _, k := range before.Keys {
+		k = strings.TrimSuffix(k, "[]")
+		have[norm(k[strings.LastIndexAny(k, ".")+1:])] = true
+	}
+	for _, f := range fields {
+		if have[norm(f)] {
+			return ""
+		}
+	}
+	return fmt.Sprintf("%s shows no %s, the field the write sets", pathOf(vu), strings.Join(fields, "/"))
+}
+
+// setFields are the names of the fields a write's body sets: a JSON object's
+// or a form's.
+func setFields(w writeReq) []string {
+	var out []string
+	var m map[string]any
+	if json.Unmarshal(w.body, &m) == nil {
+		for k := range m {
+			out = append(out, k)
+		}
+	} else if q, err := url.ParseQuery(string(w.body)); err == nil && !strings.Contains(w.header.Get("Content-Type"), "json") {
+		for k := range q {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// liveVerify finds the owner's object a write can be checked against when
+// no answer of the history holds it: the write's own URL, then its parents
+// down to two segments, each read as the owner (at most once each).
+func liveVerify(w writeReq, owner role, live map[string]bool, read func(role, string) (answer, bool)) (string, answer, bool) {
+	if w.method == http.MethodPost {
+		return "", answer{}, false
+	}
+	pu, err := url.Parse(w.url)
+	if err != nil {
+		return "", answer{}, false
+	}
+	path := strings.TrimRight(pu.Path, "/")
+	for first := true; ; first = false {
+		last := path[strings.LastIndex(path, "/")+1:]
+		if first || !versionSeg.MatchString(norm(last)) { // /users/v1 is the collection, not an object
+			cand := *pu
+			cand.Path, cand.RawPath, cand.RawQuery, cand.Fragment = path, "", "", ""
+			u := cand.String()
+			key := owner.name + "\x00" + u
+			if !live[key] { // a failed read is not tried again; a good one is read afresh
+				if got, ok := read(owner, u); ok && reads(got) {
+					return u, got, true
+				}
+				live[key] = true
+			}
+		}
+		if strings.Count(path, "/") < 3 {
+			return "", answer{}, false // a parent one segment deep is a collection
+		}
+		path = path[:strings.LastIndex(path, "/")]
+	}
 }
 
 func finishWriteRow(row roleRow) roleRow {

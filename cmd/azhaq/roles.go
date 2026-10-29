@@ -105,7 +105,7 @@ func cmdRoles(args []string) error {
 		return cmdRolesShow(args[1:])
 	}
 	fs := newFlags("roles")
-	var specs, logins, cmds, idSpecs, hars, canarySpecs stringsFlag
+	var specs, logins, cmds, idSpecs, hars, burps, allows, canarySpecs stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: …")
 	fs.Var(&cmds, "role-cmd", "NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left")
@@ -119,7 +119,11 @@ func cmdRoles(args []string) error {
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
 	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har, and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
-	fs.Var(&hars, "har", "NAME=FILE: the requests role NAME sent, as a browser or Burp saved them (HAR): its writes are replayed with -replay-writes")
+	fs.Var(&hars, "har", "NAME=FILE: the requests account NAME sent, as a browser or proxy saved them (HAR). Every GET is a page the role reached, its Authorization and Cookie headers of the latest request are its session (unless -role gives headers), its writes are replayed with -replay-writes. Without -- run options this is the whole input: no crawl")
+	fs.Var(&burps, "burp", "NAME=FILE: the same from a Burp \"Save items\" XML file (repeat a name to add files)")
+	fs.Var(&allows, "allow", "HOST: an origin of the history that is the target besides the ones most of a role's requests go to (the others, analytics and CDNs, are left out) (repeatable)")
+	noAnon := fs.Bool("no-anon", false, "with -har or -burp: do not add the anonymous role")
+	rateFlag := fs.Float64("rate", 0, "requests per second for the history reads and the replay, when the run options give none")
 	fs.Var(&canarySpecs, "canary", "[ROLE:]URL[=REGEX]: what checks a session during the replay: a URL only a live session reads, and what its body holds (default: the role's own /me-like answer, or a page the anonymous role is refused)")
 	canaryEvery := fs.Int("canary-every", 50, "replay requests between two checks of a role's session (0: no checks)")
 	refusalSpec := fs.String("refusal", "", "REGEX: a 2xx answer whose body matches is a refusal, for every role (a 200 \"Access denied\" page); each origin's own refusal page is learned besides")
@@ -144,8 +148,14 @@ func cmdRoles(args []string) error {
 	if len(logins) > 0 && *loginURL == "" {
 		return usagef("-role-login needs -login, the page to sign in on")
 	}
+	hist, err := loadHistories(hars, burps)
+	if err != nil {
+		return err
+	}
+	sc := historyScope(hist, append(slices.Clone(allows), runAllows(runArgs)...))
+	roles = addHistories(roles, hist, sc, *noAnon)
 	if len(roles) < 2 {
-		return usagef("need at least two -role, for example -role anon -role 'user=Cookie: session=…'")
+		return usagef("need at least two roles, for example -role anon -role 'user=Cookie: session=…', or -har alice=alice.har -har bob=bob.har")
 	}
 	for _, r := range roles {
 		if r.name+".db" == evidenceFile {
@@ -156,8 +166,12 @@ func cmdRoles(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(runArgs) == 0 {
-		return usagef("give the run options after --, for example -- -url https://app.example.com/")
+	crawl := len(runArgs) > 0
+	if !crawl && len(hist) == 0 {
+		return usagef("give the run options after --, for example -- -url https://app.example.com/, or the accounts' history: -har alice=alice.har -har bob=bob.har")
+	}
+	if !crawl && len(logins) > 0 {
+		return usagef("-role-login signs in during a run: give the run options after --")
 	}
 	canaries, err := parseCanaries(canarySpecs, roles)
 	if err != nil {
@@ -170,12 +184,11 @@ func cmdRoles(args []string) error {
 		}
 	}
 	var methods map[string]bool
-	harOf := map[string]string{}
 	if *writesSpec != "" {
 		if methods, err = writeMethods(*writesSpec); err != nil {
 			return err
 		}
-		if !hasFlag(runArgs, "allow", "scope") {
+		if crawl && !hasFlag(runArgs, "allow", "scope") {
 			// The apps given are the scope: no write goes to a host their scripts name.
 			hosts := urlHosts(runArgs)
 			if len(hosts) == 0 {
@@ -185,16 +198,6 @@ func cmdRoles(args []string) error {
 				runArgs = append(runArgs, "-allow", h)
 			}
 		}
-	}
-	for _, h := range hars {
-		name, file, ok := strings.Cut(h, "=")
-		if !ok || !slices.ContainsFunc(roles, func(r role) bool { return r.name == name && !r.anonymous() }) {
-			return usagef("-har %q: want NAME=FILE for a signed-in role", h)
-		}
-		if *writesSpec == "" {
-			return usagef("-har gives writes to replay: add -replay-writes post,put,patch")
-		}
-		harOf[name] = file
 	}
 	for _, a := range runArgs {
 		switch strings.TrimLeft(strings.SplitN(a, "=", 2)[0], "-") {
@@ -219,9 +222,11 @@ func cmdRoles(args []string) error {
 	}
 	bodies = newBodyKeep()
 	defer func() { bodies = nil }()
-	rate := 0.0
-	if fs := flagsOf("run"); fs != nil && fs.Parse(runArgs) == nil {
-		rate, _ = strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64)
+	rate := *rateFlag
+	if fs := flagsOf("run"); fs != nil && crawl && fs.Parse(runArgs) == nil {
+		if r, _ := strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64); r > 0 {
+			rate = r
+		}
 	}
 
 	stale, soon, expired := expiryNotes(roles, time.Now())
@@ -239,6 +244,12 @@ func cmdRoles(args []string) error {
 	made := map[string]instance{}             // object URL → the route it fills and whose object it is
 	signedIn := map[string]browser.Session{}  // role → what its Chrome login left
 	var scopeHosts []string
+	histOf := map[string]*history{}
+	for _, h := range hist {
+		histOf[h.name] = h
+	}
+	var histURLs []string
+	replayed := 0 // requests the history reads and the read replay sent, of -replay-max
 	for i, r := range roles {
 		if r.cmd != "" {
 			if roles[i].headers, err = cmdHeaders(r); err != nil {
@@ -246,32 +257,51 @@ func cmdRoles(args []string) error {
 			}
 			r = roles[i]
 		}
-		db := filepath.Join(*dir, r.name+".db")
-		args := append([]string{"-db", db, "-quiet", "-kill-file", filepath.Join(*dir, "roles.stop")}, runArgs...) // one stop file for every role
-		for _, h := range r.headers {
-			args = append(args, "-header", h)
+		var (
+			got   = map[string]answer{}
+			raw   = map[string]string{}
+			hosts []string
+			s     = newRunSeen()
+		)
+		if crawl {
+			db := filepath.Join(*dir, r.name+".db")
+			args := append([]string{"-db", db, "-quiet", "-kill-file", filepath.Join(*dir, "roles.stop")}, runArgs...) // one stop file for every role
+			for _, h := range r.headers {
+				args = append(args, "-header", h)
+			}
+			if r.user != "" {
+				args = append(args, "-login", *loginURL, "-login-user", r.user, "-login-pass", r.pass)
+			}
+			if !*asJSON {
+				fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
+			}
+			browser.OnLogin = func(s browser.Session) { signedIn[r.name] = s }
+			sub, err := quietly(*asJSON, func() (*report, error) { return runEmbedded(args) })
+			browser.OnLogin = nil
+			if err != nil {
+				return rolesFailed(rep, *asJSON, fmt.Errorf("role %s: %w", r.name, err))
+			}
+			roles[i].session = fetch.Extra.Clone()
+			if got, raw, hosts, s, err = endpointAnswers(db); err != nil {
+				return err
+			}
+			keepRunBodies(got, raw)
+			readBodies(got, raw, s, hostSet(hosts))
+			rep.Requests += fetch.Sent() // the run's requests, and any the cache could not answer
+			absorb(rep, r.name, sub)
+		} else {
+			roles[i].session = headerOf(r.headers)
 		}
-		if r.user != "" {
-			args = append(args, "-login", *loginURL, "-login-user", r.user, "-login-pass", r.pass)
+		if h := histOf[r.name]; h != nil {
+			// What the account's own browsing reached, read as the account.
+			hosts = append(hosts, sc.hostnames()...)
+			urls, _ := h.gets(sc, hostSet(hosts))
+			histURLs = append(histURLs, urls...)
+			n, err := readHistoryURLs(roles[i], urls, got, raw, s, hostSet(hosts), rate, max(0, *replayMax-replayed))
+			rep.Requests += int64(n)
+			replayed += n
+			noteCap(rep, "history", err)
 		}
-		if !*asJSON {
-			fmt.Fprintf(os.Stderr, "azhaq roles: %s\n", r.name)
-		}
-		browser.OnLogin = func(s browser.Session) { signedIn[r.name] = s }
-		sub, err := quietly(*asJSON, func() (*report, error) { return runEmbedded(args) })
-		browser.OnLogin = nil
-		if err != nil {
-			return rolesFailed(rep, *asJSON, fmt.Errorf("role %s: %w", r.name, err))
-		}
-		roles[i].session = fetch.Extra.Clone()
-		got, raw, hosts, s, err := endpointAnswers(db)
-		if err != nil {
-			return err
-		}
-		keepRunBodies(got, raw)
-		readBodies(got, raw, s, hostSet(hosts))
-		rep.Requests += fetch.Sent() // the run's requests, and any the cache could not answer
-		absorb(rep, r.name, sub)
 		answers[r.name], seen[r.name] = got, s
 		for t := range s.templates {
 			templates[t] = true
@@ -281,7 +311,12 @@ func cmdRoles(args []string) error {
 		}
 		scopeHosts = append(scopeHosts, hosts...)
 	}
-	replayed := 0 // requests the read replay sent, of -replay-max
+	for _, t := range historyTemplates(histURLs, seen) {
+		templates[t] = true
+	}
+	if n := sc.note(); n != "" {
+		rep.Notes = append(rep.Notes, n)
+	}
 	own := hostSet(scopeHosts)
 	var who map[string]identity
 	if *replay {
@@ -383,14 +418,8 @@ func cmdRoles(args []string) error {
 	rep.Requests += int64(asked)
 	if methods != nil {
 		var reqs []writeReq
-		for _, r := range roles {
-			if file := harOf[r.name]; file != "" {
-				ws, err := harWrites(r.name, file, methods, hostSet(scopeHosts))
-				if err != nil {
-					return rolesFailed(rep, *asJSON, err)
-				}
-				reqs = append(reqs, ws...)
-			}
+		for _, h := range hist {
+			reqs = append(reqs, historyWrites(h, sc, methods, own)...)
 		}
 		writes := map[string][]writeOp{}
 		for _, s := range seen {
@@ -417,7 +446,7 @@ func cmdRoles(args []string) error {
 			noteCap(rep, "write replay", err)
 		}
 		if len(reqs) == 0 {
-			rep.Notes = append(rep.Notes, "-replay-writes: no write to replay (no -har, and no PUT, PATCH or DELETE on a route with a role's own object)")
+			rep.Notes = append(rep.Notes, "-replay-writes: no write to replay (no -har or -burp write of the methods named, and no PUT, PATCH or DELETE on a route with a role's own object)")
 		}
 		rows = append(wrows, rows...)
 		sort.SliceStable(rows, func(i, j int) bool { return verdictOrder[rows[i].Verdict] < verdictOrder[rows[j].Verdict] })
@@ -529,7 +558,7 @@ func rolesFailed(rep *report, asJSON bool, err error) error {
 // listed: the verdicts worth a reader's time by default.
 func listed(v string) bool {
 	switch v {
-	case verdictWriteAnyone, verdictWriteCross, verdictWriteDry, verdictAnyoneSecrets, verdictCross, verdictAnyID, verdictObject, verdictSecrets, verdictShared, verdictSignedIn, verdictOnly,
+	case verdictWriteAnyone, verdictWriteCross, verdictWriteUnread, verdictWriteDry, verdictAnyoneSecrets, verdictCross, verdictAnyID, verdictObject, verdictSecrets, verdictShared, verdictSignedIn, verdictOnly,
 		verdictRoleGated, verdictFields, verdictPublicObj, verdictStatus:
 		return true
 	}
@@ -557,6 +586,8 @@ func printRoles(roles []role, rows []roleRow, compared int, dir string) {
 			line += " found by " + strings.Join(row.FoundBy, ", ")
 		case verdictWriteAnyone, verdictWriteCross:
 			line += " " + row.Confidence + " · " + row.Evidence
+		case verdictWriteUnread:
+			line += " · " + row.Evidence
 		case verdictWriteDry:
 			line += " · " + row.Owner + "'s, by " + row.OwnerBy
 		case verdictCross, verdictAnyID, verdictObject, verdictPublicObj, verdictOnly:
@@ -632,6 +663,12 @@ func (row roleRow) label() string {
 		return who + " writes " + row.Owner + "'s object"
 	case row.Verdict == verdictWriteCross:
 		return who + " write " + row.Owner + "'s object"
+	case row.Verdict == verdictWriteUnread && len(row.Readers) > 0:
+		verb := " writes "
+		if len(row.Readers) > 1 {
+			verb = " write "
+		}
+		return who + verb + row.Owner + "'s object: accepted (" + strconv.Itoa(row.Answers[row.Readers[0]].Status) + "); the change cannot be read back to confirm"
 	case row.Verdict == verdictWriteCreate && len(row.Readers) > 0:
 		return who + " can create in the collection " + row.Owner + " wrote to"
 	case row.Verdict == verdictWriteNoChange && len(row.Readers) > 0:

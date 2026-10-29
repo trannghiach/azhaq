@@ -30,15 +30,16 @@ type answer struct {
 	// and not proved alive again after it (see canaries).
 	SessionSuspect bool `json:"session_suspect,omitempty"`
 
-	said    string          // what a short answer says: a JSON message, an HTML title and first heading
-	nested  bool            // Keys are nested paths read from the body, not the stored top-level fields
-	top     []string        // the top-level fields, as the run stores them
-	secrets []secret        // the values of the sensitive fields
-	held    map[string]bool // the scalar values of the answer (a few hundred), to see an object's identifier in it
-	flags   map[string]bool // paths of list items' fields that only hold true or false (data[].liked)
-	self    *listObject     // the object the answer is about: its fields say whose it is
-	toLogin bool            // a redirect to a sign-in page
-	toRoot  bool            // a redirect to the front page
+	said    string              // what a short answer says: a JSON message, an HTML title and first heading
+	nested  bool                // Keys are nested paths read from the body, not the stored top-level fields
+	top     []string            // the top-level fields, as the run stores them
+	secrets []secret            // the values of the sensitive fields
+	held    map[string]bool     // the scalar values of the answer (a few hundred), to see an object's identifier in it
+	vals    map[string][]string // the short values of each field, by folded name: what a write set, to be seen in the answer
+	flags   map[string]bool     // paths of list items' fields that only hold true or false (data[].liked)
+	self    *listObject         // the object the answer is about: its fields say whose it is
+	toLogin bool                // a redirect to a sign-in page
+	toRoot  bool                // a redirect to the front page
 }
 
 // reads: the role got the endpoint's data, not a refusal shaped as data.
@@ -341,6 +342,14 @@ func (f *jsonFacts) apply(a *answer) {
 	a.Keys, a.nested = f.paths, true
 	a.Error = f.isError
 	a.secrets, a.held, a.flags, a.self = f.secrets, f.held, f.flags, f.self
+	a.vals = nil
+	if len(f.ids) <= 64 {
+		a.vals = map[string][]string{}
+		for k, vs := range f.ids {
+			n := norm(k)
+			a.vals[n] = append(a.vals[n], vs[:min(len(vs), 32)]...)
+		}
+	}
 	a.Sensitive = nil
 	for _, s := range f.secrets {
 		if !slices.Contains(a.Sensitive, s.field) {
