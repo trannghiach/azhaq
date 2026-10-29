@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 )
 
 // Evidence is what stands behind the rows azhaq roles listed: each role's
@@ -95,6 +96,9 @@ func (e *Evidence) Save(roles []string, rows []EvidenceRow) error {
 	if _, err := tx.Exec(`INSERT OR REPLACE INTO meta (k, v) VALUES ('roles', ?)`, strings.Join(roles, "\n")); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`INSERT OR REPLACE INTO meta (k, v) VALUES ('saved_at', ?)`, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
 	insRow, err := tx.Prepare(`INSERT OR REPLACE INTO rows (url, method, row) VALUES (?, ?, ?)`)
 	if err != nil {
 		return err
@@ -133,6 +137,17 @@ func (e *Evidence) Roles() []string {
 		return nil
 	}
 	return strings.Split(v, "\n")
+}
+
+// SavedAt is when the run saved the evidence; not ok for a database an
+// older version wrote.
+func (e *Evidence) SavedAt() (time.Time, bool) {
+	var v string
+	if e.db.QueryRow(`SELECT v FROM meta WHERE k = 'saved_at'`).Scan(&v) != nil {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, v)
+	return t, err == nil
 }
 
 // Row is the row kept for url and method ("" for a read).
