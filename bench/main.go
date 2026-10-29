@@ -131,6 +131,8 @@ func main() {
 	}
 
 	must(os.MkdirAll(binDir, 0o755))
+	// A fresh name history per bench run: one-shot, as the reference tools are.
+	must(os.Setenv("AZHAQ_DATA_DIR", filepath.Join(work, "data-"+time.Now().UTC().Format("20060102T150405"))))
 	logf("building azhaq")
 	if _, err := exec.Command("go", "build", "-o", azhaq, "./cmd/azhaq").CombinedOutput(); err != nil {
 		fatal("go build: %v", err)

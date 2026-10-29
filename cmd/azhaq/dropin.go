@@ -481,7 +481,10 @@ func cmdSubs(args []string) error {
 		input, _ := p["domain"].(string)
 		foundBy, _ := p["found_by"].(map[string]any)
 		srcs, _ := p["sources"].(map[string]any)
-		for _, v := range srcs {
+		for name, v := range srcs {
+			if name == "history" {
+				continue // a local file, not a source that was asked
+			}
 			if row, _ := v.(map[string]any); row["skipped"] == nil {
 				ran++
 				if row["error"] == nil {
