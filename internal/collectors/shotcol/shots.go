@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"image"
 	_ "image/png"
 	"math/bits"
@@ -35,6 +37,7 @@ type Collector struct {
 	Browser *browser.Browser
 
 	shot sync.Map // pages already taken: a name and its URL are one page
+	need sync.Map // URL → requests the page asked for when the budget cut it short
 }
 
 func (c *Collector) Name() string { return Name }
@@ -65,6 +68,25 @@ func (c *Collector) Skip(seed types.Seed) bool {
 	return err != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != ""
 }
 
+// budgetLeft is how many requests the run may still send, or -1 without a cap.
+func budgetLeft() int {
+	if fetch.MaxRequests <= 0 {
+		return -1
+	}
+	return int(max(fetch.MaxRequests-fetch.Sent(), 0))
+}
+
+// notTaken says in the summary that the budget left no room for a page
+// and no image was saved. need is what the page asked for, 0 when it
+// never loaded.
+func notTaken(raw string, need, left int) {
+	if need == 0 {
+		fetch.Note(fmt.Sprintf("screenshot of %s not taken: the budget was spent before the page loaded (raise -max-requests)", raw))
+		return
+	}
+	fetch.Note(fmt.Sprintf("screenshot of %s not taken: the page needs about %d requests and %d were left (raise -max-requests)", raw, need, left))
+}
+
 var unsafeName = regexp.MustCompile(`[^a-zA-Z0-9.-]+`)
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
@@ -89,13 +111,21 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return types.RunMeta{Status: types.StatusOK}, nil // taken, or being taken, through another seed
 		}
 		raw = t
+		left := budgetLeft()
 		if err := fetch.Spend(ctx); err != nil {
 			c.shot.Delete(t)
+			if errors.Is(err, neterr.ErrBudget) {
+				v, _ := c.need.Load(t)
+				n, _ := v.(int)
+				notTaken(t, n, left)
+			}
 			return types.RunMeta{Status: types.StatusCapped}, err
 		}
 		p, err = c.Browser.Load(ctx, t, true)
 		if p.Capped {
 			c.shot.Delete(t)
+			c.need.Store(t, p.Asked)
+			notTaken(t, p.Asked, left)
 			return types.RunMeta{Status: types.StatusCapped}, neterr.ErrBudget
 		}
 		for _, s := range []struct {

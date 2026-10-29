@@ -6,6 +6,8 @@ import (
 	"image/color"
 	"image/png"
 	"testing"
+
+	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
 func pngOf(t *testing.T, draw func(x, y int) uint8) []byte {
@@ -42,5 +44,21 @@ func TestDHashGroupsLookAlikes(t *testing.T) {
 	}
 	if _, ok := DHash([]byte("not a png")); ok {
 		t.Error("garbage hashed")
+	}
+}
+
+func TestNotTakenSaysWhatThePageNeeds(t *testing.T) {
+	fetch.Reset()
+	t.Cleanup(fetch.Reset)
+	notTaken("http://h/", 26, 8)
+	notTaken("http://h/", 26, 8) // told once
+	notTaken("http://g/", 0, 0)
+	got := fetch.Notes()
+	want := []string{
+		"screenshot of http://h/ not taken: the page needs about 26 requests and 8 were left (raise -max-requests)",
+		"screenshot of http://g/ not taken: the budget was spent before the page loaded (raise -max-requests)",
+	}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("notes %q, want %q", got, want)
 	}
 }

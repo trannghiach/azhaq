@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // A catch-all response is what an origin returns for a path that does not
@@ -34,9 +35,10 @@ var (
 )
 
 type baseline struct {
-	once sync.Once
-	ok   bool
-	fp   fingerprint
+	once  sync.Once
+	ready atomic.Bool // the probe has answered or failed
+	ok    bool
+	fp    fingerprint
 }
 
 type fingerprint struct {
@@ -115,11 +117,35 @@ func CatchAll(ctx context.Context, c *http.Client, res Result) bool {
 		return false
 	}
 	origin := u.Scheme + "://" + u.Host
-	b := baselineFor(ctx, c, origin, parentDir(path))
+	dir := parentDir(path)
+	fp := fingerprintOf(res, origin, requestTarget(u))
+	if rootShell(origin, dir, fp) {
+		return true
+	}
+	b := baselineFor(ctx, c, origin, dir)
 	if b == nil || !b.ok {
 		return false
 	}
-	return b.fp.matches(fingerprintOf(res, origin, requestTarget(u)))
+	return b.fp.matches(fp)
+}
+
+// rootShell: a page byte for byte the site root's answer for an unknown
+// path (the single-page app's shell) is that answer in any directory not
+// yet asked, so its own baseline request is saved.
+func rootShell(origin, dir string, fp fingerprint) bool {
+	if dir == "/" {
+		return false
+	}
+	probeMu.Lock()
+	root, asked := baselines[origin+"/"], baselines[origin+dir] != nil
+	probeMu.Unlock()
+	if root == nil || asked {
+		return false
+	}
+	if !root.ready.Load() {
+		return false
+	}
+	return root.ok && root.fp.status == fp.status && root.fp.hash == fp.hash && fp.size > 0
 }
 
 // FinalCatchAll is CatchAll for the page a redirect chain ended on: the
@@ -151,6 +177,7 @@ func baselineFor(ctx context.Context, c *http.Client, origin, dir string) *basel
 	}
 	probeMu.Unlock()
 	b.once.Do(func() {
+		defer b.ready.Store(true)
 		target := origin + dir + ProbeToken()
 		res, _, err := Do(ctx, c, target)
 		if err != nil || res.Status == 0 {

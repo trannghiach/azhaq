@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
@@ -171,5 +172,47 @@ func TestSpecInSwaggerUIScript(t *testing.T) {
 	}
 	if got := embedded(`SwaggerUIBundle({spec: {"swagger": "2.0", "paths": {}}, dom_id: "#x"})`); got != `{"swagger": "2.0", "paths": {}}` {
 		t.Errorf("spec option: %q", got)
+	}
+}
+
+// A UI whose script carries the document is not asked for the usual names
+// next to it: the description is in hand.
+func TestSwaggerUIWithEmbeddedDocumentAsksNoSiblings(t *testing.T) {
+	fetch.Reset()
+	t.Cleanup(fetch.Reset)
+	var mu sync.Mutex
+	var asked []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked = append(asked, r.URL.Path)
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/api-docs/":
+			_, _ = w.Write([]byte(`<html><title>Swagger UI</title><script src="./swagger-ui-init.js"></script></html>`))
+		case "/api-docs/swagger-ui-init.js":
+			_, _ = w.Write([]byte(swaggerUIInit))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	var hints []string
+	meta, err := New(srv.Client()).Run(context.Background(), types.Seed{
+		Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/api-docs/"},
+	}, func(types.Observation) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range meta.NextHints {
+		hints = append(hints, h.Keys["url"])
+	}
+	if len(asked) != 2 {
+		t.Errorf("asked %v: want the page and its script only", asked)
+	}
+	if len(hints) != 1 || hints[0] != srv.URL+"/api-docs/swagger-ui-init.js" {
+		t.Errorf("hints %v: want the script", hints)
+	}
+	if !fetch.Described(srv.URL) {
+		t.Error("the origin is not marked as described")
 	}
 }

@@ -122,6 +122,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		final = raw
 	}
 	base := apiBase(final, d)
+	if u, err := url.Parse(final); err == nil {
+		fetch.MarkDescribed(u.Scheme + "://" + u.Host)
+	}
 	now := time.Now().UTC()
 
 	paths := make([]string, 0, len(d.Paths))
@@ -438,6 +441,16 @@ func (c *Collector) swaggerUI(ctx context.Context, raw string, res fetch.Result,
 	for _, m := range regexp.MustCompile(`src=["']([^"']*(?:swagger-initializer|swagger-ui-init|initializer)[^"']*\.js)["']`).FindAllStringSubmatch(body, -1) {
 		if u, err := base.Parse(m[1]); err == nil && u.Host == base.Host {
 			if r, _, err := fetch.Do(ctx, c.Client, u.String()); err == nil && r.Status == http.StatusOK {
+				if _, ok := parse(r.Body); ok {
+					// The description is written into the script: no
+					// other location is asked. The script is read as one.
+					fetch.MarkDescribed(base.Scheme + "://" + base.Host)
+					meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u.String()}})
+					payload, _ := json.Marshal(map[string]any{"url": raw, "via": "openapi", "ui": true, "tried": 0, "documents": []string{u.String()}})
+					err := emit(types.Observation{Collector: Name, Source: raw, Kind: "api-ui", Payload: payload, Confidence: 0.6, ObservedAt: time.Now().UTC()})
+					meta.EmitCount++
+					return meta, err
+				}
 				texts = append(texts, string(r.Body))
 			}
 		}

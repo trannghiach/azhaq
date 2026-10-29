@@ -142,3 +142,48 @@ func TestCatchAllPlain404Server(t *testing.T) {
 		t.Errorf("baseline probes %d, want 0 (status decides these)", probes.Load())
 	}
 }
+
+// The shell the root serves for unknown paths is that answer in every
+// directory: only the root is asked for a baseline, and a directory with
+// an answer of its own is still told apart.
+func TestCatchAllRootShellAsksOneBaseline(t *testing.T) {
+	Reset()
+	var probes atomic.Int32
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rest/user/whoami", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"user":{}}`))
+	})
+	mux.HandleFunc("/rest/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ProbeToken()) {
+			probes.Add(1)
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("Error: Unexpected path"))
+	})
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ProbeToken()) {
+			probes.Add(1)
+		}
+		_, _ = w.Write([]byte(`<!doctype html><title>Shop</title><app-root></app-root>`))
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	if !catchAll(t, srv, "/admin") {
+		t.Fatal("/admin: want catch-all")
+	}
+	for _, p := range []string{"/.well-known/security.txt", "/.git/HEAD", "/swagger/v1/x.json"} {
+		if !catchAll(t, srv, p) {
+			t.Errorf("%s: want catch-all", p)
+		}
+	}
+	if n := probes.Load(); n != 1 {
+		t.Errorf("%d baseline requests, want 1 (the root's)", n)
+	}
+	if catchAll(t, srv, "/rest/user/whoami") {
+		t.Error("/rest/user/whoami: a page of its own reported as the shell")
+	}
+	if !catchAll(t, srv, "/rest/nothing") {
+		t.Error("/rest/nothing: its directory's error page is its catch-all")
+	}
+}

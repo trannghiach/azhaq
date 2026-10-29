@@ -164,6 +164,8 @@ func Reset() {
 	origins = map[string]*origin{}
 	originMu.Unlock()
 	resetProbes()
+	resetDescribed()
+	resetNotes()
 	resetBudget()
 }
 

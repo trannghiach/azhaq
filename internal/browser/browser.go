@@ -189,6 +189,7 @@ type Page struct {
 	Title     string
 	PNG       []byte
 	HTML      string
+	Asked     int      // how many requests the page made, images, fonts and media included: what its budget has to cover
 	Requests  []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
 	Blocked   []string // URLs it asked for outside the scope, to list (Reason); not sent
 	Downloads []string // what it would have saved to disk, to list (DownloadReason); refused
@@ -252,7 +253,13 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}()
 	var mu sync.Mutex
 	var reqs []string
+	var asked int
 	watched = b.watch(tab, t, func(ev *network.EventRequestWillBeSent) {
+		if ev.Request != nil && reads(ev.Request.Method) {
+			mu.Lock()
+			asked++
+			mu.Unlock()
+		}
 		if ev.Request == nil || !reads(ev.Request.Method) || decoration(ev.Type) {
 			return // a write: the request paused says more of it (Writes); a decoration names no route
 		}
@@ -297,6 +304,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	b.settle(t)
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)
+	p.Asked = asked
 	mu.Unlock()
 	mine := b.claim(t)
 	writes := b.writesOf(t)

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -184,18 +185,121 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var mu sync.Mutex
 	sem := make(chan struct{}, parallel)
 	var wg sync.WaitGroup
-	for _, path := range list {
-		if ctx.Err() != nil {
-			break
+	var skipped atomic.Int32
+	// probe asks one location and emits what it finds; it says whether the
+	// answer was an API description.
+	probe := func(target, path string) bool {
+		res, _, err := fetch.Do(ctx, c.Client, target)
+		if err != nil || !interesting(res.Status) || fetch.CatchAll(ctx, c.Client, res) {
+			return false
 		}
-		path := strings.TrimPrefix(path, "/")
+		reqURL := target
+		if n, err := normalize.URL(target); err == nil {
+			reqURL = n
+		}
+		final := res.URL
+		if n, err := normalize.URL(res.URL); err == nil {
+			final = n
+		}
+		payload, _ := json.Marshal(map[string]any{
+			"url":       reqURL,
+			"via":       "paths",
+			"status":    res.Status,
+			"path":      "/" + path,
+			"final_url": final,
+			"hops":      res.Hops,
+		})
+		mu.Lock()
+		defer mu.Unlock()
+		if err := emit(types.Observation{
+			Collector:  Name,
+			Source:     raw,
+			Kind:       "url",
+			Payload:    payload,
+			Confidence: 0.75,
+			ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return false
+		}
+		meta.EmitCount++
+		if res.Status == 200 && (strings.HasSuffix(path, "sitemap.xml") || path == "sitemap_index.xml") {
+			for _, loc := range sitemapLocs(res.Body) {
+				hintURL(raw, loc, &meta)
+			}
+		}
+		if path == "robots.txt" && res.Status == 200 {
+			for _, loc := range robotsRefs(res.Body, base) {
+				hintURL(raw, loc, &meta)
+			}
+		}
+		for _, u := range []string{reqURL, final} {
+			if u == "" || !webextract.Hintable(u) {
+				continue
+			}
+			low := strings.ToLower(u)
+			if strings.HasSuffix(low, ".txt") || strings.HasSuffix(low, ".xml") || strings.HasSuffix(low, ".ico") {
+				continue
+			}
+			meta.NextHints = append(meta.NextHints, types.Seed{
+				Type: types.TypeURL,
+				Keys: map[string]string{"url": u},
+			})
+		}
+		return isDescLoc(path) && res.Status < 400 && describes(res.Body)
+	}
+	var locs, descs []string
+	for _, path := range list {
+		path = strings.TrimPrefix(path, "/")
 		if path == "" {
 			continue
 		}
+		if isDescLoc(path) {
+			descs = append(descs, path)
+		} else {
+			locs = append(locs, path)
+		}
+	}
+	// The guesses of an API description go one at a time, likeliest first,
+	// and stop at the first that is one.
+	slices.SortStableFunc(descs, func(a, b string) int { return descRank(a) - descRank(b) })
+	targetOf := func(path string) string {
 		target := base.Scheme + "://" + base.Host + prefix + path
 		if u, err := normalize.URL(target); err == nil {
 			target = u
 		}
+		return target
+	}
+	if len(descs) > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for _, path := range descs {
+				target := targetOf(path)
+				if target == raw || ctx.Err() != nil {
+					continue
+				}
+				if fetch.Described(origin) {
+					skipped.Add(1)
+					continue
+				}
+				select {
+				case <-ctx.Done():
+					return
+				case sem <- struct{}{}:
+				}
+				found := probe(target, path)
+				<-sem
+				if found {
+					fetch.MarkDescribed(origin)
+				}
+			}
+		}()
+	}
+	for _, path := range locs {
+		if ctx.Err() != nil {
+			break
+		}
+		target := targetOf(path)
 		if target == raw {
 			continue
 		}
@@ -208,65 +312,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			case sem <- struct{}{}:
 			}
 			defer func() { <-sem }()
-			res, _, err := fetch.Do(ctx, c.Client, target)
-			if err != nil || !interesting(res.Status) || fetch.CatchAll(ctx, c.Client, res) {
-				return
-			}
-			reqURL := target
-			if n, err := normalize.URL(target); err == nil {
-				reqURL = n
-			}
-			final := res.URL
-			if n, err := normalize.URL(res.URL); err == nil {
-				final = n
-			}
-			payload, _ := json.Marshal(map[string]any{
-				"url":       reqURL,
-				"via":       "paths",
-				"status":    res.Status,
-				"path":      "/" + path,
-				"final_url": final,
-				"hops":      res.Hops,
-			})
-			mu.Lock()
-			defer mu.Unlock()
-			if err := emit(types.Observation{
-				Collector:  Name,
-				Source:     raw,
-				Kind:       "url",
-				Payload:    payload,
-				Confidence: 0.75,
-				ObservedAt: time.Now().UTC(),
-			}); err != nil {
-				return
-			}
-			meta.EmitCount++
-			if res.Status == 200 && (strings.HasSuffix(path, "sitemap.xml") || path == "sitemap_index.xml") {
-				for _, loc := range sitemapLocs(res.Body) {
-					hintURL(raw, loc, &meta)
-				}
-			}
-			if path == "robots.txt" && res.Status == 200 {
-				for _, loc := range robotsRefs(res.Body, base) {
-					hintURL(raw, loc, &meta)
-				}
-			}
-			for _, u := range []string{reqURL, final} {
-				if u == "" || !webextract.Hintable(u) {
-					continue
-				}
-				low := strings.ToLower(u)
-				if strings.HasSuffix(low, ".txt") || strings.HasSuffix(low, ".xml") || strings.HasSuffix(low, ".ico") {
-					continue
-				}
-				meta.NextHints = append(meta.NextHints, types.Seed{
-					Type: types.TypeURL,
-					Keys: map[string]string{"url": u},
-				})
-			}
+			probe(target, path)
 		}(target, path)
 	}
 	wg.Wait()
+	if n := skipped.Load(); n > 0 {
+		payload, _ := json.Marshal(map[string]any{"skipped_checks": n, "origin": origin})
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "note", Payload: payload, Confidence: 1, ObservedAt: time.Now().UTC()}); err == nil {
+			meta.EmitCount++
+		}
+	}
 	return meta, ctx.Err()
 }
 
