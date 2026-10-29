@@ -130,6 +130,10 @@ var HostParallel = 10
 // Delay is a pause before each uncached GET.
 var Delay time.Duration
 
+// NoFollow keeps each GET to the URL asked (-no-follow): a redirect is
+// recorded with its Location, as httpx does by default.
+var NoFollow bool
+
 // OriginTrips is how many connects or timeouts in a row, with no answer
 // between them, stop an origin for the rest of the run: its remaining
 // requests are refused with neterr.ErrOriginDown, and the work waits for
@@ -159,6 +163,7 @@ func Reset() {
 	Keep = nil
 	Memos = nil
 	Delay = 0
+	NoFollow = false
 	cacheMu.Unlock()
 	originMu.Lock()
 	origins = map[string]*origin{}
@@ -675,7 +680,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		lastTrunc = truncated
 		lastHeader = resp.Header
 		lastURL = reqURL
-		if !isRedirect(resp.StatusCode) || loc == "" {
+		if !isRedirect(resp.StatusCode) || loc == "" || NoFollow {
 			break
 		}
 		next, err := resp.Request.URL.Parse(loc)

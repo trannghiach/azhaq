@@ -212,6 +212,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	maxNames := fs.Int("max-names", 0, "max hostnames resolved (default 20000)")
 	parallel := fs.Int("parallel", 0, "work items in flight (default 16)")
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
+	noFollow := fs.Bool("no-follow", false, "do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default)")
 	hostParallel := fs.Int("host-parallel", 0, "requests in flight per host (default 10, as katana)")
 	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
@@ -253,6 +254,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	fetch.Reset()
 	fetch.Delay = *delay
+	fetch.NoFollow = *noFollow
 	if *hostParallel > 0 {
 		fetch.HostParallel = *hostParallel
 	}

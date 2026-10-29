@@ -67,6 +67,28 @@ func TestRedirectHops(t *testing.T) {
 	}
 }
 
+// -no-follow: the URL asked is the only request, its redirect recorded.
+func TestNoFollowAsksOnce(t *testing.T) {
+	Reset()
+	defer Reset()
+	NoFollow = true
+	asked := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked++
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/home", http.StatusFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	res, _, err := Do(context.Background(), srv.Client(), srv.URL+"/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 || len(res.Hops) != 1 || res.Hops[0].Location != "/home" {
+		t.Fatalf("asked %d, hops %+v", asked, res.Hops)
+	}
+}
+
 func TestExtraHeadersAndUA(t *testing.T) {
 	Reset()
 	h := make(http.Header)

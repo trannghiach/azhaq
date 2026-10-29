@@ -713,7 +713,7 @@ func cmdProbe(args []string) error {
 	var urls stringsFlag
 	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
 	list := fs.String("l", "", "file of targets (- for stdin)")
-	given := inherit(fs, append([]string{"web-ports", "parallel", "host-parallel", "delay", "no-tech", "resolvers"}, targetFlags...)...)
+	given := inherit(fs, append([]string{"web-ports", "parallel", "host-parallel", "delay", "no-follow", "no-tech", "resolvers"}, targetFlags...)...)
 	favicon := fs.Bool("favicon", false, "also hash each front page's favicon (one or two more requests per service)")
 	if err := parse(fs, args); err != nil {
 		return err
