@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -118,7 +119,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	queue := []dirLevel{{url: base, depth: 1}}
 	var all []hit
 	var skipped []string // guesses not sent: nobody saw them exist, so they are no URLs of the map
-	requests, filtered := 0, 0
+	requests, filtered, failed := 0, 0, 0
 	// Each hit is kept as it is found, as ffuf prints it: a run stopped by
 	// Ctrl-C or the budget keeps what it found so far.
 	var emitErr error
@@ -143,7 +144,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if _, done := c.swept.LoadOrStore(d.url, true); done {
 			continue
 		}
-		hits, n, f, held, spent := c.sweep(ctx, d.url, found)
+		hits, n, f, x, held, spent := c.sweep(ctx, d.url, found)
 		if spent {
 			// The sweep is redone whole by azhaq resume; what it found is
 			// kept, and found again.
@@ -152,6 +153,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		requests += n
 		filtered += f
+		failed += x
 		all = append(all, hits...)
 		skipped = append(skipped, held...)
 		for _, h := range hits {
@@ -168,7 +170,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	summary, _ := json.Marshal(map[string]any{
 		"base": base, "words": len(c.Opts.Words), "extensions": c.Opts.Extensions, "requests": requests,
-		"hits": len(all), "filtered": filtered, "depth": c.Opts.Depth,
+		"hits": len(all), "filtered": filtered, "failed": failed, "depth": c.Opts.Depth,
 	})
 	if err := emit(types.Observation{Collector: Name, Source: base, Kind: "dirs", Payload: summary, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 		return meta, err
@@ -210,7 +212,7 @@ func schemeHost(raw string) string {
 // found as it comes (one at a time); held lists the URLs not sent
 // because, with a session, a GET there could change something; spent
 // says the request budget ran out before it was through.
-func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ []hit, _ int, _ int, held []string, spent bool) {
+func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ []hit, _ int, _ int, failed int, held []string, spent bool) {
 	cal := c.calibrate(ctx, dir)
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
@@ -255,11 +257,17 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ [
 			if errors.Is(err, neterr.ErrBudget) {
 				out.Store(true)
 			}
-			if err != nil || !c.matches(r.Status) {
-				return
-			}
 			mu.Lock()
 			defer mu.Unlock()
+			if err != nil {
+				if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrEndsSession) {
+					failed++
+				}
+				return
+			}
+			if !c.matches(r.Status) {
+				return
+			}
 			if cal.explains(r, word) {
 				filtered++
 				return
@@ -270,7 +278,7 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ [
 		}(t)
 	}
 	wg.Wait()
-	return hits, len(targets), filtered, held, out.Load()
+	return hits, len(targets), filtered, failed, held, out.Load()
 }
 
 func escapeWord(w string) string {
@@ -289,6 +297,9 @@ func (c *Collector) matches(status int) bool {
 	}
 	return false
 }
+
+// errCutOff: the connection ended before the body did.
+var errCutOff = errors.New("answer cut off")
 
 // response is what the sweep compares: never the body itself.
 type response struct {
@@ -310,6 +321,9 @@ func (c *Collector) get(ctx context.Context, target string) (response, error) {
 		}
 	}
 	r, err := c.send(ctx, target)
+	if errors.Is(err, errCutOff) && ctx.Err() == nil {
+		r, err = c.send(ctx, target)
+	}
 	if err == nil && fetch.Memos != nil {
 		if raw, err := json.Marshal(r); err == nil {
 			fetch.Memos.Remember("dirs "+target, raw)
@@ -334,8 +348,16 @@ func (c *Collector) send(ctx context.Context, target string) (response, error) {
 	defer resp.Body.Close()
 	// Words and lines from the first MB; the length is the whole body's,
 	// as ffuf reports it (read up to 64 MB).
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	rest, _ := io.Copy(io.Discard, io.LimitReader(resp.Body, 63<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	var rest int64
+	if err == nil {
+		rest, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 63<<20))
+	}
+	if err != nil {
+		// A body cut off is not an answer: its length would be a size
+		// calibration never saw, and the page would pass as a hit.
+		return response{}, fmt.Errorf("%w: %v", errCutOff, err)
+	}
 	return response{
 		Status:   resp.StatusCode,
 		Length:   len(body) + int(rest),

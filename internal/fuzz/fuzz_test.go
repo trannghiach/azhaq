@@ -474,3 +474,23 @@ func TestSenderSpendsTheBudget(t *testing.T) {
 		t.Errorf("errors %v, sent %d", errs, fetch.Sent())
 	}
 }
+
+// An answer cut off mid-body is an error, not a short page that a size
+// filter calibrated on the whole one would let through.
+func TestSenderRefusesACutOffAnswer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "9984")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "<html>")
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		conn.Close()
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	s := NewSender(HTTPOptions{Timeout: time.Second, Threads: 1})
+	tmpl, _ := NewTemplate("", srv.URL+"/FUZZ", "", nil, nil)
+	req := tmpl.Expand(map[string]string{"FUZZ": "zh-cn"})
+	if r, err := s.Send(context.Background(), &req, false); err == nil {
+		t.Errorf("cut-off answer taken: %+v", r)
+	}
+}

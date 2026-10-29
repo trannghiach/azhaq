@@ -1319,7 +1319,12 @@ func cmdDirs(args []string) error {
 	if err != nil {
 		return err
 	}
+	failed := 0
 	see := func(_ types.Entity, o types.Observation) {
+		if o.Collector == "azhaq-dirs" && o.Kind == "dirs" {
+			failed += intOf(payloadOf(o)["failed"])
+			return
+		}
 		if o.Collector != "azhaq-dirs" || o.Kind != "url" {
 			return
 		}
@@ -1361,6 +1366,9 @@ func cmdDirs(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
+	if failed > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d paths got no whole answer, after one retry: they were not judged (a service under load cuts answers off; run again or lower -t)", failed))
+	}
 	return rep.finish(c.json, c.silent)
 }
 

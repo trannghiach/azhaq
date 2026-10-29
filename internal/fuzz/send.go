@@ -3,7 +3,7 @@ package fuzz
 import (
 	"bytes"
 	"context"
-	"github.com/trannghiach/azhaq/internal/ledger"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptrace"
@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // Sender sends one request and describes the answer. keepBody says a
@@ -100,7 +101,11 @@ func (s *httpSender) Send(ctx context.Context, req *Request, keepBody bool) (*Re
 			return r, nil // not read: size only, as ffuf
 		}
 	}
-	body, length, words, lines, ok := readCounting(resp.Body, keepBody)
+	body, length, words, lines, ok, err := readCounting(resp.Body, keepBody)
+	if err != nil {
+		// Cut off: its size is no answer's, and would pass a size filter.
+		return nil, fmt.Errorf("answer cut off after %d bytes: %w", length, err)
+	}
 	if ok {
 		r.Length, r.Words, r.Lines, r.Body = length, words, lines, body
 	}
@@ -110,16 +115,17 @@ func (s *httpSender) Send(ctx context.Context, req *Request, keepBody bool) (*Re
 
 // readCounting reads up to MaxBody, counting as it goes, and keeps the
 // bytes only when asked: words are spaces plus one, lines newlines plus one.
-// ok is false when the body was longer than the most read.
-func readCounting(r io.Reader, keep bool) (body []byte, length, words, lines int64, ok bool) {
+// ok is false when the body was longer than the most read; err says the
+// body ended early.
+func readCounting(r io.Reader, keep bool) (body []byte, length, words, lines int64, ok bool, err error) {
 	buf := make([]byte, 32<<10)
 	var spaces, newlines int64
 	for {
-		n, err := r.Read(buf)
+		n, rerr := r.Read(buf)
 		if n > 0 {
 			chunk := buf[:n]
 			if length+int64(n) > MaxBody {
-				return nil, 0, 0, 0, false
+				return nil, 0, 0, 0, false, nil
 			}
 			length += int64(n)
 			spaces += int64(bytes.Count(chunk, []byte{' '}))
@@ -128,8 +134,11 @@ func readCounting(r io.Reader, keep bool) (body []byte, length, words, lines int
 				body = append(body, chunk...)
 			}
 		}
-		if err != nil {
-			return body, length, spaces + 1, newlines + 1, err == io.EOF
+		if rerr == io.EOF {
+			return body, length, spaces + 1, newlines + 1, true, nil
+		}
+		if rerr != nil {
+			return nil, length, 0, 0, false, rerr
 		}
 	}
 }

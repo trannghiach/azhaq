@@ -88,3 +88,38 @@ func TestSweepKeepsSessionAlive(t *testing.T) {
 		t.Errorf("with a session, logout must not be requested: %v", got)
 	}
 }
+
+// A catch-all page cut off mid-body (the server going down) was a hit of
+// length 0: calibration had seen the whole page.
+func TestSweepDropsCutOffAnswers(t *testing.T) {
+	fetch.Reset()
+	shell := strings.Repeat("<p>the same shell for every route</p>", 50)
+	tries := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tries[r.URL.Path]++
+		switch {
+		case r.URL.Path == "/flaky" && tries["/flaky"] == 1, r.URL.Path == "/zh-cn":
+			w.Header().Set("Content-Length", "1850")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(shell[:100]))
+			conn, _, _ := w.(http.Hijacker).Hijack()
+			conn.Close()
+		case r.URL.Path == "/admin":
+			w.WriteHeader(http.StatusForbidden)
+		default:
+			w.Write([]byte(shell))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.Client(), Options{Words: []string{"admin", "flaky", "zh-cn"}, Rate: 1000, Threads: 1})
+	got, summary := sweepOf(t, c, srv.URL+"/")
+	if strings.Join(got, " ") != "/admin" {
+		t.Errorf("hits %v, want only /admin", got)
+	}
+	if tries["/flaky"] != 2 || tries["/zh-cn"] != 2 {
+		t.Errorf("a cut-off answer is asked once more: tries %v", tries)
+	}
+	if summary["failed"].(float64) != 1 {
+		t.Errorf("failed %v, want 1 (zh-cn, cut off twice)", summary["failed"])
+	}
+}
