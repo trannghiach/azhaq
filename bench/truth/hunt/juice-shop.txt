@@ -1,0 +1,11 @@
+/ftp/	directory listing of confidential files
+/ftp/incident-support.kdbx	credential store file exposed
+/ftp/package.json.bak	backup file
+/rest/admin/application-configuration	admin configuration readable without a session
+/api-docs	API documentation exposed
+/metrics	monitoring endpoint exposed
+/redirect	redirect parameter (to)
+/rest/basket/{id}	object identifier in the path: IDOR candidate
+/api/Users	user records
+/rest/products/search	query parameter fed to a search
+/rest/user/authentication-details	every user with their session details

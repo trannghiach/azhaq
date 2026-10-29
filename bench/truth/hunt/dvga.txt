@@ -1,0 +1,2 @@
+/graphql	GraphQL endpoint
+/graphiql	GraphQL IDE exposed

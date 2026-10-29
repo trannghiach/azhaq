@@ -1,0 +1,7 @@
+/users/v1/_debug	debug endpoint returning user records with passwords
+/books/v1/{book_title}	object in the path: IDOR candidate
+/users/v1/{username}	user object in the path
+/users/v1/{username}/password	password change for a named user (write)
+/users/v1/register	registration body: mass assignment candidate (write)
+/createdb	GET that resets the database (state changing)
+/openapi.json	API description exposed

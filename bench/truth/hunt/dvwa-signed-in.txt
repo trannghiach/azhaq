@@ -1,0 +1,8 @@
+/vulnerabilities/exec/	host parameter passed to a command
+/vulnerabilities/upload/	file upload
+/vulnerabilities/sqli/	id parameter fed to a query
+/vulnerabilities/fi/	page parameter naming a file
+/vulnerabilities/csrf/	password change by GET
+/setup.php	database reset page
+/phpinfo.php	server configuration exposed
+/config/	configuration directory listing

@@ -1,0 +1,6 @@
+/app/ping	host parameter passed to a command
+/app/calc	expression evaluated server side
+/app/products	search parameter fed to a query
+/app/redirect	redirect parameter (url)
+/app/bulkproducts	file upload (XML)
+/app/admin/users	admin user list
