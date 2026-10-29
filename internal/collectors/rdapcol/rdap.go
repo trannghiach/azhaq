@@ -13,6 +13,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/types"
@@ -260,8 +261,11 @@ func (c *Collector) pull(ctx context.Context, rawURL, span string) (json.RawMess
 	return nil, current, 0, fmt.Errorf("%s redirect loop", hostOf(current))
 }
 
+// noFollow is c without redirects and out of the ledger: a registry asked
+// about the domain is a third-party source, not the target.
 func noFollow(c *http.Client) *http.Client {
 	cp := *c
+	cp.Transport = ledger.Unwrap(cp.Transport)
 	cp.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -169,5 +171,32 @@ func TestSkipReservedLive(t *testing.T) {
 	})
 	if err != nil || skipped != "reserved" {
 		t.Fatalf("skipped=%q err=%v", skipped, err)
+	}
+}
+
+// A registry asked about the domain is no request to the target: the
+// ledger lists those only.
+func TestRegistryIsNotInTheLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"ldhName":"example.test"}`))
+	}))
+	t.Cleanup(srv.Close)
+	col := New(nil)
+	col.BaseURL = srv.URL
+	if _, err := col.Run(context.Background(), types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.test"}}, func(types.Observation) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	l.Close()
+	n := 0
+	_ = ledger.Read(path, func(ledger.Entry) error { n++; return nil })
+	if n != 0 {
+		t.Errorf("%d registry requests in the ledger", n)
 	}
 }
