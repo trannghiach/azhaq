@@ -223,6 +223,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active; the targets given are the scope unless -allow)")
 	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list such as 22,80,8000-8100 (active; the targets given are the scope unless -allow)")
+	portsUDP := fs.String("ports-udp", "", "ask UDP ports (active): top (about 20 common ones), or a list such as 53,123,161,1-1024; a reply is open, an ICMP unreachable closed, neither open|filtered (-ports none: UDP only)")
 	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1000, as naabu, and 127.0.0.1 unpaced)")
 	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active; the targets given are the scope unless -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
@@ -340,7 +341,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	// Everything that can make this a usage error is checked before a
 	// database is created.
-	active := *bruteFile != "" || *permute || *graphql || *portsSpec != "" || *dirsFile != "" || *paramsFile != ""
+	active := *bruteFile != "" || *permute || *graphql || *portsSpec != "" || *portsUDP != "" || *dirsFile != "" || *paramsFile != ""
 	if active && len(allow) == 0 {
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
 	}
@@ -456,7 +457,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *graphql {
 		budgets.Active["graphql"] = true
 	}
-	if *portsSpec != "" {
+	if *portsSpec != "" || *portsUDP != "" {
 		budgets.Active["ports"] = true
 	}
 	if *dirsFile != "" {
@@ -560,6 +561,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *portsSpec != "" {
 		if opts.Ports, err = portscan.Ports(*portsSpec); err != nil {
 			return fmt.Errorf("-ports: %w", err)
+		}
+	}
+	if *portsUDP != "" {
+		if opts.UDPPorts, err = portscan.UDPPorts(*portsUDP); err != nil {
+			return fmt.Errorf("-ports-udp: %w", err)
 		}
 	}
 	if *paramsFile != "" {

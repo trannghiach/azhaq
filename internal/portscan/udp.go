@@ -1,0 +1,187 @@
+package portscan
+
+import (
+	"context"
+	"errors"
+	"net"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"syscall"
+	"time"
+
+	"github.com/trannghiach/azhaq/internal/ledger"
+)
+
+// UDPTop is the default UDP list: the services that answer a harmless
+// request of their own protocol.
+const UDPTop = "53,67,69,123,137,161,500,514,520,623,1194,1900,3478,4500,5353,5683,11211,27015,47808,51820"
+
+// UDPPorts parses a UDP port spec: "top" (or empty) for UDPTop, "none",
+// or the list syntax of Ports.
+func UDPPorts(spec string) ([]int, error) {
+	switch strings.ToLower(strings.TrimSpace(spec)) {
+	case "", "top", "top-udp":
+		spec = UDPTop
+	}
+	return Ports(spec)
+}
+
+// States of a UDP port. A closed port answers with an ICMP unreachable
+// (a connected socket reads it as ECONNREFUSED); an open one may answer
+// with data; a silent one is either open and quiet or filtered.
+const (
+	UDPOpen         = "open"
+	UDPOpenFiltered = "open|filtered"
+	UDPClosed       = "closed"
+)
+
+// UDPPort is one UDP port that was not closed.
+type UDPPort struct {
+	Port    int    `json:"port"`
+	State   string `json:"state"`
+	Service string `json:"service,omitempty"`
+	Product string `json:"product,omitempty"`
+	Version string `json:"version,omitempty"`
+	Banner  string `json:"banner,omitempty"`
+}
+
+// UDPReport is what one address's UDP scan found.
+type UDPReport struct {
+	Open         []UDPPort
+	OpenFiltered []UDPPort
+	Closed       int
+}
+
+// ScanUDP sends each port of ip a request of its protocol (an empty
+// datagram where none is known) and sorts the ports by what came back.
+// A port that stayed silent is asked a second time before it is called
+// open|filtered. Each datagram counts against the budget, is paced and
+// goes in the ledger.
+func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UDPReport, error) {
+	s.init()
+	var r UDPReport
+	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports)
+	r.Open, r.Closed = answered, closed
+	if err == nil && len(silent) > 0 {
+		var again []UDPPort
+		again, silent, closed, err = s.udpPass(ctx, host, ip, silent)
+		r.Open = append(r.Open, again...)
+		r.Closed += closed
+	}
+	for _, p := range silent {
+		r.OpenFiltered = append(r.OpenFiltered, UDPPort{Port: p, State: UDPOpenFiltered, Service: udpGuess(p)})
+	}
+	sort.Slice(r.Open, func(i, j int) bool { return r.Open[i].Port < r.Open[j].Port })
+	sort.Slice(r.OpenFiltered, func(i, j int) bool { return r.OpenFiltered[i].Port < r.OpenFiltered[j].Port })
+	return r, err
+}
+
+func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int) (open []UDPPort, silent []int, closed int, err error) {
+	var mu sync.Mutex
+	sem := make(chan struct{}, s.Workers)
+	var wg sync.WaitGroup
+	var stop error
+	for _, p := range ports {
+		if err := s.wait(ctx, ip); err != nil {
+			break
+		}
+		if s.Take != nil {
+			if stop = s.Take(); stop != nil {
+				break
+			}
+		}
+		select {
+		case <-ctx.Done():
+		case sem <- struct{}{}:
+		}
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Add(1)
+		go func(p int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			u, state := s.udpProbe(ctx, host, ip, p)
+			mu.Lock()
+			switch state {
+			case UDPOpen:
+				open = append(open, u)
+			case UDPClosed:
+				closed++
+			default:
+				silent = append(silent, p)
+			}
+			mu.Unlock()
+		}(p)
+	}
+	wg.Wait()
+	if stop != nil {
+		return open, silent, closed, stop
+	}
+	return open, silent, closed, ctx.Err()
+}
+
+// udpProbe sends one datagram on a connected socket and waits for the
+// answer or the ICMP error the kernel turns into ECONNREFUSED.
+func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port int) (UDPPort, string) {
+	addr := net.JoinHostPort(ip, strconv.Itoa(port))
+	ledger.UDP(ctx, host, addr)
+	raddr, err := net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return UDPPort{}, UDPOpenFiltered
+	}
+	conn, err := net.DialUDP("udp", nil, raddr)
+	if err != nil {
+		return UDPPort{}, UDPOpenFiltered
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(s.Timeout))
+	req := udpRequest(port)
+	if _, err := conn.Write(req.payload); err != nil {
+		return UDPPort{}, udpFailed(err)
+	}
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil {
+		return UDPPort{}, udpFailed(err)
+	}
+	u := UDPPort{Port: port, State: UDPOpen}
+	if info, ok := req.parse(buf[:n], req.payload); ok {
+		u.Service, u.Product, u.Version, u.Banner = info.service, info.product, info.version, info.banner
+	} else {
+		// Something answered, but not in the protocol asked for.
+		if g := udpGuess(port); g != "" {
+			u.Service = g
+		}
+		u.Banner = printable(buf[:n])
+	}
+	return u, UDPOpen
+}
+
+// udpFailed: nothing listens when the kernel read an ICMP port
+// unreachable; any other failure leaves the port undecided.
+func udpFailed(err error) string {
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return UDPClosed
+	}
+	return UDPOpenFiltered
+}
+
+// udpNames are the services the UDP ports usually carry.
+var udpNames = map[int]string{
+	53: "dns", 67: "dhcp", 69: "tftp", 123: "ntp", 137: "netbios-ns", 161: "snmp", 500: "isakmp",
+	514: "syslog", 520: "rip", 623: "ipmi", 1194: "openvpn", 1900: "ssdp", 3478: "stun",
+	4500: "ipsec-nat-t", 5353: "mdns", 5683: "coap", 11211: "memcached", 27015: "source-engine",
+	47808: "bacnet", 51820: "wireguard",
+}
+
+// udpGuess names what a silent or unvalidated port usually runs, marked
+// as a guess.
+func udpGuess(port int) string {
+	if n, ok := udpNames[port]; ok {
+		return n + "?"
+	}
+	return ""
+}

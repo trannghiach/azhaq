@@ -38,6 +38,8 @@ func Ports(spec string) ([]int, error) {
 		spec = top1000
 	case "full", "all", "1-65535":
 		spec = "1-65535"
+	case "none":
+		return nil, nil
 	}
 	seen := map[int]bool{}
 	var out []int
@@ -78,6 +80,8 @@ type Open struct {
 	Port      int      `json:"port"`
 	Service   string   `json:"service,omitempty"`
 	Banner    string   `json:"banner,omitempty"`
+	Product   string   `json:"product,omitempty"`
+	Version   string   `json:"version,omitempty"`
 	TLS       bool     `json:"tls,omitempty"`
 	SubjectCN string   `json:"subject_cn,omitempty"`
 	SubjectAN []string `json:"subject_an,omitempty"`
@@ -246,9 +250,10 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 			n, err = conn.Read(buf)
 		}
 		o.Banner = printable(buf[:n])
+		s.greeted(&o, buf[:n])
 		// Still open after the wait, the service waits to be asked. One
 		// that closed the connection says nothing to anyone (tcpwrapped).
-		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) {
+		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) && !s.speak(&o, conn) {
 			s.identify(ctx, &o, conn, host, ip)
 		}
 	}
@@ -284,12 +289,19 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 	answer := s.ask(conn, host, o.Port, 80)
 	if status, banner, ok := httpAnswer(answer); ok {
 		o.Service, o.Banner = "http", banner
+		s.webProduct(ctx, o, answer, status, host, ip, false)
 		if status != 400 {
 			return
 		}
+	} else if postgresError(answer) {
+		o.Service, o.Product, o.Banner = "postgresql", "PostgreSQL", ""
+		return
 	} else if text := printable(answer); text != "" && text != "(binary)" {
 		// Another protocol's error, such as redis's -ERR: not TLS.
 		o.Banner = text
+		if redisError.MatchString(text) {
+			o.Service, o.Product = "redis", "Redis"
+		}
 		return
 	}
 	if s.wait(ctx, ip) != nil || s.Take != nil && s.Take() != nil {
@@ -318,8 +330,10 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 			o.SubjectAN = append(o.SubjectAN, a.String())
 		}
 	}
-	if _, banner, ok := httpAnswer(s.ask(c, host, o.Port, 443)); ok {
+	head := s.ask(c, host, o.Port, 443)
+	if status, banner, ok := httpAnswer(head); ok {
 		o.Service, o.Banner = "https", banner
+		s.webProduct(ctx, o, head, status, host, ip, true)
 	}
 }
 

@@ -93,3 +93,56 @@ func TestNotesSilentPorts(t *testing.T) {
 		t.Errorf("notes %q\nwant %q", got, want)
 	}
 }
+
+// With UDP ports given, a row says which answered, which were silent
+// and how many were closed, and the note counts the silent ones.
+func TestUDPFieldsInTheRow(t *testing.T) {
+	answer, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	defer answer.Close()
+	quiet, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	defer quiet.Close()
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			_, from, err := answer.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			answer.WriteTo([]byte("hi"), from)
+		}
+	}()
+	gone, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	goneAddr := gone.LocalAddr().(*net.UDPAddr)
+	gone.Close()
+	port := func(c net.PacketConn) int { return c.LocalAddr().(*net.UDPAddr).Port }
+
+	c := New(nil, nil, 0)
+	c.UDPPorts = []int{port(answer), port(quiet), goneAddr.Port}
+	c.Scanner.Timeout = 300 * time.Millisecond
+	var obs []types.StoredObservation
+	emit := func(o types.Observation) error {
+		obs = append(obs, types.StoredObservation{Observation: o})
+		return nil
+	}
+	if _, err := c.Run(context.Background(), types.Seed{Type: types.TypeIPAddress, Keys: map[string]string{"ip": "127.0.0.1"}}, emit); err != nil {
+		t.Fatal(err)
+	}
+	var row struct {
+		UDPOpen     []int              `json:"udp_open"`
+		UDPFiltered []int              `json:"udp_open_filtered"`
+		UDPClosed   int                `json:"udp_closed"`
+		UDPScanned  int                `json:"udp_scanned"`
+		Services    []portscan.UDPPort `json:"udp_services"`
+	}
+	if len(obs) != 1 {
+		t.Fatalf("%d rows", len(obs))
+	}
+	_ = json.Unmarshal(obs[0].Payload, &row)
+	if len(row.UDPOpen) != 1 || row.UDPOpen[0] != port(answer) || len(row.UDPFiltered) != 1 || row.UDPFiltered[0] != port(quiet) ||
+		row.UDPClosed != 1 || row.UDPScanned != 3 || len(row.Services) != 2 || row.Services[0].State != "open" || row.Services[1].State != "open|filtered" {
+		t.Errorf("row %s", obs[0].Payload)
+	}
+	if n := Notes(obs); len(n) != 1 || n[0][:8] != "udp: 1 o" {
+		t.Errorf("notes %q", n)
+	}
+}

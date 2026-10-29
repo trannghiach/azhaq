@@ -36,6 +36,8 @@ type Collector struct {
 	Pool    *dnsr.Pool
 	Scanner *portscan.Scanner
 	Ports   []int
+	// UDPPorts are the UDP ports to ask on each address; none, no UDP scan.
+	UDPPorts []int
 	// IPv6 says whether this machine can reach IPv6 addresses; nil is
 	// fetch.IPv6Routable.
 	IPv6 func() bool
@@ -43,6 +45,8 @@ type Collector struct {
 	mu    sync.Mutex
 	byIP  map[string]*scan // one scan per address, however many names point to it
 	maxIP int              // addresses scanned per name
+
+	udpByIP map[string]*udpScan
 }
 
 type scan struct {
@@ -143,7 +147,23 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			c.forget(ip)
 			return types.RunMeta{Status: types.StatusCapped}, err
 		}
+		var udp portscan.UDPReport
+		if len(c.UDPPorts) > 0 && !edge {
+			var uerr error
+			if udp, uerr = c.scanUDPOnce(ctx, host, ip); uerr != nil {
+				if ctx.Err() != nil {
+					return types.RunMeta{Status: types.StatusCancelled}, uerr
+				}
+				if errors.Is(uerr, neterr.ErrBudget) {
+					c.forget(ip)
+					return types.RunMeta{Status: types.StatusCapped}, uerr
+				}
+			}
+		}
 		row := map[string]any{"host": host, "ip": ip, "scanned": len(ports), "open": portsOf(open)}
+		if len(c.UDPPorts) > 0 && !edge {
+			addUDP(row, udp, len(c.UDPPorts))
+		}
 		if len(open) > 0 {
 			row["services"] = open
 		}
@@ -192,6 +212,7 @@ const unroutedKey = "ipv6_not_scanned"
 func Notes(obs []types.StoredObservation) []string {
 	names := map[string]bool{}
 	var silent []string // address: ports, where a few ports answered neither way, twice
+	udpFiltered := 0
 	for _, o := range obs {
 		if o.Collector != Name {
 			continue
@@ -201,6 +222,7 @@ func Notes(obs []types.StoredObservation) []string {
 			IP       string   `json:"ip"`
 			Unrouted []string `json:"ipv6_not_scanned"`
 			Filtered []int    `json:"filtered_ports"`
+			UDPFilt  []int    `json:"udp_open_filtered"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil {
 			continue
@@ -208,6 +230,7 @@ func Notes(obs []types.StoredObservation) []string {
 		if len(p.Unrouted) > 0 {
 			names[p.Host] = true
 		}
+		udpFiltered += len(p.UDPFilt)
 		if len(p.Filtered) > 0 {
 			where := p.Host
 			if p.IP != "" && p.IP != p.Host {
@@ -234,7 +257,7 @@ func Notes(obs []types.StoredObservation) []string {
 		out = append(out, fmt.Sprintf("ports that neither accepted nor refused a connect, asked twice: %s%s; filtered, or the host drops connects: scan them again to be sure (azhaq show -db FILE HOST lists them all)",
 			strings.Join(silent, "; "), more))
 	}
-	return out
+	return append(out, udpNotes(udpFiltered)...)
 }
 
 // portList is "80, 443" with at most n ports, then how many more.
@@ -317,6 +340,7 @@ func (c *Collector) askAgain(ctx context.Context, host, ip string, open []portsc
 func (c *Collector) forget(ip string) {
 	c.mu.Lock()
 	delete(c.byIP, ip)
+	delete(c.udpByIP, ip)
 	c.mu.Unlock()
 }
 

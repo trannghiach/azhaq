@@ -1140,7 +1140,9 @@ func cmdPorts(args []string) error {
 	var hosts stringsFlag
 	fs.Var(&hosts, "host", "host or IP (repeatable)")
 	list := fs.String("l", "", "file of hosts (- for stdin)")
-	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full or a list such as 22,80,8000-8100")
+	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full, none or a list such as 22,80,8000-8100")
+	udp := fs.Bool("udp", false, "also ask the common UDP ports (about 20: dns, ntp, snmp, ssdp, mdns, ...)")
+	udpSpec := fs.String("pu", "", "UDP ports to ask: top or a list such as 53,123,1-1024 (implies -udp)")
 	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -1191,7 +1193,37 @@ func cmdPorts(args []string) error {
 			}
 			n, _ := strconv.Atoi(port)
 			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "tcp", "tls": svc["tls"] == true, "timestamp": time.Now().Format(time.RFC3339Nano)}
-			for _, k := range []string{"service", "banner", "subject_cn", "subject_an"} {
+			for _, k := range []string{"service", "product", "version", "banner", "subject_cn", "subject_an"} {
+				if v, ok := svc[k]; ok {
+					row[k] = v
+				}
+			}
+			w.obj(row)
+		}
+		udpServices, _ := p["udp_services"].([]any)
+		for _, s := range udpServices {
+			svc, _ := s.(map[string]any)
+			port := fmt.Sprint(svc["port"])
+			key := host + ":" + port + "/udp"
+			if w.json {
+				key = ip + " " + key
+			}
+			mu.Lock()
+			dup := seen[key]
+			seen[key] = true
+			mu.Unlock()
+			if dup {
+				continue
+			}
+			if !w.json {
+				if svc["state"] == "open" { // open|filtered rows are in the JSON
+					w.line(host + ":" + port + "/udp")
+				}
+				continue
+			}
+			n, _ := strconv.Atoi(port)
+			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "udp", "timestamp": time.Now().Format(time.RFC3339Nano)}
+			for _, k := range []string{"state", "service", "product", "version", "banner"} {
 				if v, ok := svc[k]; ok {
 					row[k] = v
 				}
@@ -1202,6 +1234,11 @@ func cmdPorts(args []string) error {
 	rep := newReport("ports")
 	rep.what = "open ports"
 	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-ports"), "-ports", *spec}
+	if *udpSpec != "" {
+		run = append(run, "-ports-udp", *udpSpec)
+	} else if *udp {
+		run = append(run, "-ports-udp", "top")
+	}
 	extra := given()
 	if !hasFlag(extra, "allow", "scope") {
 		// The hosts given are the scope.

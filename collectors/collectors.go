@@ -44,6 +44,7 @@ type Options struct {
 	Probe      bool             // azhaq-http answers like httpx: no catch-all check
 	NoFavicon  bool             // azhaq-http does not hash favicons
 	Ports      []int            // azhaq-ports: ports to scan (runs only with -ports)
+	UDPPorts   []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
 	PortRate   float64          // azhaq-ports: connection attempts per second
 	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
 	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
@@ -84,7 +85,9 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(dnsc)
 	cat.MustRegister(&brutecol.Brute{Pool: pool, Wild: dnsc.Wild, Words: o.BruteWords})
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})
-	cat.MustRegister(portcol.New(pool, o.Ports, o.PortRate))
+	pc := portcol.New(pool, o.Ports, o.PortRate)
+	pc.UDPPorts = o.UDPPorts
+	cat.MustRegister(pc)
 	cat.MustRegister(dirscol.New(client, o.Dirs))
 	cat.MustRegister(paramcol.New(client, o.Params))
 	cat.MustRegister(asncol.NewASN(nil))
