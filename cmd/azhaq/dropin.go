@@ -475,6 +475,7 @@ func cmdSubs(args []string) error {
 	seen := map[string]bool{}
 	answered, ran, failedOff := 0, 0, 0
 	verbose := hasFlag(given(), "v")
+	private := map[string]bool{}
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
 	for _, p := range payloads(st, "azhaq-subdomains") {
@@ -482,6 +483,10 @@ func cmdSubs(args []string) error {
 		foundBy, _ := p["found_by"].(map[string]any)
 		srcs, _ := p["sources"].(map[string]any)
 		for name, v := range srcs {
+			if row, _ := v.(map[string]any); strings.HasPrefix(fmt.Sprint(row["skipped"]), "not a public domain") && !private[input] {
+				private[input] = true
+				rep.Notes = append(rep.Notes, input+": not a public domain, so no third-party source was asked (its TLD has no registry); -w or the name history find its names")
+			}
 			if name == "history" {
 				continue // a local file, not a source that was asked
 			}

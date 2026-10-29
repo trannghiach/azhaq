@@ -389,9 +389,9 @@ func (h *hunter) writes(c *cand, r engine.MapEntry, ok bool, st int) {
 		return
 	}
 	if ok {
-		c.add("unauth-write", strings.Join(ms, ", ")+" with no credentials asked, and the route answers without a session")
+		c.add("unauth-write", strings.Join(ms, ", ")+": nothing that names it asks for credentials, and a GET of it answers without a session (the write was not tried)")
 	} else {
-		c.addW("unauth-write", unauthWriteDry, strings.Join(ms, ", ")+" with no credentials asked")
+		c.addW("unauth-write", unauthWriteDry, strings.Join(ms, ", ")+": nothing that names it asks for credentials (not tried)")
 	}
 }
 

@@ -196,8 +196,8 @@ A map of thousands of routes does not say where to start. `azhaq hunt -db app.db
 
 ```
 $ azhaq hunt -db app.db
-  1   57  http://app/api/orders/{id}  object-id: {id} in the path; path-data: "orders" in /api/orders/{id}, named, not requested; unauth-write: DELETE with no credentials asked  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
-  2   33  http://app/api/v2/export  object-id: identifier parameter userId; unauth-write: POST with no credentials asked; input: takes format, userId  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
+  1   57  http://app/api/orders/{id}  object-id: {id} in the path; path-data: "orders" in /api/orders/{id}, named, not requested; unauth-write: DELETE: nothing that names it asks for credentials (not tried)  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
+  2   33  http://app/api/v2/export  object-id: identifier parameter userId; unauth-write: POST: nothing that names it asks for credentials (not tried); input: takes format, userId  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
 $ azhaq roles -json -role anon -role 'user=Authorization: Bearer …' -- -url https://app/ > roles.jsonl
 $ azhaq hunt -db app.db -roles roles.jsonl -limit 10
 ```

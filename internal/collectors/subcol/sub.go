@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/net/publicsuffix"
 	"net/http"
 	"sort"
 	"strings"
@@ -171,6 +172,19 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		})
 	}
 	run, skipped := c.plan()
+	if _, icann := publicsuffix.PublicSuffix(domain); !icann {
+		// No registry runs its TLD (azqlab.lan, corp.internal): no public
+		// source can hold its names, so only the local history is asked.
+		kept := run[:0]
+		for _, s := range run {
+			if s.name == historyName {
+				kept = append(kept, s)
+				continue
+			}
+			skipped[s.name] = "not a public domain: third-party sources only know public names"
+		}
+		run = kept
+	}
 	ext, err := subscraping.NewSubdomainExtractor(domain)
 	if err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
