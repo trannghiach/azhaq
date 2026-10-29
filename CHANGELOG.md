@@ -1,5 +1,69 @@
 # Changelog
 
+## v0.9.0
+
+Two reviews of v0.8.1 ended the same way: adopt azhaq for some jobs, keep another tool for the others. This release goes after both halves:
+- the jobs where reviewers kept ffuf, naabu/nmap, subfinder or gowitness;
+- the work none of those tools do: deciding where to look first, noticing what a deploy added, writing the finding up, and proving what was sent.
+
+### New
+
+- `azhaq hunt -db FILE`: the mapped surface ranked by where to look first. Each row says why and gives the command to run next. Signals:
+  - cross-role reads and writes from `roles` (`-roles FILE`);
+  - exposed secrets and source maps;
+  - admin, debug and internal paths;
+  - backup and key files, directory listings;
+  - API descriptions and GraphQL;
+  - object identifiers in routes;
+  - parameters that take a URL, file, command or redirect;
+  - writes without credentials, file uploads, takeover candidates and what is new.
+
+  On the five local labs, every known issue the map holds ranks in the top 20 (top 25 for DVWA).
+- `watch` reports the API routes a deploy changed: a new route with its method and body fields, a method or field added, a route gone from the bundle. Each change names the script that calls the route, and notifications carry it. Two runs of an unchanged app report nothing.
+- `azhaq report -dir DIR`: each finding `roles` listed, written up in Markdown or JSON, ready to submit:
+  - steps to reproduce, with curl commands;
+  - the owner's and the reader's answers;
+  - the made-up-identifier control, and why the object is the owner's.
+
+  `-redact` masks hosts, tokens and identifiers. A report never states what the evidence store does not hold.
+- The request ledger. Every run with a workspace writes `DB.ledger.jsonl` next to it: one hash-chained line for each request or connection sent to a target (HTTP, Chrome's requests, TCP and UDP probes), with its time, target, scope rule and collector.
+  - `azhaq ledger -verify` catches an edited line; `-summary` and `-csv` make it ready for a client or a blue team.
+  - It matched an independent counting proxy request for request: VAmPI 41 of 41, Juice Shop 190 of 190, a path sweep 56 of 56.
+- A kill switch. `-kill-file PATH` (default `DB.stop`): create the file, and within half a second nothing more is sent; exit 4, and `azhaq resume` continues once the file is gone.
+- `azhaq fuzz`: ffuf's flags and counting.
+  - The keyword can go in the path, query, host, headers (Host included), method or body.
+  - Matchers `-mc -ms -mw -ml -mr` and filters `-fc -fs -fw -fl -fr`, auto-calibration, `-recursion`, `-e`, and clusterbomb or pitchfork over several wordlists.
+  - It gave the same results as ffuf 2.3 in every comparison on the local labs. On VAmPI, common.txt took 6.6 s against ffuf's 7.3 s.
+- `ports -udp` (and `run -ports-udp`): UDP inventory without root, reporting open, open|filtered or closed. It sends protocol-correct requests to 20 common UDP services. On 127.0.0.1 it agreed with `ss` on all 1,030 ports scanned.
+- Open TCP ports now carry `product` and `version`, read from greetings, headers and version handshakes: OpenSSH 9.6p1, Apache httpd 2.4.25, Werkzeug, CUPS, Express, Ollama, MySQL/MariaDB, PostgreSQL, Redis, MongoDB and Elasticsearch.
+- `subs` keeps a per-user history of the names it found. Later runs ask it as a source, and its names count only if they still resolve (`-no-history` to skip).
+- `subs` estimates its coverage with Chao1, and gives a sampled source's population with Schnabel. A tesla.com run holds about 1,400 of the roughly 1,609 names the independent sources know.
+- Every map row says how it is known: answered, described, called, linked, archived or guessed (`query -evidence`; `evidence` in exports; `x-azhaq-evidence` in OpenAPI). A GraphQL schema recovered with introspection disabled is marked partial everywhere it is shown or exported.
+- `dns -d DOMAIN -w FILE` brute-forces as dnsx does.
+- `scripts/install.sh` installs a release after checking its sha256, and its cosign signature when cosign is present.
+
+### Changed
+
+- Memory: CDN and WAF ranges and the page-parsing patterns load on first use. `azhaq version` takes 16 MB (was 29). `dirs` and `params` leave technologies to `probe`: 28 MB for 200 paths (was 55).
+- Fewer requests for the same map. Path checks stop once an origin has served an API description. Juice Shop takes 148 requests (was 190) with the same 70 of 77 known routes; VAmPI takes 31 (was 41).
+- `subs` counts the sources asked and answered, and counts failures of off-by-default sources apart. `degraded` is set when a default source failed.
+- `shots` says when the request budget left no room for a page: "the page needs about N requests". Five local apps take 4.6 s against gowitness's 34.4 s.
+- The output contract (exit codes, `stopped`, `complete`, summary counts against the rows written) is tested for every case a review or hunt has found.
+
+### Fixed
+
+- The MCP subdomain tool is held to the server's scope. It used to ask third-party sources about any domain.
+- `roles`: a request budget spent during a role's Chrome sign-in is a limit (exit 4), not an error.
+- GETs that would spend a one-time token (`?token=`, `?reset_token=`), and one-word verbs such as `resetpw` and `dataerasure`, are left alone.
+- `roles` lists sensitive fields the server sent masked as masked, instead of leaving them out.
+- The summary says when URLs fold into templated rows ("44 map rows, 65 URLs").
+- The docs no longer say active options "need a scope": the targets given are their scope.
+- `dns` says how many names it asked and how many did not resolve.
+- `-browser` says when Chrome found nothing the static pass had not.
+- `export -format hosts` lists addresses given as targets.
+- A screenshot directory that is a file is a usage error naming it.
+- A `redir` parameter is recognised as a redirect target.
+
 ## v0.8.1
 
 ### Changed
