@@ -75,6 +75,32 @@ func udpListener(t *testing.T, reply []byte) (port int, reads *atomic.Int32) {
 	return c.LocalAddr().(*net.UDPAddr).Port, reads
 }
 
+// udpResponder runs fn on each datagram and sends back what it returns
+// (nothing, when it returns nil).
+func udpResponder(t *testing.T, fn func(in []byte) []byte) (port int, reads *atomic.Int32) {
+	t.Helper()
+	c, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	reads = new(atomic.Int32)
+	go func() {
+		buf := make([]byte, 2048)
+		for {
+			n, from, err := c.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			reads.Add(1)
+			if out := fn(buf[:n]); out != nil {
+				c.WriteTo(out, from)
+			}
+		}
+	}()
+	return c.LocalAddr().(*net.UDPAddr).Port, reads
+}
+
 func closedUDPPort(t *testing.T) int {
 	t.Helper()
 	c, err := net.ListenPacket("udp", "127.0.0.1:0")
@@ -113,6 +139,48 @@ func TestUDPStates(t *testing.T) {
 	}
 	if got := takes.Load(); got != 4 { // 3 ports, the silent one twice
 		t.Fatalf("%d probes counted against the budget, want 4", got)
+	}
+}
+
+// DNS moved to a port nobody assigns to it is found by the first ask,
+// and a service that answers only an empty datagram by the second: no
+// more datagrams than before.
+func TestUDPUnknownPortsAskDNSThenEmpty(t *testing.T) {
+	dns, dnsReads := udpResponder(t, func(in []byte) []byte {
+		if len(in) < 12 {
+			return nil // a DNS server ignores an empty datagram
+		}
+		r := append([]byte{}, in[:12]...)
+		r[2], r[3], r[6], r[7] = 0x81, 0x80, 0, 0
+		return r
+	})
+	pong, pongReads := udpResponder(t, func(in []byte) []byte {
+		if len(in) == 0 {
+			return []byte("pong")
+		}
+		return nil
+	})
+	var takes atomic.Int32
+	s := &Scanner{Timeout: 300 * time.Millisecond, Take: func() error { takes.Add(1); return nil }}
+	r, err := s.ScanUDP(context.Background(), "localhost", "127.0.0.1", []int{dns, pong})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[int]UDPPort{}
+	for _, u := range r.Open {
+		got[u.Port] = u
+	}
+	if u := got[dns]; u.State != UDPOpen || u.Service != "dns" || u.Banner != "dns answer, rcode 0, 0 records" {
+		t.Errorf("dns on an odd port: %+v", u)
+	}
+	if u := got[pong]; u.State != UDPOpen || u.Banner != "pong" || u.Service != "" {
+		t.Errorf("empty-datagram service: %+v", u)
+	}
+	if len(r.OpenFiltered) != 0 {
+		t.Errorf("open|filtered: %+v", r.OpenFiltered)
+	}
+	if dnsReads.Load() != 1 || pongReads.Load() != 2 || takes.Load() != 3 {
+		t.Errorf("datagrams: dns port %d, other %d, %d counted; want 1, 2, 3", dnsReads.Load(), pongReads.Load(), takes.Load())
 	}
 }
 

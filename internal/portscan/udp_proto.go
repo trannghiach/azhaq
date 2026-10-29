@@ -21,7 +21,8 @@ type udpReq struct {
 }
 
 // udpRequest returns a standard discovery or version request of the
-// protocol a port usually carries; an empty datagram for the others.
+// protocol a port usually carries; an empty datagram for the others (the
+// first pass of a scan asks those a DNS query instead).
 func udpRequest(port int) udpReq {
 	switch port {
 	case 53:

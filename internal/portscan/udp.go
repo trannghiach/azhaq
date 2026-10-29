@@ -60,19 +60,20 @@ type UDPReport struct {
 	Closed       int
 }
 
-// ScanUDP sends each port of ip a request of its protocol (an empty
-// datagram where none is known) and sorts the ports by what came back.
-// A port that stayed silent is asked a second time before it is called
-// open|filtered. Each datagram counts against the budget, is paced and
-// goes in the ledger.
+// ScanUDP sends each port of ip a request of its protocol (a DNS query
+// where none is known, as DNS is what is most often moved to an odd
+// port) and sorts the ports by what came back. A port that stayed silent
+// is asked a second time (an empty datagram where no protocol is known)
+// before it is called open|filtered. Each datagram counts against the
+// budget, is paced and goes in the ledger.
 func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UDPReport, error) {
 	s.init()
 	var r UDPReport
-	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports)
+	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports, 0)
 	r.Open, r.Closed = answered, closed
 	if err == nil && len(silent) > 0 {
 		var again []UDPPort
-		again, silent, closed, err = s.udpPass(ctx, host, ip, silent)
+		again, silent, closed, err = s.udpPass(ctx, host, ip, silent, 1)
 		r.Open = append(r.Open, again...)
 		r.Closed += closed
 	}
@@ -84,7 +85,7 @@ func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UD
 	return r, err
 }
 
-func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int) (open []UDPPort, silent []int, closed int, err error) {
+func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int) (open []UDPPort, silent []int, closed int, err error) {
 	var mu sync.Mutex
 	sem := make(chan struct{}, s.Workers)
 	var wg sync.WaitGroup
@@ -109,7 +110,7 @@ func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int) (op
 		go func(p int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			u, state := s.udpProbe(ctx, host, ip, p)
+			u, state := s.udpProbe(ctx, host, ip, p, pass)
 			mu.Lock()
 			switch state {
 			case UDPOpen:
@@ -130,8 +131,9 @@ func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int) (op
 }
 
 // udpProbe sends one datagram on a connected socket and waits for the
-// answer or the ICMP error the kernel turns into ECONNREFUSED.
-func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port int) (UDPPort, string) {
+// answer or the ICMP error the kernel turns into ECONNREFUSED. pass is 0
+// for the first ask of a port, 1 for the second.
+func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port, pass int) (UDPPort, string) {
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
 	ledger.UDP(ctx, host, addr)
 	raddr, err := net.ResolveUDPAddr("udp", addr)
@@ -145,6 +147,11 @@ func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port int) (UDPP
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(s.Timeout))
 	req := udpRequest(port)
+	if pass == 0 && len(req.payload) == 0 {
+		// No protocol known for the port: the first ask is a DNS query, the
+		// second the empty datagram.
+		req = udpReq{dnsQuery(), parseDNS}
+	}
 	if _, err := conn.Write(req.payload); err != nil {
 		return UDPPort{}, udpFailed(err)
 	}
