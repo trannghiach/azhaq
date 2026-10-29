@@ -153,3 +153,7 @@ const (
 	// was spent; it is left for azhaq resume.
 	StatusCapped = "capped"
 )
+
+// CutShort marks work the run's -timeout stopped: the run hit its limit
+// (exit 4, resumable); the collector did not fail.
+const CutShort = "cut short by the run's -timeout"

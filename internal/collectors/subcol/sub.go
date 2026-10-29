@@ -182,7 +182,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		grace := min(emitGrace, left/4)
 		if left-grace < wait {
 			wait = max(left-grace, 0)
-			errLate = errors.New("no answer before the run's -timeout: cut short")
+			errLate = errors.New(types.CutShort)
 		}
 	}
 	results := make([]outcome, len(run))
@@ -262,6 +262,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		// Ctrl-C, or the deadline came first: the sources that gave up
 		// with the run are not failures of their own.
 		late, cut = fmt.Errorf("stopped with the run (%v)", ctx.Err()), true
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			late = errors.New(types.CutShort)
+		}
 	}
 	// The names gathered so far are emitted whatever stopped the wait: a
 	// recon tool never throws away work it already did.
@@ -430,7 +433,7 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 				// checks them.
 				why := "the DNS lookups failed"
 				if skip {
-					why = "the run's -timeout stopped the DNS check"
+					why = types.CutShort
 				}
 				row["error"] = fmt.Sprintf("%d of its names not checked: %s; azhaq resume checks them", unchecked, why)
 			}

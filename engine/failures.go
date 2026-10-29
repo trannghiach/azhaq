@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
@@ -99,10 +100,21 @@ func eachFailure(ents []types.Entity, obs []types.StoredObservation, add func(co
 	for _, e := range ents {
 		keys[e.ID] = e.Key
 	}
+	// A collector's newer answer for the same target supersedes its older
+	// one: a source a resume asked again is not still listed as failed.
+	newest := map[string]time.Time{}
+	for _, o := range obs {
+		if k := o.Collector + "\x00" + o.EntityID + "\x00" + o.Kind; o.ObservedAt.After(newest[k]) {
+			newest[k] = o.ObservedAt
+		}
+	}
 	for _, o := range obs {
 		var p map[string]any
 		_ = json.Unmarshal(o.Payload, &p)
 		target := keys[o.EntityID]
+		if o.ObservedAt.Before(newest[o.Collector+"\x00"+o.EntityID+"\x00"+o.Kind]) && (p["sources"] != nil || p["engines"] != nil) {
+			continue
+		}
 		if o.Kind == "error" {
 			msg, _ := p["error"].(string)
 			if msg == "" || strings.HasPrefix(msg, "not requested:") {
@@ -229,6 +241,8 @@ var (
 func ShortError(s string) string {
 	l := strings.ToLower(s)
 	switch {
+	case strings.Contains(s, types.CutShort):
+		return types.CutShort
 	case strings.Contains(l, "timeout") || strings.Contains(l, "deadline exceeded") || strings.Contains(l, "timed out"):
 		return "timeout"
 	case strings.Contains(l, "connection refused"):
@@ -263,7 +277,7 @@ func ShortError(s string) string {
 // connections, rate limits, server errors).
 func Retryable(s string) bool {
 	switch e := ShortError(s); {
-	case e == "timeout", e == "connection reset", e == "connection closed (EOF)", strings.HasPrefix(e, "HTTP 429"):
+	case e == "timeout", e == types.CutShort, e == "connection reset", e == "connection closed (EOF)", strings.HasPrefix(e, "HTTP 429"):
 		return true
 	case strings.HasPrefix(e, "HTTP 5"):
 		return true

@@ -535,6 +535,29 @@ func cmdSubs(args []string) error {
 			}
 		}
 	}
+	// Live names under the domains that DNS met as another name's CNAME
+	// target: no source gave them, but they are found and in scope.
+	viaCNAME := 0
+	if alive != nil {
+		var extra []string
+		for name := range alive {
+			if !seen[name] && apexOf(name, apexes) != "" {
+				extra = append(extra, name)
+			}
+		}
+		sort.Strings(extra)
+		for _, name := range extra {
+			seen[name] = true
+			viaCNAME++
+			if !w.json {
+				w.line(name)
+				continue
+			}
+			row := map[string]any{"host": name, "input": apexOf(name, apexes), "source": "cname", "sources": []string{"cname"}}
+			dnsFields(row, alive[name])
+			w.obj(row)
+		}
+	}
 	if err := w.close(); err != nil {
 		return err
 	}
@@ -548,8 +571,11 @@ func cmdSubs(args []string) error {
 		// that do not resolve (stale certificate logs, wildcard noise). The
 		// live set is the one you can act on.
 		rep.Counts["collected"] = len(collected)
-		if d := len(collected) - (len(seen) - guessed); d > 0 {
+		if d := len(collected) - (len(seen) - guessed - viaCNAME); d > 0 {
 			rep.Counts["did not resolve"] = d
+		}
+		if viaCNAME > 0 {
+			rep.Counts["found as CNAME targets"] = viaCNAME
 		}
 	}
 	if s := topSources(bySource, 8); s != "" {
@@ -1064,6 +1090,16 @@ func cmdDNS(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
+	asked := map[string]bool{}
+	for _, n := range ns {
+		if h := normalize.Hostname(n); h != "" {
+			asked[h] = true
+		}
+	}
+	rep.Counts = map[string]int{"asked": len(asked)}
+	if d := len(asked) - rep.Results; d > 0 {
+		rep.Counts["did not resolve"] = d // NXDOMAIN, no address, or a wildcard's answer
+	}
 	return rep.finish(c.json, c.silent)
 }
 

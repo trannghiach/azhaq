@@ -219,3 +219,38 @@ func (s *Store) Claim(key, owner string) string {
 	_ = s.db.QueryRow(`SELECT owner FROM claims WHERE run_id = ? AND key = ?`, s.runID, key).Scan(&got)
 	return got
 }
+
+// Reopen marks the done tasks of collector on the targets named (seed
+// keys) not done, so a resume runs them again: work the run's -timeout
+// cut short. It returns how many it reopened.
+func (s *Store) Reopen(collector string, targets []string) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	want := map[string]bool{}
+	for _, t := range targets {
+		want[t] = true
+	}
+	rows, err := s.db.Query(`SELECT id, seed FROM tasks WHERE run_id = ? AND collector = ? AND done = 1`, s.runID, collector)
+	if err != nil {
+		return 0, err
+	}
+	var ids []string
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		var seed types.Seed
+		if json.Unmarshal([]byte(raw), &seed) == nil && want[seed.Key()] {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+	for _, id := range ids {
+		if _, err := s.db.Exec(`UPDATE tasks SET done = 0 WHERE run_id = ? AND id = ?`, s.runID, id); err != nil {
+			return 0, err
+		}
+	}
+	return len(ids), nil
+}
