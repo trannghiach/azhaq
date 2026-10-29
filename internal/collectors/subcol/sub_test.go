@@ -291,3 +291,45 @@ func strs(v any) []string {
 	}
 	return out
 }
+
+// A padding source's names need a DNS check (Options.Verify). Under a tight
+// -timeout that check cannot finish, and running it anyway would blow the
+// deadline so the engine stores nothing — the v0.8 "0 names on -timeout"
+// bug. The collector must emit the real names and drop the unchecked
+// padding name instead.
+func TestRunDeadlineSkipsSlowPaddingVerify(t *testing.T) {
+	pad := fake("pad", noKey, true, []string{"junk.example.org"}, nil)
+	pad.verify = true
+	stuck := make(chan struct{})
+	defer close(stuck)
+	c := collector(Options{SourceTimeout: time.Minute, Verify: func(ctx context.Context, _ string, names []string) ([]string, int) {
+		<-ctx.Done() // the DNS check never answers in time
+		return nil, len(names)
+	}},
+		fake("fast", noKey, true, []string{"www.example.org"}, nil),
+		pad,
+		hang("deaf", stuck), // keeps a source running so the -timeout cuts the wait
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	t0 := time.Now()
+	var payload map[string]any
+	_, err := c.Run(ctx, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}, func(o types.Observation) error {
+		if ctx.Err() != nil {
+			return ctx.Err() // as the engine does: nothing is taken after the run ends
+		}
+		return json.Unmarshal(o.Payload, &payload)
+	})
+	if err != nil || ctx.Err() != nil {
+		t.Fatalf("emitted nothing before the deadline (%s): %v", time.Since(t0), err)
+	}
+	if got := strings.Join(strs(payload["names"]), ","); got != "www.example.org" {
+		t.Errorf("want the real name kept and the unchecked padding name dropped, got %q", got)
+	}
+	if payload["partial"] != true {
+		t.Errorf("a cut-short result is partial: %+v", payload)
+	}
+	if msg, _ := payload["sources"].(map[string]any)["pad"].(map[string]any)["error"].(string); !strings.Contains(msg, "not checked") {
+		t.Errorf("padding source should say its names were not checked: %q", msg)
+	}
+}

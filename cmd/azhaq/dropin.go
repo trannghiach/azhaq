@@ -548,7 +548,7 @@ func cmdSubs(args []string) error {
 		// that do not resolve (stale certificate logs, wildcard noise). The
 		// live set is the one you can act on.
 		rep.Counts["collected"] = len(collected)
-		if d := len(collected) - guessed - len(seen); d > 0 {
+		if d := len(collected) - (len(seen) - guessed); d > 0 {
 			rep.Counts["did not resolve"] = d
 		}
 	}

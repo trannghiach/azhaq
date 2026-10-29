@@ -222,7 +222,7 @@ A domain the engine derives from a URL or hostname (`-url https://app.example.co
 
 `-dirs FILE` (active, needs `-allow`) guesses paths on each web service's front page, then in each directory it finds, down to `-dirs-depth` levels. Before a directory is swept, it is asked for names that cannot exist, in the shapes ffuf's auto-calibration uses (a random word, `admin…`, `.htaccess…`, a random directory, and one per extension). A guess is dropped when it answers like one of those: same status and the same size, or the same word and line counts, or a size that differs only by the length of the path the page echoes, or the same redirect. Statuses default to ffuf's (`200-299,301,302,307,401,403,405,500`). A directory is a path that redirects to itself with a trailing slash.
 
-The sweep has its own client: no cache, no redirects followed, bodies read only to count them, 20 requests in flight and 100 per second per host (`-dirs-threads`, `-dirs-rate`). Hits become URLs for the other collectors. With a session, logout-like words are skipped.
+The sweep has its own client: no cache, no redirects followed, bodies read only to count them, 40 requests in flight and 100 per second per host (`-dirs-threads`, `-dirs-rate`). Hits become URLs for the other collectors. With a session, logout-like words are skipped.
 
 ## Parameters
 

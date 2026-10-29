@@ -40,7 +40,7 @@ const (
 	// and listed as failed, retryable, while the names the others gave are
 	// kept. It alone makes the exit code 3 only when no other source
 	// answered.
-	DefaultSourceTimeout = 30 * time.Second
+	DefaultSourceTimeout = 60 * time.Second
 	// lateGrace is how long after a source's deadline Run still waits for
 	// it: some sources ignore the context (subfinder's crt.sh tries a
 	// Postgres connection first).
@@ -318,7 +318,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	for name, why := range skipped {
 		status[name] = map[string]any{"skipped": why}
 	}
-	names, foundBy = c.verifyPadded(ctx, domain, run, names, foundBy, status)
+	names, foundBy = c.verifyPadded(ctx, domain, run, names, foundBy, status, cut)
 	sort.Strings(names)
 	for _, by := range foundBy {
 		sort.Strings(by)
@@ -361,7 +361,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 // verifyPadded drops the names only padding sources gave (source.verify)
 // that do not resolve, and notes in each such source's status how many it
 // kept.
-func (c *Collector) verifyPadded(ctx context.Context, domain string, run []source, names []string, foundBy map[string][]string, status map[string]any) ([]string, map[string][]string) {
+func (c *Collector) verifyPadded(ctx context.Context, domain string, run []source, names []string, foundBy map[string][]string, status map[string]any, cut bool) ([]string, map[string][]string) {
 	padding := map[string]bool{}
 	for _, s := range run {
 		if s.verify {
@@ -388,9 +388,32 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 		return names, foundBy
 	}
 	live := map[string]bool{}
-	got, unchecked := c.opts.Verify(ctx, domain, check)
-	for _, n := range got {
-		live[n] = true
+	var unchecked int
+	// A DNS pass over the padding sources' names (hundreds of them) takes
+	// longer than the room left before the run's -timeout, and running it
+	// then would blow the deadline so the engine stores nothing at all (the
+	// result is dropped). When the wait was cut, or the deadline is too near
+	// to finish the check and still emit, drop the unverified padding-only
+	// names — they are mostly noise — and emit the rest now; azhaq resume
+	// checks them. Otherwise the check runs, bounded to leave room to emit.
+	vctx, skip := ctx, cut
+	if dl, ok := ctx.Deadline(); ok {
+		if left := time.Until(dl); left < emitGrace {
+			skip = true
+		} else {
+			var cancel context.CancelFunc
+			vctx, cancel = context.WithTimeout(ctx, left-emitGrace)
+			defer cancel()
+		}
+	}
+	if skip {
+		unchecked = len(check)
+	} else {
+		var got []string
+		got, unchecked = c.opts.Verify(vctx, domain, check)
+		for _, n := range got {
+			live[n] = true
+		}
 	}
 	drop := map[string]bool{}
 	for _, n := range check {
@@ -410,8 +433,13 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 			row["kept"] = len(check) - len(drop)
 			row["dropped_unresolved"] = len(drop)
 			if unchecked > 0 {
-				// Said, not silent: these may hold a real name.
-				row["error"] = fmt.Sprintf("%d of its names not checked: the DNS lookups failed", unchecked)
+				// Said, not silent: these may hold a real name. azhaq resume
+				// checks them.
+				why := "the DNS lookups failed"
+				if skip {
+					why = "the run's -timeout stopped the DNS check"
+				}
+				row["error"] = fmt.Sprintf("%d of its names not checked: %s; azhaq resume checks them", unchecked, why)
 			}
 		}
 	}
