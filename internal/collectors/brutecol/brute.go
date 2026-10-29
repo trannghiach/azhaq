@@ -200,7 +200,9 @@ func resolveFound(ctx context.Context, pool *dnsr.Pool, wild *dnsr.Wildcards, ap
 	}
 	var found []string
 	for _, a := range pool.ResolveMany(dnsr.Bulk(ctx), names, workers) {
-		if a.Live() && !wild.Match(ctx, a.Name, apex, a) {
+		// A CNAME whose target is gone is a name that exists: the kind a
+		// takeover check wants most.
+		if (a.Live() || len(a.CNAME) > 0) && !wild.Match(ctx, a.Name, apex, a) {
 			found = append(found, a.Name)
 		}
 	}

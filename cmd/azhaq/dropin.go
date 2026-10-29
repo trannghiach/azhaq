@@ -523,12 +523,13 @@ func cmdSubs(args []string) error {
 			w.obj(row)
 		}
 	}
-	// Names the guesses found: resolved, so live.
+	// Names the guesses found. A dangling CNAME is found but not live: with
+	// -live it shows as a takeover candidate, not as a name.
 	guessed := 0
 	for _, g := range []struct{ collector, source string }{{"azhaq-dns-brute", "dns-brute"}, {"azhaq-permute", "permute"}} {
 		for _, p := range payloads(st, g.collector) {
 			for _, name := range strs(p["names"]) {
-				if seen[name] {
+				if seen[name] || (alive != nil && alive[name] == nil) {
 					continue
 				}
 				seen[name] = true
