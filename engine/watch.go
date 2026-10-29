@@ -14,7 +14,7 @@ var watchKinds = []struct {
 	kind string
 	re   *regexp.Regexp
 }{
-	{"redirect", regexp.MustCompile(`(?i)^(redirect|redirect_?(uri|url|to)|return_?(url|to|path)?|returnurl|next|continue|dest(ination)?|goto|forward|callback_?url|success_?url|back_?url|target_?url|to)$`)},
+	{"redirect", regexp.MustCompile(`(?i)^(redirect|redir|redirect_?(uri|url|to)|return_?(url|to|path)?|returnurl|next|continue|dest(ination)?|goto|forward|callback_?url|success_?url|back_?url|target_?url|to)$`)},
 	{"url", regexp.MustCompile(`(?i)^(url|uri|link|href|src|source_?url|image_?url|img_?url|feed|webhook(_?url)?|proxy|host|domain|endpoint|site|fetch|load)$`)},
 	{"file", regexp.MustCompile(`(?i)^(file|filename|file_?name|path|filepath|file_?path|dir|directory|folder|document|template|include|download|attachment)$`)},
 	{"command", regexp.MustCompile(`(?i)^(cmd|command|exec|execute|run|shell|eval|ping)$`)},
