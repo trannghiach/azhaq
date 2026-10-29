@@ -59,7 +59,7 @@ func New(client *http.Client, o Options) *Collector {
 		o.Depth = 1
 	}
 	if o.Threads <= 0 {
-		o.Threads = 20
+		o.Threads = 40
 	}
 	if o.Rate <= 0 {
 		o.Rate = 1e6 // no pace but the threads', as ffuf

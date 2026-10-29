@@ -218,7 +218,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active: needs -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
-	dirsThreads := fs.Int("dirs-threads", 20, "path guesses in flight per service")
+	dirsThreads := fs.Int("dirs-threads", 40, "path guesses in flight per service (as ffuf)")
 	dirsRate := fs.Float64("dirs-rate", 100, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
 	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active: needs -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
