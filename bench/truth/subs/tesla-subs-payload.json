@@ -1,0 +1,7559 @@
+{
+"count": 1454,
+"domain": "tesla.com",
+"found_by": {
+"20.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"3.tesla.com": [
+"anubis",
+"crtname"
+],
+"47.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"a.energy.smf12.tcs.tesla.com": [
+"thc"
+],
+"a.energy.smf13.tcs.tesla.com": [
+"thc"
+],
+"a.energy.vast.tcs.tesla.com": [
+"thc"
+],
+"a.vast.tesla-hermes-snapshot-motors.tcs.tesla.com": [
+"thc"
+],
+"academiawashingtonribeiraopreto.tesla.com": [
+"anubis",
+"crtname"
+],
+"account.analytics-relay.tesla.com": [
+"crtname"
+],
+"account.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"account.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"account.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"account.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"accounts.tesla.com": [
+"crtname",
+"hudsonrock",
+"scanmalware",
+"thc"
+],
+"acme-sentry-4.eng.use1.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"acme-sentry-4a.eng.use1.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"acs2-poc.voice.tesla.com": [
+"crtname",
+"thc"
+],
+"admin.apigateway-logging.tesla.com": [
+"crtname"
+],
+"admin.digitalassets.tesla.com": [
+"crtname"
+],
+"admin.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"admin.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"ads.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"ads.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"ads.hcaptcha.tesla.com": [
+"crtname"
+],
+"ads.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"ai-api-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"ai-api-uat.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"ai-api.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"akamai-apigateway-automation-billing.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-automation.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-bender.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-captiveunderwriting.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-chargebackapi.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-charging-ownership.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"akamai-apigateway-clmapi-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-clmapi-uat.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-crawford-prd.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-crawford-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-deliveryopsapi1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-deliveryopsvitu.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-dev-captiveunderwriting.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-dev-warptmsapiserver-upgrade.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-dev-warptmsapiserver.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-ehs-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-ehs.de.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-ehs.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-einvoicing-stg.tesla.com": [
+"crtname",
+"thc"
+],
+"akamai-apigateway-einvoicing.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-finplat-prd.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-finplat-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-finplateng-defi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-finplateng-routeone.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-finplateng.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-fta.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-inventorytxnextapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-kro-reggi.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-logisticsratesapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-materials.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-mfs-gfb-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-mfs-supplier-uat.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-mfs-supplier.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-mytcore-prdsvc.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-nestgateway-stgsvc.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-ops-warp3pl.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-ownershipsvc-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-ownershipsvc.tesla.com": [
+"scanmalware",
+"subdomaincenter"
+],
+"akamai-apigateway-packaging2.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-payment.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-prd-global-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-procuretopayapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-profileapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-qa-captiveunderwriting.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-repair-api.tesla.com": [
+"crtname"
+],
+"akamai-apigateway-samsungsds-test.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-samsungsds.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-scraprecycle.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-shipmentplanningapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-bender.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-captiveunderwriting.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-deliveryopsapi1.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-deliveryopsvitu.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-einvoicing.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-finplateng-defi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-finplateng-routeone.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-finplateng.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-fta.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-global-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-inventorytxnextapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-kro-reggi.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-stg-materials.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-ops-warp3pl.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-packaging2.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg-payment.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-procuretopayapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg-profileapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-sandbox-automation.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-shipmentplanningapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-teslarpsapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-translationpipeline.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-vendorpartsapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-warp3pl.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg-warpassetapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-warpcxml.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-warpdashboardapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg-warpedi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg-warptmsapiserver-upgrade.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg-warptmsapiserver.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-stg-warptqpapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-stg2-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg2-global-deliveryopsapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-stg2-procuretopayapi.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-suppliers-rfq-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-suppliers-rfq.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"akamai-apigateway-tabsapi-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-tabsapi.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-teslarpsapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-teslaservice-api-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-teslaservice-api.tesla.com": [
+"crtname"
+],
+"akamai-apigateway-translationpipeline.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-uat-materials.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-vehicleextinfogw-prdsvc-st.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"akamai-apigateway-vehicleextinfogw-stgsvc-st.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"akamai-apigateway-vendorpartsapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-vfx-stg.tesla.com": [
+"rapiddns",
+"subdomaincenter"
+],
+"akamai-apigateway-vfx.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-warp3pl.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-warpassetapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-warpcxml-dev.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-warpcxml-stg.tesla.com": [
+"subdomaincenter"
+],
+"akamai-apigateway-warpcxml.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-warpdashboardapi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"akamai-apigateway-warpedi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-warptmsapiserver-upgrade.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-warptmsapiserver.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"akamai-apigateway-warptqpapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"akamai-apigateway-zip3-suppliersequence.tesla.com": [
+"anubis",
+"crtname"
+],
+"alpha.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"alpha.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"ams13-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"analytics-relay.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"analytics.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"analytics.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"analytics.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"analytics.hcaptcha.tesla.com": [
+"crtname"
+],
+"apac-cppm.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"apac-sso.tesla.com": [
+"anubis",
+"crtname"
+],
+"apac.logs.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"apacvpn.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"apacvpn1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"apacvpn2.tesla.com": [
+"anubis",
+"crtname"
+],
+"apf-api.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"apf-api.prd.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"api-account-master.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"api-firebolt-dev.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"api-firebolt-stage.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"api-firebolt.tesla.com": [
+"anubis",
+"crtname"
+],
+"api-kronos-dev.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"api-toolbox.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"api.apmv3-cdn-go.tesla.com": [
+"crtname"
+],
+"api.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"api.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"api.kronos.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"api.location-services-prd.tesla.com": [
+"crtname"
+],
+"apigateway-charging-bff.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"apigateway-cmms-external.tx.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-cx-api.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-logging.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"apigateway-logisticsportalapi.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-message-center-ownership.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"apigateway-pricing-gateway.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"apigateway-stg-warpassetapi.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-stg-warptmsapiserver.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-tcc-graph.tesla.com": [
+"subdomaincenter"
+],
+"apigateway-warpeventsapi.tesla.com": [
+"subdomaincenter"
+],
+"apmv3-cdn-go.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"app.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"app.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"app.apigateway-logging.tesla.com": [
+"crtname"
+],
+"app.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"app.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"app.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"app.tesla.com": [
+"anubis",
+"crtname"
+],
+"appplayer.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"apps.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"subdomaincenter"
+],
+"assets-ir.tesla.com": [
+"crtname",
+"thc"
+],
+"assets.digitalcontent.tesla.com": [
+"crtname"
+],
+"assets.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"assets.engage.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"assets.epc.tesla.com": [
+"crtname"
+],
+"assets.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"assets.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"assets.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"assets.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"assets.github-it.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"assets.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"assets.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"assistant-api.prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"aurora-ordering-ext-qa.tesla.com": [
+"anubis",
+"crtname"
+],
+"aurora-ordering-ext-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"aurora-ordering-ext.tesla.com": [
+"anubis",
+"crtname"
+],
+"auth-global-stage.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"auth-global.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"auth-stage.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"auth.eng.euw1.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"auth.eng.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"auth.prd.euw1.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"auth.prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"auth.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"scanmalware",
+"thc"
+],
+"auth0.tesla.com": [
+"crtname"
+],
+"autobidder-eng.powerhub.energy.tesla.com": [
+"anubis",
+"crtname"
+],
+"autobidder-preprd.powerhub.energy.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"autobidder.powerhub.energy.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"autoconfig.auth.tesla.com": [
+"crtname"
+],
+"autoconfig.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"autoconfig.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"autodiscover.contractors.contractors.tesla.com": [
+"anubis",
+"crtname"
+],
+"autodiscover.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"autodiscover.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"autodiscover.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"avatars.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"avatars.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"avatars.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"avatars.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"avatars.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"aws.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"aws.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"awsbtest.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"azure.assistant-api.prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"b.energy.ams15.tcs.tesla.com": [
+"thc"
+],
+"b.energy.ams17.tcs.tesla.com": [
+"thc"
+],
+"b.energy.vast.tcs.tesla.com": [
+"thc"
+],
+"bcl.tesla.com": [
+"anubis",
+"crtname"
+],
+"bctpay.tesla.com": [
+"anubis",
+"crtname"
+],
+"bender-auth.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"beta-fvcarriers.tesla.com": [
+"anubis",
+"crtname"
+],
+"beta-partners.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"beta-suppliers.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"beta.digitalcontent.tesla.com": [
+"crtname"
+],
+"beta.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"bettertime-stage.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"bettertime.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"bi.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"billing.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"blog.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"blog.extsentry.tesla.com": [
+"crtname"
+],
+"blog.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"blog.tesla.com": [
+"anubis",
+"crtname"
+],
+"bn.na.vn.cloud.tesla.com": [
+"thc"
+],
+"bolt.tesla.com": [
+"anubis",
+"crtname"
+],
+"bom01-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"bottlerocket.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"bounce.emails.tesla.com": [
+"anubis",
+"crtname"
+],
+"business-shop.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"business-ui-ownership.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"business.tesla.com": [
+"crtname"
+],
+"c.tesla.com": [
+"anubis",
+"crtname"
+],
+"c382p434p572c.tesla.com": [
+"anubis",
+"crtname"
+],
+"ca.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cdn-design.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cdn.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"cdn.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"cdn.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"cdn.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"cdn.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"cdn.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"cdn.link.tesla.com": [
+"crtname"
+],
+"cdn.location-services-prd.tesla.com": [
+"crtname"
+],
+"cdns-content.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"charging-transparency.tesla.com": [
+"crtname",
+"thc"
+],
+"chat-staging.bottlerocket.tesla.com": [
+"thc"
+],
+"chat.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"chat.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"chat.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"chat.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"checkout-ui-assets.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"ci.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"cicerone.tesla.com": [
+"anubis",
+"crtname"
+],
+"ciscoguest.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapiencpoc.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"citiapiencpocv2.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapiencpocv3.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapiencprodv4.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"citiapiencprodv5.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"citiapiencsandboxv4.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapipgpprodv6.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapipgpprodv7.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapipgpprodv8.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapisshprodv6.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapisslpoc.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapisslpocv2.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapisslpocv3.tesla.com": [
+"anubis",
+"crtname"
+],
+"citiapisslprodv4.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"citiapisslprodv5.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"citiapisslprodv7.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapisslprodv8.tesla.com": [
+"crtname",
+"thc"
+],
+"citiapisslsandboxv4.tesla.com": [
+"anubis",
+"crtname"
+],
+"citibankstatementsha512.tesla.com": [
+"anubis",
+"crtname"
+],
+"cld-ec.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"click.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"click.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"click.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"click.email.tesla.com": [
+"anubis",
+"crtname"
+],
+"click.emails.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"click.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"click.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"cloud.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"cloud.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"cloud.epc.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"cloudprotect.tesla.com": [
+"anubis",
+"crtname"
+],
+"cn-north-1-eng-teslamaps.k8s.tesla.com": [
+"crtname"
+],
+"cn-north-1-prd-teslamaps.k8s.tesla.com": [
+"crtname"
+],
+"cn.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cnvpn.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cnvpn1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"codeload.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"codeload.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"codeload.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"codeload.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"codeload.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"com.tesla.com": [
+"anubis",
+"crtname"
+],
+"comparison.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"consul.bottlerocket.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"containers.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"cradlepointtest01.tesla.com": [
+"anubis",
+"crtname"
+],
+"crossdock-logistics.tesla.com": [
+"subdomaincenter"
+],
+"crpt.tesla.com": [
+"anubis",
+"crtname"
+],
+"cryptopay.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cryptopay2.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"cryptopay3.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"cryptopay4.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"cssp-dev-teleport-proxy.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"cua-chat-ui.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"cua-help-me-charge-ui.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"cua-help-me-choose-ui.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cua-test-drive-ui.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cx-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cx-apac.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cx-api-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cx-api-apac.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cxadmin-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cxadmin-apac.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"cxadmin-api-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cxadmin-api-apac.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"cxengine-apac-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"cxengine-apac.tesla.com": [
+"anubis",
+"crtname"
+],
+"cyberbeer.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"dal11-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"darkerfield-emea.tesla.com": [
+"subdomaincenter"
+],
+"darkfield-emea.tesla.com": [
+"subdomaincenter"
+],
+"darkfield.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"dashcam.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"data.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"dataviz-one.tesla.com": [
+"subdomaincenter"
+],
+"dataviz.tesla.com": [
+"anubis",
+"crtname"
+],
+"db.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"db.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"db.digitalcontent.tesla.com": [
+"crtname"
+],
+"db.fleet-music-prd.tesla.com": [
+"crtname"
+],
+"db.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"de.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"demo.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"demo.cloud.tesla.com": [
+"crtname"
+],
+"dev-hermes-qd.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"dev.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"dev.cloud.tesla.com": [
+"crtname"
+],
+"dev.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dev.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"dev.kronosdb.tesla.com": [
+"anubis",
+"crtname"
+],
+"dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"developer.tesla.com": [
+"crtname",
+"thc"
+],
+"device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"device-api.prd.na.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"dex.ops.bn.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"dex.ops.na.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"dex.ops.vs-bnc.na.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"dgf.tesla.com": [
+"anubis",
+"crtname"
+],
+"dhc.tesla.com": [
+"crtname",
+"thc"
+],
+"digitalassets-accounts.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"digitalassets-contents.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"digitalassets-energy.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"digitalassets-learning.tesla.com": [
+"anubis",
+"crtname"
+],
+"digitalassets-secure.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"digitalassets-shop.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"digitalassets-stage.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"digitalassets.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"digitalcontent.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"diner-api-stage.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"diner-api.tesla.com": [
+"thc"
+],
+"diner-webapp-stage.tesla.com": [
+"thc"
+],
+"diner-webapp.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"discovery-service.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"discovery.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"dns.apigateway-pricing-gateway.tesla.com": [
+"crtname"
+],
+"dns.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"dns.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"dns.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns1.apigateway-logging.tesla.com": [
+"crtname"
+],
+"dns1.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns1.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns1.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"dns1.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"dns1.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns1.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns2.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"dns2.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns2.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"dns2.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"docker.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"docker.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"docker.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"docker.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"docker.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"docs.bottlerocket.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"docs.digitalassets.tesla.com": [
+"crtname"
+],
+"docs.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"docs.location-services-prd.tesla.com": [
+"crtname"
+],
+"doraemon-svc-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"doraemon-svc-apac.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"dpuas-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"dpupr-eng.euw1.vn.cloud.tesla.com": [
+"subdomaincenter"
+],
+"e-swift.tesla.com": [
+"subdomaincenter"
+],
+"e382p434p572c.tesla.com": [
+"anubis",
+"crtname"
+],
+"eaa-setup.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"echo-internal.tesla.com": [
+"crtname"
+],
+"echo.tesla.com": [
+"crtname"
+],
+"edge.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"edge.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"edge.digitalassets.tesla.com": [
+"crtname"
+],
+"edgedns.tesla.com": [
+"anubis",
+"crtname"
+],
+"edr-eu.tesla.com": [
+"crtname",
+"thc"
+],
+"edr.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"ehs.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"einvoicing.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"em1.tesla.com": [
+"anubis",
+"crtname"
+],
+"em1488.tesla.com": [
+"anubis",
+"crtname"
+],
+"em1962.tesla.com": [
+"anubis",
+"crtname"
+],
+"em3490.tesla.com": [
+"anubis",
+"crtname"
+],
+"em5886.tesla.com": [
+"anubis",
+"crtname"
+],
+"em7799.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"email.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"email.vms.tesla.com": [
+"anubis",
+"crtname"
+],
+"email1.tesla.com": [
+"anubis",
+"crtname"
+],
+"emails.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"embed-staging.bottlerocket.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"employee-teslatequila.tesla.com": [
+"anubis",
+"crtname"
+],
+"employeefeedback.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"energy-technician.bottlerocket.tesla.com": [
+"thc"
+],
+"energy.bottlerocket.tesla.com": [
+"thc"
+],
+"energy.obs.tesla.com": [
+"crtname"
+],
+"energy.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"energydesk.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"energylibrary.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"energysupport.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"eng.america.vn.cloud.tesla.com": [
+"thc"
+],
+"eng.euw1.vn.cloud.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"eng.na.vn.cloud.tesla.com": [
+"thc"
+],
+"eng.usw.vn.cloud.tesla.com": [
+"thc"
+],
+"eng.usw2.vn.cloud.tesla.com": [
+"thc"
+],
+"engage.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"enterpriseregistration.c.tesla.com": [
+"anubis",
+"crtname"
+],
+"enterpriseregistration.contractors.contractors.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"enterpriseregistration.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"envoy-finplat-stg.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"envoy-finplat-sunlight.tesla.com": [
+"anubis",
+"crtname"
+],
+"envoy-partnerleadsharing.tesla.com": [
+"anubis",
+"crtname"
+],
+"envoy-partnertasks.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"epc-support-api.tesla.com": [
+"subdomaincenter"
+],
+"epc-support.tesla.com": [
+"crtname"
+],
+"epc.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"epcapi.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"epuca-eng.euw1.vn.cloud.tesla.com": [
+"subdomaincenter"
+],
+"epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"epuca-prd.usw2.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns",
+"thc"
+],
+"errlog-stage.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"errlog.tesla.com": [
+"anubis",
+"crtname"
+],
+"eu.logs.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"eu.tesla.com": [
+"anubis",
+"crtname"
+],
+"eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"eua-origin.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"eumirror.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"events.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"example.tesla.com": [
+"crtname"
+],
+"excluded.tesla.com": [
+"anubis",
+"crtname"
+],
+"exp-zcp-cloud-ap-mfgsre.tesla.com": [
+"crtname",
+"thc"
+],
+"exp-zcp-cloud-eu-itmfg-staging.tesla.com": [
+"crtname",
+"thc"
+],
+"exp-zcp-cloud-eu-itmfg.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"exp-zcp-cloud-na-itmfg-staging.tesla.com": [
+"crtname",
+"thc"
+],
+"exp-zcp-cloud-na-itmfg.tesla.com": [
+"crtname",
+"thc"
+],
+"external-3pl-prd.tesla.com": [
+"anubis",
+"crtname"
+],
+"external-3pl-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"external-automation.tesla.com": [
+"anubis",
+"crtname"
+],
+"external-sandbox-automation.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"external.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"external.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"external.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"extsentry.tesla.com": [
+"crtname"
+],
+"factory-berlin.tesla.com": [
+"anubis",
+"crtname"
+],
+"factory.tesla.com": [
+"crtname",
+"thc"
+],
+"feedback.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"files.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"files.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"financeplatform.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"financial-gw-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"financial-gw.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"finops.tesla.com": [
+"anubis",
+"crtname"
+],
+"fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"fleet-api-files-prd.tesla.com": [
+"crtname"
+],
+"fleet-api.eng.eu.vn.cloud.tesla.com": [
+"subdomaincenter"
+],
+"fleet-api.eng.na.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"fleet-api.prd.eu.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"fleet-api.prd.na.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"fleet-api.prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"fleet-auth.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleet-auth.tesla.com": [
+"crtname",
+"thc"
+],
+"fleet-mcp.eng.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"fleet-mcp.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleet-mcp.prd.eu.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"fleet-mcp.prd.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"fleet-mcp.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"fleet-music-prd.tesla.com": [
+"crtname"
+],
+"fleet-streaming-api.eng.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"fleet-streaming-api.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"fleetview.america.fn.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleetview.europe.fn.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleetview.fn.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"fleetview.prd.america.fn.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleetview.prd.america.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"fleetview.prd.eu.fn.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"fleetview.prd.europe.fn.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"fleetview.prd.europe.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"fleetview.prd.euw1.fn.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"fleetview.prd.na.fn.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"fleetview.prd.usw.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"fleetview.prd.usw2.fn.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"flux.tesla.com": [
+"hudsonrock"
+],
+"forum.analytics-relay.tesla.com": [
+"crtname"
+],
+"forum.digitalcontent.tesla.com": [
+"crtname"
+],
+"forum.energy.obs.tesla.com": [
+"crtname"
+],
+"forum.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"forums.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"fra05-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"frontend-tesla-int.us-west-2-eng-it.k8s.tesla.com": [
+"crtname",
+"thc"
+],
+"fsx-ws.tesla.com": [
+"subdomaincenter"
+],
+"ftp.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"ftp.extsentry.tesla.com": [
+"crtname"
+],
+"gantry.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"gateway-public-ap-hermes-eng5x-hermes.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-ap-hermes-prd5x-hermes.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-eng5a-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-eng5b-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-eng5c-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-eng5d-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-eng5x-media.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-hermes-eng5x-hermes.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-hermes-prd5x-hermes.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-ops5x-sentry.ops.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-prd5a-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-prd5b-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-prd5c-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-prd5d-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-prd5x-media.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-service-center-eng5a-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-service-center-eng5b-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-service-center-eng5c-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-telemetry-eng5a-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-eng5b-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-eng5c-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-eng5d-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-prd5a-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-prd5b-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-prd5c-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-telemetry-prd5d-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"gateway-public-vehicle-eng5a-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-eng5b-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-eng5c-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-eng5d-fleet.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-prd5a-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-prd5b-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-prd5c-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway-public-vehicle-prd5d-fleet.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gateway.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"gateway.epc.tesla.com": [
+"crtname"
+],
+"gateway.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"gateway.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"gcp.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"gcp.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"gcp.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"gem-api.eng.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"gem-api.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"genai.tesla.com": [
+"crtname",
+"thc"
+],
+"gf-modeling-mpp.tesla.com": [
+"anubis",
+"crtname"
+],
+"gf.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"gfb.vdi.tesla.com": [
+"thc"
+],
+"gigabier.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"gigalife.tesla.com": [
+"subdomaincenter"
+],
+"gist.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"gist.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"gist.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"gist.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"gist.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"git.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"github-it.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"githubmirror.tesla.com": [
+"anubis",
+"crtname"
+],
+"githubmirroraus08.tesla.com": [
+"anubis",
+"crtname"
+],
+"githubmirrorber02.tesla.com": [
+"anubis",
+"crtname"
+],
+"gitlab.digitalassets.tesla.com": [
+"crtname"
+],
+"gitlab.epc.tesla.com": [
+"crtname"
+],
+"gitlab.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"go.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"go.apigateway-logging.tesla.com": [
+"crtname"
+],
+"go.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"go.energy.obs.tesla.com": [
+"crtname"
+],
+"go.location-services-prd.tesla.com": [
+"crtname"
+],
+"gpv.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"grafana.energy.obs.tesla.com": [
+"crtname"
+],
+"grafana.extsentry.tesla.com": [
+"crtname"
+],
+"grid.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"gridlogic-eng.energy.tesla.com": [
+"anubis",
+"crtname"
+],
+"gridlogic-eng.powerhub.energy.tesla.com": [
+"anubis",
+"crtname"
+],
+"gridlogic-qa.energy.tesla.com": [
+"anubis",
+"crtname"
+],
+"gridlogic.energy.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"gridlogic.powerhub.energy.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"group301.tesla.com": [
+"anubis",
+"crtname"
+],
+"hcaptcha.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"help.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"help.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"help.cloud.tesla.com": [
+"crtname"
+],
+"help.fleet-music-prd.tesla.com": [
+"crtname"
+],
+"hermes-ap.eng.vn.cloud.tesla.com": [
+"rapiddns",
+"thc"
+],
+"hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"hnd13-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"home.digitalassets.tesla.com": [
+"crtname"
+],
+"home.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"home.location-services-prd.tesla.com": [
+"crtname"
+],
+"hub.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"hub.epc.tesla.com": [
+"crtname"
+],
+"hub.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"humans.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"iad05-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"image-emails.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"image.email.tesla.com": [
+"anubis",
+"crtname"
+],
+"image.emails.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"images.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"images.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"images.apmv3-cdn-go.tesla.com": [
+"crtname"
+],
+"images.cloud.tesla.com": [
+"crtname"
+],
+"images.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"imap.auth.tesla.com": [
+"crtname"
+],
+"imap.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"imap.digitalcontent.tesla.com": [
+"crtname"
+],
+"imap.tesla.com": [
+"anubis",
+"crtname"
+],
+"img.digitalassets-accounts.tesla.com": [
+"crtname"
+],
+"img.energy.obs.tesla.com": [
+"crtname"
+],
+"img.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"img.hcaptcha.tesla.com": [
+"crtname"
+],
+"incontrol.tesla.com": [
+"crtname",
+"thc"
+],
+"inference-eu-staging.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"inference-eu.bottlerocket.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"inference-staging.bottlerocket.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"inference-staging.tesla.com": [
+"thc"
+],
+"inference.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"inference.tesla.com": [
+"crtname",
+"thc"
+],
+"inside-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"inside.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"installations-ext-api.tesla.com": [
+"anubis",
+"crtname"
+],
+"int.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"int.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"integration-kronos-dev.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"integration.kronos.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"internal.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"internal.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"internal.cloud.tesla.com": [
+"crtname"
+],
+"internal.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"internal.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"inventory-assets.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"invest.tesla.com": [
+"anubis",
+"crtname"
+],
+"ion.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"ir.bottlerocket.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"ir.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"scanmalware",
+"thc"
+],
+"issue-tracker-stg.tesla.com": [
+"crtname",
+"thc"
+],
+"issue-tracker.tesla.com": [
+"crtname",
+"thc"
+],
+"issue-trackerapi-stg.tesla.com": [
+"crtname",
+"thc"
+],
+"issue-trackerapi.tesla.com": [
+"crtname",
+"thc"
+],
+"itanswers.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"jenkins.digitalassets.tesla.com": [
+"crtname"
+],
+"jenkins.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"k8s.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"k8s.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"k8s.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"k8s.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"keycloak-tesla-int.us-west-2-eng-it.k8s.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"kpai7ycr7jxqkilp.tesla.com": [
+"anubis",
+"crtname"
+],
+"krndevdb.tesla.com": [
+"crtname",
+"thc"
+],
+"kronos-dev.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"kronos.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"thc"
+],
+"kronosdb-dev.tesla.com": [
+"crtname",
+"thc"
+],
+"kronosdb.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"kubernetes.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"lax32-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"ldap.tesla.com": [
+"crtname",
+"thc"
+],
+"learning-apac-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"learning-apac.tesla.com": [
+"anubis",
+"crtname"
+],
+"lighthouse.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"link.qa.tesla.com": [
+"anubis",
+"crtname"
+],
+"link.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"links.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"lionpayshare.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"lionpaytest.tesla.com": [
+"anubis",
+"crtname"
+],
+"lionshare.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"live-data.america.fn.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"live-data.europe.fn.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"live-data.fn.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"live-data.prd.america.fn.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"live-data.prd.eu.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"live-data.prd.europe.fn.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"live-data.prd.euw1.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"live-data.prd.na.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"live-data.prd.usw.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"live-data.prd.usw2.fn.tesla.com": [
+"crtname",
+"thc"
+],
+"live.apigateway-pricing-gateway.tesla.com": [
+"crtname"
+],
+"live.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"live.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"live.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"live.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"livestream.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"livestreamapi-test.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"livestreamapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"location-services-prd.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"logcollection.tesla.com": [
+"anubis",
+"crtname"
+],
+"logcollector-ext.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"login.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"login.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"login.link.tesla.com": [
+"crtname"
+],
+"logs.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"logtransit-ext.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"lyncdiscover.c.tesla.com": [
+"anubis",
+"crtname"
+],
+"lyncdiscover.contractors.contractors.tesla.com": [
+"anubis",
+"crtname"
+],
+"lyncdiscover.tesla.com": [
+"anubis",
+"crtname"
+],
+"m.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"m.extsentry.tesla.com": [
+"crtname"
+],
+"m.location-services-prd.tesla.com": [
+"crtname"
+],
+"m365api.tesla.com": [
+"crtname",
+"thc"
+],
+"mail.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"mail.apmv3-cdn-go.tesla.com": [
+"crtname"
+],
+"mail.assistant-api.prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"mail.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"mail.auth.tesla.com": [
+"crtname"
+],
+"mail.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"mail.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"mail.tesla.com": [
+"anubis",
+"crtname"
+],
+"mail1.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"mail1.digitalassets.tesla.com": [
+"crtname"
+],
+"mail1.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"mail1.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"mail2.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"mail2.extsentry.tesla.com": [
+"crtname"
+],
+"mail2.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"manager.courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"marketing.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"maven.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"maven.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"maven.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"maven.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"maven.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media-server-api.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"media-server-api.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"media-server-dev-api.eng.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"media-server-qr-dev.eng.america.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"media-server-qr.eng.america.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"media-server-qr.prd.america.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"media.auth.tesla.com": [
+"crtname"
+],
+"media.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"media.digitalassets.tesla.com": [
+"crtname"
+],
+"media.digitalcontent.tesla.com": [
+"crtname"
+],
+"media.epc.tesla.com": [
+"crtname"
+],
+"media.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"media.hcaptcha.tesla.com": [
+"crtname"
+],
+"media.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"meet.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"mfa-dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"mfa-reset.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"mfa-stage.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"mfa.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mfamobile-dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"mfauser-dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"mfg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mfs-reno.tesla.com": [
+"crtname",
+"thc"
+],
+"mfs-supplier-uat.tesla.com": [
+"anubis",
+"crtname"
+],
+"mfs-supplier.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"mfs-synergy.tesla.com": [
+"crtname",
+"thc"
+],
+"mirror.tesla.com": [
+"anubis",
+"crtname"
+],
+"mobile-links-cdn.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"mobile-links-cdn.prd.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"mobile-links.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"mobile-links.prd.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"mobile-ops-links.prd.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"mobile.kronos.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mobile.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"model3.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"monitor.apigateway-logging.tesla.com": [
+"crtname"
+],
+"monitor.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"monitor.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"monitoring-eu.tesla.com": [
+"anubis",
+"crtname"
+],
+"monitoring.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"mrsproxy06.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"msoid.contractors.contractors.tesla.com": [
+"anubis",
+"crtname"
+],
+"mta.email.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mta.emails.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mta2.email.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"mta2.emails.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mta2gh.emails.tesla.com": [
+"anubis",
+"crtname"
+],
+"mta3.emails.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"mta4.emails.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"mta5.emails.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"multiplier.tesla.com": [
+"crtname"
+],
+"mx.digitalcontent.tesla.com": [
+"crtname"
+],
+"mx.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"mx.fleet-music-prd.tesla.com": [
+"crtname"
+],
+"my.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"my.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"my.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"my.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"my.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"myapps.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"mytcore-inventory-assests.tesla.com": [
+"crtname"
+],
+"na-1-sso.tesla.com": [
+"anubis",
+"crtname"
+],
+"na-2-sso.tesla.com": [
+"anubis",
+"crtname"
+],
+"na-eq-sso.tesla.com": [
+"anubis",
+"crtname"
+],
+"na-sso.tesla.com": [
+"anubis",
+"crtname"
+],
+"na.logs.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"na.vn.cloud.tesla.com": [
+"crtname"
+],
+"naa-origin.tesla.com": [
+"anubis",
+"crtname"
+],
+"nas-origin.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"nav.vn.cloud.tesla.com": [
+"crtname"
+],
+"nema1450.tesla.com": [
+"crtname",
+"thc"
+],
+"new-dev.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"new.tesla.com": [
+"anubis",
+"crtname"
+],
+"news.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"noservice.tesla.com": [
+"anubis",
+"crtname"
+],
+"notebook.github-ap.tesla.com": [
+"anubis",
+"crtname"
+],
+"notebook.github-fw.tesla.com": [
+"anubis",
+"crtname"
+],
+"notebook.github-it.tesla.com": [
+"anubis",
+"crtname"
+],
+"notebooks.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"notebooks.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"notebooks.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"notebooks.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"notebooks.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npm.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npm.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npm.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npm.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npm.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"npu.prd.nav.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npuapt-prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"npuca-prd.usw2.vn.cloud.tesla.com": [
+"thc"
+],
+"npuhe-eng.euw1.vn.cloud.tesla.com": [
+"rapiddns"
+],
+"npuhe-eng.usw2.vn.cloud.tesla.com": [
+"rapiddns",
+"subdomaincenter"
+],
+"npute-eng.euw1.vn.cloud.tesla.com": [
+"rapiddns"
+],
+"npute-prd.euw1.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npute-prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npute-prd.usw2.vn.cloud.tesla.com": [
+"rapiddns",
+"thc"
+],
+"npuv-ap.prd.usw2.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npuv-eng.usw2.vn.cloud.tesla.com": [
+"thc"
+],
+"npuv-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"npuv-prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"npuv-prd.usw2.vn.cloud.tesla.com": [
+"rapiddns",
+"thc"
+],
+"ns1.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns1.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns1.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"ns2.analytics-relay.tesla.com": [
+"crtname"
+],
+"ns2.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns2.digitalassets.tesla.com": [
+"crtname"
+],
+"ns2.digitalcontent.tesla.com": [
+"crtname"
+],
+"ns2.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns2.fleet-music-prd.tesla.com": [
+"crtname"
+],
+"ns2.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns2.location-services-prd.tesla.com": [
+"crtname"
+],
+"ns3.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"ns3.analytics-relay.tesla.com": [
+"crtname"
+],
+"ns3.cloud.tesla.com": [
+"crtname"
+],
+"ns3.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns3.energy.obs.tesla.com": [
+"crtname"
+],
+"ns3.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns4.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"ns4.analytics-relay.tesla.com": [
+"crtname"
+],
+"ns4.cloud.tesla.com": [
+"crtname"
+],
+"ns4.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"ns4.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ns4.digitalcontent.tesla.com": [
+"crtname"
+],
+"nuget.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"nuget.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"nuget.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"nuget.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"nuget.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"nv.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"ny.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"o1.ptr2410.link.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"o2.ptr556.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"o3.ptr1444.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"o4.ptr1867.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"o5.ptr8466.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"o6.ptr9437.tesla.com": [
+"anubis",
+"crtname"
+],
+"o7.ptr6980.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"obs.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"onboard.tesla.com": [
+"anubis",
+"crtname"
+],
+"oneteam.tesla.com": [
+"anubis",
+"crtname"
+],
+"openadrclient.tesla.com": [
+"anubis",
+"crtname"
+],
+"ops.na.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"orca.tesla.com": [
+"scanmalware"
+],
+"origin-apigateway-reassignments.tesla.com": [
+"subdomaincenter"
+],
+"origin-apigateway-teslarpsapi.tesla.com": [
+"subdomaincenter"
+],
+"origin-apigateway-warptmsapiserver.tesla.com": [
+"subdomaincenter"
+],
+"origin-apps.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-assets-contactus-withdraw.tesla.com": [
+"crtname"
+],
+"origin-assets-contactus.tesla.com": [
+"crtname",
+"thc"
+],
+"origin-assets-teslaaccount-leasing-financing.tesla.com": [
+"subdomaincenter"
+],
+"origin-aurora-ordering-ext.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-auth-gtm.tesla.com": [
+"subdomaincenter"
+],
+"origin-auth.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"origin-bolt.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"origin-charging-ownership-stage.tesla.com": [
+"subdomaincenter"
+],
+"origin-cicerone.tesla.com": [
+"rapiddns"
+],
+"origin-courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-dms-api-stg.tesla.com": [
+"subdomaincenter"
+],
+"origin-edr.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-ehs-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-ehs.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-einvoicing.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-financialgateway-stg.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"origin-financialgateway.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-finplat-prd.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"origin-finplat-stg.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"origin-grid.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-inside-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-inside.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-installations-ext-api.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-itanswers.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-mfa.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-mobile.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-myapps.tesla.com": [
+"subdomaincenter"
+],
+"origin-ownership.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-pay.tesla.com": [
+"rapiddns"
+],
+"origin-pilotbpay.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-profile.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-profileapi-stg.tesla.com": [
+"rapiddns"
+],
+"origin-profileapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-ranger-api.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"origin-reassignments.tesla.com": [
+"subdomaincenter"
+],
+"origin-referral-app.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"origin-slingsdlc.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"origin-sspr.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"origin-static-assets-profile-settings.tesla.com": [
+"subdomaincenter"
+],
+"origin-stg-logisticssignals.tesla.com": [
+"subdomaincenter"
+],
+"origin-tcc-gw-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-tcc-gw.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-toolbox-beta.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-warp-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-warp.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"origin-warpcxml-dev.tesla.com": [
+"subdomaincenter"
+],
+"origin-webchat-emea.tesla.com": [
+"subdomaincenter"
+],
+"origin-webchat.tesla.com": [
+"subdomaincenter"
+],
+"origin-workforceapi.tesla.com": [
+"subdomaincenter"
+],
+"origin-www-auth.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-www.tesla.com": [
+"anubis",
+"crtname"
+],
+"origin-wwwcdn.tesla.com": [
+"anubis",
+"crtname"
+],
+"os.tesla.com": [
+"anubis",
+"crtname"
+],
+"other.tesla.com": [
+"anubis",
+"crtname"
+],
+"owa.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"owa.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"owner-api.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"ownerapi-alpha.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"ownerapi-api.eng.euw1.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"ownerapi-api.eng.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"ownerapi-api.eng.usw2.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"ownerapi-signoff-stage.eng.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"ownerapi-signoff.eng.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"ownership.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"oxp-charging-guest-web.tesla.com": [
+"crtname",
+"thc"
+],
+"oxp-documents-ui.tesla.com": [
+"crtname"
+],
+"pages.email.tesla.com": [
+"anubis",
+"crtname"
+],
+"pages.emails.tesla.com": [
+"anubis",
+"crtname"
+],
+"pages.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"pages.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"pages.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"pages.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"pages.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"paloalto.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"partnerleadsharing.tesla.com": [
+"anubis",
+"crtname"
+],
+"partners.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"parts.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"pay.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"payment-dlocal-prod.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"payment-dlocal-stg.tesla.com": [
+"crtname",
+"thc"
+],
+"payment-public-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"paymentrecon-stage.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"paymentrecon.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"payx-citiapi-prod.tesla.com": [
+"anubis",
+"crtname"
+],
+"pds.tesla.com": [
+"crtname"
+],
+"phototravel.tesla.com": [
+"anubis",
+"crtname"
+],
+"pilot-bpay.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"pixiecloud.tesla.com": [
+"crtname",
+"thc"
+],
+"pm-bounces.tesla.com": [
+"anubis",
+"crtname"
+],
+"pop.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"pop.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"pop.energy.obs.tesla.com": [
+"crtname"
+],
+"pop.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"pop.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"portal.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"powerhub.energy.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"powerwall.tesla.com": [
+"anubis",
+"crtname"
+],
+"prd.america.vn.cloud.tesla.com": [
+"thc"
+],
+"prd.eu.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"prd.euw1.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"prd.na.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"prd.nav.vn.cloud.tesla.com": [
+"crtname"
+],
+"prd.usw.vn.cloud.tesla.com": [
+"thc"
+],
+"prd.usw2.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"preview.analytics-relay.tesla.com": [
+"crtname"
+],
+"preview.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"preview.digitalcontent.tesla.com": [
+"crtname"
+],
+"private.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"private.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"private.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"private.epc.tesla.com": [
+"crtname"
+],
+"private.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"prod.apigateway-logging.tesla.com": [
+"crtname"
+],
+"prod.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"prod.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"prod.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"prod.digitalassets.tesla.com": [
+"crtname"
+],
+"prod.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"productinfo.tesla.com": [
+"anubis",
+"crtname"
+],
+"profile.tesla.com": [
+"anubis",
+"crtname"
+],
+"prometheus.apigateway-logging.tesla.com": [
+"crtname"
+],
+"prometheus.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"prometheus.digitalassets.tesla.com": [
+"crtname"
+],
+"ptr1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"ptr2.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"pub.email.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"public.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"public.apigateway-pricing-gateway.tesla.com": [
+"crtname"
+],
+"public.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"public.epc.tesla.com": [
+"crtname"
+],
+"q1haoturxk.tesla.com": [
+"anubis",
+"crtname"
+],
+"qa.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"ranger-api.tesla.com": [
+"anubis",
+"crtname"
+],
+"raultest.tesla.com": [
+"anubis",
+"crtname"
+],
+"raw.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"raw.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"raw.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"raw.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"raw.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"reassignment-ui.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"referral-app.tesla.com": [
+"anubis",
+"crtname"
+],
+"referral.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"render.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"render.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"render.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"render.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"repair.tesla.com": [
+"anubis",
+"crtname"
+],
+"reply.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"reply.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"reply.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"reply.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"reply.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"resources.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"rioolbuizens.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"ro.github-ap.tesla.com": [
+"crtname",
+"thc"
+],
+"ro.github-fw.tesla.com": [
+"crtname",
+"thc"
+],
+"ro.github.tesla.com": [
+"crtname",
+"thc"
+],
+"roadside.tesla.com": [
+"crtname"
+],
+"roadsideinvoice.tesla.com": [
+"anubis",
+"crtname"
+],
+"robotaxi-app-feedback-eng.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"robotaxi-app-feedback-prd.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"rubygems.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"rubygems.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"rubygems.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"rubygems.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"rubygems.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"rumipv6.tesla.com": [
+"anubis",
+"crtname"
+],
+"s3-sidekick-ssl.github.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"s3.a.buf01.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.a.energy.smf12.tcs.tesla.com": [
+"crtname"
+],
+"s3.a.energy.smf13.tcs.tesla.com": [
+"crtname"
+],
+"s3.a.energy.vast.tcs.tesla.com": [
+"crtname"
+],
+"s3.a.iad06.tcs.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"s3.a.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.a.smf12.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.a.smf13.tcs.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"s3.a.vast-dr.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.a.vast.tcs.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"s3.a.vast.tesla-hermes-snapshot-motors.tcs.tesla.com": [
+"crtname"
+],
+"s3.b.ams15.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.b.ams17.tcs.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"s3.b.energy.ams15.tcs.tesla.com": [
+"crtname"
+],
+"s3.b.energy.ams17.tcs.tesla.com": [
+"crtname"
+],
+"s3.b.energy.vast.tcs.tesla.com": [
+"crtname"
+],
+"s3.b.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.b.vast.tcs.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"s3.c.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.d.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"s3.energy.obs.tesla.com": [
+"crtname"
+],
+"s3.eng.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"s3.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"s3.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"s3.prd.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"sales-prd.tesla.com": [
+"anubis",
+"crtname"
+],
+"sandbox-manager.courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"sandbox-studio.courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"sandbox.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"sandbox.epc.tesla.com": [
+"crtname"
+],
+"sc-cppm.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"sc-eu-cppm.tesla.com": [
+"crtname",
+"thc"
+],
+"sca.tesla.com": [
+"anubis",
+"crtname"
+],
+"schedule.tesla.com": [
+"anubis",
+"crtname"
+],
+"secure-static-assets.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"secure.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"secure.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"secure.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"secureaccess.tesla.com": [
+"anubis",
+"crtname"
+],
+"secureguest.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"rapiddns"
+],
+"secureguestcn.tesla.com": [
+"anubis",
+"crtname"
+],
+"secureguesteu.tesla.com": [
+"anubis",
+"crtname"
+],
+"sentry-api-test.ops.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"sentry-api.ops.na.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"sentry.app.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"server.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"service.tesla.com": [
+"crtname",
+"thc"
+],
+"serviceapi-stg.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"serviceapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"serviceapp.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"share.tesla.com": [
+"anubis",
+"crtname"
+],
+"shop-stage.tesla.com": [
+"crtname",
+"thc"
+],
+"shop.apigateway-pricing-gateway.tesla.com": [
+"crtname"
+],
+"shop.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"shop.epc.tesla.com": [
+"crtname"
+],
+"shop.eu.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"shop.extsentry.tesla.com": [
+"crtname"
+],
+"shop.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"shop.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"signaling-alpha.prd.vn.cloud.tesla.com": [
+"crtname",
+"thc"
+],
+"signaling-ap-api.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"signaling-robotics.eng.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"signaling-robotics.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"simpleorigin.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"sin05-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"sip.contractors.contractors.tesla.com": [
+"anubis",
+"crtname"
+],
+"sip.tesla.com": [
+"anubis",
+"crtname"
+],
+"sjc04d1rsaap02.tesla.com": [
+"anubis",
+"crtname"
+],
+"sjc36-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"sling.tesla.com": [
+"anubis",
+"crtname"
+],
+"smarttax.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"smt.tesla.com": [
+"anubis",
+"crtname"
+],
+"smtp.device-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"smtp.digitalcontent.tesla.com": [
+"crtname"
+],
+"smtp.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"smtp.extsentry.tesla.com": [
+"crtname"
+],
+"smtp.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"solarbonds.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"sso-dec.tesla.com": [
+"anubis",
+"crtname"
+],
+"sso-dev-origin.tesla.com": [
+"anubis",
+"crtname"
+],
+"sso-dev.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"sso-na.tesla.com": [
+"anubis",
+"crtname"
+],
+"sso-sandbox.tesla.com": [
+"anubis",
+"crtname"
+],
+"sso-sig.tesla.com": [
+"anubis",
+"crtname"
+],
+"sso.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock",
+"rapiddns",
+"thc"
+],
+"sspr.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"stage-traffic-flow-test.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"stage.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"staging.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"staging.bottlerocket.tesla.com": [
+"thc"
+],
+"staging.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"staging.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"staging.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"staging.location-services-prd.tesla.com": [
+"crtname"
+],
+"static-assets-contactus-comm-preferences.tesla.com": [
+"crtname",
+"thc"
+],
+"static-assets-pay.tesla.com": [
+"anubis",
+"crtname"
+],
+"static-assets-subscription-preferences.tesla.com": [
+"subdomaincenter"
+],
+"static-assets-teslaaccount.tesla.com": [
+"crtname",
+"rapiddns",
+"scanmalware"
+],
+"static-assets.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"static-event-dev.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"static-map.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"static.auth.tesla.com": [
+"crtname"
+],
+"static.energy.obs.tesla.com": [
+"crtname"
+],
+"static.epc.tesla.com": [
+"crtname"
+],
+"static.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"static.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"staticpay-origin-wwwcdn.tesla.com": [
+"anubis",
+"crtname"
+],
+"stats.apigateway-pricing-gateway.tesla.com": [
+"crtname"
+],
+"stats.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"stats.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"status.auth.tesla.com": [
+"crtname"
+],
+"status.digitalassets.tesla.com": [
+"crtname"
+],
+"status.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"status.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"stg-uc-twilio-bpm-webhook.tesla.com": [
+"anubis",
+"crtname"
+],
+"storage.cloud.tesla.com": [
+"crtname"
+],
+"storage.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"store.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"store.link.tesla.com": [
+"crtname"
+],
+"stream.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"stream.digitalcontent.tesla.com": [
+"crtname"
+],
+"stream.dpuas-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"stream.epuca-prd.usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"stream.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"stream.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"sts-broker.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"studio.courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"studio.sandbox-courses.tesla.com": [
+"anubis",
+"crtname"
+],
+"suppliers-stg.tesla.com": [
+"rapiddns"
+],
+"suppliers.tesla.com": [
+"crtname",
+"thc"
+],
+"surveys.tesla.com": [
+"anubis",
+"crtname"
+],
+"svopn.tesla.com": [
+"anubis",
+"crtname"
+],
+"syd14-gpgw1.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"taffy.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"tcc-graph-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"tcc-graph.tesla.com": [
+"anubis",
+"crtname"
+],
+"tcc-gw-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"tcc-gw.tesla.com": [
+"anubis",
+"crtname"
+],
+"teamchat.tesla.com": [
+"anubis",
+"crtname"
+],
+"teamchatcn.tesla.com": [
+"anubis",
+"crtname"
+],
+"teamchatgl.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"telemetry-ap.prd.vn.cloud.tesla.com": [
+"crtname",
+"rapiddns"
+],
+"terraform.us-west-2-prd-tfe.k8s.tesla.com": [
+"crtname"
+],
+"tesla-hermes-snapshot-motors-eng.s3.eng.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"tesla-hermes-snapshot-motors.eng.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"tesla-hermes-snapshot-motors.s3.prd.na.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"tesla-inc-docsys-eorg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"tesla.com": [
+"anubis",
+"thc"
+],
+"teslacdpna0.tesla.com": [
+"anubis",
+"crtname"
+],
+"teslacdpna03.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"teslacdpna04.tesla.com": [
+"crtname"
+],
+"teslacdpna05.tesla.com": [
+"crtname"
+],
+"teslacis.tesla.com": [
+"anubis",
+"crtname"
+],
+"teslacmgap01.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"teslacmgcn01.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"teslacmgeu01.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"teslacmgna01.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"teslacmgus0.tesla.com": [
+"anubis",
+"crtname"
+],
+"teslacmgus01.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"teslamezcal.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"teslaquila.tesla.com": [
+"anubis",
+"crtname"
+],
+"teslatequila.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter",
+"thc"
+],
+"test.akamai-apigateway-suppliers.tesla.com": [
+"crtname"
+],
+"test.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"test.epuca-prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"testnotify.tesla.com": [
+"anubis",
+"crtname"
+],
+"tf-poc.tesla.com": [
+"crtname",
+"thc"
+],
+"thisistest.tesla.com": [
+"crtname",
+"thc"
+],
+"three.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"tokens-staging.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"toolbox-beta.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"toolbox.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"thc"
+],
+"track.cloud.tesla.com": [
+"crtname"
+],
+"track.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"track.epc.tesla.com": [
+"crtname"
+],
+"track.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"track.hermes-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"track.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"track.tesla.com": [
+"anubis",
+"crtname"
+],
+"tradein.tesla.com": [
+"anubis",
+"crtname"
+],
+"tradepartnertickets.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"tripx-alpha.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"tripx.eng.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"tripx.eng.usw2.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"tripx.prd.euw1.vn.cloud.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"tripx.prd.usw.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware"
+],
+"tripx.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"tripx.prd.vn.cloud.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"triton-management-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"triton-management-uat.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"triton-management.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"triton-server-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"triton-server-uat.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"triton-server.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"trt.tesla.com": [
+"anubis",
+"crtname",
+"hudsonrock"
+],
+"tssapi-aem-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"tssapi-aem.tesla.com": [
+"anubis",
+"crtname"
+],
+"tssapi-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"tssapi.tesla.com": [
+"anubis",
+"crtname"
+],
+"tvs-api-stg.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"tvs-api-uat.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"tvs-api.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"tvs-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"tvs-uat.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"tvs.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"tweventhook.tesla.com": [
+"anubis",
+"crtname"
+],
+"tx.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"u003ebilling.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"u003evn.tesla.com": [
+"crtname"
+],
+"ug.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"ui.a.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"ui.b.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"ui.c.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"ui.d.smf11.tcs.tesla.com": [
+"crtname",
+"thc"
+],
+"uicrashtracer.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"ul.engage.tesla.com": [
+"crtname"
+],
+"upload.apigateway-logging.tesla.com": [
+"crtname"
+],
+"upload.assistant-api.prd.usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"upload.digitalassets.tesla.com": [
+"crtname"
+],
+"uploads.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"uploads.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"uploads.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"uploads.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"uploads.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"url1894.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"url2547.tesla.com": [
+"anubis",
+"crtname"
+],
+"url4104.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"url4211.tesla.com": [
+"anubis",
+"crtname"
+],
+"url4857.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"url5196.tesla.com": [
+"anubis",
+"crtname"
+],
+"url5347.tesla.com": [
+"anubis",
+"crtname"
+],
+"url6661.tesla.com": [
+"anubis",
+"crtname"
+],
+"url7051.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"url8833.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"us-west-2-eng-maps.k8s.tesla.com": [
+"crtname"
+],
+"us-west-2-prd-it.k8s.tesla.com": [
+"anubis",
+"crtname"
+],
+"usw.vn.cloud.tesla.com": [
+"crtname"
+],
+"usw2.vn.cloud.tesla.com": [
+"crtname"
+],
+"v1.akamai-apigateway-vfx.tesla.com": [
+"crtname"
+],
+"v1.apf-api.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"v1.device-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"v1.digitalassets-accounts.tesla.com": [
+"crtname"
+],
+"v1.epc.tesla.com": [
+"crtname"
+],
+"v1.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"v2.digitalassets-accounts.tesla.com": [
+"crtname"
+],
+"v2.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"v2.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"v3.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"v3.epc.tesla.com": [
+"crtname"
+],
+"v3.hcaptcha.tesla.com": [
+"crtname"
+],
+"v3.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"vdi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"vehicle-files.eng.euw1.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"vehicle-files.eng.usw2.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware"
+],
+"vehicle-files.eng.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"vehicle-files.prd.euw1.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"vehicle-files.prd.usw2.vn.cloud.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"subdomaincenter"
+],
+"vehicle-files.prd.vn.cloud.tesla.com": [
+"anubis",
+"crtname"
+],
+"veritas-staging.bottlerocket.tesla.com": [
+"crtname",
+"thc"
+],
+"video.assistant-api.prd.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"video.fleet-apf-prd.tesla.com": [
+"crtname"
+],
+"view.email.tesla.com": [
+"anubis",
+"crtname"
+],
+"view.emails.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"viewscreen.extgithub.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"viewscreen.github-ap.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"viewscreen.github-fw.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"viewscreen.github-it.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"viewscreen.github.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"vmanage-alerts.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"vms.iad06.tcs.tesla.com": [
+"thc"
+],
+"vms.smf13.tcs.tesla.com": [
+"thc"
+],
+"vn.cloud.tesla.com": [
+"crtname"
+],
+"vn.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"vpn.assistant-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"vpn.hermes-ap.prd.vn.cloud.tesla.com": [
+"crtname"
+],
+"vpn.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"vpn1.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"vpn2.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"vpn3.tesla.com": [
+"anubis",
+"crtname"
+],
+"vrp-stg.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"vs-bnc.na.vn.cloud.tesla.com": [
+"thc"
+],
+"vs-bnc.usw2.vn.cloud.tesla.com": [
+"subdomaincenter",
+"thc"
+],
+"w3-akamai-apigateway-procuretopayapi.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"warehouse-stg.tesla.com": [
+"anubis",
+"crtname"
+],
+"warehouse.tesla.com": [
+"anubis",
+"crtname",
+"scanmalware",
+"thc"
+],
+"warpbilling.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"wdm-kronos-dev.tesla.com": [
+"crtname",
+"thc"
+],
+"wdm.kronos.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"web.digitalassets-accounts.tesla.com": [
+"crtname"
+],
+"webmail.auth.tesla.com": [
+"crtname"
+],
+"webmail.cua-chat-ui.tesla.com": [
+"crtname"
+],
+"webmail.cua-help-me-choose-ui.tesla.com": [
+"crtname"
+],
+"webmail.euw1.vn.cloud.tesla.com": [
+"crtname"
+],
+"webmail.tesla.com": [
+"anubis",
+"crtname"
+],
+"wifi.tesla.com": [
+"hudsonrock"
+],
+"wiki.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"wiki.hcaptcha.tesla.com": [
+"crtname"
+],
+"wiki.hermes-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"wim-kronos-dev.tesla.com": [
+"crtname",
+"subdomaincenter",
+"thc"
+],
+"wim.kronos.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"wire.tesla.com": [
+"crtname",
+"scanmalware",
+"thc"
+],
+"workforce.tesla.com": [
+"crtname"
+],
+"ww.tesla.com": [
+"anubis",
+"crtname"
+],
+"ww1.digitalassets.tesla.com": [
+"crtname"
+],
+"ww1.fleet-music-prd.tesla.com": [
+"crtname"
+],
+"ww1.hermes-stream-api.prd.na.vn.cloud.tesla.com": [
+"crtname"
+],
+"ww2.digitalcontent.tesla.com": [
+"crtname"
+],
+"ww2.hermes-stream-api.prd.eu.vn.cloud.tesla.com": [
+"crtname"
+],
+"www-dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-static-dev.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-static-prod.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-static-qa.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-static-stage.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"www-stg2.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-test.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-uat.tesla.com": [
+"anubis",
+"crtname"
+],
+"www-uat2.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"www.akamai-apigateway-charging-ownership.tesla.com": [
+"crtname"
+],
+"www.apigateway-charging-bff.tesla.com": [
+"crtname"
+],
+"www.apigateway-logging.tesla.com": [
+"crtname"
+],
+"www.apigateway-message-center-ownership.tesla.com": [
+"crtname"
+],
+"www.auth.tesla.com": [
+"crtname"
+],
+"www.cloud.tesla.com": [
+"crtname"
+],
+"www.cua-help-me-charge-ui.tesla.com": [
+"crtname"
+],
+"www.digitalassets-shop.tesla.com": [
+"crtname"
+],
+"www.engage.tesla.com": [
+"crtname",
+"scanmalware",
+"subdomaincenter",
+"thc"
+],
+"www.epc.tesla.com": [
+"crtname"
+],
+"www.gridlogic.energy.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"www.ir.tesla.com": [
+"crtname"
+],
+"www.powerhub.energy.tesla.com": [
+"crtname"
+],
+"www.sandbox-studio.courses.tesla.com": [
+"crtname"
+],
+"www.tesla.com": [
+"crtname",
+"hudsonrock",
+"scanmalware",
+"thc"
+],
+"www.teslaquila.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"www.teslatequila.tesla.com": [
+"crtname"
+],
+"www.toolbox.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"www.ug.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"www.uicrashtracer.tesla.com": [
+"crtname"
+],
+"www.vpn1.tesla.com": [
+"crtname",
+"subdomaincenter"
+],
+"www45.tesla.com": [
+"anubis",
+"crtname",
+"subdomaincenter"
+],
+"wwwmta3-emailbjenkins.emails.tesla.com": [
+"anubis",
+"crtname"
+],
+"wy7vtk21un.tesla.com": [
+"anubis",
+"crtname"
+],
+"x3-eng.obs.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"x3-prod.obs.tesla.com": [
+"anubis",
+"crtname",
+"thc"
+],
+"x3.obs.tesla.com": [
+"crtname",
+"thc"
+],
+"xapps.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns"
+],
+"xmail.tesla.com": [
+"anubis",
+"crtname",
+"rapiddns",
+"subdomaincenter"
+],
+"zta-setup.tesla.com": [
+"anubis",
+"crtname"
+]
+},
+"names": [
+"20.tesla.com",
+"3.tesla.com",
+"47.tesla.com",
+"a.energy.smf12.tcs.tesla.com",
+"a.energy.smf13.tcs.tesla.com",
+"a.energy.vast.tcs.tesla.com",
+"a.vast.tesla-hermes-snapshot-motors.tcs.tesla.com",
+"academiawashingtonribeiraopreto.tesla.com",
+"account.analytics-relay.tesla.com",
+"account.apf-api.prd.vn.cloud.tesla.com",
+"account.device-api.prd.na.vn.cloud.tesla.com",
+"account.eu.vn.cloud.tesla.com",
+"account.euw1.vn.cloud.tesla.com",
+"accounts.tesla.com",
+"acme-sentry-4.eng.use1.vn.cloud.tesla.com",
+"acme-sentry-4a.eng.use1.vn.cloud.tesla.com",
+"acs2-poc.voice.tesla.com",
+"admin.apigateway-logging.tesla.com",
+"admin.digitalassets.tesla.com",
+"admin.dpuas-prd.usw.vn.cloud.tesla.com",
+"admin.eu.vn.cloud.tesla.com",
+"ads.akamai-apigateway-vfx.tesla.com",
+"ads.cua-chat-ui.tesla.com",
+"ads.hcaptcha.tesla.com",
+"ads.hermes-ap.prd.vn.cloud.tesla.com",
+"ai-api-stg.tesla.com",
+"ai-api-uat.tesla.com",
+"ai-api.tesla.com",
+"akamai-apigateway-automation-billing.tesla.com",
+"akamai-apigateway-automation.tesla.com",
+"akamai-apigateway-bender.tesla.com",
+"akamai-apigateway-captiveunderwriting.tesla.com",
+"akamai-apigateway-chargebackapi.tesla.com",
+"akamai-apigateway-charging-ownership.tesla.com",
+"akamai-apigateway-clmapi-stg.tesla.com",
+"akamai-apigateway-clmapi-uat.tesla.com",
+"akamai-apigateway-crawford-prd.tesla.com",
+"akamai-apigateway-crawford-stg.tesla.com",
+"akamai-apigateway-deliveryopsapi.tesla.com",
+"akamai-apigateway-deliveryopsapi1.tesla.com",
+"akamai-apigateway-deliveryopsvitu.tesla.com",
+"akamai-apigateway-dev-captiveunderwriting.tesla.com",
+"akamai-apigateway-dev-warptmsapiserver-upgrade.tesla.com",
+"akamai-apigateway-dev-warptmsapiserver.tesla.com",
+"akamai-apigateway-ehs-stg.tesla.com",
+"akamai-apigateway-ehs.de.tesla.com",
+"akamai-apigateway-ehs.tesla.com",
+"akamai-apigateway-einvoicing-stg.tesla.com",
+"akamai-apigateway-einvoicing.tesla.com",
+"akamai-apigateway-finplat-prd.tesla.com",
+"akamai-apigateway-finplat-stg.tesla.com",
+"akamai-apigateway-finplateng-defi.tesla.com",
+"akamai-apigateway-finplateng-routeone.tesla.com",
+"akamai-apigateway-finplateng.tesla.com",
+"akamai-apigateway-fta.tesla.com",
+"akamai-apigateway-inventorytxnextapi.tesla.com",
+"akamai-apigateway-kro-reggi.tesla.com",
+"akamai-apigateway-logisticsratesapi.tesla.com",
+"akamai-apigateway-materials.tesla.com",
+"akamai-apigateway-mfs-gfb-stg.tesla.com",
+"akamai-apigateway-mfs-supplier-uat.tesla.com",
+"akamai-apigateway-mfs-supplier.tesla.com",
+"akamai-apigateway-mytcore-prdsvc.tesla.com",
+"akamai-apigateway-nestgateway-stgsvc.tesla.com",
+"akamai-apigateway-ops-warp3pl.tesla.com",
+"akamai-apigateway-ownershipsvc-stg.tesla.com",
+"akamai-apigateway-ownershipsvc.tesla.com",
+"akamai-apigateway-packaging2.tesla.com",
+"akamai-apigateway-payment.tesla.com",
+"akamai-apigateway-prd-global-deliveryopsapi.tesla.com",
+"akamai-apigateway-procuretopayapi.tesla.com",
+"akamai-apigateway-profileapi.tesla.com",
+"akamai-apigateway-qa-captiveunderwriting.tesla.com",
+"akamai-apigateway-repair-api.tesla.com",
+"akamai-apigateway-samsungsds-test.tesla.com",
+"akamai-apigateway-samsungsds.tesla.com",
+"akamai-apigateway-scraprecycle.tesla.com",
+"akamai-apigateway-shipmentplanningapi.tesla.com",
+"akamai-apigateway-stg-bender.tesla.com",
+"akamai-apigateway-stg-captiveunderwriting.tesla.com",
+"akamai-apigateway-stg-deliveryopsapi.tesla.com",
+"akamai-apigateway-stg-deliveryopsapi1.tesla.com",
+"akamai-apigateway-stg-deliveryopsvitu.tesla.com",
+"akamai-apigateway-stg-einvoicing.tesla.com",
+"akamai-apigateway-stg-finplateng-defi.tesla.com",
+"akamai-apigateway-stg-finplateng-routeone.tesla.com",
+"akamai-apigateway-stg-finplateng.tesla.com",
+"akamai-apigateway-stg-fta.tesla.com",
+"akamai-apigateway-stg-global-deliveryopsapi.tesla.com",
+"akamai-apigateway-stg-inventorytxnextapi.tesla.com",
+"akamai-apigateway-stg-kro-reggi.tesla.com",
+"akamai-apigateway-stg-materials.tesla.com",
+"akamai-apigateway-stg-ops-warp3pl.tesla.com",
+"akamai-apigateway-stg-packaging2.tesla.com",
+"akamai-apigateway-stg-payment.tesla.com",
+"akamai-apigateway-stg-procuretopayapi.tesla.com",
+"akamai-apigateway-stg-profileapi.tesla.com",
+"akamai-apigateway-stg-sandbox-automation.tesla.com",
+"akamai-apigateway-stg-shipmentplanningapi.tesla.com",
+"akamai-apigateway-stg-teslarpsapi.tesla.com",
+"akamai-apigateway-stg-translationpipeline.tesla.com",
+"akamai-apigateway-stg-vendorpartsapi.tesla.com",
+"akamai-apigateway-stg-warp3pl.tesla.com",
+"akamai-apigateway-stg-warpassetapi.tesla.com",
+"akamai-apigateway-stg-warpcxml.tesla.com",
+"akamai-apigateway-stg-warpdashboardapi.tesla.com",
+"akamai-apigateway-stg-warpedi.tesla.com",
+"akamai-apigateway-stg-warptmsapiserver-upgrade.tesla.com",
+"akamai-apigateway-stg-warptmsapiserver.tesla.com",
+"akamai-apigateway-stg-warptqpapi.tesla.com",
+"akamai-apigateway-stg2-deliveryopsapi.tesla.com",
+"akamai-apigateway-stg2-global-deliveryopsapi.tesla.com",
+"akamai-apigateway-stg2-procuretopayapi.tesla.com",
+"akamai-apigateway-suppliers-rfq-stg.tesla.com",
+"akamai-apigateway-suppliers-rfq.tesla.com",
+"akamai-apigateway-suppliers.tesla.com",
+"akamai-apigateway-tabsapi-stg.tesla.com",
+"akamai-apigateway-tabsapi.tesla.com",
+"akamai-apigateway-teslarpsapi.tesla.com",
+"akamai-apigateway-teslaservice-api-stg.tesla.com",
+"akamai-apigateway-teslaservice-api.tesla.com",
+"akamai-apigateway-translationpipeline.tesla.com",
+"akamai-apigateway-uat-materials.tesla.com",
+"akamai-apigateway-vehicleextinfogw-prdsvc-st.tesla.com",
+"akamai-apigateway-vehicleextinfogw-stgsvc-st.tesla.com",
+"akamai-apigateway-vendorpartsapi.tesla.com",
+"akamai-apigateway-vfx-stg.tesla.com",
+"akamai-apigateway-vfx.tesla.com",
+"akamai-apigateway-warp3pl.tesla.com",
+"akamai-apigateway-warpassetapi.tesla.com",
+"akamai-apigateway-warpcxml-dev.tesla.com",
+"akamai-apigateway-warpcxml-stg.tesla.com",
+"akamai-apigateway-warpcxml.tesla.com",
+"akamai-apigateway-warpdashboardapi.tesla.com",
+"akamai-apigateway-warpedi.tesla.com",
+"akamai-apigateway-warptmsapiserver-upgrade.tesla.com",
+"akamai-apigateway-warptmsapiserver.tesla.com",
+"akamai-apigateway-warptqpapi.tesla.com",
+"akamai-apigateway-zip3-suppliersequence.tesla.com",
+"alpha.apigateway-message-center-ownership.tesla.com",
+"alpha.epuca-prd.usw.vn.cloud.tesla.com",
+"ams13-gpgw1.tesla.com",
+"analytics-relay.tesla.com",
+"analytics.akamai-apigateway-suppliers.tesla.com",
+"analytics.dpuas-prd.usw.vn.cloud.tesla.com",
+"analytics.epuca-prd.euw1.vn.cloud.tesla.com",
+"analytics.hcaptcha.tesla.com",
+"apac-cppm.tesla.com",
+"apac-sso.tesla.com",
+"apac.logs.tesla.com",
+"apacvpn.tesla.com",
+"apacvpn1.tesla.com",
+"apacvpn2.tesla.com",
+"apf-api.eng.vn.cloud.tesla.com",
+"apf-api.prd.vn.cloud.tesla.com",
+"api-account-master.tesla.com",
+"api-firebolt-dev.tesla.com",
+"api-firebolt-stage.tesla.com",
+"api-firebolt.tesla.com",
+"api-kronos-dev.tesla.com",
+"api-toolbox.tesla.com",
+"api.apmv3-cdn-go.tesla.com",
+"api.cua-help-me-charge-ui.tesla.com",
+"api.digitalassets-shop.tesla.com",
+"api.kronos.tesla.com",
+"api.location-services-prd.tesla.com",
+"apigateway-charging-bff.tesla.com",
+"apigateway-cmms-external.tx.tesla.com",
+"apigateway-cx-api.tesla.com",
+"apigateway-logging.tesla.com",
+"apigateway-logisticsportalapi.tesla.com",
+"apigateway-message-center-ownership.tesla.com",
+"apigateway-pricing-gateway.tesla.com",
+"apigateway-stg-warpassetapi.tesla.com",
+"apigateway-stg-warptmsapiserver.tesla.com",
+"apigateway-tcc-graph.tesla.com",
+"apigateway-warpeventsapi.tesla.com",
+"apmv3-cdn-go.tesla.com",
+"app.akamai-apigateway-charging-ownership.tesla.com",
+"app.akamai-apigateway-suppliers.tesla.com",
+"app.apigateway-logging.tesla.com",
+"app.cua-chat-ui.tesla.com",
+"app.epuca-prd.euw1.vn.cloud.tesla.com",
+"app.fleet-apf-prd.tesla.com",
+"app.tesla.com",
+"appplayer.tesla.com",
+"apps.tesla.com",
+"assets-ir.tesla.com",
+"assets.digitalcontent.tesla.com",
+"assets.dpuas-prd.usw.vn.cloud.tesla.com",
+"assets.engage.tesla.com",
+"assets.epc.tesla.com",
+"assets.eu.vn.cloud.tesla.com",
+"assets.extgithub.tesla.com",
+"assets.github-ap.tesla.com",
+"assets.github-fw.tesla.com",
+"assets.github-it.tesla.com",
+"assets.github.tesla.com",
+"assets.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"assistant-api.prd.euw1.vn.cloud.tesla.com",
+"assistant-api.prd.na.vn.cloud.tesla.com",
+"assistant-api.prd.usw2.vn.cloud.tesla.com",
+"aurora-ordering-ext-qa.tesla.com",
+"aurora-ordering-ext-stg.tesla.com",
+"aurora-ordering-ext.tesla.com",
+"auth-global-stage.tesla.com",
+"auth-global.tesla.com",
+"auth-stage.tesla.com",
+"auth.eng.euw1.vn.cloud.tesla.com",
+"auth.eng.usw.vn.cloud.tesla.com",
+"auth.prd.euw1.vn.cloud.tesla.com",
+"auth.prd.usw.vn.cloud.tesla.com",
+"auth.tesla.com",
+"auth0.tesla.com",
+"autobidder-eng.powerhub.energy.tesla.com",
+"autobidder-preprd.powerhub.energy.tesla.com",
+"autobidder.powerhub.energy.tesla.com",
+"autoconfig.auth.tesla.com",
+"autoconfig.euw1.vn.cloud.tesla.com",
+"autoconfig.hermes-api.prd.eu.vn.cloud.tesla.com",
+"autodiscover.contractors.contractors.tesla.com",
+"autodiscover.epuca-prd.euw1.vn.cloud.tesla.com",
+"autodiscover.hermes-ap.prd.vn.cloud.tesla.com",
+"autodiscover.tesla.com",
+"avatars.extgithub.tesla.com",
+"avatars.github-ap.tesla.com",
+"avatars.github-fw.tesla.com",
+"avatars.github-it.tesla.com",
+"avatars.github.tesla.com",
+"aws.akamai-apigateway-charging-ownership.tesla.com",
+"aws.euw1.vn.cloud.tesla.com",
+"awsbtest.tesla.com",
+"azure.assistant-api.prd.euw1.vn.cloud.tesla.com",
+"b.energy.ams15.tcs.tesla.com",
+"b.energy.ams17.tcs.tesla.com",
+"b.energy.vast.tcs.tesla.com",
+"bcl.tesla.com",
+"bctpay.tesla.com",
+"bender-auth.tesla.com",
+"beta-fvcarriers.tesla.com",
+"beta-partners.tesla.com",
+"beta-suppliers.tesla.com",
+"beta.digitalcontent.tesla.com",
+"beta.epuca-prd.usw.vn.cloud.tesla.com",
+"bettertime-stage.tesla.com",
+"bettertime.tesla.com",
+"bi.tesla.com",
+"billing.tesla.com",
+"blog.device-api.prd.na.vn.cloud.tesla.com",
+"blog.extsentry.tesla.com",
+"blog.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"blog.tesla.com",
+"bn.na.vn.cloud.tesla.com",
+"bolt.tesla.com",
+"bom01-gpgw1.tesla.com",
+"bottlerocket.tesla.com",
+"bounce.emails.tesla.com",
+"business-shop.tesla.com",
+"business-ui-ownership.tesla.com",
+"business.tesla.com",
+"c.tesla.com",
+"c382p434p572c.tesla.com",
+"ca.tesla.com",
+"cdn-design.tesla.com",
+"cdn.akamai-apigateway-charging-ownership.tesla.com",
+"cdn.akamai-apigateway-suppliers.tesla.com",
+"cdn.assistant-api.prd.na.vn.cloud.tesla.com",
+"cdn.epuca-prd.usw.vn.cloud.tesla.com",
+"cdn.eu.vn.cloud.tesla.com",
+"cdn.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"cdn.link.tesla.com",
+"cdn.location-services-prd.tesla.com",
+"cdns-content.tesla.com",
+"charging-transparency.tesla.com",
+"chat-staging.bottlerocket.tesla.com",
+"chat.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"chat.cua-help-me-choose-ui.tesla.com",
+"chat.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"chat.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"checkout-ui-assets.tesla.com",
+"ci.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"cicerone.tesla.com",
+"ciscoguest.tesla.com",
+"citiapiencpoc.tesla.com",
+"citiapiencpocv2.tesla.com",
+"citiapiencpocv3.tesla.com",
+"citiapiencprodv4.tesla.com",
+"citiapiencprodv5.tesla.com",
+"citiapiencsandboxv4.tesla.com",
+"citiapipgpprodv6.tesla.com",
+"citiapipgpprodv7.tesla.com",
+"citiapipgpprodv8.tesla.com",
+"citiapisshprodv6.tesla.com",
+"citiapisslpoc.tesla.com",
+"citiapisslpocv2.tesla.com",
+"citiapisslpocv3.tesla.com",
+"citiapisslprodv4.tesla.com",
+"citiapisslprodv5.tesla.com",
+"citiapisslprodv7.tesla.com",
+"citiapisslprodv8.tesla.com",
+"citiapisslsandboxv4.tesla.com",
+"citibankstatementsha512.tesla.com",
+"cld-ec.tesla.com",
+"click.apigateway-charging-bff.tesla.com",
+"click.apigateway-message-center-ownership.tesla.com",
+"click.device-api.prd.na.vn.cloud.tesla.com",
+"click.email.tesla.com",
+"click.emails.tesla.com",
+"click.hermes-ap.prd.vn.cloud.tesla.com",
+"click.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"cloud.akamai-apigateway-charging-ownership.tesla.com",
+"cloud.dpuas-prd.usw.vn.cloud.tesla.com",
+"cloud.epc.tesla.com",
+"cloud.tesla.com",
+"cloudprotect.tesla.com",
+"cn-north-1-eng-teslamaps.k8s.tesla.com",
+"cn-north-1-prd-teslamaps.k8s.tesla.com",
+"cn.tesla.com",
+"cnvpn.tesla.com",
+"cnvpn1.tesla.com",
+"codeload.extgithub.tesla.com",
+"codeload.github-ap.tesla.com",
+"codeload.github-fw.tesla.com",
+"codeload.github-it.tesla.com",
+"codeload.github.tesla.com",
+"com.tesla.com",
+"comparison.tesla.com",
+"consul.bottlerocket.tesla.com",
+"containers.extgithub.tesla.com",
+"courses.tesla.com",
+"cradlepointtest01.tesla.com",
+"crossdock-logistics.tesla.com",
+"crpt.tesla.com",
+"cryptopay.tesla.com",
+"cryptopay2.tesla.com",
+"cryptopay3.tesla.com",
+"cryptopay4.tesla.com",
+"cssp-dev-teleport-proxy.tesla.com",
+"cua-chat-ui.tesla.com",
+"cua-help-me-charge-ui.tesla.com",
+"cua-help-me-choose-ui.tesla.com",
+"cua-test-drive-ui.tesla.com",
+"cx-apac-stg.tesla.com",
+"cx-apac.tesla.com",
+"cx-api-apac-stg.tesla.com",
+"cx-api-apac.tesla.com",
+"cxadmin-apac-stg.tesla.com",
+"cxadmin-apac.tesla.com",
+"cxadmin-api-apac-stg.tesla.com",
+"cxadmin-api-apac.tesla.com",
+"cxengine-apac-stg.tesla.com",
+"cxengine-apac.tesla.com",
+"cyberbeer.tesla.com",
+"dal11-gpgw1.tesla.com",
+"darkerfield-emea.tesla.com",
+"darkfield-emea.tesla.com",
+"darkfield.tesla.com",
+"dashcam.tesla.com",
+"data.hermes-api.prd.eu.vn.cloud.tesla.com",
+"dataviz-one.tesla.com",
+"dataviz.tesla.com",
+"db.apigateway-charging-bff.tesla.com",
+"db.cua-chat-ui.tesla.com",
+"db.digitalcontent.tesla.com",
+"db.fleet-music-prd.tesla.com",
+"db.hermes-api.prd.eu.vn.cloud.tesla.com",
+"de.tesla.com",
+"demo.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"demo.cloud.tesla.com",
+"dev-hermes-qd.tesla.com",
+"dev.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"dev.cloud.tesla.com",
+"dev.device-api.prd.na.vn.cloud.tesla.com",
+"dev.fleet-apf-prd.tesla.com",
+"dev.kronosdb.tesla.com",
+"dev.tesla.com",
+"developer.tesla.com",
+"device-api.prd.eu.vn.cloud.tesla.com",
+"device-api.prd.na.vn.cloud.tesla.com",
+"dex.ops.bn.na.vn.cloud.tesla.com",
+"dex.ops.na.vn.cloud.tesla.com",
+"dex.ops.vs-bnc.na.vn.cloud.tesla.com",
+"dgf.tesla.com",
+"dhc.tesla.com",
+"digitalassets-accounts.tesla.com",
+"digitalassets-contents.tesla.com",
+"digitalassets-energy.tesla.com",
+"digitalassets-learning.tesla.com",
+"digitalassets-secure.tesla.com",
+"digitalassets-shop.tesla.com",
+"digitalassets-stage.tesla.com",
+"digitalassets.tesla.com",
+"digitalcontent.tesla.com",
+"diner-api-stage.tesla.com",
+"diner-api.tesla.com",
+"diner-webapp-stage.tesla.com",
+"diner-webapp.tesla.com",
+"discovery-service.bottlerocket.tesla.com",
+"discovery.bottlerocket.tesla.com",
+"dns.apigateway-pricing-gateway.tesla.com",
+"dns.cua-help-me-choose-ui.tesla.com",
+"dns.device-api.prd.na.vn.cloud.tesla.com",
+"dns.epuca-prd.euw1.vn.cloud.tesla.com",
+"dns.fleet-apf-prd.tesla.com",
+"dns.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"dns1.apigateway-logging.tesla.com",
+"dns1.assistant-api.prd.na.vn.cloud.tesla.com",
+"dns1.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"dns1.cua-chat-ui.tesla.com",
+"dns1.cua-help-me-charge-ui.tesla.com",
+"dns1.device-api.prd.na.vn.cloud.tesla.com",
+"dns1.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"dns2.akamai-apigateway-charging-ownership.tesla.com",
+"dns2.device-api.prd.na.vn.cloud.tesla.com",
+"dns2.dpuas-prd.usw.vn.cloud.tesla.com",
+"dns2.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"docker.extgithub.tesla.com",
+"docker.github-ap.tesla.com",
+"docker.github-fw.tesla.com",
+"docker.github-it.tesla.com",
+"docker.github.tesla.com",
+"docs.bottlerocket.tesla.com",
+"docs.digitalassets.tesla.com",
+"docs.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"docs.location-services-prd.tesla.com",
+"doraemon-svc-apac-stg.tesla.com",
+"doraemon-svc-apac.tesla.com",
+"dpuas-prd.euw1.vn.cloud.tesla.com",
+"dpuas-prd.usw.vn.cloud.tesla.com",
+"dpupr-eng.euw1.vn.cloud.tesla.com",
+"e-swift.tesla.com",
+"e382p434p572c.tesla.com",
+"eaa-setup.tesla.com",
+"echo-internal.tesla.com",
+"echo.tesla.com",
+"edge.akamai-apigateway-suppliers.tesla.com",
+"edge.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"edge.digitalassets.tesla.com",
+"edgedns.tesla.com",
+"edr-eu.tesla.com",
+"edr.tesla.com",
+"ehs.tesla.com",
+"einvoicing.tesla.com",
+"em1.tesla.com",
+"em1488.tesla.com",
+"em1962.tesla.com",
+"em3490.tesla.com",
+"em5886.tesla.com",
+"em7799.tesla.com",
+"email.tesla.com",
+"email.vms.tesla.com",
+"email1.tesla.com",
+"emails.tesla.com",
+"embed-staging.bottlerocket.tesla.com",
+"employee-teslatequila.tesla.com",
+"employeefeedback.tesla.com",
+"energy-technician.bottlerocket.tesla.com",
+"energy.bottlerocket.tesla.com",
+"energy.obs.tesla.com",
+"energy.tesla.com",
+"energydesk.tesla.com",
+"energylibrary.tesla.com",
+"energysupport.tesla.com",
+"eng.america.vn.cloud.tesla.com",
+"eng.euw1.vn.cloud.tesla.com",
+"eng.na.vn.cloud.tesla.com",
+"eng.usw.vn.cloud.tesla.com",
+"eng.usw2.vn.cloud.tesla.com",
+"engage.tesla.com",
+"enterpriseregistration.c.tesla.com",
+"enterpriseregistration.contractors.contractors.tesla.com",
+"enterpriseregistration.tesla.com",
+"envoy-finplat-stg.tesla.com",
+"envoy-finplat-sunlight.tesla.com",
+"envoy-partnerleadsharing.tesla.com",
+"envoy-partnertasks.tesla.com",
+"epc-support-api.tesla.com",
+"epc-support.tesla.com",
+"epc.tesla.com",
+"epcapi.tesla.com",
+"epuca-eng.euw1.vn.cloud.tesla.com",
+"epuca-prd.euw1.vn.cloud.tesla.com",
+"epuca-prd.usw.vn.cloud.tesla.com",
+"epuca-prd.usw2.vn.cloud.tesla.com",
+"errlog-stage.tesla.com",
+"errlog.tesla.com",
+"eu.logs.tesla.com",
+"eu.tesla.com",
+"eu.vn.cloud.tesla.com",
+"eua-origin.tesla.com",
+"eumirror.tesla.com",
+"euw1.vn.cloud.tesla.com",
+"events.tesla.com",
+"example.tesla.com",
+"excluded.tesla.com",
+"exp-zcp-cloud-ap-mfgsre.tesla.com",
+"exp-zcp-cloud-eu-itmfg-staging.tesla.com",
+"exp-zcp-cloud-eu-itmfg.tesla.com",
+"exp-zcp-cloud-na-itmfg-staging.tesla.com",
+"exp-zcp-cloud-na-itmfg.tesla.com",
+"external-3pl-prd.tesla.com",
+"external-3pl-stg.tesla.com",
+"external-automation.tesla.com",
+"external-sandbox-automation.tesla.com",
+"external.fleet-apf-prd.tesla.com",
+"external.hermes-api.prd.na.vn.cloud.tesla.com",
+"external.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"extgithub.tesla.com",
+"extsentry.tesla.com",
+"factory-berlin.tesla.com",
+"factory.tesla.com",
+"feedback.tesla.com",
+"files.hermes-ap.prd.vn.cloud.tesla.com",
+"files.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"financeplatform.tesla.com",
+"financial-gw-stg.tesla.com",
+"financial-gw.tesla.com",
+"finops.tesla.com",
+"fleet-apf-prd.tesla.com",
+"fleet-api-files-prd.tesla.com",
+"fleet-api.eng.eu.vn.cloud.tesla.com",
+"fleet-api.eng.na.vn.cloud.tesla.com",
+"fleet-api.prd.eu.vn.cloud.tesla.com",
+"fleet-api.prd.na.vn.cloud.tesla.com",
+"fleet-api.prd.usw.vn.cloud.tesla.com",
+"fleet-auth.prd.vn.cloud.tesla.com",
+"fleet-auth.tesla.com",
+"fleet-mcp.eng.na.vn.cloud.tesla.com",
+"fleet-mcp.eng.vn.cloud.tesla.com",
+"fleet-mcp.prd.eu.vn.cloud.tesla.com",
+"fleet-mcp.prd.na.vn.cloud.tesla.com",
+"fleet-mcp.prd.vn.cloud.tesla.com",
+"fleet-music-prd.tesla.com",
+"fleet-streaming-api.eng.vn.cloud.tesla.com",
+"fleet-streaming-api.prd.vn.cloud.tesla.com",
+"fleetview.america.fn.tesla.com",
+"fleetview.europe.fn.tesla.com",
+"fleetview.fn.tesla.com",
+"fleetview.prd.america.fn.tesla.com",
+"fleetview.prd.america.vn.cloud.tesla.com",
+"fleetview.prd.eu.fn.tesla.com",
+"fleetview.prd.europe.fn.tesla.com",
+"fleetview.prd.europe.vn.cloud.tesla.com",
+"fleetview.prd.euw1.fn.tesla.com",
+"fleetview.prd.na.fn.tesla.com",
+"fleetview.prd.usw.fn.tesla.com",
+"fleetview.prd.usw2.fn.tesla.com",
+"flux.tesla.com",
+"forum.analytics-relay.tesla.com",
+"forum.digitalcontent.tesla.com",
+"forum.energy.obs.tesla.com",
+"forum.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"forums.tesla.com",
+"fra05-gpgw1.tesla.com",
+"frontend-tesla-int.us-west-2-eng-it.k8s.tesla.com",
+"fsx-ws.tesla.com",
+"ftp.akamai-apigateway-vfx.tesla.com",
+"ftp.extsentry.tesla.com",
+"gantry.tesla.com",
+"gateway-public-ap-hermes-eng5x-hermes.eng.vn.cloud.tesla.com",
+"gateway-public-ap-hermes-prd5x-hermes.prd.vn.cloud.tesla.com",
+"gateway-public-eng5a-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-eng5b-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-eng5c-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-eng5d-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-eng5x-media.eng.vn.cloud.tesla.com",
+"gateway-public-hermes-eng5x-hermes.eng.vn.cloud.tesla.com",
+"gateway-public-hermes-prd5x-hermes.prd.vn.cloud.tesla.com",
+"gateway-public-ops5x-sentry.ops.vn.cloud.tesla.com",
+"gateway-public-prd5a-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-prd5b-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-prd5c-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-prd5d-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-prd5x-media.prd.vn.cloud.tesla.com",
+"gateway-public-service-center-eng5a-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-service-center-eng5b-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-service-center-eng5c-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-telemetry-eng5a-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-telemetry-eng5b-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-telemetry-eng5c-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-telemetry-eng5d-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-telemetry-prd5a-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-telemetry-prd5b-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-telemetry-prd5c-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-telemetry-prd5d-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-vehicle-eng5a-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-vehicle-eng5b-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-vehicle-eng5c-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-vehicle-eng5d-fleet.eng.vn.cloud.tesla.com",
+"gateway-public-vehicle-prd5a-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-vehicle-prd5b-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-vehicle-prd5c-fleet.prd.vn.cloud.tesla.com",
+"gateway-public-vehicle-prd5d-fleet.prd.vn.cloud.tesla.com",
+"gateway.apf-api.prd.vn.cloud.tesla.com",
+"gateway.epc.tesla.com",
+"gateway.hermes-ap.prd.vn.cloud.tesla.com",
+"gateway.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"gcp.apigateway-charging-bff.tesla.com",
+"gcp.euw1.vn.cloud.tesla.com",
+"gcp.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"gem-api.eng.vn.cloud.tesla.com",
+"gem-api.prd.vn.cloud.tesla.com",
+"genai.tesla.com",
+"gf-modeling-mpp.tesla.com",
+"gf.tesla.com",
+"gfb.vdi.tesla.com",
+"gigabier.tesla.com",
+"gigalife.tesla.com",
+"gist.extgithub.tesla.com",
+"gist.github-ap.tesla.com",
+"gist.github-fw.tesla.com",
+"gist.github-it.tesla.com",
+"gist.github.tesla.com",
+"git.epuca-prd.usw.vn.cloud.tesla.com",
+"github-ap.tesla.com",
+"github-fw.tesla.com",
+"github-it.tesla.com",
+"github.tesla.com",
+"githubmirror.tesla.com",
+"githubmirroraus08.tesla.com",
+"githubmirrorber02.tesla.com",
+"gitlab.digitalassets.tesla.com",
+"gitlab.epc.tesla.com",
+"gitlab.epuca-prd.euw1.vn.cloud.tesla.com",
+"go.akamai-apigateway-suppliers.tesla.com",
+"go.apigateway-logging.tesla.com",
+"go.device-api.prd.eu.vn.cloud.tesla.com",
+"go.energy.obs.tesla.com",
+"go.location-services-prd.tesla.com",
+"gpv.tesla.com",
+"grafana.energy.obs.tesla.com",
+"grafana.extsentry.tesla.com",
+"grid.tesla.com",
+"gridlogic-eng.energy.tesla.com",
+"gridlogic-eng.powerhub.energy.tesla.com",
+"gridlogic-qa.energy.tesla.com",
+"gridlogic.energy.tesla.com",
+"gridlogic.powerhub.energy.tesla.com",
+"group301.tesla.com",
+"hcaptcha.tesla.com",
+"help.akamai-apigateway-charging-ownership.tesla.com",
+"help.apf-api.prd.vn.cloud.tesla.com",
+"help.cloud.tesla.com",
+"help.fleet-music-prd.tesla.com",
+"hermes-ap.eng.vn.cloud.tesla.com",
+"hermes-ap.prd.vn.cloud.tesla.com",
+"hermes-api.prd.eu.vn.cloud.tesla.com",
+"hermes-api.prd.na.vn.cloud.tesla.com",
+"hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"hnd13-gpgw1.tesla.com",
+"home.digitalassets.tesla.com",
+"home.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"home.location-services-prd.tesla.com",
+"hub.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"hub.epc.tesla.com",
+"hub.tesla.com",
+"humans.tesla.com",
+"iad05-gpgw1.tesla.com",
+"image-emails.tesla.com",
+"image.email.tesla.com",
+"image.emails.tesla.com",
+"images.apf-api.prd.vn.cloud.tesla.com",
+"images.apigateway-message-center-ownership.tesla.com",
+"images.apmv3-cdn-go.tesla.com",
+"images.cloud.tesla.com",
+"images.dpuas-prd.usw.vn.cloud.tesla.com",
+"imap.auth.tesla.com",
+"imap.cua-help-me-charge-ui.tesla.com",
+"imap.digitalcontent.tesla.com",
+"imap.tesla.com",
+"img.digitalassets-accounts.tesla.com",
+"img.energy.obs.tesla.com",
+"img.eu.vn.cloud.tesla.com",
+"img.hcaptcha.tesla.com",
+"incontrol.tesla.com",
+"inference-eu-staging.bottlerocket.tesla.com",
+"inference-eu.bottlerocket.tesla.com",
+"inference-staging.bottlerocket.tesla.com",
+"inference-staging.tesla.com",
+"inference.bottlerocket.tesla.com",
+"inference.tesla.com",
+"inside-stg.tesla.com",
+"inside.tesla.com",
+"installations-ext-api.tesla.com",
+"int.akamai-apigateway-charging-ownership.tesla.com",
+"int.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"integration-kronos-dev.tesla.com",
+"integration.kronos.tesla.com",
+"internal.akamai-apigateway-charging-ownership.tesla.com",
+"internal.apigateway-charging-bff.tesla.com",
+"internal.cloud.tesla.com",
+"internal.epuca-prd.usw.vn.cloud.tesla.com",
+"internal.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"inventory-assets.tesla.com",
+"invest.tesla.com",
+"ion.tesla.com",
+"ir.bottlerocket.tesla.com",
+"ir.tesla.com",
+"issue-tracker-stg.tesla.com",
+"issue-tracker.tesla.com",
+"issue-trackerapi-stg.tesla.com",
+"issue-trackerapi.tesla.com",
+"itanswers.tesla.com",
+"jenkins.digitalassets.tesla.com",
+"jenkins.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"k8s.apigateway-message-center-ownership.tesla.com",
+"k8s.device-api.prd.eu.vn.cloud.tesla.com",
+"k8s.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"k8s.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"keycloak-tesla-int.us-west-2-eng-it.k8s.tesla.com",
+"kpai7ycr7jxqkilp.tesla.com",
+"krndevdb.tesla.com",
+"kronos-dev.tesla.com",
+"kronos.tesla.com",
+"kronosdb-dev.tesla.com",
+"kronosdb.tesla.com",
+"kubernetes.device-api.prd.eu.vn.cloud.tesla.com",
+"lax32-gpgw1.tesla.com",
+"ldap.tesla.com",
+"learning-apac-stg.tesla.com",
+"learning-apac.tesla.com",
+"lighthouse.tesla.com",
+"link.qa.tesla.com",
+"link.tesla.com",
+"links.tesla.com",
+"lionpayshare.tesla.com",
+"lionpaytest.tesla.com",
+"lionshare.tesla.com",
+"live-data.america.fn.tesla.com",
+"live-data.europe.fn.tesla.com",
+"live-data.fn.tesla.com",
+"live-data.prd.america.fn.tesla.com",
+"live-data.prd.eu.fn.tesla.com",
+"live-data.prd.europe.fn.tesla.com",
+"live-data.prd.euw1.fn.tesla.com",
+"live-data.prd.na.fn.tesla.com",
+"live-data.prd.usw.fn.tesla.com",
+"live-data.prd.usw2.fn.tesla.com",
+"live.apigateway-pricing-gateway.tesla.com",
+"live.assistant-api.prd.na.vn.cloud.tesla.com",
+"live.epuca-prd.usw.vn.cloud.tesla.com",
+"live.hermes-api.prd.na.vn.cloud.tesla.com",
+"live.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"livestream.tesla.com",
+"livestreamapi-test.tesla.com",
+"livestreamapi.tesla.com",
+"location-services-prd.tesla.com",
+"logcollection.tesla.com",
+"logcollector-ext.tesla.com",
+"login.device-api.prd.na.vn.cloud.tesla.com",
+"login.hermes-ap.prd.vn.cloud.tesla.com",
+"login.link.tesla.com",
+"logs.tesla.com",
+"logtransit-ext.tesla.com",
+"lyncdiscover.c.tesla.com",
+"lyncdiscover.contractors.contractors.tesla.com",
+"lyncdiscover.tesla.com",
+"m.epuca-prd.euw1.vn.cloud.tesla.com",
+"m.extsentry.tesla.com",
+"m.location-services-prd.tesla.com",
+"m365api.tesla.com",
+"mail.apigateway-charging-bff.tesla.com",
+"mail.apmv3-cdn-go.tesla.com",
+"mail.assistant-api.prd.euw1.vn.cloud.tesla.com",
+"mail.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"mail.auth.tesla.com",
+"mail.digitalassets-shop.tesla.com",
+"mail.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"mail.tesla.com",
+"mail1.akamai-apigateway-suppliers.tesla.com",
+"mail1.digitalassets.tesla.com",
+"mail1.euw1.vn.cloud.tesla.com",
+"mail1.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"mail2.cua-help-me-charge-ui.tesla.com",
+"mail2.extsentry.tesla.com",
+"mail2.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"manager.courses.tesla.com",
+"marketing.tesla.com",
+"maven.extgithub.tesla.com",
+"maven.github-ap.tesla.com",
+"maven.github-fw.tesla.com",
+"maven.github-it.tesla.com",
+"maven.github.tesla.com",
+"media-server-api.eng.vn.cloud.tesla.com",
+"media-server-api.prd.vn.cloud.tesla.com",
+"media-server-dev-api.eng.vn.cloud.tesla.com",
+"media-server-qr-dev.eng.america.vn.cloud.tesla.com",
+"media-server-qr.eng.america.vn.cloud.tesla.com",
+"media-server-qr.prd.america.vn.cloud.tesla.com",
+"media.auth.tesla.com",
+"media.device-api.prd.eu.vn.cloud.tesla.com",
+"media.digitalassets.tesla.com",
+"media.digitalcontent.tesla.com",
+"media.epc.tesla.com",
+"media.extgithub.tesla.com",
+"media.github-ap.tesla.com",
+"media.github-fw.tesla.com",
+"media.github-it.tesla.com",
+"media.github.tesla.com",
+"media.hcaptcha.tesla.com",
+"media.hermes-api.prd.eu.vn.cloud.tesla.com",
+"meet.tesla.com",
+"mfa-dev.tesla.com",
+"mfa-reset.tesla.com",
+"mfa-stage.tesla.com",
+"mfa.tesla.com",
+"mfamobile-dev.tesla.com",
+"mfauser-dev.tesla.com",
+"mfg.tesla.com",
+"mfs-reno.tesla.com",
+"mfs-supplier-uat.tesla.com",
+"mfs-supplier.tesla.com",
+"mfs-synergy.tesla.com",
+"mirror.tesla.com",
+"mobile-links-cdn.eng.vn.cloud.tesla.com",
+"mobile-links-cdn.prd.vn.cloud.tesla.com",
+"mobile-links.eng.vn.cloud.tesla.com",
+"mobile-links.prd.vn.cloud.tesla.com",
+"mobile-ops-links.prd.vn.cloud.tesla.com",
+"mobile.kronos.tesla.com",
+"mobile.tesla.com",
+"model3.tesla.com",
+"monitor.apigateway-logging.tesla.com",
+"monitor.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"monitor.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"monitoring-eu.tesla.com",
+"monitoring.tesla.com",
+"mrsproxy06.tesla.com",
+"msoid.contractors.contractors.tesla.com",
+"mta.email.tesla.com",
+"mta.emails.tesla.com",
+"mta2.email.tesla.com",
+"mta2.emails.tesla.com",
+"mta2gh.emails.tesla.com",
+"mta3.emails.tesla.com",
+"mta4.emails.tesla.com",
+"mta5.emails.tesla.com",
+"multiplier.tesla.com",
+"mx.digitalcontent.tesla.com",
+"mx.epuca-prd.euw1.vn.cloud.tesla.com",
+"mx.fleet-music-prd.tesla.com",
+"my.akamai-apigateway-vfx.tesla.com",
+"my.assistant-api.prd.na.vn.cloud.tesla.com",
+"my.epuca-prd.usw.vn.cloud.tesla.com",
+"my.hermes-api.prd.na.vn.cloud.tesla.com",
+"my.tesla.com",
+"myapps.tesla.com",
+"mytcore-inventory-assests.tesla.com",
+"na-1-sso.tesla.com",
+"na-2-sso.tesla.com",
+"na-eq-sso.tesla.com",
+"na-sso.tesla.com",
+"na.logs.tesla.com",
+"na.vn.cloud.tesla.com",
+"naa-origin.tesla.com",
+"nas-origin.tesla.com",
+"nav.vn.cloud.tesla.com",
+"nema1450.tesla.com",
+"new-dev.tesla.com",
+"new.tesla.com",
+"news.hermes-ap.prd.vn.cloud.tesla.com",
+"noservice.tesla.com",
+"notebook.github-ap.tesla.com",
+"notebook.github-fw.tesla.com",
+"notebook.github-it.tesla.com",
+"notebooks.extgithub.tesla.com",
+"notebooks.github-ap.tesla.com",
+"notebooks.github-fw.tesla.com",
+"notebooks.github-it.tesla.com",
+"notebooks.github.tesla.com",
+"npm.extgithub.tesla.com",
+"npm.github-ap.tesla.com",
+"npm.github-fw.tesla.com",
+"npm.github-it.tesla.com",
+"npm.github.tesla.com",
+"npu.prd.nav.vn.cloud.tesla.com",
+"npuapt-prd.usw.vn.cloud.tesla.com",
+"npuca-prd.usw.vn.cloud.tesla.com",
+"npuca-prd.usw2.vn.cloud.tesla.com",
+"npuhe-eng.euw1.vn.cloud.tesla.com",
+"npuhe-eng.usw2.vn.cloud.tesla.com",
+"npute-eng.euw1.vn.cloud.tesla.com",
+"npute-prd.euw1.vn.cloud.tesla.com",
+"npute-prd.usw.vn.cloud.tesla.com",
+"npute-prd.usw2.vn.cloud.tesla.com",
+"npuv-ap.prd.usw2.vn.cloud.tesla.com",
+"npuv-eng.usw2.vn.cloud.tesla.com",
+"npuv-prd.euw1.vn.cloud.tesla.com",
+"npuv-prd.usw.vn.cloud.tesla.com",
+"npuv-prd.usw2.vn.cloud.tesla.com",
+"ns1.apf-api.prd.vn.cloud.tesla.com",
+"ns1.epuca-prd.euw1.vn.cloud.tesla.com",
+"ns1.fleet-apf-prd.tesla.com",
+"ns2.analytics-relay.tesla.com",
+"ns2.assistant-api.prd.na.vn.cloud.tesla.com",
+"ns2.digitalassets.tesla.com",
+"ns2.digitalcontent.tesla.com",
+"ns2.epuca-prd.euw1.vn.cloud.tesla.com",
+"ns2.fleet-music-prd.tesla.com",
+"ns2.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"ns2.location-services-prd.tesla.com",
+"ns3.akamai-apigateway-vfx.tesla.com",
+"ns3.analytics-relay.tesla.com",
+"ns3.cloud.tesla.com",
+"ns3.device-api.prd.na.vn.cloud.tesla.com",
+"ns3.energy.obs.tesla.com",
+"ns3.hermes-api.prd.na.vn.cloud.tesla.com",
+"ns4.akamai-apigateway-vfx.tesla.com",
+"ns4.analytics-relay.tesla.com",
+"ns4.cloud.tesla.com",
+"ns4.cua-help-me-charge-ui.tesla.com",
+"ns4.device-api.prd.na.vn.cloud.tesla.com",
+"ns4.digitalcontent.tesla.com",
+"nuget.extgithub.tesla.com",
+"nuget.github-ap.tesla.com",
+"nuget.github-fw.tesla.com",
+"nuget.github-it.tesla.com",
+"nuget.github.tesla.com",
+"nv.tesla.com",
+"ny.tesla.com",
+"o1.ptr2410.link.tesla.com",
+"o2.ptr556.tesla.com",
+"o3.ptr1444.tesla.com",
+"o4.ptr1867.tesla.com",
+"o5.ptr8466.tesla.com",
+"o6.ptr9437.tesla.com",
+"o7.ptr6980.tesla.com",
+"obs.tesla.com",
+"onboard.tesla.com",
+"oneteam.tesla.com",
+"openadrclient.tesla.com",
+"ops.na.vn.cloud.tesla.com",
+"orca.tesla.com",
+"origin-apigateway-reassignments.tesla.com",
+"origin-apigateway-teslarpsapi.tesla.com",
+"origin-apigateway-warptmsapiserver.tesla.com",
+"origin-apps.tesla.com",
+"origin-assets-contactus-withdraw.tesla.com",
+"origin-assets-contactus.tesla.com",
+"origin-assets-teslaaccount-leasing-financing.tesla.com",
+"origin-aurora-ordering-ext.tesla.com",
+"origin-auth-gtm.tesla.com",
+"origin-auth.tesla.com",
+"origin-bolt.tesla.com",
+"origin-charging-ownership-stage.tesla.com",
+"origin-cicerone.tesla.com",
+"origin-courses.tesla.com",
+"origin-dms-api-stg.tesla.com",
+"origin-edr.tesla.com",
+"origin-ehs-stg.tesla.com",
+"origin-ehs.tesla.com",
+"origin-einvoicing.tesla.com",
+"origin-financialgateway-stg.tesla.com",
+"origin-financialgateway.tesla.com",
+"origin-finplat-prd.tesla.com",
+"origin-finplat-stg.tesla.com",
+"origin-grid.tesla.com",
+"origin-inside-stg.tesla.com",
+"origin-inside.tesla.com",
+"origin-installations-ext-api.tesla.com",
+"origin-itanswers.tesla.com",
+"origin-mfa.tesla.com",
+"origin-mobile.tesla.com",
+"origin-myapps.tesla.com",
+"origin-ownership.tesla.com",
+"origin-pay.tesla.com",
+"origin-pilotbpay.tesla.com",
+"origin-profile.tesla.com",
+"origin-profileapi-stg.tesla.com",
+"origin-profileapi.tesla.com",
+"origin-ranger-api.tesla.com",
+"origin-reassignments.tesla.com",
+"origin-referral-app.tesla.com",
+"origin-slingsdlc.tesla.com",
+"origin-sspr.tesla.com",
+"origin-static-assets-profile-settings.tesla.com",
+"origin-stg-logisticssignals.tesla.com",
+"origin-tcc-gw-stg.tesla.com",
+"origin-tcc-gw.tesla.com",
+"origin-toolbox-beta.tesla.com",
+"origin-warp-stg.tesla.com",
+"origin-warp.tesla.com",
+"origin-warpcxml-dev.tesla.com",
+"origin-webchat-emea.tesla.com",
+"origin-webchat.tesla.com",
+"origin-workforceapi.tesla.com",
+"origin-www-auth.tesla.com",
+"origin-www.tesla.com",
+"origin-wwwcdn.tesla.com",
+"os.tesla.com",
+"other.tesla.com",
+"owa.akamai-apigateway-suppliers.tesla.com",
+"owa.device-api.prd.na.vn.cloud.tesla.com",
+"owner-api.eng.vn.cloud.tesla.com",
+"ownerapi-alpha.prd.vn.cloud.tesla.com",
+"ownerapi-api.eng.euw1.vn.cloud.tesla.com",
+"ownerapi-api.eng.usw.vn.cloud.tesla.com",
+"ownerapi-api.eng.usw2.vn.cloud.tesla.com",
+"ownerapi-signoff-stage.eng.na.vn.cloud.tesla.com",
+"ownerapi-signoff.eng.na.vn.cloud.tesla.com",
+"ownership.tesla.com",
+"oxp-charging-guest-web.tesla.com",
+"oxp-documents-ui.tesla.com",
+"pages.email.tesla.com",
+"pages.emails.tesla.com",
+"pages.extgithub.tesla.com",
+"pages.github-ap.tesla.com",
+"pages.github-fw.tesla.com",
+"pages.github-it.tesla.com",
+"pages.github.tesla.com",
+"paloalto.tesla.com",
+"partnerleadsharing.tesla.com",
+"partners.tesla.com",
+"parts.tesla.com",
+"pay.tesla.com",
+"payment-dlocal-prod.tesla.com",
+"payment-dlocal-stg.tesla.com",
+"payment-public-stg.tesla.com",
+"paymentrecon-stage.tesla.com",
+"paymentrecon.tesla.com",
+"payx-citiapi-prod.tesla.com",
+"pds.tesla.com",
+"phototravel.tesla.com",
+"pilot-bpay.tesla.com",
+"pixiecloud.tesla.com",
+"pm-bounces.tesla.com",
+"pop.akamai-apigateway-suppliers.tesla.com",
+"pop.device-api.prd.eu.vn.cloud.tesla.com",
+"pop.energy.obs.tesla.com",
+"pop.epuca-prd.euw1.vn.cloud.tesla.com",
+"pop.tesla.com",
+"portal.cua-help-me-charge-ui.tesla.com",
+"powerhub.energy.tesla.com",
+"powerwall.tesla.com",
+"prd.america.vn.cloud.tesla.com",
+"prd.eu.vn.cloud.tesla.com",
+"prd.euw1.vn.cloud.tesla.com",
+"prd.na.vn.cloud.tesla.com",
+"prd.nav.vn.cloud.tesla.com",
+"prd.usw.vn.cloud.tesla.com",
+"prd.usw2.vn.cloud.tesla.com",
+"prd.vn.cloud.tesla.com",
+"preview.analytics-relay.tesla.com",
+"preview.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"preview.digitalcontent.tesla.com",
+"private.apigateway-charging-bff.tesla.com",
+"private.cua-chat-ui.tesla.com",
+"private.digitalassets-shop.tesla.com",
+"private.epc.tesla.com",
+"private.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"prod.apigateway-logging.tesla.com",
+"prod.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"prod.cua-help-me-choose-ui.tesla.com",
+"prod.device-api.prd.na.vn.cloud.tesla.com",
+"prod.digitalassets.tesla.com",
+"prod.eu.vn.cloud.tesla.com",
+"productinfo.tesla.com",
+"profile.tesla.com",
+"prometheus.apigateway-logging.tesla.com",
+"prometheus.cua-help-me-charge-ui.tesla.com",
+"prometheus.digitalassets.tesla.com",
+"ptr1.tesla.com",
+"ptr2.tesla.com",
+"pub.email.tesla.com",
+"public.apigateway-charging-bff.tesla.com",
+"public.apigateway-pricing-gateway.tesla.com",
+"public.digitalassets-shop.tesla.com",
+"public.epc.tesla.com",
+"q1haoturxk.tesla.com",
+"qa.tesla.com",
+"ranger-api.tesla.com",
+"raultest.tesla.com",
+"raw.extgithub.tesla.com",
+"raw.github-ap.tesla.com",
+"raw.github-fw.tesla.com",
+"raw.github-it.tesla.com",
+"raw.github.tesla.com",
+"reassignment-ui.tesla.com",
+"referral-app.tesla.com",
+"referral.tesla.com",
+"render.github-ap.tesla.com",
+"render.github-fw.tesla.com",
+"render.github-it.tesla.com",
+"render.github.tesla.com",
+"repair.tesla.com",
+"reply.extgithub.tesla.com",
+"reply.github-ap.tesla.com",
+"reply.github-fw.tesla.com",
+"reply.github-it.tesla.com",
+"reply.github.tesla.com",
+"resources.tesla.com",
+"rioolbuizens.tesla.com",
+"ro.github-ap.tesla.com",
+"ro.github-fw.tesla.com",
+"ro.github.tesla.com",
+"roadside.tesla.com",
+"roadsideinvoice.tesla.com",
+"robotaxi-app-feedback-eng.tesla.com",
+"robotaxi-app-feedback-prd.tesla.com",
+"rubygems.extgithub.tesla.com",
+"rubygems.github-ap.tesla.com",
+"rubygems.github-fw.tesla.com",
+"rubygems.github-it.tesla.com",
+"rubygems.github.tesla.com",
+"rumipv6.tesla.com",
+"s3-sidekick-ssl.github.tesla.com",
+"s3.a.buf01.tcs.tesla.com",
+"s3.a.energy.smf12.tcs.tesla.com",
+"s3.a.energy.smf13.tcs.tesla.com",
+"s3.a.energy.vast.tcs.tesla.com",
+"s3.a.iad06.tcs.tesla.com",
+"s3.a.smf11.tcs.tesla.com",
+"s3.a.smf12.tcs.tesla.com",
+"s3.a.smf13.tcs.tesla.com",
+"s3.a.vast-dr.tcs.tesla.com",
+"s3.a.vast.tcs.tesla.com",
+"s3.a.vast.tesla-hermes-snapshot-motors.tcs.tesla.com",
+"s3.b.ams15.tcs.tesla.com",
+"s3.b.ams17.tcs.tesla.com",
+"s3.b.energy.ams15.tcs.tesla.com",
+"s3.b.energy.ams17.tcs.tesla.com",
+"s3.b.energy.vast.tcs.tesla.com",
+"s3.b.smf11.tcs.tesla.com",
+"s3.b.vast.tcs.tesla.com",
+"s3.c.smf11.tcs.tesla.com",
+"s3.d.smf11.tcs.tesla.com",
+"s3.energy.obs.tesla.com",
+"s3.eng.na.vn.cloud.tesla.com",
+"s3.eu.vn.cloud.tesla.com",
+"s3.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"s3.prd.na.vn.cloud.tesla.com",
+"sales-prd.tesla.com",
+"sandbox-manager.courses.tesla.com",
+"sandbox-studio.courses.tesla.com",
+"sandbox.digitalassets-shop.tesla.com",
+"sandbox.epc.tesla.com",
+"sc-cppm.tesla.com",
+"sc-eu-cppm.tesla.com",
+"sca.tesla.com",
+"schedule.tesla.com",
+"secure-static-assets.tesla.com",
+"secure.eu.vn.cloud.tesla.com",
+"secure.hermes-api.prd.na.vn.cloud.tesla.com",
+"secure.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"secureaccess.tesla.com",
+"secureguest.tesla.com",
+"secureguestcn.tesla.com",
+"secureguesteu.tesla.com",
+"sentry-api-test.ops.na.vn.cloud.tesla.com",
+"sentry-api.ops.na.vn.cloud.tesla.com",
+"sentry.app.tesla.com",
+"server.tesla.com",
+"service.tesla.com",
+"serviceapi-stg.tesla.com",
+"serviceapi.tesla.com",
+"serviceapp.tesla.com",
+"share.tesla.com",
+"shop-stage.tesla.com",
+"shop.apigateway-pricing-gateway.tesla.com",
+"shop.cua-help-me-choose-ui.tesla.com",
+"shop.epc.tesla.com",
+"shop.eu.tesla.com",
+"shop.extsentry.tesla.com",
+"shop.hermes-api.prd.na.vn.cloud.tesla.com",
+"shop.tesla.com",
+"signaling-alpha.prd.vn.cloud.tesla.com",
+"signaling-ap-api.eng.vn.cloud.tesla.com",
+"signaling-robotics.eng.usw.vn.cloud.tesla.com",
+"signaling-robotics.eng.vn.cloud.tesla.com",
+"simpleorigin.tesla.com",
+"sin05-gpgw1.tesla.com",
+"sip.contractors.contractors.tesla.com",
+"sip.tesla.com",
+"sjc04d1rsaap02.tesla.com",
+"sjc36-gpgw1.tesla.com",
+"sling.tesla.com",
+"smarttax.tesla.com",
+"smt.tesla.com",
+"smtp.device-api.prd.eu.vn.cloud.tesla.com",
+"smtp.digitalcontent.tesla.com",
+"smtp.euw1.vn.cloud.tesla.com",
+"smtp.extsentry.tesla.com",
+"smtp.tesla.com",
+"solarbonds.tesla.com",
+"sso-dec.tesla.com",
+"sso-dev-origin.tesla.com",
+"sso-dev.tesla.com",
+"sso-na.tesla.com",
+"sso-sandbox.tesla.com",
+"sso-sig.tesla.com",
+"sso.tesla.com",
+"sspr.tesla.com",
+"stage-traffic-flow-test.tesla.com",
+"stage.tesla.com",
+"staging.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"staging.bottlerocket.tesla.com",
+"staging.digitalassets-shop.tesla.com",
+"staging.epuca-prd.euw1.vn.cloud.tesla.com",
+"staging.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"staging.location-services-prd.tesla.com",
+"static-assets-contactus-comm-preferences.tesla.com",
+"static-assets-pay.tesla.com",
+"static-assets-subscription-preferences.tesla.com",
+"static-assets-teslaaccount.tesla.com",
+"static-assets.tesla.com",
+"static-event-dev.tesla.com",
+"static-map.tesla.com",
+"static.auth.tesla.com",
+"static.energy.obs.tesla.com",
+"static.epc.tesla.com",
+"static.hermes-api.prd.eu.vn.cloud.tesla.com",
+"static.tesla.com",
+"staticpay-origin-wwwcdn.tesla.com",
+"stats.apigateway-pricing-gateway.tesla.com",
+"stats.cua-help-me-charge-ui.tesla.com",
+"stats.eu.vn.cloud.tesla.com",
+"status.auth.tesla.com",
+"status.digitalassets.tesla.com",
+"status.epuca-prd.euw1.vn.cloud.tesla.com",
+"status.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"stg-uc-twilio-bpm-webhook.tesla.com",
+"storage.cloud.tesla.com",
+"storage.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"store.epuca-prd.usw.vn.cloud.tesla.com",
+"store.link.tesla.com",
+"stream.akamai-apigateway-charging-ownership.tesla.com",
+"stream.digitalcontent.tesla.com",
+"stream.dpuas-prd.usw.vn.cloud.tesla.com",
+"stream.epuca-prd.usw.vn.cloud.tesla.com",
+"stream.hermes-api.prd.na.vn.cloud.tesla.com",
+"stream.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"sts-broker.bottlerocket.tesla.com",
+"studio.courses.tesla.com",
+"studio.sandbox-courses.tesla.com",
+"suppliers-stg.tesla.com",
+"suppliers.tesla.com",
+"surveys.tesla.com",
+"svopn.tesla.com",
+"syd14-gpgw1.tesla.com",
+"taffy.bottlerocket.tesla.com",
+"tcc-graph-stg.tesla.com",
+"tcc-graph.tesla.com",
+"tcc-gw-stg.tesla.com",
+"tcc-gw.tesla.com",
+"teamchat.tesla.com",
+"teamchatcn.tesla.com",
+"teamchatgl.tesla.com",
+"telemetry-ap.prd.vn.cloud.tesla.com",
+"terraform.us-west-2-prd-tfe.k8s.tesla.com",
+"tesla-hermes-snapshot-motors-eng.s3.eng.na.vn.cloud.tesla.com",
+"tesla-hermes-snapshot-motors.eng.usw.vn.cloud.tesla.com",
+"tesla-hermes-snapshot-motors.s3.prd.na.vn.cloud.tesla.com",
+"tesla-inc-docsys-eorg.tesla.com",
+"tesla.com",
+"teslacdpna0.tesla.com",
+"teslacdpna03.tesla.com",
+"teslacdpna04.tesla.com",
+"teslacdpna05.tesla.com",
+"teslacis.tesla.com",
+"teslacmgap01.tesla.com",
+"teslacmgcn01.tesla.com",
+"teslacmgeu01.tesla.com",
+"teslacmgna01.tesla.com",
+"teslacmgus0.tesla.com",
+"teslacmgus01.tesla.com",
+"teslamezcal.tesla.com",
+"teslaquila.tesla.com",
+"teslatequila.tesla.com",
+"test.akamai-apigateway-suppliers.tesla.com",
+"test.cua-chat-ui.tesla.com",
+"test.epuca-prd.euw1.vn.cloud.tesla.com",
+"testnotify.tesla.com",
+"tf-poc.tesla.com",
+"thisistest.tesla.com",
+"three.tesla.com",
+"tokens-staging.bottlerocket.tesla.com",
+"toolbox-beta.tesla.com",
+"toolbox.tesla.com",
+"track.cloud.tesla.com",
+"track.cua-help-me-choose-ui.tesla.com",
+"track.epc.tesla.com",
+"track.hermes-ap.prd.vn.cloud.tesla.com",
+"track.hermes-api.prd.eu.vn.cloud.tesla.com",
+"track.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"track.tesla.com",
+"tradein.tesla.com",
+"tradepartnertickets.tesla.com",
+"tripx-alpha.prd.vn.cloud.tesla.com",
+"tripx.eng.usw.vn.cloud.tesla.com",
+"tripx.eng.usw2.vn.cloud.tesla.com",
+"tripx.prd.euw1.vn.cloud.tesla.com",
+"tripx.prd.usw.vn.cloud.tesla.com",
+"tripx.prd.usw2.vn.cloud.tesla.com",
+"tripx.prd.vn.cloud.tesla.com",
+"triton-management-stg.tesla.com",
+"triton-management-uat.tesla.com",
+"triton-management.tesla.com",
+"triton-server-stg.tesla.com",
+"triton-server-uat.tesla.com",
+"triton-server.tesla.com",
+"trt.tesla.com",
+"tssapi-aem-stg.tesla.com",
+"tssapi-aem.tesla.com",
+"tssapi-stg.tesla.com",
+"tssapi.tesla.com",
+"tvs-api-stg.tesla.com",
+"tvs-api-uat.tesla.com",
+"tvs-api.tesla.com",
+"tvs-stg.tesla.com",
+"tvs-uat.tesla.com",
+"tvs.tesla.com",
+"tweventhook.tesla.com",
+"tx.tesla.com",
+"u003ebilling.tesla.com",
+"u003evn.tesla.com",
+"ug.tesla.com",
+"ui.a.smf11.tcs.tesla.com",
+"ui.b.smf11.tcs.tesla.com",
+"ui.c.smf11.tcs.tesla.com",
+"ui.d.smf11.tcs.tesla.com",
+"uicrashtracer.tesla.com",
+"ul.engage.tesla.com",
+"upload.apigateway-logging.tesla.com",
+"upload.assistant-api.prd.usw2.vn.cloud.tesla.com",
+"upload.digitalassets.tesla.com",
+"uploads.extgithub.tesla.com",
+"uploads.github-ap.tesla.com",
+"uploads.github-fw.tesla.com",
+"uploads.github-it.tesla.com",
+"uploads.github.tesla.com",
+"url1894.tesla.com",
+"url2547.tesla.com",
+"url4104.tesla.com",
+"url4211.tesla.com",
+"url4857.tesla.com",
+"url5196.tesla.com",
+"url5347.tesla.com",
+"url6661.tesla.com",
+"url7051.tesla.com",
+"url8833.tesla.com",
+"us-west-2-eng-maps.k8s.tesla.com",
+"us-west-2-prd-it.k8s.tesla.com",
+"usw.vn.cloud.tesla.com",
+"usw2.vn.cloud.tesla.com",
+"v1.akamai-apigateway-vfx.tesla.com",
+"v1.apf-api.prd.vn.cloud.tesla.com",
+"v1.device-api.prd.na.vn.cloud.tesla.com",
+"v1.digitalassets-accounts.tesla.com",
+"v1.epc.tesla.com",
+"v1.hermes-ap.prd.vn.cloud.tesla.com",
+"v2.digitalassets-accounts.tesla.com",
+"v2.hermes-api.prd.na.vn.cloud.tesla.com",
+"v2.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"v3.akamai-apigateway-charging-ownership.tesla.com",
+"v3.epc.tesla.com",
+"v3.hcaptcha.tesla.com",
+"v3.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"vdi.tesla.com",
+"vehicle-files.eng.euw1.vn.cloud.tesla.com",
+"vehicle-files.eng.usw2.vn.cloud.tesla.com",
+"vehicle-files.eng.vn.cloud.tesla.com",
+"vehicle-files.prd.euw1.vn.cloud.tesla.com",
+"vehicle-files.prd.usw2.vn.cloud.tesla.com",
+"vehicle-files.prd.vn.cloud.tesla.com",
+"veritas-staging.bottlerocket.tesla.com",
+"video.assistant-api.prd.euw1.vn.cloud.tesla.com",
+"video.fleet-apf-prd.tesla.com",
+"view.email.tesla.com",
+"view.emails.tesla.com",
+"viewscreen.extgithub.tesla.com",
+"viewscreen.github-ap.tesla.com",
+"viewscreen.github-fw.tesla.com",
+"viewscreen.github-it.tesla.com",
+"viewscreen.github.tesla.com",
+"vmanage-alerts.tesla.com",
+"vms.iad06.tcs.tesla.com",
+"vms.smf13.tcs.tesla.com",
+"vn.cloud.tesla.com",
+"vn.tesla.com",
+"vpn.assistant-api.prd.na.vn.cloud.tesla.com",
+"vpn.hermes-ap.prd.vn.cloud.tesla.com",
+"vpn.tesla.com",
+"vpn1.tesla.com",
+"vpn2.tesla.com",
+"vpn3.tesla.com",
+"vrp-stg.tesla.com",
+"vs-bnc.na.vn.cloud.tesla.com",
+"vs-bnc.usw2.vn.cloud.tesla.com",
+"w3-akamai-apigateway-procuretopayapi.tesla.com",
+"warehouse-stg.tesla.com",
+"warehouse.tesla.com",
+"warpbilling.tesla.com",
+"wdm-kronos-dev.tesla.com",
+"wdm.kronos.tesla.com",
+"web.digitalassets-accounts.tesla.com",
+"webmail.auth.tesla.com",
+"webmail.cua-chat-ui.tesla.com",
+"webmail.cua-help-me-choose-ui.tesla.com",
+"webmail.euw1.vn.cloud.tesla.com",
+"webmail.tesla.com",
+"wifi.tesla.com",
+"wiki.apigateway-message-center-ownership.tesla.com",
+"wiki.hcaptcha.tesla.com",
+"wiki.hermes-api.prd.na.vn.cloud.tesla.com",
+"wim-kronos-dev.tesla.com",
+"wim.kronos.tesla.com",
+"wire.tesla.com",
+"workforce.tesla.com",
+"ww.tesla.com",
+"ww1.digitalassets.tesla.com",
+"ww1.fleet-music-prd.tesla.com",
+"ww1.hermes-stream-api.prd.na.vn.cloud.tesla.com",
+"ww2.digitalcontent.tesla.com",
+"ww2.hermes-stream-api.prd.eu.vn.cloud.tesla.com",
+"www-dev.tesla.com",
+"www-static-dev.tesla.com",
+"www-static-prod.tesla.com",
+"www-static-qa.tesla.com",
+"www-static-stage.tesla.com",
+"www-stg2.tesla.com",
+"www-test.tesla.com",
+"www-uat.tesla.com",
+"www-uat2.tesla.com",
+"www.akamai-apigateway-charging-ownership.tesla.com",
+"www.apigateway-charging-bff.tesla.com",
+"www.apigateway-logging.tesla.com",
+"www.apigateway-message-center-ownership.tesla.com",
+"www.auth.tesla.com",
+"www.cloud.tesla.com",
+"www.cua-help-me-charge-ui.tesla.com",
+"www.digitalassets-shop.tesla.com",
+"www.engage.tesla.com",
+"www.epc.tesla.com",
+"www.gridlogic.energy.tesla.com",
+"www.ir.tesla.com",
+"www.powerhub.energy.tesla.com",
+"www.sandbox-studio.courses.tesla.com",
+"www.tesla.com",
+"www.teslaquila.tesla.com",
+"www.teslatequila.tesla.com",
+"www.toolbox.tesla.com",
+"www.ug.tesla.com",
+"www.uicrashtracer.tesla.com",
+"www.vpn1.tesla.com",
+"www45.tesla.com",
+"wwwmta3-emailbjenkins.emails.tesla.com",
+"wy7vtk21un.tesla.com",
+"x3-eng.obs.tesla.com",
+"x3-prod.obs.tesla.com",
+"x3.obs.tesla.com",
+"xapps.tesla.com",
+"xmail.tesla.com",
+"zta-setup.tesla.com"
+],
+"sources": {
+"alienvault": {
+"skipped": "needs a key"
+},
+"anubis": {
+"count": 703,
+"seconds": 0.4
+},
+"bevigil": {
+"skipped": "needs a key"
+},
+"bufferover": {
+"skipped": "needs a key"
+},
+"builtwith": {
+"skipped": "needs a key"
+},
+"c99": {
+"skipped": "needs a key"
+},
+"censys": {
+"skipped": "needs a key"
+},
+"certspotter": {
+"count": 0,
+"error": "unexpected status code 429 received from https://api.certspotter.com/v1/issuances?domain=tesla.com&include_subdomains=true&expand=dns_names",
+"seconds": 0.7
+},
+"chaos": {
+"skipped": "needs a key"
+},
+"chinaz": {
+"skipped": "needs a key"
+},
+"crtname": {
+"count": 1349,
+"seconds": 1.1
+},
+"crtsh": {
+"count": 0,
+"error": "unexpected status code 502 received from https://crt.sh/json?q=tesla.com",
+"seconds": 1.1
+},
+"digitalyama": {
+"skipped": "needs a key"
+},
+"dnsdumpster": {
+"skipped": "needs a key"
+},
+"dnsrepo": {
+"skipped": "needs a key"
+},
+"domainsproject": {
+"skipped": "needs a key"
+},
+"driftnet": {
+"skipped": "needs a key"
+},
+"fofa": {
+"skipped": "needs a key"
+},
+"fullhunt": {
+"skipped": "needs a key"
+},
+"hackertarget": {
+"count": 0,
+"seconds": 1
+},
+"hudsonrock": {
+"count": 11,
+"seconds": 0.2
+},
+"intelx": {
+"skipped": "needs a key"
+},
+"leakix": {
+"skipped": "needs a key"
+},
+"onyphe": {
+"skipped": "needs a key"
+},
+"profundis": {
+"skipped": "needs a key"
+},
+"quake": {
+"skipped": "needs a key"
+},
+"rapiddns": {
+"count": 88,
+"seconds": 3.5
+},
+"reconeer": {
+"skipped": "needs a key"
+},
+"redhuntlabs": {
+"skipped": "needs a key"
+},
+"robtex": {
+"skipped": "needs a key"
+},
+"rsecloud": {
+"skipped": "needs a key"
+},
+"scanmalware": {
+"count": 111,
+"seconds": 3
+},
+"securitytrails": {
+"skipped": "needs a key"
+},
+"shodan": {
+"skipped": "needs a key"
+},
+"shodanct": {
+"count": 0,
+"error": "unexpected status code 403 received from https://ctl.shodan.io/api/v1/domain/tesla.com/hostnames",
+"seconds": 0.2
+},
+"subdomaincenter": {
+"count": 2135,
+"dropped_unresolved": 1825,
+"kept": 54,
+"seconds": 29.3
+},
+"thc": {
+"count": 475,
+"seconds": 3.6
+},
+"urlscan": {
+"skipped": "needs a key"
+},
+"virustotal": {
+"skipped": "needs a key"
+},
+"whoisxmlapi": {
+"skipped": "needs a key"
+},
+"windvane": {
+"skipped": "needs a key"
+}
+},
+"warning": "failed: certspotter, crtsh, shodanct"
+}
