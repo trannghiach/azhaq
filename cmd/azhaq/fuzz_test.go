@@ -253,3 +253,13 @@ func TestFuzzIsInTheCommandTable(t *testing.T) {
 		t.Errorf("registry entry %+v", c)
 	}
 }
+
+func TestFuzzResumeArgs(t *testing.T) {
+	got := withoutFlag([]string{"-u", "http://h/FUZZ", "-start", "5", "-w", "w.txt", "-start=9", "-t", "10"}, "start")
+	if strings.Join(got, " ") != "-u http://h/FUZZ -w w.txt -t 10" {
+		t.Fatalf("%v", got)
+	}
+	if s := shellJoin([]string{"-H", "Host: FUZZ.x", "-mr", "it's"}); s != `-H 'Host: FUZZ.x' -mr 'it'\''s'` {
+		t.Fatalf("%s", s)
+	}
+}

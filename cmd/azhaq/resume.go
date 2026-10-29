@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -39,6 +40,14 @@ func cmdResume(args []string) error {
 	st, err := store.OpenExisting(db)
 	if err != nil {
 		return err
+	}
+	// A stopped fuzz run keeps the command that goes on from where it was.
+	if raw := st.GetMeta(fuzzResumeKey); raw != "" {
+		var args []string
+		if json.Unmarshal([]byte(raw), &args) == nil && len(args) > 0 {
+			st.Close()
+			return cmdFuzz(append(args, rest...))
+		}
 	}
 	id, runArgs, left, ok, err := st.Resumable()
 	st.Close()

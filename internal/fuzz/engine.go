@@ -28,6 +28,10 @@ type Config struct {
 	Recursion bool
 	Depth     int // 0: no limit
 
+	// Start skips the first inputs of the first request: where a stopped
+	// run left off (-start).
+	Start int
+
 	// Allow, when set, says whether a request's host is in scope; one that
 	// is not is not sent.
 	Allow func(host string) bool
@@ -66,6 +70,9 @@ type Stats struct {
 	Down       []string // origins that stopped answering
 	Filters    []string // what calibration added, "size 1234"
 	Notes      []string
+	// Done: inputs of the first request answered in a row from Start, so a
+	// stopped run goes on from Start+Done. Queued: recursions not started.
+	Done, Queued int
 }
 
 type job struct {
@@ -100,12 +107,15 @@ func Run(ctx context.Context, cfg Config) Stats {
 	}
 	e := &engine{cfg: cfg, downOrigs: map[string]bool{}}
 	e.queue = []job{{tmpl: cfg.Template}}
+	first := true
 	for len(e.queue) > 0 && ctx.Err() == nil && !e.stop.Load() {
 		j := e.queue[0]
 		e.queue = e.queue[1:]
 		e.stats.Jobs++
-		e.runJob(ctx, j)
+		e.runJob(ctx, j, first)
+		first = false
 	}
+	e.stats.Queued = len(e.queue)
 	for o := range e.downOrigs {
 		e.stats.Down = append(e.stats.Down, o)
 	}
@@ -123,12 +133,28 @@ func (e *engine) activeLists(t Template) []List {
 	return out
 }
 
-func (e *engine) runJob(ctx context.Context, j job) {
+func (e *engine) runJob(ctx context.Context, j job, first bool) {
 	lists := e.activeLists(j.tmpl)
 	total := Total(e.cfg.Mode, lists)
+	start := 0
+	if first {
+		start = min(e.cfg.Start, total)
+	}
+	done := make([]bool, total)
+	var doneMu sync.Mutex
 	sem := make(chan struct{}, e.cfg.Threads)
 	var wg sync.WaitGroup
-	for i := 0; i < total; i++ {
+	defer func() {
+		if !first {
+			return
+		}
+		n := 0
+		for n < total-start && done[start+n] {
+			n++
+		}
+		e.stats.Done = n
+	}()
+	for i := start; i < total; i++ {
 		if ctx.Err() != nil || e.stop.Load() {
 			break
 		}
@@ -144,22 +170,28 @@ func (e *engine) runJob(ctx context.Context, j job) {
 		wg.Add(1)
 		go func(i int) {
 			defer func() { <-sem; wg.Done() }()
-			e.task(ctx, j, At(e.cfg.Mode, lists, i), i+1)
+			if e.task(ctx, j, At(e.cfg.Mode, lists, i), i+1) {
+				doneMu.Lock()
+				done[i] = true
+				doneMu.Unlock()
+			}
 		}(i)
 	}
 	wg.Wait()
 }
 
-func (e *engine) task(ctx context.Context, j job, input map[string]string, pos int) {
+// task sends one input; false when a stop (budget, kill file, the run's
+// end) kept it from being asked, so a resume asks it again.
+func (e *engine) task(ctx context.Context, j job, input map[string]string, pos int) bool {
 	req := j.tmpl.Expand(input)
 	req.Position = pos
 	if e.cfg.Allow != nil && !e.cfg.Allow(hostOf(req.URL)) {
 		e.count(func(s *Stats) { s.OutOfScope++ })
-		return
+		return true
 	}
 	resp, err := e.send(ctx, &req)
 	if err != nil {
-		return
+		return !errors.Is(err, neterr.ErrBudget) && ctx.Err() == nil
 	}
 	e.calibrate(ctx, j.tmpl, input)
 	if e.cfg.Set.Matches(resp) {
@@ -168,6 +200,7 @@ func (e *engine) task(ctx context.Context, j job, input map[string]string, pos i
 	if e.cfg.Recursion {
 		e.recurse(j, resp)
 	}
+	return true
 }
 
 // send sends req, once more if it failed. An error is counted and, when it

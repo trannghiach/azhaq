@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,6 +19,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/connector"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 )
@@ -56,6 +59,7 @@ func cmdFuzz(args []string) error {
 	ack := fs.String("ack", "FUZZ", "the keyword calibration replaces")
 	recursion := fs.Bool("recursion", false, "descend into directories found (the URL must end with FUZZ)")
 	depth := fs.Int("recursion-depth", 0, "levels of recursion (0: no limit)")
+	start := fs.Int("start", 0, "skip the first N inputs: where a stopped run left off (its summary gives the command)")
 	exts := fs.String("e", "", "extensions added to each FUZZ word, comma-separated: .php,.bak")
 	ic := fs.Bool("ic", false, "ignore comments in wordlists")
 	threads := fs.Int("t", 40, "requests in flight")
@@ -172,7 +176,7 @@ func cmdFuzz(args []string) error {
 		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads,
 		Sender:    fuzz.NewSender(fuzz.HTTPOptions{Timeout: to, Threads: *threads, Follow: *follow, Allow: rules.Allows}),
 		Calibrate: *ac, CalKeyword: *ack, Recursion: *recursion, Depth: *depth,
-		Allow: rules.Allows, OriginTrips: fetch.OriginTrips,
+		Allow: rules.Allows, OriginTrips: fetch.OriginTrips, Start: *start,
 	}
 
 	w, err := newWriter(&c)
@@ -244,7 +248,10 @@ func cmdFuzz(args []string) error {
 		rep.Notes = append(rep.Notes, "auto-calibration filtered out answers with "+strings.Join(st.Filters, ", "))
 	}
 	rep.Notes = append(rep.Notes, st.Notes...)
+	var killed *neterr.Killed
 	switch {
+	case errors.As(fetch.Killed(), &killed):
+		rep.Stopped = "the kill switch: kill file " + killed.Path + " exists"
 	case st.Spent:
 		rep.Stopped = fmt.Sprintf("the request budget of %d is spent", fetch.MaxRequests)
 	case len(st.Down) > 0:
@@ -253,6 +260,23 @@ func cmdFuzz(args []string) error {
 		rep.Stopped = fmt.Sprintf("-maxtime %gs reached", *maxtime)
 	case ctx.Err() != nil:
 		rep.Stopped = "interrupted"
+	}
+	if rep.Stopped != "" {
+		// Go on from the first input not answered; azhaq resume -db runs it.
+		next := append(withoutFlag(args, "start"), "-start", strconv.Itoa(*start+st.Done))
+		rep.Resume = "azhaq fuzz " + shellJoin(next)
+		if st.Queued > 0 {
+			rep.Notes = append(rep.Notes, fmt.Sprintf("%d directories found for -recursion were not swept: run fuzz on each (they are in the results)", st.Queued))
+		}
+		if c.db != "" {
+			if err := setFuzzResume(c.db, next); err != nil {
+				return err
+			}
+		}
+	} else if c.db != "" {
+		if err := setFuzzResume(c.db, nil); err != nil {
+			return err
+		}
 	}
 	if c.db != "" {
 		if err := keepFuzzHits(c.db, hits, tmpl.Method, os.Args); err != nil {
@@ -383,4 +407,50 @@ func keepFuzzHits(path string, hits []fuzz.Result, method string, argv []string)
 		_ = st.SaveSeeds(hints)
 	}
 	return nil
+}
+
+// fuzzResumeKey holds, in a workspace, the fuzz command that goes on from
+// where a stopped one left off; azhaq resume runs it.
+const fuzzResumeKey = "fuzz:resume"
+
+func setFuzzResume(path string, args []string) error {
+	st, err := store.Open(path)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	v := ""
+	if args != nil {
+		raw, _ := json.Marshal(args)
+		v = string(raw)
+	}
+	return st.SetMeta(fuzzResumeKey, v)
+}
+
+// withoutFlag is args without -name and its value.
+func withoutFlag(args []string, name string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		k, _, eq := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		if strings.HasPrefix(args[i], "-") && k == name {
+			if !eq {
+				i++
+			}
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
+}
+
+// shellJoin quotes args for a shell where they need it.
+func shellJoin(args []string) string {
+	out := make([]string, len(args))
+	for i, a := range args {
+		if a == "" || strings.ContainsAny(a, " \t'\"$`\\|&;<>(){}*?[]#~!") {
+			a = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		}
+		out[i] = a
+	}
+	return strings.Join(out, " ")
 }
