@@ -205,10 +205,12 @@ func (s *Schema) recoverSchema(ctx context.Context, raw string, status int, emit
 		return failed(err)
 	}
 	row := map[string]any{"url": raw, "role": "graphql", "status": status, "introspection": false, "recovered": "suggestions",
-		"queries": q.names(), "types": typeNames(q, m)}
+		"queries": q.names(), "types": typeNames(q, m), "errors": q.errors, "query_type": q.name}
 	sigs := map[string]any{"queries": q.signatures()}
 	if m != nil {
 		row["mutations"] = m.names()
+		row["errors"] = q.errors + m.errors
+		row["mutation_type"] = m.name
 		sigs["mutations"] = m.signatures()
 	}
 	row["signatures"] = sigs

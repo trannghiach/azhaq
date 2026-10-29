@@ -310,6 +310,7 @@ func introspectionUnits(raw []byte) (*exportUnits, error) {
 	type endpoint struct {
 		url        string
 		schema     map[string]any
+		mark       any // x-azhaq: a recovered schema's mark
 		types, dir []any
 	}
 	read := func(u string, v any) (endpoint, error) {
@@ -321,7 +322,7 @@ func introspectionUnits(raw []byte) (*exportUnits, error) {
 		}
 		ts, _ := sc["types"].([]any)
 		ds, _ := sc["directives"].([]any)
-		return endpoint{url: u, schema: sc, types: ts, dir: ds}, nil
+		return endpoint{url: u, schema: sc, mark: res["x-azhaq"], types: ts, dir: ds}, nil
 	}
 	var eps []endpoint
 	keyed := doc["data"] == nil
@@ -374,7 +375,11 @@ func introspectionUnits(raw []byte) (*exportUnits, error) {
 		result := func(e int) map[string]any {
 			sc := maps.Clone(eps[e].schema)
 			sc["types"], sc["directives"] = orEmpty(types[e]), orEmpty(dirs[e])
-			return map[string]any{"data": map[string]any{"__schema": sc}}
+			page := map[string]any{"data": map[string]any{"__schema": sc}}
+			if eps[e].mark != nil {
+				page["x-azhaq"] = eps[e].mark
+			}
+			return page
 		}
 		if !keyed {
 			return compactJSON(result(0))

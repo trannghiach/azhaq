@@ -268,6 +268,7 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Unreachable = engine.Unreachable(seeds, ents, obs)
 	rep.Notes = append(rep.Notes, engine.Notes(obs)...)
 	rep.Notes = append(rep.Notes, portcol.Notes(obs)...)
+	rep.Notes = append(rep.Notes, engine.GraphQLNotes(obs)...)
 	rep.Takeover = takeovers(ents, obs)
 	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
 		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
@@ -339,6 +340,8 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("coverage", r.Coverage, r.Coverage != "")
 	set("role", r.Role, r.Role != "")
 	set("status", r.Status, r.Status != 0)
+	set("evidence", r.Evidence, r.Evidence != "")
+	set("evidence_from", r.EvidenceFrom, len(r.EvidenceFrom) > 0)
 	set("title", r.Title, r.Title != "")
 	set("methods", r.Methods, len(r.Methods) > 0)
 	set("params", r.Params, len(r.Params) > 0)

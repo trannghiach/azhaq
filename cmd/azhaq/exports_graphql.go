@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -18,6 +19,10 @@ type gqlEndpoint struct {
 	URL    string
 	Raw    json.RawMessage // the __schema object, as the server sent it
 	Schema *gqlschema.Schema
+	// Set for a schema recovered from validation errors, not introspected.
+	Recovered *engine.GQLSchema
+	Mark      map[string]any      // its "x-azhaq" in the JSON export
+	Untyped   map[string][]string // root fields recovered with no type
 }
 
 // graphqlEndpoints lists the endpoints with a whole schema, by URL; a
@@ -56,7 +61,9 @@ func graphqlEndpoints(obs []types.StoredObservation) []gqlEndpoint {
 // language, each endpoint's under a "# URL" comment. origin (-origin)
 // keeps the endpoints on that origin, or the one at that URL.
 func graphqlExport(g *graphView, format, origin string, w io.Writer) error {
-	all := graphqlEndpoints(g.obs)
+	whole := graphqlEndpoints(g.obs)
+	all := append(whole, recoveredEndpoints(engine.GraphQLSchemas(g.obs), whole)...)
+	sort.Slice(all, func(i, j int) bool { return all[i].URL < all[j].URL })
 	var eps []gqlEndpoint
 	want := strings.TrimSuffix(origin, "/")
 	for _, ep := range all {
@@ -84,7 +91,11 @@ func graphqlExport(g *graphView, format, origin string, w io.Writer) error {
 			if i > 0 {
 				fmt.Fprintln(w)
 			}
-			fmt.Fprintf(w, "# %s\n# read by introspection; mapped by azhaq %s\n\n", ep.URL, version)
+			if ep.Recovered != nil {
+				fmt.Fprintf(w, "# %s\n# mapped by azhaq %s\n%s\n", ep.Recovered.Mark(), version, recoveredSDLNotes(ep))
+			} else {
+				fmt.Fprintf(w, "# %s\n# read by introspection; mapped by azhaq %s\n\n", ep.URL, version)
+			}
 			if _, err := io.WriteString(w, ep.Schema.SDL()); err != nil {
 				return err
 			}
@@ -92,7 +103,11 @@ func graphqlExport(g *graphView, format, origin string, w io.Writer) error {
 		return nil
 	}
 	result := func(ep gqlEndpoint) map[string]any {
-		return map[string]any{"data": map[string]any{"__schema": ep.Raw}}
+		res := map[string]any{"data": map[string]any{"__schema": ep.Raw}}
+		if ep.Mark != nil {
+			res["x-azhaq"] = ep.Mark // never a recovered schema without its mark
+		}
+		return res
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

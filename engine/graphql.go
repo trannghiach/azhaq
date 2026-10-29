@@ -21,6 +21,7 @@ func graphqlOps(obs []types.StoredObservation) []Op {
 		Queries       []string        `json:"queries"`
 		Mutations     []string        `json:"mutations"`
 		Subscriptions []string        `json:"subscriptions"`
+		Recovered     string          `json:"recovered"`
 	}
 	var p *answer
 	for _, o := range obs {
@@ -36,6 +37,11 @@ func graphqlOps(obs []types.StoredObservation) []Op {
 		return nil
 	}
 	var out []Op
+	defer func() {
+		for i := range out {
+			out[i].Partial = p.Recovered != "" // names the server's errors gave, not its schema
+		}
+	}()
 	if s, err := gqlschema.Parse(p.Schema); err == nil {
 		for _, o := range s.Operations() {
 			op := Op{Method: "POST", Summary: o.Kind + " " + o.Signature(), OperationID: o.Name, Source: "graphql"}

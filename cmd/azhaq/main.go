@@ -1314,6 +1314,9 @@ func cmdExport(args []string) error {
 		if row.Proof != "" {
 			out["proof"] = row.Proof
 		}
+		if row.Evidence != "" {
+			out["evidence"], out["evidence_from"] = row.Evidence, row.EvidenceFrom
+		}
 		if row.Template != "" {
 			out["template"] = row.Template
 		}

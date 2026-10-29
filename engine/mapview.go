@@ -35,6 +35,10 @@ type MapEntry struct {
 	Guard     string            // client-route: what the app's router checks before it draws the view
 	Protocol  string            // websocket: socket.io, or "" for a plain WebSocket
 	Namespace string            // websocket: socket.io's namespace, when known
+	// How the URL is known (answered, described, called, linked, archived,
+	// guessed) and the collectors behind it, sorted.
+	Evidence     string   `json:"evidence,omitempty"`
+	EvidenceFrom []string `json:"evidence_from,omitempty"`
 }
 
 // maxFound caps the places a row lists for where scripts name it.
@@ -52,7 +56,8 @@ type Op struct {
 	Auth        bool     `json:"auth,omitempty"` // the description asks for credentials
 	Summary     string   `json:"summary,omitempty"`
 	OperationID string   `json:"operation_id,omitempty"`
-	Source      string   `json:"source,omitempty"` // js-call, openapi
+	Source      string   `json:"source,omitempty"`  // js-call, openapi
+	Partial     bool     `json:"partial,omitempty"` // graphql: recovered from errors, not introspected
 }
 
 // MapForm is a form on a page: where it submits and the fields it sends,
@@ -85,6 +90,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	apiOps := apiOperations(obs)
 	probes := pathProbes(obs)
 	finds := findings(obs)
+	evidence := evidenceIndex(obs)
 	decl := declaredRoles(obs)
 	secured := securedHosts(obs)
 	out := make([]MapEntry, 0, len(ents))
@@ -170,6 +176,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 				}
 			}
 			m.Forms = pageForms(byEnt[e.ID])
+			m.setEvidence(evidence[e.Key], rows)
 			// The URL's own query names; those in the links on a page
 			// are the links' rows'.
 			if u, err := url.Parse(e.Key); err == nil {
@@ -581,7 +588,7 @@ func (m MapEntry) Line() string {
 	} else {
 		b.WriteString(m.Entity.Key)
 	}
-	for _, p := range []string{m.Scope, m.Coverage, m.Role, strings.Join(m.Methods, ","), m.Proof} {
+	for _, p := range []string{m.Scope, m.Coverage, m.Role, strings.Join(m.Methods, ","), m.Proof, m.EvidenceTag()} {
 		if p == "" {
 			continue
 		}
@@ -620,6 +627,9 @@ func (m MapEntry) Details() []string {
 	gql := 0
 	for _, op := range m.Ops {
 		if op.Source == "graphql" {
+			if gql == 0 && op.Partial {
+				out = append(out, "GraphQL: introspection disabled, schema recovered (partial, may lack types and fields)")
+			}
 			if gql++; gql <= maxGraphQLLines {
 				out = append(out, op.Summary)
 			}
@@ -707,6 +717,7 @@ func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 		}
 		g := &out[i]
 		g.Count++
+		g.mergeEvidence(r)
 		for _, f := range r.Forms {
 			g.Forms = addForm(g.Forms, f)
 		}

@@ -55,6 +55,7 @@ secret secrets key keys apiKey apiKeys webhook webhooks integration integrations
 type recoveredType struct {
 	name   string               // Query, Mutations…, as the server calls it
 	fields map[string]*recField // the fields it has
+	errors int                  // validation errors read to learn them
 }
 
 type recField struct {
@@ -99,6 +100,7 @@ func (s *Schema) recoverType(ctx context.Context, raw, op string) (*recoveredTyp
 			return nil, nil
 		}
 		unknown := map[string]bool{}
+		rt.errors += len(res.Errors)
 		for _, e := range res.Errors {
 			m := strings.TrimSpace(e.Message)
 			if g := unknownField.FindStringSubmatch(m); g != nil {

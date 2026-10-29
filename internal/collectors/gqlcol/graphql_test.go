@@ -186,6 +186,9 @@ func TestSchemaFromSuggestions(t *testing.T) {
 	if got["recovered"] != "suggestions" || fmt.Sprint(got["queries"]) != "[paste pastes systemHealth]" || fmt.Sprint(got["mutations"]) != "[createPaste deletePaste]" {
 		t.Fatalf("recovered %v", got)
 	}
+	if n, _ := got["errors"].(float64); n < 2 || got["query_type"] != "Query" || got["mutation_type"] != "Mutations" {
+		t.Errorf("errors read %v, root types %v and %v", got["errors"], got["query_type"], got["mutation_type"])
+	}
 	sigs, _ := got["signatures"].(map[string]any)
 	if fmt.Sprint(sigs["mutations"]) != "[createPaste(title: String!): CreatePaste deletePaste: DeletePaste]" {
 		t.Errorf("signatures %v", sigs)

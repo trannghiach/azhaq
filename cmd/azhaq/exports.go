@@ -471,6 +471,7 @@ func mergeDoc(doc, paths map[string]any, d servedDoc) {
 			if _, ok := dst[m]; !ok {
 				if opm, ok := op.(map[string]any); ok && slices.Contains(opMethods, m) {
 					opm["x-azhaq"] = map[string]any{"source": "served description"}
+					opm["x-azhaq-evidence"] = engine.EvDescribed
 				}
 				dst[m] = op
 			}
@@ -598,6 +599,9 @@ func (s *spec) addRoute(r engine.MapEntry) {
 			x["needs_credentials"] = true
 		}
 		op["x-azhaq"] = x
+		if r.Evidence != "" {
+			op["x-azhaq-evidence"] = r.Evidence
+		}
 		item[m] = op
 	}
 	if len(item) > 0 {
@@ -639,9 +643,10 @@ func (s *spec) addForm(origin string, f engine.MapForm) {
 	switch {
 	case op == nil:
 		op = map[string]any{
-			"operationId": operationID(engine.Op{}, method, p),
-			"responses":   map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
-			"x-azhaq":     map[string]any{"source": "form"},
+			"operationId":      operationID(engine.Op{}, method, p),
+			"responses":        map[string]any{"default": map[string]any{"description": "not described; mapped by azhaq"}},
+			"x-azhaq":          map[string]any{"source": "form"},
+			"x-azhaq-evidence": engine.EvLinked,
 		}
 		if params := pathParameters(pathParams); len(params) > 0 {
 			op["parameters"] = params
@@ -795,6 +800,9 @@ func graphqlOperation(r engine.MapEntry, p string, pathParams []string, sc *gqls
 		"x-azhaq":         x,
 		"x-azhaq-graphql": ext,
 	}
+	if r.Evidence != "" {
+		op["x-azhaq-evidence"] = r.Evidence
+	}
 	if params := pathParameters(pathParams); len(params) > 0 {
 		op["parameters"] = params
 	}
@@ -835,11 +843,18 @@ func graphqlExtension(sc *gqlschema.Schema, ops []engine.Op) map[string]any {
 		}
 		return map[string]any{"operations": list}
 	}
+	partial := false
 	for _, o := range ops {
 		kind, _, _ := strings.Cut(o.Summary, " ")
 		list = append(list, map[string]any{"type": kind, "name": o.OperationID})
+		partial = partial || o.Partial
 	}
-	return map[string]any{"operations": list}
+	ext := map[string]any{"operations": list}
+	if partial {
+		// Names the server's validation errors gave, not its schema.
+		ext["introspection"], ext["recovered"], ext["partial"] = false, "suggestions", true
+	}
+	return ext
 }
 
 // openAPIPath turns a mapped path into an OpenAPI one: every placeholder
@@ -1220,12 +1235,12 @@ figure img{width:100%;border:1px solid var(--line)}figcaption{font-size:12px;col
 {{range .Secrets}}<tr><td>{{.Severity}}</td><td>{{.Kind}}</td><td><code>{{.Redacted}}</code></td><td class="wrap">{{.Where}}</td></tr>
 {{end}}</table><p class="muted">Values are shortened here; azhaq export -format secrets prints them whole.</p>{{end}}
 {{if .API}}<h2>API routes ({{len .API}})</h2>
-<table><tr><th>Route</th><th>Methods</th><th>Parameters</th><th>Seen</th></tr>
-{{range .API}}<tr><td class="wrap"><code>{{.Entity.Key}}</code></td><td>{{join .Methods}}</td><td class="wrap">{{join .Params}}</td><td>{{.Coverage}}</td></tr>
+<table><tr><th>Route</th><th>Methods</th><th>Parameters</th><th>Seen</th><th>Evidence</th></tr>
+{{range .API}}<tr><td class="wrap"><code>{{.Entity.Key}}</code></td><td>{{join .Methods}}</td><td class="wrap">{{join .Params}}</td><td>{{.Coverage}}</td><td>{{.Evidence}}</td></tr>
 {{end}}</table>{{end}}
 <h2>Map ({{len .Map}} rows)</h2>
-<table><tr><th>Entity</th><th>Scope</th><th>Seen</th><th>Role</th><th>Facts</th></tr>
-{{range .Map}}<tr><td class="wrap">{{.Entity.Type}} <code>{{.Entity.Key}}</code>{{if .Count}} ({{.Count}}){{end}}</td><td>{{.Scope}}</td><td>{{.Coverage}}</td><td>{{.Role}}</td><td class="wrap">{{.Proof}}</td></tr>
+<table><tr><th>Entity</th><th>Scope</th><th>Seen</th><th>Evidence</th><th>Role</th><th>Facts</th></tr>
+{{range .Map}}<tr><td class="wrap">{{.Entity.Type}} <code>{{.Entity.Key}}</code>{{if .Count}} ({{.Count}}){{end}}</td><td>{{.Scope}}</td><td>{{.Coverage}}</td><td>{{.Evidence}}</td><td>{{.Role}}</td><td class="wrap">{{.Proof}}</td></tr>
 {{end}}</table>
 </body></html>
 `))
