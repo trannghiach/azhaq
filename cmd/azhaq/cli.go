@@ -103,11 +103,12 @@ func init() {
 			examples: []string{"azhaq subs -d example.com | azhaq dns -json"}},
 		{name: "probe", group: groupDropIn, like: "httpx", run: cmdProbe,
 			summary: "find the web services of hosts: status, title, technologies, CDN, favicon",
-			usage:   "-u TARGET | -l FILE | stdin  [-web-ports P] [-scope … -program P] [-rate N] [-json] [-silent]",
+			usage:   "-u TARGET | -l FILE | stdin  [-web-ports P] [-no-follow] [-scope … -program P] [-rate N] [-json] [-silent]",
 			output:  "one web service per line, as it answers; -json: httpx's fields (url, host, host_ip, port, scheme, status_code, title, tech, …)",
 			examples: []string{
 				"azhaq subs -d example.com -live | azhaq probe -json",
 				"azhaq probe -l hosts.txt -scope hackerone -program security -rate 10",
+				"azhaq probe -l hosts.txt -web-ports 443 -no-follow -rate 5   # one GET per host",
 			}},
 		{name: "crawl", group: groupDropIn, like: "katana + jsluice", run: cmdCrawl,
 			summary:  "the URLs of an application: links, forms, scripts, routes in JavaScript, API descriptions",

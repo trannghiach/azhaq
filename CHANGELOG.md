@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.9.1
+
+Fixes from an independent review of v0.9.0.
+
+### Fixed
+
+- `dirs` no longer reports an answer cut off mid-body as a hit of length 0. A server going down while it answered made five catch-all pages pass the calibration filter. A cut-off answer is now asked once more; if it is cut off again, the path is not judged and the summary says how many such paths there were. `fuzz` asks a cut-off answer once more too, then counts it as an error.
+- The request ledger shows lines cut from its end. A run that ends writes a seal line, and its summary names the seal. `azhaq ledger -verify` exits 3 when lines follow the last seal: a run killed, crashed or still running, or a file whose end was removed.
+- RDAP lookups are no longer in the ledger: the registry is a third-party source, like those of `subs` and `urls`.
+- `run -passive` on a domain under a TLD no registry runs (`azqlab.lan`) no longer asks the archives, and ends cleanly; `subs` already skipped its sources. A name under a private suffix such as `github.io` is looked up in the sources again.
+
+### Ports
+
+- Port lists combine names, numbers and ranges: `-pu top,5354`, `-p top-100,8888`. A TCP list name given to `-pu`, or a UDP one to `-p`, says which to use.
+- A UDP port with no known protocol is asked a DNS query first, then an empty datagram, with no extra datagrams sent. A DNS server on an odd port (5354, 8053) is now `open`, service `dns`.
+- An SSH, FTP or mail port that sent no greeting gets one more connect after the scan: sshd drops greetings when many connects arrive at once. A greeting that arrives in reply to the HTTP probe is read as one.
+- A web port whose answer names no product gets the page's `<title>` in a new `title` field, and its `<meta name="generator">` as product and version.
+
+### Output
+
+- `probe -no-follow` and `run -no-follow` ask each URL once and record the redirect. With `-web-ports 443`, a program-scoped probe stays at one request per host.
+- The `subs` coverage note adds up with the names printed. It says how many names came from the history, from guesses checked in DNS or as CNAME targets, which the estimate leaves out.
+- `subs` names a source that set the wall time, even without `-v`, and gives the flags that bound it or drop it.
+- A run stopped by `-max-requests` says the cap holds for each run. `azhaq resume` sends up to that many more requests, or as many as its own `-max-requests` allows.
+- `-o` naming a directory is a usage error that says what `-o` is for. `shots` adds that its PNG files go to `-dir`.
+- An export that finds nothing says why on stderr.
+
 ## v0.9.0
 
 Two reviews of v0.8.1 ended the same way: adopt azhaq for some jobs, keep another tool for the others. This release goes after both halves:

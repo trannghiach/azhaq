@@ -92,7 +92,7 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 | `-asn AS64500`, `-cidr 192.0.2.0/24` | start from networks: announced prefixes, address ranges, their reverse DNS names and web services |
 | `-list FILE` | targets one per line (`-` for stdin): URLs, hosts, `host:port`, addresses |
 | `-passive` | third-party sources and DNS only; nothing is sent to the targets |
-| `-probe`, `-web-ports 80,443,8080` | only fetch the targets themselves; ports to try on each name |
+| `-probe`, `-web-ports 80,443,8080`, `-no-follow` | only fetch the targets themselves; ports to try on each name; ask each URL once and record its redirect instead of following it |
 | `-sources`, `-exclude-sources`, `-all-sources`, `-providers FILE` | subdomain sources and API keys (subfinder's `provider-config.yaml` format) |
 | `-resolvers FILE`, `-dns-rate N` | DNS resolvers and their pace |
 | `-dns-brute FILE`, `-permute` | active: names from a wordlist, variations of found names (held to the targets given, or `-allow`/`-scope`) |
@@ -283,7 +283,7 @@ Chrome saves nothing to disk (`internal/browser/downloads.go`). Every download i
 
 An open port is read for 1.5 seconds: the first line a service sends (`SSH-2.0-…`, `220 … ESMTP`) names it; binary greetings are marked as such. Ports that stay silent or answer like HTTP become URLs for `azhaq-http`, HTTPS first. The greeting, the HTTP head (`Server`, `X-Powered-By`) and, for a web port whose head names no product and answered 200 or 401 with a small JSON or text body, a `GET /` also give `product` and `version` (`internal/portscan/services.go`); a silent port among 5432, 5433, 6379 and 27017–27019 is asked that database's first request (PostgreSQL's SSLRequest, Redis `PING`, MongoDB's isMaster), and the raw printing ports (9100–9107) are never asked anything.
 
-`-ports-udp` (`ports -udp`, `-pu`) asks UDP ports on the same addresses (`internal/portscan/udp.go`): each port gets one datagram on a connected socket, the harmless request of the protocol the port usually carries (`internal/portscan/udp_proto.go`: DNS, NTP, SNMP, SSDP, mDNS, NetBIOS, IKE, STUN, memcached, BACnet, CoAP; an empty datagram for the rest), and the kernel turns an ICMP port unreachable into `ECONNREFUSED`. A reply is `open` (with what it names), a refusal `closed`, and a port that stayed silent is asked once more before it is `open|filtered`. Each datagram takes `fetch.Take`, is paced and goes in the ledger as `udp`; an address in a CDN or WAF range is not asked. The `ports` row keeps `udp_open`, `udp_open_filtered`, `udp_closed`, `udp_scanned` and `udp_services`.
+`-ports-udp` (`ports -udp`, `-pu`) asks UDP ports on the same addresses (`internal/portscan/udp.go`): each port gets one datagram on a connected socket, the harmless request of the protocol the port usually carries (`internal/portscan/udp_proto.go`: DNS, NTP, SNMP, SSDP, mDNS, NetBIOS, IKE, STUN, memcached, BACnet, CoAP; for the rest a DNS query, then an empty datagram), and the kernel turns an ICMP port unreachable into `ECONNREFUSED`. A reply is `open` (with what it names), a refusal `closed`, and a port that stayed silent is asked once more before it is `open|filtered`. Each datagram takes `fetch.Take`, is paced and goes in the ledger as `udp`; an address in a CDN or WAF range is not asked. The `ports` row keeps `udp_open`, `udp_open_filtered`, `udp_closed`, `udp_scanned` and `udp_services`.
 
 ## Historical URLs
 
