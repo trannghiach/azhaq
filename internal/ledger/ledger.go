@@ -23,7 +23,7 @@ import (
 type Entry struct {
 	Seq       int64     `json:"seq"`
 	Time      time.Time `json:"time"`
-	Kind      string    `json:"kind"` // http, tcp or chrome
+	Kind      string    `json:"kind"` // http, tcp, udp or chrome
 	Method    string    `json:"method,omitempty"`
 	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
 	Host      string    `json:"host,omitempty"`
