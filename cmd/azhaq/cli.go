@@ -285,7 +285,7 @@ var exitCodes = []struct {
 }{
 	{exitOK, "complete"},
 	{exitError, "error: the command could not do its job"},
-	{exitUsage, "usage: bad flags or input, nothing was sent"},
+	{exitUsage, "usage: bad flags or input (targets all outside the scope given too), nothing was sent"},
 	{exitPartial, "finished, but some sources or requests failed: the results are usable, the summary on stderr lists what failed"},
 	{exitLimit, "stopped by a limit (-max-requests, -timeout, -daily-requests, -max-items) or by the kill file (-kill-file) with work left: azhaq resume -db FILE continues"},
 }
