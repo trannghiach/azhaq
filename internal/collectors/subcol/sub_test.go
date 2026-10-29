@@ -151,7 +151,7 @@ func TestDerivedDomainWaitsLess(t *testing.T) {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}
-	c := collector(Options{Timeout: time.Minute}, slow)
+	c := collector(Options{SourceTimeout: time.Minute}, slow)
 	t0 := time.Now()
 	var payload map[string]any
 	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org", types.DerivedKey: "1"}}, func(o types.Observation) error {
@@ -163,4 +163,131 @@ func TestDerivedDomainWaitsLess(t *testing.T) {
 	if payload["degraded"] != true {
 		t.Errorf("a source cut short must be reported: %v", payload)
 	}
+}
+
+// hang is a source that never answers until its context ends (crt.sh on a
+// bad day), or at all when it ignores the context (release closes it).
+func hang(name string, release <-chan struct{}) source {
+	return source{name: name, deflt: true, collect: func(ctx context.Context, _ string, _ []string, _ *subscraping.Session) ([]string, error) {
+		if release != nil {
+			<-release
+			return nil, nil
+		}
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+}
+
+func TestRunDeadlineKeepsWhatSourcesGave(t *testing.T) {
+	stuck := make(chan struct{})
+	defer close(stuck)
+	c := collector(Options{SourceTimeout: time.Minute},
+		fake("fast", noKey, true, []string{"www.example.org", "api.example.org"}, nil),
+		fake("other", noKey, true, []string{"mail.example.org"}, nil),
+		hang("slow", nil),
+		hang("deaf", stuck),
+	)
+	ctx, cancel := context.WithTimeout(context.Background(), 400*time.Millisecond)
+	defer cancel()
+	t0 := time.Now()
+	var payload map[string]any
+	meta, err := c.Run(ctx, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}, func(o types.Observation) error {
+		if ctx.Err() != nil {
+			return ctx.Err() // as the engine does: nothing is taken after the run ends
+		}
+		return json.Unmarshal(o.Payload, &payload)
+	})
+	if err != nil || ctx.Err() != nil {
+		t.Fatalf("not emitted before the run's deadline (%s): %v", time.Since(t0), err)
+	}
+	if meta.Status != types.StatusDegraded || payload["degraded"] != true || payload["partial"] != true {
+		t.Errorf("a result cut short by -timeout is partial: %+v %v", meta, payload)
+	}
+	if got := strings.Join(strs(payload["names"]), ","); got != "api.example.org,mail.example.org,www.example.org" {
+		t.Errorf("names the sources gave were thrown away: %q", got)
+	}
+	srcs := payload["sources"].(map[string]any)
+	for _, name := range []string{"slow", "deaf"} {
+		msg, _ := srcs[name].(map[string]any)["error"].(string)
+		if !strings.Contains(msg, "-timeout") {
+			t.Errorf("%s: %q should say the run cut it short", name, msg)
+		}
+	}
+	if srcs["fast"].(map[string]any)["error"] != nil || srcs["fast"].(map[string]any)["count"].(float64) != 2 {
+		t.Errorf("fast: %v", srcs["fast"])
+	}
+	if len(meta.NextHints) != 3 {
+		t.Errorf("hints %v", meta.NextHints)
+	}
+}
+
+func TestSourceTimeoutAbandonsOneSourceOnly(t *testing.T) {
+	stuck := make(chan struct{})
+	defer close(stuck)
+	c := collector(Options{SourceTimeout: 50 * time.Millisecond},
+		fake("fast", noKey, true, []string{"www.example.org"}, nil),
+		hang("slow", nil),
+		hang("deaf", stuck),
+	)
+	t0 := time.Now()
+	payload, meta := run(t, c, context.Background())
+	if time.Since(t0) > 5*time.Second {
+		t.Fatalf("waited %s on a source past -source-timeout", time.Since(t0))
+	}
+	if meta.Status != types.StatusOK || payload["degraded"] != nil || payload["partial"] != nil {
+		t.Errorf("one slow source among answers is a warning, not a partial result: %+v %v", meta, payload)
+	}
+	if got := strings.Join(strs(payload["names"]), ","); got != "www.example.org" {
+		t.Errorf("names %q", got)
+	}
+	srcs := payload["sources"].(map[string]any)
+	for _, name := range []string{"slow", "deaf"} {
+		msg, _ := srcs[name].(map[string]any)["error"].(string)
+		if !strings.Contains(msg, "50ms (-source-timeout)") {
+			t.Errorf("%s: %q should name -source-timeout", name, msg)
+		}
+	}
+	if payload["warning"] != "failed: deaf, slow" {
+		t.Errorf("warning %v", payload["warning"])
+	}
+}
+
+func TestCancelledRunStillEmitsWhatItHas(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	// A source's names are hinted once its answer is recorded: the signal
+	// that fast is in before slow pulls the plug.
+	answered := make(chan struct{})
+	var once sync.Once
+	ctx = catalog.WithHints(ctx, func([]types.Seed) { once.Do(func() { close(answered) }) })
+	c := collector(Options{SourceTimeout: time.Minute},
+		fake("fast", noKey, true, []string{"www.example.org"}, nil),
+		source{name: "slow", deflt: true, collect: func(ctx context.Context, _ string, _ []string, _ *subscraping.Session) ([]string, error) {
+			<-answered
+			cancel() // Ctrl-C while it is still working
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}},
+	)
+	payload, meta := run(t, c, ctx)
+	if meta.Status != types.StatusDegraded || payload["degraded"] != true || payload["count"].(float64) != 1 {
+		t.Errorf("%+v %v", meta, payload)
+	}
+	msg, _ := payload["sources"].(map[string]any)["slow"].(map[string]any)["error"].(string)
+	if !strings.Contains(msg, "stopped with the run") {
+		t.Errorf("slow: %q", msg)
+	}
+	// An emit the run's end refuses (the engine's) makes the task cancelled.
+	meta, err := c.Run(ctx, types.Seed{Type: types.TypeDomain, Keys: map[string]string{"domain": "example.org"}}, func(types.Observation) error { return ctx.Err() })
+	if meta.Status != types.StatusCancelled || !errors.Is(err, context.Canceled) {
+		t.Errorf("%+v %v", meta, err)
+	}
+}
+
+func strs(v any) []string {
+	xs, _ := v.([]any)
+	out := make([]string, 0, len(xs))
+	for _, x := range xs {
+		out = append(out, x.(string))
+	}
+	return out
 }

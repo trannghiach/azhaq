@@ -7,6 +7,7 @@ package subcol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -33,12 +34,23 @@ var fanoutTimeout = 15 * time.Second
 
 const (
 	maxNames = 20000
-	// sourceTimeout bounds a source on a direct `subs -d` run. crt.sh is
-	// the slow one: 30 s is normal for a large domain and it can take
-	// longer, so the bound sits well above that; a source that truly fails
-	// or times out past it is still reported, and makes the exit code 3.
-	sourceTimeout = 60 * time.Second
-	maxBody       = 32 << 20
+	// DefaultSourceTimeout bounds each source on a direct `subs -d` run
+	// (-source-timeout), apart from the run's -timeout: a slow source
+	// (crt.sh takes 30 s and more for a large domain) is abandoned at it
+	// and listed as failed, retryable, while the names the others gave are
+	// kept. It alone makes the exit code 3 only when no other source
+	// answered.
+	DefaultSourceTimeout = 30 * time.Second
+	// lateGrace is how long after a source's deadline Run still waits for
+	// it: some sources ignore the context (subfinder's crt.sh tries a
+	// Postgres connection first).
+	lateGrace = 2 * time.Second
+	// emitGrace is how long before the run's deadline Run stops waiting on
+	// sources: the engine drops what a task emits once its context has
+	// ended, so what the sources gave by then is emitted while the run is
+	// live, as a partial result, not thrown away.
+	emitGrace = 5 * time.Second
+	maxBody   = 32 << 20
 )
 
 func init() {
@@ -53,7 +65,10 @@ type Options struct {
 	Only    []string            // run only these sources
 	Exclude []string            // never run these
 	All     bool                // also run sources outside the default set
-	Timeout time.Duration       // per source
+	// SourceTimeout bounds each source (-source-timeout; default
+	// DefaultSourceTimeout). It is not the run's -timeout: a source past it
+	// is abandoned and listed as failed, and the others' names are kept.
+	SourceTimeout time.Duration
 	// Verify returns the names that resolve, not to a wildcard of domain
 	// (what is kept of the names only a padding source gave), and how many
 	// it could not check (the resolvers failed). Nil keeps them all.
@@ -70,8 +85,8 @@ func New(o Options) *Collector {
 	if o.Client == nil {
 		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: http.DefaultTransport.(*http.Transport).Clone()}
 	}
-	if o.Timeout <= 0 {
-		o.Timeout = sourceTimeout
+	if o.SourceTimeout <= 0 {
+		o.SourceTimeout = DefaultSourceTimeout
 	}
 	all := allSources()
 	l := limit.New(0, 1)
@@ -154,9 +169,24 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
-	timeout := c.opts.Timeout
+	timeout := c.opts.SourceTimeout
 	if seed.Derived() && timeout > fanoutTimeout {
 		timeout = fanoutTimeout
+	}
+	// What a source still running is marked with when Run stops waiting.
+	errSource := fmt.Errorf("no answer in %s (-source-timeout)", timeout)
+	// wait is how long Run waits on the sources: their bound plus a grace
+	// for the ones that ignore the context, but never past the run's
+	// deadline, less the time to emit what was gathered.
+	wait := timeout + lateGrace
+	errLate := errSource
+	if dl, ok := ctx.Deadline(); ok {
+		left := time.Until(dl)
+		grace := min(emitGrace, left/4)
+		if left-grace < wait {
+			wait = max(left-grace, 0)
+			errLate = errors.New("no answer before the run's -timeout: cut short")
+		}
 	}
 	results := make([]outcome, len(run))
 	var hintMu sync.Mutex
@@ -167,8 +197,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	pass := func(names []string) {
 		hintMu.Lock()
 		defer hintMu.Unlock()
-		if finished {
-			return
+		if finished || !early {
+			return // nothing listens: the names go in NextHints at the end
 		}
 		var seeds []types.Seed
 		for _, raw := range names {
@@ -203,8 +233,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			t0 := time.Now()
 			names, err := s.collect(sctx, domain, c.opts.Keys[s.name], sess)
 			done()
-			if err == nil && sctx.Err() != nil && ctx.Err() == nil {
-				err = sctx.Err()
+			if sctx.Err() != nil && ctx.Err() == nil && (err == nil || contextEnded(err)) {
+				err = errSource // the names it gave by then are kept
 			}
 			hintMu.Lock()
 			if !finished {
@@ -217,27 +247,41 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}(i, s)
 	}
-	// Some sources ignore the context (subfinder's crt.sh tries a Postgres
-	// connection first); stop waiting a little after the deadline.
 	all := make(chan struct{})
 	go func() { wg.Wait(); close(all) }()
 	t0 := time.Now()
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	// late is what the sources still running are marked with; cut says the
+	// run, not a source's bound, stopped the wait: the result is partial.
+	late, cut := errSource, false
 	select {
 	case <-all:
 	case <-ctx.Done():
-	case <-time.After(timeout + 2*time.Second):
+	case <-timer.C:
+		late, cut = errLate, errLate != errSource
 	}
+	if ctx.Err() != nil {
+		// Ctrl-C, or the deadline came first: the sources that gave up
+		// with the run are not failures of their own.
+		late, cut = fmt.Errorf("stopped with the run (%v)", ctx.Err()), true
+	}
+	// The names gathered so far are emitted whatever stopped the wait: a
+	// recon tool never throws away work it already did.
 	hintMu.Lock()
 	finished = true
+	partial := false
 	for i := range run {
-		if !reported[i] {
-			results[i] = outcome{err: context.DeadlineExceeded, took: time.Since(t0)}
+		switch {
+		case !reported[i]:
+			results[i] = outcome{err: late, took: time.Since(t0)}
+			partial = partial || cut
+		case ctx.Err() != nil && contextEnded(results[i].err):
+			results[i].err = late
+			partial = true
 		}
 	}
 	hintMu.Unlock()
-	if ctx.Err() != nil {
-		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
-	}
 
 	seen := map[string]bool{}
 	var names []string
@@ -284,17 +328,26 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if len(failed) > 0 {
 		sort.Strings(failed)
 		payload["warning"] = "failed: " + strings.Join(failed, ", ")
-		if len(names) == 0 {
-			// Nothing found and something broke: not an honest zero.
+		if len(names) == 0 || partial {
+			// Nothing found and something broke: not an honest zero. Or
+			// the run stopped the wait: what is here is what the sources
+			// gave by then, not the whole answer.
 			payload["degraded"] = true
 			meta.Status = types.StatusDegraded
 		}
+	}
+	if partial {
+		payload["partial"] = true
 	}
 	raw, _ := json.Marshal(payload)
 	if err := emit(types.Observation{
 		Collector: Name, Source: "subdomains", Kind: "subdomains",
 		Payload: raw, Confidence: 0.8, ObservedAt: time.Now().UTC(),
 	}); err != nil {
+		if ctx.Err() != nil {
+			// The engine takes nothing from a task whose run has ended.
+			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+		}
 		return meta, err
 	}
 	for _, n := range names {
@@ -388,6 +441,19 @@ func set(xs []string) map[string]bool {
 }
 
 func round(f float64) float64 { return float64(int(f*10+0.5)) / 10 }
+
+// contextEnded reports whether err is a context's end, not the source's
+// own failure. subfinder's sources join their errors as text.
+func contextEnded(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "context canceled") || strings.Contains(s, "context deadline exceeded")
+}
 
 func shorten(s string) string {
 	if len(s) > 200 {
