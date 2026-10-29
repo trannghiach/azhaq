@@ -781,6 +781,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}
 		rep.Resume = "azhaq resume -db " + path
+		if *login != "" {
+			// The sign-in is not stored (no password on disk); resume signs
+			// in again, so the hint carries the credential flags.
+			rep.Resume += " -login-user " + *loginUser + " -login-pass PASS"
+		}
 		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
 		}

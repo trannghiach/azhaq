@@ -69,7 +69,7 @@ azhaq run -scope hackerone -program acme -max-requests 5000 -rate 5 -db acme.db
 azhaq resume -db acme.db
 ```
 
-A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where it stopped, without asking again what it already asked. The single-job commands (`subs`, `probe`, `dirs`, …) resume the same way when they were given a `-db`; without one their workspace is temporary and gone.
+A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where it stopped, without asking again what it already asked. A run's session is never stored, so a run behind a sign-in is resumed with its credentials again (`azhaq resume -db app.db -login-user me -login-pass …`, or the cookie or header it carried); the `stopped:` line of a login run prints the exact command. The single-job commands (`subs`, `probe`, `dirs`, …) resume the same way when they were given a `-db`; without one their workspace is temporary and gone.
 
 ## 8. Watch a program and get alerts
 
