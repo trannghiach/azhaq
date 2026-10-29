@@ -2,9 +2,16 @@
 
 ## v0.9.1
 
-Fixes from an independent review of v0.9.0.
+Fixes from two independent reviews of v0.9.0.
 
 ### Fixed
+
+- The request ledger and the request count now hold exactly what Chrome sent. Before, a screenshot of Juice Shop at `-rate 2` counted 51 requests, listed 36 in the ledger, and an independent proxy got 35.
+  - A request that waited for the pace when the page closed was counted but never sent. It is now neither counted nor listed.
+  - A request Chrome dropped and retried on a new connection was listed although it never left. A request is now listed once Chrome says it went out.
+  - A WebSocket's line had only the host; it now has the handshake's path and query.
+
+  The same run now counts 35, lists 35 and the proxy gets the same 35.
 
 - `dirs` no longer reports an answer cut off mid-body as a hit of length 0. A server going down while it answered made five catch-all pages pass the calibration filter. A cut-off answer is now asked once more; if it is cut off again, the path is not judged and the summary says how many such paths there were. `fuzz` asks a cut-off answer once more too, then counts it as an error.
 - The request ledger shows lines cut from its end. A run that ends writes a seal line, and its summary names the seal. `azhaq ledger -verify` exits 3 when lines follow the last seal: a run killed, crashed or still running, or a file whose end was removed.
@@ -26,6 +33,9 @@ Fixes from an independent review of v0.9.0.
 - A run stopped by `-max-requests` says the cap holds for each run. `azhaq resume` sends up to that many more requests, or as many as its own `-max-requests` allows.
 - `-o` naming a directory is a usage error that says what `-o` is for. `shots` adds that its PNG files go to `-dir`.
 - An export that finds nothing says why on stderr.
+- `watch` no longer notifies the first run, the baseline; it notifies changes only. `-always` sends every run, the baseline included.
+- MCP: `azhaq_map` and `azhaq_plan` take `graphql`, which asks for each GraphQL endpoint's schema. `docs/MCP.md` lists what no tool starts, on purpose: writes and bodies the client chooses, wordlists, DNS brute force and UDP scans.
+- Exit code 2 now says it also covers targets that all fall outside the scope given.
 
 ## v0.9.0
 

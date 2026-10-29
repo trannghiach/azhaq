@@ -407,7 +407,7 @@ Every run with a workspace writes `DB.ledger.jsonl` next to it (`-ledger FILE` w
 | --- | --- |
 | `seq` | the line's number, from 1 |
 | `time` | when it was sent, UTC |
-| `kind` | `http`, `tcp` (a connect of `ports`, or a TLS handshake of `ports` or `azhaq-tls`), `udp`, `chrome` (a request Chrome was let send), or `seal`: the end of a run, with no target |
+| `kind` | `http`, `tcp` (a connect of `ports`, or a TLS handshake of `ports` or `azhaq-tls`), `udp`, `chrome` (a request Chrome sent, listed once it left: one Chrome dropped before sending is not, nor counted; a WebSocket handshake is `ws://host:port/path?query`, and `wss://host:port` inside TLS), or `seal`: the end of a run, with no target |
 | `method` | the HTTP method (not on `tcp` and `udp` lines) |
 | `target` | the URL as sent, query string included (a password in its user info is masked), for `http` and `chrome`; `ip:port` for `tcp` and `udp` |
 | `host` | the host the request was for |
