@@ -5,7 +5,8 @@
 // Changes from upstream: a pattern's regexp compiles the first time its
 // literal prefilter passes instead of at load, the parsed JSON is not kept
 // after compiling, and the js and dom rules (which need a browser) are
-// neither embedded nor compiled. Matching is otherwise unchanged, so
-// results agree with httpx -td. fingerprints_data.json is produced by
+// neither embedded nor compiled, and cdnjs no longer implies Cloudflare (a
+// page loading a library from it is not behind Cloudflare). Matching is
+// otherwise unchanged, so results agree with httpx -td. fingerprints_data.json is produced by
 // strip.go from the upstream file.
 package wappalyzer

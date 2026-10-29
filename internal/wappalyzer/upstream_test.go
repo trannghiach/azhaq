@@ -66,6 +66,9 @@ func TestSameAsUpstream(t *testing.T) {
 		page := []byte(body.String())
 		want := up.Fingerprint(headers, page)
 		got := fork.Fingerprint(headers, page)
+		if _, cdn := want["cdnjs"]; cdn {
+			delete(want, "Cloudflare") // cdnjs no longer implies it (doc.go)
+		}
 		hits += len(want)
 		if !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: fork only %q, upstream only %q", name, minus(got, want), minus(want, got))

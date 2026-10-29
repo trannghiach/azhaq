@@ -2,7 +2,7 @@
 
 // strip writes the part of wappalyzergo's fingerprints_data.json that the
 // passive matcher reads: the js and dom rules need a browser and are left
-// out. To update, from this directory:
+// out, as is cdnjs's implying Cloudflare. To update, from this directory:
 //
 //	go run strip.go $(go env GOMODCACHE)/github.com/projectdiscovery/wappalyzergo@vX.Y.Z/fingerprints_data.json
 package main
@@ -30,6 +30,9 @@ func main() {
 		delete(app, "js")
 		delete(app, "dom")
 	}
+	// A script from cdnjs says nothing of the page's host: it is not behind
+	// Cloudflare for loading jQuery from there.
+	delete(data.Apps["cdnjs"], "implies")
 	out, err := json.Marshal(data)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
