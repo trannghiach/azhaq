@@ -1146,9 +1146,9 @@ func cmdPorts(args []string) error {
 	var hosts stringsFlag
 	fs.Var(&hosts, "host", "host or IP (repeatable)")
 	list := fs.String("l", "", "file of hosts (- for stdin)")
-	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full, none or a list such as 22,80,8000-8100")
+	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full, none, or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888")
 	udp := fs.Bool("udp", false, "also ask the common UDP ports (about 20: dns, ntp, snmp, ssdp, mdns, ...)")
-	udpSpec := fs.String("pu", "", "UDP ports to ask: top or a list such as 53,123,1-1024 (implies -udp)")
+	udpSpec := fs.String("pu", "", "UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp)")
 	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
 	if err := parse(fs, args); err != nil {
 		return err

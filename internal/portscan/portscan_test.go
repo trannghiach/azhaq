@@ -32,6 +32,35 @@ func TestPorts(t *testing.T) {
 	}
 }
 
+// Names, numbers and ranges mix in one list; a name of the other
+// protocol is refused with what to use.
+func TestPortsCompose(t *testing.T) {
+	got, err := Ports("Top-100,8080-8081")
+	if err != nil || !slices.Contains(got, 443) || !slices.Contains(got, 8080) || len(got) != 100 {
+		t.Fatalf("Top-100,8080-8081 (both already in the list): %d ports, %v", len(got), err)
+	}
+	got, err = Ports("top-100,8082-8083")
+	if err != nil || len(got) != 102 || !slices.Contains(got, 8083) {
+		t.Fatalf("top-100,8082-8083: %d ports, %v", len(got), err)
+	}
+	if got, err = Ports("22,all"); err != nil || len(got) != 65535 {
+		t.Fatalf("22,all: %d %v", len(got), err)
+	}
+	if got, err = Ports("none"); err != nil || len(got) != 0 {
+		t.Fatalf("none: %v %v", got, err)
+	}
+	if _, err = Ports("none,22"); err == nil || err.Error() != `bad port "none"` {
+		t.Fatalf("none,22: %v", err)
+	}
+	_, err = Ports("22,top")
+	if err == nil || err.Error() != `bad port "top": TCP takes top-100, top-1000 or full (top is the UDP list)` {
+		t.Fatalf("top on TCP: %v", err)
+	}
+	if _, err = Ports("22,nope"); err == nil || err.Error() != `bad port "nope"` {
+		t.Fatalf("nope: %v", err)
+	}
+}
+
 func TestScanAndBanner(t *testing.T) {
 	ssh, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ssh.Close()

@@ -7,6 +7,7 @@ import (
 	"net"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,6 +28,26 @@ func TestUDPPorts(t *testing.T) {
 	}
 	if p, _ := UDPPorts("123,53-54"); !reflect.DeepEqual(p, []int{53, 54, 123}) {
 		t.Fatalf("list: %v", p)
+	}
+}
+
+func TestUDPPortsCompose(t *testing.T) {
+	top, _ := UDPPorts("top")
+	got, err := UDPPorts("TOP,5354,53")
+	want := append(append([]int{}, top...), 5354)
+	slices.Sort(want)
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("top,5354: %v %v", got, err)
+	}
+	if got, err = UDPPorts("full"); err != nil || len(got) != 65535 {
+		t.Fatalf("full: %d %v", len(got), err)
+	}
+	if _, err = UDPPorts("none,53"); err == nil || err.Error() != `bad port "none"` {
+		t.Fatalf("none,53: %v", err)
+	}
+	_, err = UDPPorts("top-100")
+	if err == nil || err.Error() != `bad port "top-100": UDP takes top or full (top-100 is a TCP list)` {
+		t.Fatalf("top-100 on UDP: %v", err)
 	}
 }
 

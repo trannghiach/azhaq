@@ -6,7 +6,6 @@ import (
 	"net"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -18,14 +17,21 @@ import (
 // request of their own protocol.
 const UDPTop = "53,67,69,123,137,161,500,514,520,623,1194,1900,3478,4500,5353,5683,11211,27015,47808,51820"
 
-// UDPPorts parses a UDP port spec: "top" (or empty) for UDPTop, "none",
-// or the list syntax of Ports.
+// UDPPorts parses a UDP port spec: a comma-separated list whose parts are
+// each a name (top for UDPTop, full), a port or a range, as in Ports:
+// "top,5354". "none" alone is no ports; an empty spec is top.
 func UDPPorts(spec string) ([]int, error) {
-	switch strings.ToLower(strings.TrimSpace(spec)) {
-	case "", "top", "top-udp":
-		spec = UDPTop
-	}
-	return Ports(spec)
+	return parseList(spec, UDPTop, func(w string) (string, bool) {
+		switch w {
+		case "top", "top-udp":
+			return UDPTop, true
+		case "full", "all":
+			return "1-65535", true
+		}
+		return "", false
+	}, "UDP takes top or full", map[string]string{
+		"top-100": "a TCP list", "top100": "a TCP list", "top-1000": "a TCP list", "top1000": "a TCP list",
+	})
 }
 
 // States of a UDP port. A closed port answers with an ICMP unreachable
