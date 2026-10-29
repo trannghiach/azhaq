@@ -22,6 +22,8 @@ Names taken in this way are `unresolved` until a run or `azhaq dns` looks them u
 
 `cmd/azhaq-index-fixture` is a small working example.
 
+A connector is a separate program, and what it sends is its own: Azhaq does not see its requests, so they do not count against `-max-requests`, are not paced by `-rate` and are not in the request ledger (`DB.ledger.jsonl`, which lists what Azhaq itself sent to a target). Facts taken in with `azhaq ingest` were not sent by this run and are not in it either.
+
 ## Transport
 
 - One JSON object per line. Blank lines and lines starting with `#` are ignored.

@@ -16,9 +16,9 @@ Every command follows the same contract, so a script or an assistant can read an
 | 1 | Error: the command could not do its job (a database it cannot open, Chrome missing for `-browser`). | Read the message. |
 | 2 | Usage: bad flags or input. Nothing was sent. | `azhaq help COMMAND`. |
 | 3 | Finished, but some sources or requests failed. The results are usable. | The summary lists each failure, whether it is worth retrying, and its targets. |
-| 4 | Stopped by a limit (`-max-requests`, `-timeout`, `-daily-requests`, `-max-items`) with work left. | `azhaq resume -db FILE` continues where it stopped. |
+| 4 | Stopped by a limit (`-max-requests`, `-timeout`, `-daily-requests`, `-max-items`) or by the kill file (`-kill-file`, default `DB.stop`) with work left. | `azhaq resume -db FILE` continues where it stopped; with a kill file, remove it first. |
 
-`watch` exits with the code of its run (one run, without `-every`).
+`watch` exits with the code of its run (one run, without `-every`). `ledger -verify` exits 3 when the chain is broken.
 
 A run keeps the answers it got in its workspace until nothing is left to resume, so `azhaq resume` does not ask again what the run already asked: the requests of a run stopped and resumed add up to about those of one uninterrupted run (Juice Shop: 207 against 202 with `-max-requests 50`; a 4,750-word path sweep: 4,812 against 4,801). A port scan the budget cut short scans that address again. A drop-in (`subs`, `probe`, `dirs`, …) run without `-db` uses a temporary database and cannot be resumed; `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`).
 
@@ -50,8 +50,9 @@ Failures on fan-out are listed with `"fanout": true` and do not make the exit co
 | `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. `retryable` is true for timeouts, dropped connections, 429 and 5xx. `source` names a third-party source (crtsh, wayback). `targets` names up to 100; `azhaq query -db FILE -failed` lists every failed target, the list to retry. |
 | `skipped` | Targets and requests Azhaq chose not to touch, with the reason: outside the scope, would end the session, a scope entry a run cannot use. Chrome's requests outside the scope are refused before they leave and listed here without their query string, `outside the scope (Chrome)` (`outside the site (Chrome)` without a scope: the registrable domain or address of the pages it was pointed at), the first 100 URLs of a run; `notes` gives the number of requests when there were more. Chrome sends GET, HEAD and OPTIONS only (outside signing in): a write a page or its scripts would send (a POST, PUT, PATCH or DELETE, a beacon, a form a script posts) is refused before it leaves and listed as `a page's script would send a write`, by method and URL without its query (`POST http://127.0.0.1:3001/api/track`); its route is mapped with that method (`ops` with `source` `browser`). With `-browser-writes` pages send their writes, which change data on the target, and nothing is listed. Chrome saves nothing to disk: a download (a URL that is a file, an `<a download>`, a `Content-Disposition: attachment` answer) is refused for the whole browser and listed as `Chrome would download it`, by URL without its query and the name Chrome would have given the file (`http://127.0.0.1:3001/ftp/incident-support.kdbx (incident-support.kdbx)`); the request itself was sent and counted, only what it answered is dropped. |
 | `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
+| `degraded` | `subs` only: true when `sources failed` (below) is above 0, so a source the run relies on did not answer and the names may be incomplete. It does not change the exit code: a failure the other sources made up for is listed as `partial` and the exit stays 0 (3 with `-fail-on-errors`). Failures of sources that ran only because of `-all-sources` never set it on their own. |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
-| `notes` | Caps that were hit and other things worth knowing that are not failures. |
+| `notes` | Caps that were hit and other things worth knowing that are not failures: `ledger: 148 requests and connections recorded in app.db.ledger.jsonl (azhaq ledger -verify app.db.ledger.jsonl)`; `path checks: 28 skipped (an API description was already found)`; `screenshot of URL not taken: the page needs about 26 requests and 8 were left (raise -max-requests)` (or `the budget was spent before the page loaded`); `GraphQL URL: introspection disabled: schema recovered (partial)` or `introspection: full schema`; for `subs`, the `coverage` line below. |
 | `next` | Commands worth running next. A run without `-browser` whose target pages leave their links to their scripts (three or more `{{templates}}` in the text; or Markdown in the text, whose links are read as text, or an empty shell of a front page, with fewer than 10 routes found on its origin) gets `azhaq run -url ORIGIN/ -browser …` with the page that showed it: `(/learn/vulnerability/a1_injection and 11 more pages: Markdown its scripts turn into links; read as text here, Chrome sees the page as rendered)`. A run that found a GraphQL endpoint and did not read its schema (no `-graphql`, or its host outside the scope) gets `azhaq run -url ORIGIN/ -graphql -allow HOST …   (/graphql and /graphiql answer like GraphQL; -graphql reads the schema by introspection)`. A run without a session (`-login`, `-cookie`, `-header`) whose target site shows a sign-in form (a form that takes a password) gets `azhaq run -url ORIGIN/ -login PAGE -login-user USER -login-pass PASS -allow HOST …`. |
 
 ## run
@@ -77,6 +78,7 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
 | `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `gone`: answered 404 or 410 (found in an archive or a link, not there now). `hint`: found (in a script, an API description, an archive) but not requested (an archive's static assets, images, fonts and the like, are never requested, whatever hides their extension), or called by scripts only with POST or PUT, or written to only by a page in Chrome (a GET that answers 404, 405 or the catch-all page says nothing about such a route), or named only in scripts with no GET call among them while a GET answers 404 (`proof` says `GET answers 404; found only in scripts, method unknown`). `skipped`: found (by a link, a script's call, an API description or an archive), not requested because its name says a GET would change something; `word` names the verb, and the summary lists it under `skipped` (`left alone`). `capped`: left when a limit was hit, or when its origin stopped answering (5 connects or timeouts in a row with no answer between them: the rest of that origin's work is left for `azhaq resume`, listed under `left alone` with `ORIGIN stopped answering after 5 timeouts`, and `stopped` names the origin). A version prefix alone that only a script's strings name (`/v3`) is left out of the map when it answers 404 or the catch-all page. |
+| `evidence` (URLs) | How azhaq knows the row, the strongest level any of its sources reaches: `answered`, `described`, `called`, `linked`, `archived` or `guessed` ([CONCEPTS.md](CONCEPTS.md#evidence-how-azhaq-knows-a-url) defines them). A row folded into a template takes the strongest level of its instances. `evidence_from` lists the collectors behind it, sorted. Only URL rows have a level. |
 | `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest: Vite's `.vite/manifest.json`, Create React App's `asset-manifest.json`, Angular's `ngsw.json`, Nuxt's build meta), `client-route` and `websocket` (below). |
 | `client-route` | A view a single-page app's router draws, read from its route table (Angular's `RouterModule`, React Router's `<Route>` and `createBrowserRouter`, Vue Router): `http://host/#/administration` for an app that routes by the hash, else its path (`http://host/admin`), parameters as `{name}`, nested routes joined to their parents'. A view after the hash is never requested: the server answers every one with the app's shell. A view in the path is asked for once with a GET, as the server may answer it itself: a sign-in's 401 makes the row `auth`, a page the server renders `page`, with the guard still on the row and in its `proof`; a view the shell answers stays `client-route` (`catchall`), a template (`/reports/{id}`) is not requested. `guard` is what the router checks before it draws the view, a parent's guard holding for its children: Angular's `canActivate`, `canMatch`, `canLoad` or `canActivateChild` (with the guard's name when the build keeps it, `canLoad AdminGuard`), Vue's `meta.requiresAuth` (or another meta key about sessions or roles) or `beforeEnter`, a React wrapper such as `RequireAuth` or `PrivateRoute`. A string in a script that names a view (a router link, `router.navigate(['/order-completion', id])`) is that view's, listed in its `found_in`, not a page of its own. With `-browser`, Chrome does not open the views. |
 | `websocket` | A WebSocket endpoint a script opens (`new WebSocket(…)`, `SockJS`, a `ws://` or `wss://` URL, a socket.io client's `io(url, {path})`), as `ws://` or `wss://` (the page's scheme when the script builds the URL from `location.host`). Never requested. `protocol` is `socket.io` for a socket.io endpoint, whose `namespace` (`/chat`) is given when the app's call names one; the library's default path, `/socket.io`, stands when the app's call cannot be read. Third parties' sockets (chat widgets, analytics) are left out. |
@@ -94,6 +96,8 @@ A GraphQL endpoint whose schema was read with `-graphql` has one op per query, m
 
 A run's summary counts `client routes` and `websockets` apart from `URLs`. The text map lists them after the routes of the server with the same rank, with `guard=…`, `protocol=…` and `namespace=…` as their proof.
 
+`azhaq query -fields key,evidence,evidence_from` shows the level, and `azhaq query -evidence answered,described` keeps the rows with those levels. The text map ends a row that is not `answered` with `[described]`, `[called]`, `[linked]`, `[archived]` or `[guessed]`. `export -format jsonl` carries `evidence` and `evidence_from` on each entity line, `export -format openapi` `x-azhaq-evidence` on each operation, and `export -format html` an Evidence column in the API and map tables.
+
 The text map prints the same rows, one per line, with forms and parameters indented below, and a GraphQL endpoint's operations by their signatures (the first 50; the rest are in `-json` and the exports). `azhaq show URL` prints where scripts name it under `found in`, one place per line as `script:line:col  snippet`:
 
 ```
@@ -107,18 +111,70 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 
 | Command | Fields |
 | --- | --- |
-| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`); with `-live`, dnsx's `a` and `aaaa` (the addresses), `cname` (the chain) and `cdn` (the CDN or WAF in front). Takeover candidates are in the summary (`takeover`). |
-| `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. |
+| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`; `history` for a name an earlier run kept, below); with `-live`, dnsx's `a` and `aaaa` (the addresses), `cname` (the chain) and `cdn` (the CDN or WAF in front). Takeover candidates are in the summary (`takeover`). |
+| `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. With `-d DOMAIN -w FILE` it resolves `WORD.DOMAIN` for each word instead, as dnsx `-d -w` does, with wildcard answers left out; the rows are the same. |
 | `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code` (the first answer: a redirect stays 302, as httpx prints it), `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url` and `final_status_code` (where a redirect inside the scope, or without one inside the site, ended; title and tech describe that page), `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. Every target given ends as a row, a failure or a skip: a name that resolved and got neither an answer nor a recorded failure is listed as failed, `no answer and no failure recorded`. |
 | `crawl` | `url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`, `found_in`, and for a view or a socket `guard`, `protocol`, `namespace`). Views (`client-route`) and sockets (`websocket`) are listed with `-json` only, as routes with a parameter are: no GET gets them. |
 | `urls` | `url`, `source` (the archive that gave it first: wayback, commoncrawl, otx, urlscan, arquivo). |
-| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service` and `banner`, and for a TLS port the certificate's `subject_cn` and `subject_an` (httpx's names). A service that speaks first (`ssh`, `ftp`, `smtp`, …) is named from what it says. One that waits is asked once: `HEAD / HTTP/1.0` on the open connection (an HTTP answer is `http`, its banner the `Server` header or the status line), and without one, or with a 400, a TLS handshake on a second connection, counted like a connect (`tls`; `https` when HTTP answers inside it, `tls` true). A name ending in `?` is only the port's usual service. Raw printing ports (9100–9107) are never asked anything. A second name on the same address has its web and TLS ports asked again under its own name. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it; where it cannot, the summary's notes say so (`IPv6 addresses of 1 name not scanned: no IPv6 route from this machine`). A port that neither accepts nor refuses a connect (a timeout, an ICMP unreachable) is asked once more after the others, when such ports are at most 64 or a tenth of the scan (a loaded or lossy host drops a connect now and then; a firewall that drops nearly everything would only double the scan). A service on a port that usually speaks first (22, 21, 25, 3306, …) is given a second wait for its greeting before it is asked anything. In `run` and `query`, a scanned address's `ports` row counts these silent ports in `filtered`, and lists them in `filtered_ports` when there are no more than 64; the summary names them (`ports that neither accepted nor refused a connect, asked twice: scanme.nmap.org (45.33.32.156) port 80; …`), since an open port may hide among them. |
+| `ports` | naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `timestamp`, plus `service`, `banner`, `product` and `version` ([below](#ports-udp-products-and-versions)), `state` and `"protocol":"udp"` for a UDP port, and for a TLS port the certificate's `subject_cn` and `subject_an` (httpx's names). A service that speaks first (`ssh`, `ftp`, `smtp`, …) is named from what it says. One that waits is asked once: `HEAD / HTTP/1.0` on the open connection (an HTTP answer is `http`, its banner the `Server` header or the status line), and without one, or with a 400, a TLS handshake on a second connection, counted like a connect (`tls`; `https` when HTTP answers inside it, `tls` true). A name ending in `?` is only the port's usual service. Raw printing ports (9100–9107) are never asked anything. A second name on the same address has its web and TLS ports asked again under its own name. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it; where it cannot, the summary's notes say so (`IPv6 addresses of 1 name not scanned: no IPv6 route from this machine`). A port that neither accepts nor refuses a connect (a timeout, an ICMP unreachable) is asked once more after the others, when such ports are at most 64 or a tenth of the scan (a loaded or lossy host drops a connect now and then; a firewall that drops nearly everything would only double the scan). A service on a port that usually speaks first (22, 21, 25, 3306, …) is given a second wait for its greeting before it is asked anything. In `run` and `query`, a scanned address's `ports` row counts these silent ports in `filtered`, and lists them in `filtered_ports` when there are no more than 64; the summary names them (`ports that neither accepted nor refused a connect, asked twice: scanme.nmap.org (45.33.32.156) port 80; …`), since an open port may hide among them. |
 | `dirs` | `url`, `status`, `length` (the whole body, as ffuf; up to 64 MB), `words`, `lines` (from the first MB), `redirectlocation`. |
+| `fuzz` | ffuf's: `input` (an object keyed by keyword, the values in base64 as ffuf prints them), `position`, `status`, `length`, `words`, `lines`, `content-type`, `redirectlocation`, `url`, `duration` (nanoseconds to the first byte), `host`: `{"input":{"FUZZ":"YWRtaW4="},"position":12,"status":200,"length":483,"words":51,"lines":7,"content-type":"text/plain","redirectlocation":"","url":"…","duration":7596361,"host":"127.0.0.1:3001"}`. The summary is one JSON line on stderr. Text: one line per match, the input and `[Status, Size, Words, Lines, Duration]`; `-v` adds the URL, `-s` prints the inputs only. |
 | `params` | `url`, `method`, `params`, and `why` (what changed in the answer for each name: `status`, `size`, or `reflected`, its value came back more often than random names' values do). A page that answers names it does not read (most names of a group, or nearly every name tried alone, change its answer, and so do as many random names made like them) is listed in the summary's `notes`; the names of that group are dropped and the search stops there, names found in earlier groups stay. |
 | `asn` | `as_number`, `as_name`, `prefix`. |
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
 
-`probe`, `dns`, `ports`, `dirs`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
+`probe`, `dns`, `ports`, `dirs`, `fuzz`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
+
+**`subs`: sources, names kept, coverage.** `subs` counts the sources it asked, in the summary's `counts`:
+
+| Count | Meaning |
+| --- | --- |
+| `sources asked` | Passive sources that ran for the domains given. Skipped ones, such as a keyed source with no key, are not counted, and neither is `history`. |
+| `sources answered` | Those that returned without an error. |
+| `sources failed` | Failures of sources in the default set, or named with `-sources`. |
+| `off-by-default failed` | Failures of sources that ran only because of `-all-sources`. |
+
+`sources asked` is `sources answered` plus `sources failed` plus `off-by-default failed`. The summary has `degraded` when `sources failed` is above 0. The per-source status in the workspace (`azhaq show`, the `sources` payload of an `azhaq-subdomains` observation) has, for each source, `count`, `seconds`, `calls`, `error`, `skipped` (why it did not run) and `"default": false` on a source that ran only because of `-all-sources`.
+
+Azhaq keeps every name it kept for a domain in `names/DOMAIN.json` under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`: the first and last time seen (`first_seen`, `last_seen`) and the sources that gave it (`sources`), at most 200,000 names per domain (the ones unseen the longest go first). The next run asks this file as a source called `history`: a stored name counts only if it resolves now (not to a wildcard), so stale names drop out and a name a source missed this time comes back. `-no-history` neither reads nor writes the file. A file that cannot be written is a note, `name history not saved: …`.
+
+`subs` ends with a note such as
+
+```
+coverage: the independent sources hold about 1609 names; this run has 1400 of them (87%) — an estimate of what the sources know, not of every name that exists
+```
+
+It is a Chao1 estimate over how many independent sources gave each name: S + f1²/(2·f2), with f1 names given by one source and f2 by two (with f2 = 0: S + f1(f1−1)/2). Independent means every source except the ones that pad their answer (subdomain.center) and `history`; a name only those gave is in the output but not in the count. It needs two independent sources that gave names, and counts the names printed (with `-live`, the live ones). It estimates what the sources know, not every name that exists. The `azhaq-subdomains` payload has `"coverage": {"observed", "estimated", "share"}`; the row of a sampled source (subdomain.center) in `sources` has `"population_estimate"`, a Schnabel estimate of how many names one call draws from, when its rounds repeated names.
+
+### ports: UDP, products and versions
+
+`ports -udp` asks UDP ports too: the 20 common ones (`-pu top`: 53, 67, 69, 123, 137, 161, 500, 514, 520, 623, 1194, 1900, 3478, 4500, 5353, 5683, 11211, 27015, 47808, 51820), or the list `-pu` gives (`-pu 1-1024`); `-p none` leaves the TCP ports out. In `run` it is `-ports-udp SPEC` (`top` or a list). No privileges are needed: each port gets one datagram on a connected socket, and the kernel tells an ICMP port unreachable from silence.
+
+| What came back | State |
+| --- | --- |
+| a datagram | `open`, with the service, product, version and banner the reply gives |
+| an ICMP port unreachable | `closed` |
+| nothing, twice | `open|filtered`: a service that ignores the request, or a filter |
+
+The request is the harmless one of the protocol the port usually carries: DNS `. NS`, an NTP client request, an SNMP GET of `sysDescr.0` (community `public`), SSDP M-SEARCH, an mDNS service query, a NetBIOS node status request, an IKEv2 header, a STUN binding request, memcached `version`, BACnet Who-Is, CoAP `GET /.well-known/core`; the others get an empty datagram. Nothing logs in, guesses a credential or changes state. Every datagram counts against `-max-requests`, is paced by `-rate` and goes in the request ledger as kind `udp`. A CDN or WAF address is not asked.
+
+JSON rows have `"protocol":"udp"` and `"state"`. In a workspace, the `ports` row has `udp_open`, `udp_open_filtered`, `udp_closed`, `udp_scanned` and `udp_services` (port, state, service, product, version, banner). Plain output lists `host:port/udp` for the open ports only; `open|filtered` ports are in the JSON and in the summary note (`udp: 1 open|filtered (asked twice, no answer and no ICMP port unreachable): …`). On a loopback or LAN address, `open|filtered` usually means a service that does not answer a request it does not understand; a closed port there answers with an ICMP error and is reported `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`.
+
+Each open TCP port gets `product` and `version` next to `service`, from what it says first or answers:
+
+| Source | Example | Product, version |
+| --- | --- | --- |
+| SSH greeting | `SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13.20` | OpenSSH, 9.6p1 |
+| FTP, SMTP, POP3, IMAP greeting | `220 (vsFTPd 3.0.5)`, `ESMTP Exim 4.96`, `Dovecot` | vsftpd 3.0.5, Exim 4.96, Dovecot |
+| MySQL, MariaDB handshake | server version in the first packet | MySQL 8.0.35, MariaDB 10.11.6 |
+| HTTP `Server` | `Werkzeug/2.2.3 Python/3.11`, `Apache/2.4.25 (Debian)`, `CUPS/2.4` | Werkzeug 2.2.3, Apache httpd 2.4.25, CUPS 2.4 |
+| HTTP `X-Powered-By`, when `Server` names none | `Express` | Express |
+| `GET /` body, when the head names no product | `Ollama is running`; Elasticsearch or OpenSearch JSON `version.number` | Ollama; Elasticsearch 8.11.1 |
+| 5432: the answer to an SSLRequest | one byte, `S` or `N` | PostgreSQL (no version) |
+| 6379: the answer to `PING` | `+PONG` or `-NOAUTH` | Redis (no version) |
+| 27017-27019: the answer to isMaster over OP_MSG | `maxWireVersion` | MongoDB, the release as major.minor |
+
+`service` is unchanged. The `GET /` for a body is one more connection on a web port whose HEAD answer gave no product and is a 200 or 401 of type JSON or text; it counts, is paced and is recorded like a connect. The first request of PostgreSQL (also on 5433), Redis and MongoDB is sent only to a port that said nothing and is not one of the raw printing ports (9100–9107); it logs in to nothing and changes nothing.
 
 ## roles
 
@@ -220,18 +276,138 @@ A map write (empty body) is first sent with its owner's session; when the owner 
 
 The row's `owner_by` says where the write came from (`alice.har`, `PUT /api/BasketItems/{id} with an empty body`) and what proved it (`after bob's PUT the owner's object changed to match it`, `after bob's DELETE the owner's object is gone (404)`); `confidence` is `proved` on a proven cross write; `evidence` says who was let; `azhaq roles show -dir DIR -method PUT URL` prints each role's curl line with the write's body.
 
+## report
+
+`azhaq report -dir DIR` writes up what `azhaq roles` found as one Markdown report per finding, ready to paste into HackerOne or Bugcrowd, or into a red team's client report. It reads the evidence the roles run kept in `DIR/roles.db` and sends nothing.
+
+```
+$ azhaq report -dir azhaq-roles-20261028-101500
+azhaq report: 3 reports in azhaq-roles-20261028-101500/reports
+  …/01-proved-get-books-v1-book-title.md  [proved] Broken object level authorization: bob reads alice's book via GET /books/v1/{book_title}
+  …/02-proved-get-books-v1-book-title.md  [proved] Broken object level authorization: alice reads bob's book via GET /books/v1/{book_title}
+  …/03-unrated-get-users-v1-debug.md  [unrated] Excessive data exposure: anyone reads password via GET /users/v1/_debug
+```
+
+Without `-url`, it writes a report for each listed row whose verdict is `reads another role's object`, `writes another role's object`, `anyone writes another role's object` or `anyone reads sensitive fields`, ordered by confidence (`proved`, `likely`, `guess`, then rows that carry none). With `-url URL` (and `-method M` for a write row) it writes that one report to standard output; a row that is not one of the four verdicts is refused.
+
+| Flag | |
+| --- | --- |
+| `-dir DIR` | the `-dir` of the roles run (it holds `roles.db`) |
+| `-url URL`, `-method M` | one row only |
+| `-format md\|json` | Markdown (default), or the same content as structured fields |
+| `-o PATH` | a file (the reports one after another, a JSON array for `json`), or a directory (`out/`, or an existing one) with a file per report; default: `DIR/reports` |
+| `-redact` | also mask hosts (`<host>`) and identifiers (`<id-1>`) |
+
+Each report has a title naming the bug class (broken object level authorization for a read, "(write)" for a write, excessive data exposure for sensitive fields anyone reads), a two-sentence summary, a severity that is labelled a guess and says why (sensitive fields and a write raise it), numbered steps with the curl commands from the evidence (the sessions as `$ALICE_TOKEN`, `$BOB_TOKEN`), the evidence (status, length and the relevant JSON fields of the owner's answer, the reader's, and the control: what a made-up identifier returned), the row's `owner_by` quoted as the reason the object is the owner's, impact and remediation by class, and notes (confidence, both ways, "found by azhaq roles, run DATE").
+
+A report never says what the evidence does not hold. A row with no control, a body that was not kept, no `owner_by`, or an evidence file from an older azhaq (no run date) says so in the report, under "Missing from the evidence store". A write's before-and-after reads of the owner's object are not kept; the report says so.
+
+`-redact` is for a report that leaves the engagement: the host becomes `<host>`, the identifier in the route and the values of identifier fields in the kept bodies (`id`, `*Id`, `username`, `owner`, `email`, …) become `<id-N>`, and any token is removed. Role names are the tester's own labels and stay. Read a redacted report once before sharing it: an identifier no kept body names in an identifier field is not masked.
+
+`-format json` holds, per report: `title`, `class` (`bola_read`, `bola_write`, `excessive_data_exposure`), `method`, `url`, `route`, `verdict`, `confidence` (`unrated` when roles gave none), `summary`, `severity_guess` (`level`, `reason`), `variables`, `steps` (`n`, `text`, `curl`, `expect`), `evidence` (per answer: `role`, `kind` `owner`, `reader`, `other` or `control`, `request`, `status`, `length`, `content_type`, `body_kept`, `fields`), `owner_reason`, `impact`, `remediation`, `notes` (`confidence`, `both_ways`, `found_by`, `run`) and `missing`.
+
 ## diff
 
 A web page's answer is compared by status and title, and a JSON listing's also by how many items it holds (`json_items`): `watch` reports `/users/v1: [200] 5 items → [200] 6 items`. Bodies are not compared byte for byte: timestamps and tokens would make every run a change. A workspace with one run says so: a diff needs two.
 
 `diff -jsonl` prints `added` and `removed` rows, `not_seen_again` rows and a `summary`. `removed` is what answered in the older run (a name that resolved, a page with a status, a host with open ports) and is gone from the newer. `not_seen_again` is what the older run only heard of (from a subdomain source, an archive, a link) and never checked: sources answer differently from day to day and fail, so its absence says little. The summary names the `failed_sources` of the newer run.
 
+## watch
+
+`azhaq watch -db FILE -- RUN FLAGS` runs the run options into the workspace and compares its last two runs, in the terms a person watching a target cares about. The text names each kind of change that happened, with at most 20 lines each (`… and N more`), and says `no change` when nothing did. The first run of a workspace is the baseline: everything in it is new, and it lists no routes.
+
+```
+azhaq watch app.db: 2026-10-29 23:29:48 against 2026-10-29 23:29:48
+~ 4 API routes
+    + POST /api/v2/export {format, userId}  (main.js)
+    ~ /api/orders/{id}: +DELETE  (main.js)
+    ~ PUT /api/profile: +role  (main.js)
+    - /api/legacy/report  (main.js)
+```
+
+The sections are `+ hostnames that resolve`, `+ web services`, `+ URLs`, `~ API routes`, `~ hosts whose open ports changed`, `~ pages that answer differently` and `- hostnames gone`, `- web services gone`, `- URLs gone`. A frontend deploy that adds a route adds attack surface, and the first report is the one that pays, so the `API routes` section ties each change to the script that calls the route:
+
+- `+ METHODS /route {names}`: a new route, its methods and the names it sends (query and body).
+- `~ /route: +DELETE`: a method added to a known route (or `-GET`, removed).
+- `~ PUT /route: +role`: a name the route's call now sends (or `-name`).
+- `- /route`: a route the previous run's scripts or API description named and no source names in this run.
+
+A route only found by guessing or in an archive is never reported gone, and one a crawl or a guess finds is not reported new: routes are compared where a script or an API description names them. Placeholder names (`{id}` or `{orderId}`), identifiers, ordering and case are not changes, so the same app mapped twice reports no route change. A route that answers differently (status, title, item count) stays under "pages that answer differently". A route reported as new or gone is not repeated under "URLs".
+
+The same text goes to Slack, Discord and Telegram. With `-json` (and for `-notify-cmd` and generic hooks) the change set is one JSON object: `db`, `run`, `previous`, `baseline`, `hosts`, `services`, `urls`, `ports`, `changed`, `gone_hosts`, `gone_services`, `gone_urls` and `routes`. A `routes` entry is:
+
+```json
+"routes": [
+  {"kind": "new", "host": "app.example.com", "route": "/api/v2/export",
+   "methods_added": ["POST"], "fields_added": ["format", "userId"],
+   "script": "https://app.example.com/main.js"},
+  {"kind": "methods", "route": "/api/orders/{id}", "methods_added": ["DELETE"], …},
+  {"kind": "fields", "route": "/api/profile", "method": "PUT", "fields_added": ["role"], …},
+  {"kind": "gone", "route": "/api/legacy/report", "methods_removed": ["GET"], …}
+]
+```
+
+`kind` is `new`, `methods`, `fields` or `gone`; `script` is the first script that names the route; `methods_removed` and `fields_removed` are set when something was taken away.
+
 ## query, show, plan, ingest
 
 - `query -json` prints map rows (as `run -json`, with `found_in`), or only the `-fields` asked for; every row that matches, unless `-limit` says otherwise (the summary then says how many matched). `query -failed` prints every failed target instead: `target`, `collector`, `source`, `error`, `retryable`.
-- `show -json` prints one object: `row` (the map row, with `found_in`), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`; an `azhaq-js` observation's payload holds the `found_in` of the page it read); for a hostname, `services`: its front pages with `coverage`, `status`, `title`, and the `error` of one that failed. A GraphQL endpoint read with `-graphql` has an `azhaq-graphql-schema` observation whose payload holds `queries`, `mutations`, `subscriptions` and `types` (names) and `schema`, the introspection's whole `__schema` object (past 8 MB without its descriptions; past that left out, with its size in `schema_bytes`). A server that refuses the full introspection query for its depth is asked for the names only, and `schema` is absent. A server with introspection turned off is asked for root fields by name, as clairvoyance does: its validation errors (`Cannot query field "pastez" on type "Query". Did you mean "pastes"?`, `Field "paste" of type "PasteObject" must have a sub selection`, required arguments) give the payload `queries`, `mutations`, `types` and `signatures` (`uploadPaste(content: String!, filename: String!): UploadPaste`), with `"recovered":"suggestions"`. Every document asked carries a field no schema has, so none passes validation and nothing runs. A GraphQL endpoint found by a run (an `azhaq-graphql` observation) has `get_queries` true when it answers `{__typename}` sent with GET.
+- `show -json` prints one object: `row` (the map row, with `found_in`), `links` (`rel`, `dir` in or out, `type`, `key`) and `observations` (`collector`, `kind`, `source`, `observed_at`, `payload`; an `azhaq-js` observation's payload holds the `found_in` of the page it read); for a hostname, `services`: its front pages with `coverage`, `status`, `title`, and the `error` of one that failed. A GraphQL endpoint read with `-graphql` has an `azhaq-graphql-schema` observation whose payload holds `queries`, `mutations`, `subscriptions` and `types` (names) and `schema`, the introspection's whole `__schema` object (past 8 MB without its descriptions; past that left out, with its size in `schema_bytes`). A server that refuses the full introspection query for its depth is asked for the names only, and `schema` is absent. A server with introspection turned off is asked for root fields by name, as clairvoyance does: its validation errors (`Cannot query field "pastez" on type "Query". Did you mean "pastes"?`, `Field "paste" of type "PasteObject" must have a sub selection`, required arguments) give the payload `queries`, `mutations`, `types` and `signatures` (`uploadPaste(content: String!, filename: String!): UploadPaste`), with `"recovered":"suggestions"`. That is not the server's schema: it lacks types, fields it never suggested, and the types of fields whose errors did not name them. The exports mark it as partial (below), and a whole schema read by introspection is not marked. Every document asked carries a field no schema has, so none passes validation and nothing runs. A GraphQL endpoint found by a run (an `azhaq-graphql` observation) has `get_queries` true when it answers `{__typename}` sent with GET.
 - `plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`, and `requests`: what is known of the requests before any is sent. `source_queries` counts, per collector, the queries to third-party sources about the targets listed (one per source asked; a source may page through its answer), `source_queries_total` adds them up, and `source_queries_not_counted` names the collectors that do not say before they run which sources they ask (none of the built-in ones; a connector may not). `found_domains_asked` is true when domains found on the way would be asked about too (inside the scope; without one, within `-depth` and `-max-items`). The requests to the targets are a bound, not a count: how many names resolve and answer is known only by asking (`max_names` of them at most are looked up). `per_web_service` is about what each web service costs before its links, scripts and archived URLs are followed (its page, the favicon, the built-in paths), and `cap` the requests to the targets at most, set by `cap_by` (`-max-requests`, or `-daily-requests`, of which a plan does not take off what the day's runs spent); 0 is no cap. `passive` is true when nothing goes to the targets.
 - `ingest` prints only its summary: `results` is the facts read, `counts` the lines read per format.
+
+## hunt
+
+`azhaq hunt -db FILE [-roles roles.jsonl] [-limit 25] [-since 168h]` ranks the mapped routes, hosts and files by what a tester should open first. It reads the workspace and sends nothing. One row per route template: a key with `{n}`, `{uuid}`, `{hex}` or `={v}` is a template folding several URLs, and a key seen once is the URL itself.
+
+- Text: one row per line, `rank  score  key  reason; reason  → next: COMMAND`. A reason is `signal: detail`.
+- `-json`: one object per row: `rank`, `score`, `key`, `type` (`URL` or `Hostname`), `reasons` (an array of `{signal, detail}`) and `next`. The summary on stderr counts `rows`, and a note says how many rows had a signal when `-limit` cut the list.
+
+The score is the sum of the row's signals, each counted once at its highest weight. A row with no signal of its own is left out; one whose only signal is `new` never ranks. Static assets, scripts, catch-all pages and pages that are gone are never rows. Ties go to the target before fan-out, then to the row with more distinct signals, then by key. `-roles` reads the JSONL `azhaq roles -json` printed (repeatable); `-since` is how long ago a row is first seen to count as new, and `new` is added only when the workspace also holds URLs older than that.
+
+| Signal | Raised by |
+| --- | --- |
+| `cross-role` | a `-roles` verdict that one role reached another's data: `reads another role's object`, `writes another role's object`, `anyone writes another role's object`, `anyone reads sensitive fields`; the weight is scaled by the row's confidence (`proved` whole, `likely` 85%, `guess` 60%) and the reason quotes its evidence |
+| `takeover` | a name another party may take over (`strong` weighs more than `dangling` and `page`) |
+| `secret` | a credential a script carries, weighed by its severity; the file is named |
+| `sourcemap` | a source map served |
+| `exposed-file` | a `.kdbx`, `.pem`, `.key`, `.env`, `.sql`, `.db`, `.bak`, `.old`, `.orig`, `.swp`, `.zip` or `.tar.gz` file, or a `.git` directory, served; named or refused, it weighs less |
+| `listing` | a directory listing |
+| `api-description` | an API description served |
+| `graphql` | a GraphQL endpoint, whose schema was read, or whose IDE answers (weighs more), or that answers like GraphQL |
+| `object-id` | `{name}` in the path, or an `id` parameter; a route with no GET weighs less |
+| `unauth-write` | POST, PUT, PATCH or DELETE that no description asks credentials for, on a route that did not turn the plain request away; it weighs less when no GET showed that it answers |
+| `upload` | a file field in a form |
+| `state-change` | a GET left alone because its name says it changes something (a logout is left out) |
+| `password-in-url` | a GET form with a password field: it lands in logs and history |
+| `gated` | a 401 or 403: a session is needed, a target for `azhaq roles` |
+| `server-error` | a 5xx: the input reached code that failed |
+| `input` | the route takes query, body or form names |
+| `new` | first seen within `-since` |
+| `param-command`, `param-url`, `param-file`, `param-debug`, `param-redirect`, `param-query`, `param-callback` | a parameter name that says what it takes |
+| `path-admin`, `path-debug`, `path-config`, `path-env`, `path-doc`, `path-function`, `path-data` | a word in the path says what the route is for; the first five also read the labels of a host name that resolves |
+
+`next` is a real command, chosen by the signal that weighs most in the row: `azhaq roles show -dir DIR URL` (with `-method` for a write) for a `cross-role` row, where DIR is the `-dir` of the roles run; `azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url ORIGIN/` for `object-id`; `azhaq params -u URL -w WORDLIST` for `input`; `azhaq show -db FILE URL` for the rest.
+
+## ledger
+
+Every run with a workspace writes `DB.ledger.jsonl` next to it (`-ledger FILE` writes it elsewhere, `-ledger off` not at all; a drop-in command without `-db` writes one only with `-ledger FILE`; `azhaq roles` writes `roles.ledger.jsonl` in its `-dir`). It has one JSON line for each request or connection sent to a target, and `azhaq resume` and later runs into the workspace append to it. DNS queries and third-party sources are not targets and are not listed. A line has:
+
+| Field | Meaning |
+| --- | --- |
+| `seq` | the line's number, from 1 |
+| `time` | when it was sent, UTC |
+| `kind` | `http`, `tcp` (a connect of `ports`, or a TLS handshake of `ports` or `azhaq-tls`), `udp` or `chrome` (a request Chrome was let send) |
+| `method` | the HTTP method (not on `tcp` and `udp` lines) |
+| `target` | the URL as sent, query string included (a password in its user info is masked), for `http` and `chrome`; `ip:port` for `tcp` and `udp` |
+| `host` | the host the request was for |
+| `rule` | the scope rule that allowed it (`-allow`, `-scope`); empty when the run has no rules |
+| `collector` | what sent it, for the lines that say |
+| `prev`, `hash` | the previous line's hash, and the hex sha256 of `prev` and this line's JSON without `hash` |
+
+`azhaq ledger -verify FILE` prints the number of entries and whether the chain is intact: exit 0, or exit 3 naming the first line that is not (`line 3: hash does not match the content: the line was edited`). `-summary FILE` counts the lines by `kind`, `method`, `host` and `rule`, with the first and last time (`-json`: one object, `entries`, `file`, `first`, `last`, `kinds`, `methods`, `hosts`, `rules`). `-csv FILE` prints one row per line with the columns `seq`, `time`, `kind`, `method`, `target`, `host`, `rule`, `collector` and `hash`. A summary of a run that wrote a ledger has the note `ledger: N requests and connections recorded in FILE (azhaq ledger -verify FILE)`.
+
+`-kill-file PATH` (default `DB.stop`; `roles.stop` in the `-dir` of `roles`, which stops the runs of the roles but not the replay after them) is the kill switch: the file is looked for every half second, and once it exists nothing more is sent. The run exits 4, and its `stopped` says `the kill switch: kill file PATH exists, N tasks known and not done (remove it, then azhaq resume)`. A drop-in command without `-db` has no default kill file.
 
 ## export
 
@@ -239,13 +415,13 @@ A web page's answer is compared by status and title, and a JSON listing's also b
 
 | Format | Output |
 | --- | --- |
-| `jsonl` | Everything: one object per map row (`"kind":"entity"`), observation and edge. |
+| `jsonl` | Everything: one object per map row (`"kind":"entity"`, with `evidence` and `evidence_from`), observation and edge. |
 | `urls`, `hosts`, `names`, `targets` | One per line: every URL; names that resolve, and addresses given as targets or serving the web; every name; web services (front pages that answered, Azhaq's or taken in from httpx, katana or ffuf), for `nuclei -l` and `httpx`. |
-| `openapi` | OpenAPI 3 JSON of one origin (`-origin`, default the one with the most API routes): the description the target serves, as it is, plus the routes scripts call, forms, the pages found with a query string of their own (a GET taking those names) and what answered. A route the run left alone (`skipped`) has no GET or HEAD of azhaq's making in it: a tool importing the description would send one. Where the served description lists such a route anyway (VAmPI's `GET /createdb`), or azhaq guessed its POST, each operation carries `x-azhaq-skipped: true` and `x-azhaq-skipped-reason` (`looks like a GET would change something (createdb)`), and `-safe` leaves those operations out, for a tool that must not touch them. A GET form's fields are query parameters of its action's GET; a POST form's are its request body, `application/x-www-form-urlencoded` or `multipart/form-data` as its `enctype` says, a file input `"format":"binary"`. A form adds the fields an operation the export made lacks; a served description's operations are left as they are. `x-azhaq` on each operation: `source`, `coverage`, `status`, `needs_credentials`. |
-| `graphql` | The introspection result of each GraphQL endpoint read with `-graphql`, as InQL, Burp, Postman, graphql-voyager and clairvoyance read it. |
-| `sdl` | The same schemas in the GraphQL schema language. |
+| `openapi` | OpenAPI 3 JSON of one origin (`-origin`, default the one with the most API routes): the description the target serves, as it is, plus the routes scripts call, forms, the pages found with a query string of their own (a GET taking those names) and what answered. A route the run left alone (`skipped`) has no GET or HEAD of azhaq's making in it: a tool importing the description would send one. Where the served description lists such a route anyway (VAmPI's `GET /createdb`), or azhaq guessed its POST, each operation carries `x-azhaq-skipped: true` and `x-azhaq-skipped-reason` (`looks like a GET would change something (createdb)`), and `-safe` leaves those operations out, for a tool that must not touch them. A GET form's fields are query parameters of its action's GET; a POST form's are its request body, `application/x-www-form-urlencoded` or `multipart/form-data` as its `enctype` says, a file input `"format":"binary"`. A form adds the fields an operation the export made lacks; a served description's operations are left as they are. `x-azhaq` on each operation: `source`, `coverage`, `status`, `needs_credentials`; `x-azhaq-evidence` beside it is the level of the route (a served description's operations are `described`, a form's `linked`). |
+| `graphql` | The introspection result of each GraphQL endpoint read with `-graphql`, as InQL, Burp, Postman, graphql-voyager and clairvoyance read it. A schema recovered from validation errors has `"x-azhaq": {"introspection": false, "recovered": "suggestions", "partial": true}` beside `data` (inside each endpoint's object when several are keyed by URL), with `validation_errors`, `client_operations` and `untyped_fields` when known. |
+| `sdl` | The same schemas in the GraphQL schema language. A schema recovered from validation errors, not read by introspection, starts with `# introspection disabled on URL; recovered from N validation errors and M client operations: partial, may lack types and fields`, then the root types as far as they were recovered; fields whose type was not recovered, and the client operations found in scripts, are listed in comments. |
 | `burp` | Burp Suite project options with the run's target scope. |
-| `html` | One self-contained page: web services, names, screenshots, secrets, API routes, the map. |
+| `html` | One self-contained page: web services, names, screenshots, secrets, API routes (with an Evidence column), the map. |
 | `graphml` | The graph for Gephi, yEd or Cytoscape. |
 | `secrets` | Credentials found in scripts: severity, kind, value, script, tab-separated. |
 
@@ -257,7 +433,7 @@ A web page's answer is compared by status and title, and a JSON listing's also b
   {"type":"mutation","name":"createPaste","arguments":[{"name":"burn","type":"Boolean","default":"false"}],"returns":"CreatePaste"}]}
 ```
 
-`type` is `query`, `mutation` or `subscription`; `default` is a GraphQL literal; `deprecated` is set on deprecated fields. A schema kept by names only gives `type` and `name`.
+`type` is `query`, `mutation` or `subscription`; `default` is a GraphQL literal; `deprecated` is set on deprecated fields. A schema kept by names only gives `type` and `name`. A schema recovered from validation errors (see `show`) adds `"introspection": false, "recovered": "suggestions", "partial": true` beside `operations`, and the text map puts `GraphQL: introspection disabled, schema recovered (partial, may lack types and fields)` above the endpoint's operations.
 
 **graphql** prints `{"data":{"__schema":{…}}}`, the server's answer to the standard introspection query. With several endpoints it prints one object keyed by endpoint URL, `{"https://app/graphql":{"data":{"__schema":…}},…}`; `-origin` keeps the endpoints of one origin, or the one at a URL (`-origin https://app/graphql`), to get a file a tool loads as it is. **sdl** prints each endpoint's schema under a `# URL` comment: types, interfaces, unions, enums, input objects, custom scalars and directives with descriptions, defaults and `@deprecated`, without the built-in scalars and directives; a `schema { … }` block when the root types are not simply `Query`, `Mutation` and `Subscription`. Concatenated schemas of several endpoints are not one schema: pick one with `-origin`.
 

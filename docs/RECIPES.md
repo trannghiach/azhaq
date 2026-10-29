@@ -32,6 +32,8 @@ azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Author
 
 Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] proved` are the findings, worst first: `proved` rows need the least checking, `guess` rows the most. The evidence after the route says why the object is alice's, and what the same route returned for a made-up identifier (a route that answers any ID is flagged `answers any identifier`, not a finding). Check one by hand with bob's token before you report it: `azhaq roles show -dir DIR URL` prints each role's answer, how it differs from alice's, and a curl line to run with `BOB_TOKEN` set.
 
+`azhaq report -dir DIR` writes each finding up as a report to submit (recipe 14).
+
 Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3); see recipe 4.
 
 ## 4. Tokens that live a few minutes
@@ -77,7 +79,7 @@ A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where 
 azhaq watch -db acme.db -every 24h -notify https://hooks.slack.com/services/… -- -scope hackerone -program acme
 ```
 
-It reports new names, services, URLs, open ports, pages whose status or title changed, and API listings that grew or shrank. No change, no message.
+It reports new names, services, URLs, open ports, pages whose status or title changed, and API listings that grew or shrank. It also reports the API routes a deploy changed, each tied to the script that calls it (`+ POST /api/v2/export {format, userId}  (main.js)`: a new route; `~ /api/orders/{id}: +DELETE`: a method added; `~ PUT /api/profile: +role`: a body name added; `- /api/legacy/report`: a route gone from its script). No change, no message.
 
 ## 9. Feed other tools, and take their results in
 
@@ -113,3 +115,42 @@ claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000 -rate 5
 ```
 
 The scope, the budget and the pace are fixed when the server starts; no tool argument can widen them. Without `-allow` or `-scope` the server does not start, unless `-unlocked` says so.
+
+## 13. Start a test from a map
+
+```
+azhaq run -url https://app.example.com/ -db app.db
+azhaq hunt -db app.db
+azhaq roles -json -role anon -role 'user=Authorization: Bearer …' -- -url https://app.example.com/ > roles.jsonl
+azhaq hunt -db app.db -roles roles.jsonl -limit 10
+```
+
+A map of thousands of routes does not say where to start. `hunt` ranks it: one row per route template, each with its score, the reasons for it (`signal: detail`) and the command to run next. It reads the workspace and sends nothing. The first list holds what the map alone shows: an identifier in the path, a parameter that takes a URL or a file, a backup or key file, an API description, a takeover candidate, a credential in a script. The second adds what `roles` proved: a role reading or writing another role's object, with its evidence and confidence quoted, carries the heaviest weights. Run the `next` command of the top row. [OUTPUT.md](OUTPUT.md#hunt) lists the signals.
+
+Catch: `hunt` ranks what the map holds. A thin map gives a short list (see Troubleshooting), and a row is a place to look, not a finding.
+
+## 14. Write a finding up
+
+```
+azhaq report -dir azhaq-roles-20261028-101500
+azhaq report -dir azhaq-roles-20261028-101500 -url https://app.example.com/rest/basket/6 -redact
+```
+
+`report` turns what `roles` listed into one Markdown report per finding: a title naming the bug class, steps with curl commands (the sessions as `$ALICE_TOKEN` and `$BOB_TOKEN`), the evidence, the control (what a made-up identifier returned), why the object is the owner's, impact and remediation. The first command writes them to `DIR/reports`, `proved` first; the second writes one to standard output with hosts and identifiers masked, for a report that leaves the engagement. It sends nothing: it reads `DIR/roles.db`.
+
+Catch: the severity is a labelled guess. What the evidence does not hold (a row with no control, a body that was not kept) is named in the report under "Missing from the evidence store", not filled in. Read a redacted report once before you share it: an identifier that no kept body names in an identifier field is not masked.
+
+## 15. Deconfliction and audit
+
+```
+azhaq run -url https://app.example.com/ -db app.db
+azhaq ledger -verify app.db.ledger.jsonl
+azhaq ledger -csv app.db.ledger.jsonl > sent.csv
+touch app.db.stop
+```
+
+Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for each request or connection sent to a target, with its time, URL or `ip:port`, the scope rule that allowed it and the collector, each line holding the hash of the one before. Give the client's blue team `azhaq ledger -csv`, and show `-verify` passing on the file as delivered (exit 0; an edited, removed or reordered line is exit 3 naming the first bad line). `-summary` counts by kind, host, method and scope rule.
+
+`touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
+
+Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.

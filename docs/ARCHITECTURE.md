@@ -66,10 +66,10 @@ A collector can also hand over seeds before it returns with `catalog.Hint(ctx, s
 | `azhaq-js` | the requests scripts make (method, path, query names, body fields, worked out from literals, template literals and assigned variables, and through a helper that takes the URL), with the script, line and code each was found in, other routes and links in scripts, chunks, build manifests and source maps (named, in a header, or guessed), joined constants, the views of the app's router with their guards, WebSocket endpoints, GraphQL operation names, credentials; scripts on other hosts of the scope (without one, of the page's registrable domain) included |
 | `azhaq-openapi` | OpenAPI 3 and Swagger 2 documents (JSON, YAML, embedded in Swagger UI), each operation's parameters by location, body fields, security; a Swagger UI page's document even when its URL is built at run time; asks the parameterless GETs |
 | `azhaq-graphql` | GraphQL endpoints; with `-graphql`, the schema by introspection |
-| `azhaq-paths` | the built-in paths: robots.txt, sitemaps, API description locations, … |
+| `azhaq-paths` | the built-in paths: robots.txt, sitemaps, API description locations (asked one at a time, and not once an origin has served a description), … |
 | `azhaq-dns` | A/AAAA, CNAME chains, the CDN or WAF in front, MX/TXT/NS; dead and wildcard names marked and never probed (a name is dead when two resolvers agree: one's NXDOMAIN or empty answer is checked with another) |
 | `azhaq-tls` | certificates and their names |
-| `azhaq-subdomains` | names from passive sources (certificate transparency, archives, DNS datasets; 50+ with keys), with the sources of each name and each source's count or error |
+| `azhaq-subdomains` | names from passive sources (certificate transparency, archives, DNS datasets; 50+ with keys) and from the name history of earlier runs, with the sources of each name, each source's count or error, and how complete the result is |
 | `azhaq-urls` | historical URLs from the Wayback Machine, Common Crawl, OTX, urlscan and Arquivo, junk left out |
 | `azhaq-dns-brute`, `azhaq-permute`, `azhaq-dirs`, `azhaq-params`, `azhaq-ports` | the active techniques above |
 | `azhaq-asn`, `azhaq-prefix`, `azhaq-ptr` | networks, their addresses and reverse DNS names |
@@ -96,7 +96,10 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 | `-sources`, `-exclude-sources`, `-all-sources`, `-providers FILE` | subdomain sources and API keys (subfinder's `provider-config.yaml` format) |
 | `-resolvers FILE`, `-dns-rate N` | DNS resolvers and their pace |
 | `-dns-brute FILE`, `-permute` | active: names from a wordlist, variations of found names (held to the targets given, or `-allow`/`-scope`) |
-| `-dirs FILE`, `-params FILE`, `-ports SPEC`, `-graphql` | active: paths from a wordlist, query parameters, TCP ports, GraphQL introspection (held to the targets given, or the scope `-allow`/`-scope` names) |
+| `-dirs FILE`, `-params FILE`, `-ports SPEC`, `-ports-udp SPEC`, `-graphql` | active: paths from a wordlist, query parameters, TCP ports, UDP ports (`top` or a list), GraphQL introspection (held to the targets given, or the scope `-allow`/`-scope` names) |
+| `-ledger FILE`, `-kill-file PATH` | the record of every request and connection to a target (default `DB.ledger.jsonl`; `off`: none), and the file whose existence stops all sending (default `DB.stop`) |
+| `-no-history` | `subs` and `run`: neither read nor write the name history of the domains |
+| `-tabs N` | tabs Chrome has open at once (default 4) |
 | `-all-gets` | also request found URLs that look state-changing |
 | `-depth N`, `-max-items N`, `-parallel N`, `-host-parallel N`, `-delay D` | expansion and concurrency |
 | `-v` | a line for every finished task |
@@ -134,6 +137,12 @@ An origin (scheme, host and port) that does not answer 5 requests in a row, conn
 The scheduler records its frontier in the store (table `tasks`): every task it plans (collector, seed, depth), in the same transaction as the tasks that finished, so a task's hints are never lost between it ending and them being recorded. A task is done when it ran (with or without an error), was dropped, or was skipped; one that was cancelled or stopped by the request budget is not. The run's options are stored with it, without the database or the values that carry a session (`-cookie`, `-login-pass`, headers named like a credential).
 
 `azhaq resume -db FILE` takes the latest run with tasks left (interrupted by Ctrl-C or a kill, or stopped by `-max-requests`, `-daily-requests` or `-max-items`), runs it again with its stored options plus any given, and rebuilds the queues from the tasks: done tasks count against the item budget, the others are queued again, behind the task they wait for when that is not done either. Their done-marks are cleared, so a task that ran but whose end was not recorded runs again whole; observations are stored once per run, so it reports nothing twice. Tasks the budget stopped before run last, one at a time and cheapest first (by the requests they had sent), so a path sweep that needs more than the budget does not starve cheaper work; once the budget is spent, tasks that would contact targets are kept back. A resume in which no task finished says the budget is smaller than any task left needs.
+
+### The request ledger and the kill switch
+
+`internal/ledger` keeps a tamper-evident record of what a run sends to a target. Each entry is one JSON line (`seq`, `time`, `kind`, `method`, `target`, `host`, `rule`, `collector`, `prev`, `hash`), and `hash` is the sha256 of `prev` and the entry's JSON without `hash`, so an edited, removed or reordered line breaks the chain from there on. A line is flushed before the request goes, so a crash loses nothing that was sent. `Open` continues the chain of a file that exists: `azhaq resume` and later runs into the workspace append to the same file, and `azhaq roles` opens one ledger in its `-dir` for all its runs. The hooks are where a request leaves the process: `fetch.Client` and `fetch.Do` wrap every target-facing transport (`kind` `http`), `portscan` and `tlscol` record connects (`tcp`) and datagrams (`udp`), and the browser records the requests it lets Chrome send (`chrome`). DNS queries and the third-party sources are not targets and are not recorded, and neither are the requests of a connector, which Azhaq does not send. `Match` names the scope rule that allows each host, from the run's `-allow` and `-scope`.
+
+`fetch.SetKill` watches for the kill file every half second (`fetch.KillCheck`). Once it exists, `Spend`, `Take` and `Spent` refuse with `neterr.ErrKilled`, which is also an `ErrBudget`: every collector that leaves work for `azhaq resume` on a spent budget does so here, and the run ends exit 4 with `stopped` naming the kill switch. Without a workspace of its own (a drop-in command without `-db`) a run has no default ledger or kill file.
 
 ### Workers (`-serve`, `azhaq worker`)
 
@@ -196,6 +205,8 @@ Each route found in a script keeps where: the script's URL (the page's for an in
 
 `-cookie` and `-header` apply to every request of a run, and so does the session `-login` gets: Chrome fills and submits the login form, and the cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). While a session is set, URLs that look like a logout are not requested, by the HTTP collectors or by `-browser`. A role of `azhaq roles` is headers (`-role`) or an account to sign in with (`-role-login`). `azhaq roles` runs the same seeds once per role, in turn, each with its own database. Then it replays: every URL any role reached (on the run's hosts, a GET whose name does not say it changes something) is asked with each role that did not reach it, through that role's session, and GET routes with path parameters are filled with the values of identifier-like fields (`id`, `username`, `*_id`, `*_title`, …) the roles' own JSON answers held: values given with `-id` first, then each role's own (a value only that role's answers held), then shared ones. Each endpoint then has an answer per role (status, length, body hash, nested JSON field paths, whether it is an error, which fields hold secrets), a 2xx that is not an error counts as reading it, and a verdict names the difference: anyone reads sensitive fields, a role reads another role's object, an object every signed-in role reads alike, roles read the same sensitive fields, the same answer for a role that never found the URL, signed-in only, only one role reads it, some roles refused, different fields, an object anyone reads, status differs, different data, the same for all.
 
+The evidence of a roles run is a second database, `roles.db`, in its `-dir`. Its `meta` table records when the run saved it (`saved_at`), which `azhaq report` quotes as the run date; `azhaq report` (`cmd/azhaq/report_cmd.go`) reads it and sends nothing.
+
 ### Catch-all responses
 
 Many applications answer every path: a single-page app serves its index for any route, some servers return a "not found" page with status 200, others redirect every unknown path to a login page. Without a check, each of those paths would look like a real page.
@@ -203,6 +214,12 @@ Many applications answer every path: a single-page app serves its index for any 
 Before a non-root URL counts as visited, `fetch.CatchAll` compares its response with the answer for a random path in the same directory (`/rest/user/azhaq-…` for `/rest/user/login`). The responses match when the status is the same and either the redirect target or the body is the same once the requested path is removed from it, so error pages that echo the path still match. Bodies that differ only by a token or timestamp match on title, line count and word count. Each directory is probed once per run, up to 24 directories per origin.
 
 A matching response is stored with `"catchall": true` and shown as `catchall` in the map. The crawler and the JavaScript reader skip such pages, and the path sweep drops them.
+
+### Path checks
+
+The built-in path checks (`azhaq-paths`, 32 paths per web service, `-no-paths` turns them off) include the places an API description sits: `openapi.json`, `swagger.json`, `api-docs`, `v3/api-docs`, `v2/api-docs`, `swagger/v1/swagger.json`, the YAML names, `api/openapi.json`, `api/swagger.json` and `swagger`, and under each API base the run found (`/rest/`, `/v3/`, up to 8 per origin) the same names again. Those are asked one at a time, likeliest first, and stop at the first answer that is an OpenAPI or Swagger document with paths, or the Swagger UI or ReDoc page that loads one. Once an origin has served a description (here or through `azhaq-openapi`), its other locations are not asked, and the summary says so: `path checks: 28 skipped (an API description was already found)`. Every other check is still asked: only a check whose answer is already known is skipped. A Swagger UI whose script carries the document (Juice Shop's `/api-docs/`) is read from that script, and the names next to it are not guessed.
+
+A page that is byte for byte what the site root answers for a made-up path (a single-page app's shell) is the catch-all answer in a directory whose own baseline has not been asked, so that baseline is not requested; a directory with answers of its own is still asked. On Juice Shop a default `azhaq run` sends 148 requests, for the same 70 of 77 known routes.
 
 ## DNS
 
@@ -214,7 +231,9 @@ A name is a wildcard answer when one of its parent zones answers for random labe
 
 `azhaq-subdomains` asks every selected source at once and records each one's count, time and error. Most sources are subfinder's source packages, run in-process: Azhaq supplies the HTTP client, a limiter with subfinder's per-source rates, and keys from the provider file. crt.sh, Cert Spotter (usable without a key) and Chaos are implemented in Azhaq. A source that needs a key is skipped, and listed as skipped, when none is configured. When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
 
-The default set, keyless: anubis, certspotter, crt.sh, crtname, hackertarget, hudsonrock, rapiddns, scanmalware, shodanct, subdomain.center, thc; keyed sources join it when their key is configured. `-all-sources` adds slower ones. subdomain.center pads its answer with random names: a name only it gave is kept when it resolves.
+The default set, keyless: anubis, certspotter, crt.sh, crtname, hackertarget, hudsonrock, rapiddns, scanmalware, shodanct, subdomain.center, thc; keyed sources join it when their key is configured. `-all-sources` adds slower ones. subdomain.center pads its answer with random names (a random 500 of about 6,300 for tesla.com per call): a name only it gave is kept when it resolves.
+
+Azhaq also keeps the names it has kept for a domain in `names/DOMAIN.json` under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq` (first and last time seen and the sources that gave each, at most 200,000 per domain, the ones unseen the longest dropped first; written through a temporary file and a rename, a file that does not parse is set aside as `.bad`). The next run asks this file as a source called `history`, a source that, like subdomain.center, is verified: a stored name counts only if it resolves now, so stale names drop out and a name a source missed this time comes back. `-no-history` neither reads nor writes it. The payload's `coverage` (`observed`, `estimated`, `share`) is a Chao1 estimate over how many independent sources gave each name, which leaves out the verified sources, and a sampled source's row has `population_estimate`, a Schnabel estimate; [OUTPUT.md](OUTPUT.md#drop-in-commands) gives the formulas. Tests run `subs` offline with `subcol.UseTestSources`, which replaces the source list with fakes.
 
 A domain the engine derives from a URL or hostname (`-url https://app.example.com/` implies `example.com`) gets 15 seconds per source instead of 45, here and for historical URLs: the run is about the application, and one slow source would otherwise hold up its map. A domain given with `-domain` gets the full time. Sources that ignore their deadline are reported as timed out two seconds after it and no longer waited for.
 
@@ -223,6 +242,10 @@ A domain the engine derives from a URL or hostname (`-url https://app.example.co
 `-dirs FILE` (active; the targets given are its scope unless `-allow` or `-scope` names one) guesses paths on each web service's front page, then in each directory it finds, down to `-dirs-depth` levels. Before a directory is swept, it is asked for names that cannot exist, in the shapes ffuf's auto-calibration uses (a random word, `admin…`, `.htaccess…`, a random directory, and one per extension). A guess is dropped when it answers like one of those: same status and the same size, or the same word and line counts, or a size that differs only by the length of the path the page echoes, or the same redirect. Statuses default to ffuf's (`200-299,301,302,307,401,403,405,500`). A directory is a path that redirects to itself with a trailing slash.
 
 The sweep has its own client: no cache, no redirects followed, bodies read only to count them, 40 requests in flight and no pace beyond that, as ffuf (`-dirs-threads`, `-dirs-rate` to set one). Hits become URLs for the other collectors. With a session, logout-like words are skipped.
+
+## Fuzzing
+
+`azhaq fuzz` is not a collector: `internal/fuzz` is ffuf's engine, a request template with keywords (`FUZZ`, or `-w FILE:KEYWORD`) that can stand in the URL (host included), the method, the headers (`Host` too) and the body, wordlists run through it (clusterbomb or pitchfork), matchers and filters over the answers, auto-calibration and recursion. Counts (words are spaces plus one, lines newlines plus one), the match rules and the calibration follow ffuf 2.3, so a command line moved from ffuf gives the same results. Sending is behind `fuzz.Sender`, so the engine runs against a fake in tests; the real one sends through `internal/fetch`, so every request spends the run's budget, is paced by `-rate`, goes in the ledger and stops at the kill file. The host of `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise (`FUZZ.example.com` gives `example.com`); an input whose host is outside it is not sent and is counted in the summary. Five requests in a row to an origin with no answer stop the run. With `-db`, the matches go into the workspace as ffuf's do.
 
 ## Parameters
 
@@ -252,13 +275,15 @@ Chrome saves nothing to disk (`internal/browser/downloads.go`). Every download i
 
 ## Screenshots
 
-`-screenshots DIR` starts one headless Chrome found on the machine (`AZHAQ_CHROME`, or `google-chrome`, `chromium` on the path) and drives it over the DevTools protocol (chromedp). Each web service's front page opens in its own tab, four at a time (`-tabs`), with the run's `-cookie` and `-header` values. The load event gets 15 seconds; a page that never finishes loading is captured as far as it got, 1.5 seconds after navigation, within 30 seconds. The PNG goes to `DIR/scheme_host_port.png`, and a 64-bit difference hash goes with it: the HTML export groups pages whose hashes are at most 8 bits apart, so thirty copies of one login portal are one row. A name and its URL are one page and are taken once.
+`-screenshots DIR` starts one headless Chrome found on the machine (`AZHAQ_CHROME`, or `google-chrome`, `chromium` on the path) and drives it over the DevTools protocol (chromedp). Each web service's front page opens in its own tab, four at a time (`-tabs`), with the run's `-cookie` and `-header` values. The load event gets 15 seconds; a page that never finishes loading is captured as far as it got, 1.5 seconds after navigation, within 30 seconds. The PNG goes to `DIR/scheme_host_port.png`, and a 64-bit difference hash goes with it: the HTML export groups pages whose hashes are at most 8 bits apart, so thirty copies of one login portal are one row. A name and its URL are one page and are taken once. A page's images, scripts and styles each count against `-max-requests`: when too few are left, Chrome is refused them, no image is saved, and a note says what the page needs and what was left (`screenshot of URL not taken: the page needs about 26 requests and 8 were left (raise -max-requests)`; the figure is how many requests the page made when it was cut short). A run starts one Chrome and opens up to 4 tabs in it at once (`-tabs N`); each page is a tab, not a browser.
 
 ## Ports
 
 `-ports` (active; the targets given are its scope unless `-allow` or `-scope` names one) scans hosts in scope with full TCP connects, so it needs no root and leaves complete handshakes in the target's logs, like `naabu -scan-type c`. Lists are nmap's top 100 or top 1000 TCP ports (as naabu ships them), `full`, or ranges. Connection attempts share one rate across all hosts (`-port-rate`, default 1000 per second as naabu; this machine's loopback is not paced unless it is given), 100 at a time, 1.5 seconds each. A name resolves to at most two IPv4 addresses, and each address is scanned once however many names point to it. An address in a CDN or WAF range gets ports 80, 443, 8080 and 8443 only: the edge answers for thousands of customers.
 
-An open port is read for 1.5 seconds: the first line a service sends (`SSH-2.0-…`, `220 … ESMTP`) names it; binary greetings are marked as such. Ports that stay silent or answer like HTTP become URLs for `azhaq-http`, HTTPS first.
+An open port is read for 1.5 seconds: the first line a service sends (`SSH-2.0-…`, `220 … ESMTP`) names it; binary greetings are marked as such. Ports that stay silent or answer like HTTP become URLs for `azhaq-http`, HTTPS first. The greeting, the HTTP head (`Server`, `X-Powered-By`) and, for a web port whose head names no product and answered 200 or 401 with a small JSON or text body, a `GET /` also give `product` and `version` (`internal/portscan/services.go`); a silent port among 5432, 5433, 6379 and 27017–27019 is asked that database's first request (PostgreSQL's SSLRequest, Redis `PING`, MongoDB's isMaster), and the raw printing ports (9100–9107) are never asked anything.
+
+`-ports-udp` (`ports -udp`, `-pu`) asks UDP ports on the same addresses (`internal/portscan/udp.go`): each port gets one datagram on a connected socket, the harmless request of the protocol the port usually carries (`internal/portscan/udp_proto.go`: DNS, NTP, SNMP, SSDP, mDNS, NetBIOS, IKE, STUN, memcached, BACnet, CoAP; an empty datagram for the rest), and the kernel turns an ICMP port unreachable into `ECONNREFUSED`. A reply is `open` (with what it names), a refusal `closed`, and a port that stayed silent is asked once more before it is `open|filtered`. Each datagram takes `fetch.Take`, is paced and goes in the ledger as `udp`; an address in a CDN or WAF range is not asked. The `ports` row keeps `udp_open`, `udp_open_filtered`, `udp_closed`, `udp_scanned` and `udp_services`.
 
 ## Historical URLs
 
@@ -315,9 +340,9 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 ## Design choices
 
 - **In-process collectors, no wrapped tools.** Collectors speak their protocols directly or use permissively licensed Go libraries in-process (subfinder's source packages for subdomain sources, miekg/dns for DNS, wappalyzergo's matcher and cdncheck for fingerprints). Azhaq never shells out to subfinder, dnsx or similar tools, so every fact lands in one graph with its source. CI fails on GPL, AGPL, SSPL or unknown licenses.
-- **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process.
+- **Go.** Recon is I/O-bound. Go gives one static binary, cheap concurrency and a small memory footprint, and it embeds easily as a library in a worker process. Start-up work is kept small: the CDN and WAF ranges are read the first time an address is checked (`internal/cdnranges`), and the patterns of `internal/webextract` compile when first used, so `azhaq version` runs in about 16 MB.
 - **A browser only when asked.** JavaScript routes are extracted from script text, which covers bundled single-page apps. `-browser`, `-screenshots` and `-login` drive a Chrome already installed on the machine; Azhaq downloads none, and that Chrome saves nothing to disk. Chrome is held to the run's scope and budget like every other request.
-- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Every request to a target is a GET, except Chrome submitting a login form when given an account, GraphQL introspection (a POST) with `-graphql`, and what `-browser-writes` and `roles -replay-writes` send when asked for. Chrome sends GET, HEAD and OPTIONS only: the writes a page's scripts would send are mapped and listed, not sent. Operations read from an API description or a script call are mapped with their method and fields; only the parameterless GETs among them are asked.
+- **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities. Every request to a target is a GET, except Chrome submitting a login form when given an account, GraphQL introspection (a POST) with `-graphql`, what `-browser-writes` and `roles -replay-writes` send when asked for, the connects, one `HEAD /` or protocol request and UDP datagrams of `ports`, and `azhaq fuzz`, which sends the method and body you give it with your wordlist's words in them. Chrome sends GET, HEAD and OPTIONS only: the writes a page's scripts would send are mapped and listed, not sent. Operations read from an API description or a script call are mapped with their method and fields; only the parameterless GETs among them are asked.
 - **Every outcome said.** Each command ends with a summary: what failed and whether it is worth retrying, targets that never answered, what was left alone and why, the limit that stopped the work. The exit code says the same (0 complete, 3 finished with failures, 4 stopped by a limit), so a script or an assistant never has to guess whether an empty result is an honest zero.
 
 ## Limitations
@@ -343,9 +368,14 @@ types/                    seeds, observations, entities (public)
 internal/
   collectors/             one package per collector
   connector/              JSONL protocol for external collectors
+  cdnranges/              CDN, WAF and cloud address ranges, read on first use
   dnsr/                   resolver pool and wildcard detection
-  fetch/                  shared HTTP client
+  fetch/                  shared HTTP client, request budget and pace, kill switch
   fingerprint/            technologies, CDN ranges, favicon hash
+  fuzz/                   the engine of azhaq fuzz
+  hunt/                   the ranking behind azhaq hunt
+  ledger/                 the hash-chained record of what a run sent
+  portscan/               TCP and UDP port scans, services, products and versions
   limit/                  rate limits per host, source or resolver
   normalize/              seed and hostname normalization
   webextract/             HTML and JavaScript URL extraction
