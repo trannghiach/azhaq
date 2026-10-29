@@ -16,7 +16,7 @@ import (
 // or turns it into CSV for a client's report.
 func cmdLedger(args []string) error {
 	fs := newFlags("ledger")
-	verify := fs.String("verify", "", "check the ledger's chain of hashes: exit 0 when intact, 3 naming the first line that is not")
+	verify := fs.String("verify", "", "check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal")
 	summary := fs.String("summary", "", "count the ledger's requests and connections by kind, host and method, with the first and last time")
 	csvOut := fs.String("csv", "", "print the ledger as CSV")
 	asJSON := fs.Bool("json", false, "with -summary: one JSON object")
@@ -34,15 +34,18 @@ func cmdLedger(args []string) error {
 	}
 	switch {
 	case *verify != "":
-		n, bad, err := ledger.Verify(*verify)
+		c, err := ledger.Verify(*verify)
 		switch {
-		case bad > 0:
-			fmt.Printf("%s: BROKEN at line %d (%d entries before it are intact)\n", *verify, bad, n)
+		case c.BadLine > 0:
+			fmt.Printf("%s: BROKEN at line %d (%d entries before it are intact)\n", *verify, c.BadLine, c.Entries)
 			return exitErr{code: exitPartial, msg: err.Error()}
 		case err != nil:
 			return err
+		case c.Unsealed > 0:
+			fmt.Printf("%s: %d entries, the chain is intact, NOT SEALED: the last %d were written after the last seal\n", *verify, c.Entries, c.Unsealed)
+			return exitErr{code: exitPartial, msg: "a run that did not end (killed, crashed or still running) or lines cut from the end: the file cannot show it holds everything that run sent"}
 		}
-		fmt.Printf("%s: %d entries, the chain is intact\n", *verify, n)
+		fmt.Printf("%s: %d entries from %d runs, the chain is intact and sealed\n  last seal %s (the run's summary names the seal it wrote)\n", *verify, c.Entries, c.Seals, c.Seal)
 		return nil
 	case *summary != "":
 		return ledgerSummary(*summary, *asJSON)

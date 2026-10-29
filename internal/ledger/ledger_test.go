@@ -30,22 +30,28 @@ func TestVerifyCatchesAnEditedLine(t *testing.T) {
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if n, bad, err := Verify(path); n != 10 || bad != 0 || err != nil {
-		t.Fatalf("intact: %d %d %v", n, bad, err)
+	if c, err := Verify(path); c.Entries != 10 || c.BadLine != 0 || c.Seals != 1 || c.Unsealed != 0 || err != nil {
+		t.Fatalf("intact: %+v %v", c, err)
 	}
 	raw, _ := os.ReadFile(path)
 	lines := strings.Split(string(raw), "\n")
 	edited := append([]string(nil), lines...)
 	edited[4] = strings.Replace(edited[4], "a.test/4", "a.test/5", 1)
 	os.WriteFile(path, []byte(strings.Join(edited, "\n")), 0o644)
-	if n, bad, err := Verify(path); bad != 5 || n != 4 || err == nil {
-		t.Fatalf("edited line 5: %d %d %v", n, bad, err)
+	if c, err := Verify(path); c.BadLine != 5 || c.Entries != 4 || err == nil {
+		t.Fatalf("edited line 5: %+v %v", c, err)
 	}
 	// A removed line breaks the chain at the line after it.
 	removed := append(append([]string(nil), lines[:2]...), lines[3:]...)
 	os.WriteFile(path, []byte(strings.Join(removed, "\n")), 0o644)
-	if _, bad, _ := Verify(path); bad != 3 {
-		t.Fatalf("removed line 3: bad line %d", bad)
+	if c, _ := Verify(path); c.BadLine != 3 {
+		t.Fatalf("removed line 3: bad line %d", c.BadLine)
+	}
+	// Lines cut from the end leave the chain whole but take the seal.
+	cut := append(append([]string(nil), lines[:9]...), "")
+	os.WriteFile(path, []byte(strings.Join(cut, "\n")), 0o644)
+	if c, err := Verify(path); err != nil || c.BadLine != 0 || c.Unsealed != 9 || c.Seals != 0 {
+		t.Fatalf("cut after line 9: %+v %v", c, err)
 	}
 }
 
@@ -65,8 +71,8 @@ func TestConcurrentRecordsKeepTheChain(t *testing.T) {
 	if err := l.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if n, bad, err := Verify(path); n != 5000 || bad != 0 || err != nil {
-		t.Fatalf("%d entries, bad line %d, %v", n, bad, err)
+	if c, err := Verify(path); c.Entries != 5000 || c.BadLine != 0 || err != nil {
+		t.Fatalf("%+v %v", c, err)
 	}
 }
 
@@ -79,9 +85,20 @@ func TestOpenContinuesTheChain(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.Record(Entry{Kind: "tcp", Target: "127.0.0.1:2"})
+	seal := l.Last()
 	l.Close()
-	if n, bad, err := Verify(path); n != 2 || bad != 0 || err != nil {
-		t.Fatalf("%d %d %v", n, bad, err)
+	c, err := Verify(path)
+	if c.Entries != 2 || c.Seals != 2 || c.Unsealed != 0 || c.BadLine != 0 || err != nil {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if c.Seal == seal || c.Seal != l.Last() {
+		t.Errorf("the seal %s is not the last line written %s", c.Seal, l.Last())
+	}
+	// A run that sent nothing does not seal twice.
+	l, _ = Open(path)
+	l.Close()
+	if c2, _ := Verify(path); c2.Seals != 2 {
+		t.Errorf("seals %d after an empty run, want 2", c2.Seals)
 	}
 }
 

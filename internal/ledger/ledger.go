@@ -1,7 +1,9 @@
 // Package ledger keeps a tamper-evident record of every request and
 // connection a run sends to a target: when, to what, and under which scope
 // rule. Each line of the file holds the hash of the one before it, so an
-// edited, removed or reordered line breaks the chain from there on.
+// edited, removed or reordered line breaks the chain from there on. A run
+// that ends closes the file with a seal line, so lines cut from the end
+// show too.
 package ledger
 
 import (
@@ -23,7 +25,7 @@ import (
 type Entry struct {
 	Seq       int64     `json:"seq"`
 	Time      time.Time `json:"time"`
-	Kind      string    `json:"kind"` // http, tcp, udp or chrome
+	Kind      string    `json:"kind"` // http, tcp, udp, chrome, or seal: the end of a run
 	Method    string    `json:"method,omitempty"`
 	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
 	Host      string    `json:"host,omitempty"`
@@ -50,13 +52,14 @@ type Ledger struct {
 	// run has no rules.
 	Match func(host string) string
 
-	mu   sync.Mutex
-	f    *os.File
-	path string
-	w    *bufio.Writer
-	seq  int64
-	prev string
-	err  error
+	mu       sync.Mutex
+	f        *os.File
+	path     string
+	w        *bufio.Writer
+	seq      int64
+	prev     string
+	lastSeal bool // the last line is a seal: nothing to seal again
+	err      error
 }
 
 // Open appends to the file at path, creating it, and continues the chain
@@ -71,7 +74,7 @@ func Open(path string) (*Ledger, error) {
 	if err == nil && len(last) > 0 {
 		var e Entry
 		if err = json.Unmarshal(last, &e); err == nil {
-			l.seq, l.prev = e.Seq, e.Hash
+			l.seq, l.prev, l.lastSeal = e.Seq, e.Hash, e.Kind == KindSeal
 		}
 	}
 	if err != nil {
@@ -130,7 +133,7 @@ func (l *Ledger) Record(e Entry) {
 		err = l.w.Flush()
 	}
 	l.note(err)
-	l.prev = e.Hash
+	l.prev, l.lastSeal = e.Hash, e.Kind == KindSeal
 }
 
 func (l *Ledger) note(err error) {
@@ -139,23 +142,42 @@ func (l *Ledger) note(err error) {
 	}
 }
 
-// Count is how many entries the file holds, those of earlier runs included.
+// Count is how many lines the file holds, those of earlier runs and their
+// seals included.
 func (l *Ledger) Count() int64 {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.seq
 }
 
+// Last is the hash of the last line written: after Close, the seal's.
+func (l *Ledger) Last() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.prev
+}
+
 // Path is the file the ledger writes.
 func (l *Ledger) Path() string { return l.path }
 
-// Close flushes and syncs the file, and returns the first write error.
+// KindSeal is the line a run ends the file with.
+const KindSeal = "seal"
+
+// Close seals the file, flushes and syncs it, and returns the first write
+// error.
 func (l *Ledger) Close() error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	if l.f == nil {
+		l.mu.Unlock()
 		return l.err
 	}
+	sealed := l.lastSeal
+	l.mu.Unlock()
+	if !sealed {
+		l.Record(Entry{Kind: KindSeal})
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.note(l.w.Flush())
 	l.note(l.f.Sync())
 	l.note(l.f.Close())
@@ -163,7 +185,8 @@ func (l *Ledger) Close() error {
 	return l.err
 }
 
-// Read calls fn with each entry of the file in order, without checking the chain.
+// Read calls fn with each request and connection of the file in order,
+// without checking the chain; seals are left out.
 func Read(path string, fn func(e Entry) error) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -178,6 +201,9 @@ func Read(path string, fn func(e Entry) error) error {
 			if jerr := json.Unmarshal(raw, &e); jerr != nil {
 				return fmt.Errorf("%s line %d: %w", path, line, jerr)
 			}
+			if e.Kind == KindSeal {
+				continue
+			}
 			if ferr := fn(e); ferr != nil {
 				return ferr
 			}
@@ -191,28 +217,37 @@ func Read(path string, fn func(e Entry) error) error {
 	}
 }
 
-// Verify recomputes the chain of the file at path. n is how many entries
-// are intact; badLine is the first line that is not (1 is the first), 0
-// when the whole file is. err says what is wrong with that line, or why the
-// file could not be read.
-func Verify(path string) (n int, badLine int, err error) {
+// Check is what Verify found.
+type Check struct {
+	Entries  int    // requests and connections that are intact, seals not counted
+	Seals    int    // runs that closed the file
+	BadLine  int    // the first line that is not intact (1 is the first); 0 when none
+	Unsealed int    // entries after the last seal: a run that did not end, or lines cut from the end
+	Seal     string // the hash of the last seal
+}
+
+// Verify recomputes the chain of the file at path. err says what is wrong
+// with c.BadLine, or why the file could not be read.
+func Verify(path string) (c Check, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, err
+		return c, err
 	}
 	defer f.Close()
 	r := bufio.NewReaderSize(f, 1<<16)
 	prev := ""
+	var n int64
 	for line := 1; ; line++ {
 		raw, rerr := r.ReadBytes('\n')
 		if len(raw) == 0 && rerr == io.EOF {
-			return n, 0, nil
+			return c, nil
 		}
 		if rerr != nil && rerr != io.EOF {
-			return n, 0, rerr
+			return c, rerr
 		}
-		bad := func(format string, a ...any) (int, int, error) {
-			return n, line, fmt.Errorf("line %d: "+format, append([]any{line}, a...)...)
+		bad := func(format string, a ...any) (Check, error) {
+			c.BadLine = line
+			return c, fmt.Errorf("line %d: "+format, append([]any{line}, a...)...)
 		}
 		if rerr == io.EOF {
 			return bad("cut short: no newline at the end")
@@ -224,7 +259,7 @@ func Verify(path string) (n int, badLine int, err error) {
 			return bad("not an entry: %v", jerr)
 		}
 		switch {
-		case e.Seq != int64(n)+1:
+		case e.Seq != n+1:
 			return bad("seq %d, want %d (a line was removed, added or moved)", e.Seq, n+1)
 		case e.Prev != prev:
 			return bad("prev does not match the hash of the line before")
@@ -233,6 +268,13 @@ func Verify(path string) (n int, badLine int, err error) {
 		}
 		prev = e.Hash
 		n++
+		if e.Kind == KindSeal {
+			c.Seals++
+			c.Seal, c.Unsealed = e.Hash, 0
+		} else {
+			c.Entries++
+			c.Unsealed++
+		}
 	}
 }
 

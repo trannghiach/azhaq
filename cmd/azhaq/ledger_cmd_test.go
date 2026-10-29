@@ -23,6 +23,11 @@ func TestLedgerCommandVerify(t *testing.T) {
 		t.Fatalf("intact ledger: %v", err)
 	}
 	raw, _ := os.ReadFile(path)
+	lines := strings.SplitAfter(string(raw), "\n")
+	os.WriteFile(path, []byte(strings.Join(lines[:3], "")), 0o644)
+	if err := cmdLedger([]string{"-verify", path}); exitCode(err) != exitPartial || !strings.Contains(err.Error(), "cut from the end") {
+		t.Fatalf("ledger without its seal: exit %d, %v", exitCode(err), err)
+	}
 	os.WriteFile(path, []byte(strings.Replace(string(raw), "a.test/2", "a.test/9", 1)), 0o644)
 	err = cmdLedger([]string{"-verify", path})
 	if exitCode(err) != exitPartial || !strings.Contains(err.Error(), "line 2") {

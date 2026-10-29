@@ -96,11 +96,12 @@ func (r *runLedger) close(rep *report) {
 		return
 	}
 	ledger.Use(nil)
-	n, path := r.l.Count(), r.l.Path()
+	path := r.l.Path()
 	if err := r.l.Close(); err != nil {
 		fmt.Fprintf(os.Stderr, "azhaq: ledger %s: %v\n", path, err)
 		rep.Notes = append(rep.Notes, fmt.Sprintf("ledger %s could not be written (%v): what the run sent may be missing from it", path, err))
 		return
 	}
-	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %d requests and connections recorded in %s (azhaq ledger -verify %s)", n, path, path))
+	c, _ := ledger.Verify(path)
+	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %d requests and connections recorded in %s, sealed %s (azhaq ledger -verify %s)", c.Entries, path, r.l.Last(), path))
 }
