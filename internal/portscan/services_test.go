@@ -246,16 +246,82 @@ func TestScanReadsTheBodyWhenTheHeadsSayNothing(t *testing.T) {
 	if o := got[port(ollama)]; o.Service != "http" || o.Product != "Ollama" {
 		t.Errorf("ollama: %+v", o)
 	}
-	if o := got[port(page)]; o.Product != "" {
-		t.Errorf("a page named a product: %+v", o)
+	if o := got[port(page)]; o.Product != "" || o.Title != "" {
+		t.Errorf("a page named a product or a title: %+v", o)
 	}
 	l.Close()
 	n := 0
 	ledger.Read(path, func(e ledger.Entry) error { n++; return nil })
 	// Three connects and the three HEADs on them, plus a GET for each of
-	// the two JSON and plain-text answers; the HTML page is not asked again.
-	if want := 3 + 2; n != want || int(takes.Load()) != want {
+	// the JSON, plain-text and HTML answers.
+	if want := 3 + 3; n != want || int(takes.Load()) != want {
 		t.Errorf("%d ledger entries, %d takes, want %d", n, takes.Load(), want)
+	}
+}
+
+// An HTML page whose head names no product is asked for its title (and
+// generator); one whose head names a product is not asked at all.
+func TestScanReadsTheTitleOfAnUnnamedPage(t *testing.T) {
+	var gets atomic.Int32
+	count := func(r *http.Request) {
+		if r.Method == http.MethodGet {
+			gets.Add(1)
+		}
+	}
+	juice := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count(r)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte("<html><head><TITLE> OWASP &amp; Juice  \n Shop </TITLE><meta content=\"WordPress 6.4.2\" name=\"generator\"></head><body></body></html>"))
+	}))
+	defer juice.Close()
+	named := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count(r)
+		w.Header().Set("Server", "nginx/1.25.3")
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<title>Welcome</title>"))
+	}))
+	defer named.Close()
+	plain := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		count(r)
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte("<html><head><title>Flask app</title><meta name='generator' content='Hugo'></head>"))
+	}))
+	defer plain.Close()
+	port := func(s *httptest.Server) int { return s.Listener.Addr().(*net.TCPAddr).Port }
+
+	if o := scanOne(t, port(juice)); o.Service != "http" || o.Title != "OWASP & Juice Shop" || o.Product != "WordPress" || o.Version != "6.4.2" {
+		t.Errorf("unnamed page: %+v", o)
+	}
+	if gets.Load() != 1 {
+		t.Errorf("%d GETs for the unnamed page, want 1", gets.Load())
+	}
+	gets.Store(0)
+	if o := scanOne(t, port(named)); o.Product != "nginx" || o.Version != "1.25.3" || o.Title != "" || gets.Load() != 0 {
+		t.Errorf("named page: %+v, %d GETs", o, gets.Load())
+	}
+	if o := scanOne(t, port(plain)); o.Title != "Flask app" || o.Product != "Hugo" || o.Version != "" {
+		t.Errorf("single-quoted generator: %+v", o)
+	}
+}
+
+func TestPageTitleAndGenerator(t *testing.T) {
+	long := strings.Repeat("é", 200)
+	if got := pageTitle([]byte("<title>" + long + "</title>")); len([]rune(got)) != 120 {
+		t.Errorf("long title: %d runes", len([]rune(got)))
+	}
+	if got := pageTitle([]byte("<p>no title</p>")); got != "" {
+		t.Errorf("no title: %q", got)
+	}
+	for in, want := range map[string][2]string{
+		`<meta name="Generator" content="Drupal 10 (https://www.drupal.org)">`: {"Drupal", "10"},
+		`<meta content="Jekyll v4.3.2" name=generator>`:                        {"Jekyll", "4.3.2"},
+		`<meta name="generator" content="Next.js">`:                            {"Next.js", ""},
+		`<meta name="description" content="WordPress 1.0">`:                    {"", ""},
+		`<meta name="generator" content="<script>alert(1)</script>">`:          {"", ""},
+	} {
+		if p, v := generatorProduct([]byte(in)); p != want[0] || v != want[1] {
+			t.Errorf("%s: %q %q, want %q", in, p, v, want)
+		}
 	}
 }
 

@@ -32,6 +32,35 @@ func TestPorts(t *testing.T) {
 	}
 }
 
+// Names, numbers and ranges mix in one list; a name of the other
+// protocol is refused with what to use.
+func TestPortsCompose(t *testing.T) {
+	got, err := Ports("Top-100,8080-8081")
+	if err != nil || !slices.Contains(got, 443) || !slices.Contains(got, 8080) || len(got) != 100 {
+		t.Fatalf("Top-100,8080-8081 (both already in the list): %d ports, %v", len(got), err)
+	}
+	got, err = Ports("top-100,8082-8083")
+	if err != nil || len(got) != 102 || !slices.Contains(got, 8083) {
+		t.Fatalf("top-100,8082-8083: %d ports, %v", len(got), err)
+	}
+	if got, err = Ports("22,all"); err != nil || len(got) != 65535 {
+		t.Fatalf("22,all: %d %v", len(got), err)
+	}
+	if got, err = Ports("none"); err != nil || len(got) != 0 {
+		t.Fatalf("none: %v %v", got, err)
+	}
+	if _, err = Ports("none,22"); err == nil || err.Error() != `bad port "none"` {
+		t.Fatalf("none,22: %v", err)
+	}
+	_, err = Ports("22,top")
+	if err == nil || err.Error() != `bad port "top": TCP takes top-100, top-1000 or full (top is the UDP list)` {
+		t.Fatalf("top on TCP: %v", err)
+	}
+	if _, err = Ports("22,nope"); err == nil || err.Error() != `bad port "nope"` {
+		t.Fatalf("nope: %v", err)
+	}
+}
+
 func TestScanAndBanner(t *testing.T) {
 	ssh, _ := net.Listen("tcp", "127.0.0.1:0")
 	defer ssh.Close()
@@ -223,6 +252,93 @@ func TestLateGreeting(t *testing.T) {
 	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
 	if err != nil || len(open) != 1 || open[0].Service != "ssh" || open[0].Banner != "SSH-2.0-OpenSSH_6.6.1p1 Ubuntu-2ubuntu2.13" {
 		t.Fatalf("late greeting %+v err %v", open, err)
+	}
+}
+
+// sshd under a burst of connects can hold its greeting back on one
+// connection and send it on the next: a server-first port that said
+// nothing is connected to once more.
+func TestSilentGreeterGetsASecondConnection(t *testing.T) {
+	var conns atomic.Int32
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			first := conns.Add(1) == 1
+			go func() {
+				defer c.Close()
+				if first {
+					time.Sleep(time.Second) // longer than Timeout + Banner of the scan
+					return
+				}
+				c.Write([]byte("SSH-2.0-OpenSSH_9.6\r\n"))
+			}()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	var taken atomic.Int32
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond, Take: func() error { taken.Add(1); return nil }}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if o := open[0]; o.Service != "ssh" || o.Product != "OpenSSH" || o.Version != "9.6" || o.Banner != "SSH-2.0-OpenSSH_9.6" || o.again {
+		t.Fatalf("second look %+v", o)
+	}
+	// The first connect, the TLS probe of the identify and the second look.
+	if taken.Load() != 3 || conns.Load() != 3 {
+		t.Errorf("%d connects counted, %d made, want 3 and 3", taken.Load(), conns.Load())
+	}
+}
+
+// A server-first port that never greets keeps today's result, after one
+// more connection.
+func TestSilentGreeterStaysOpen(t *testing.T) {
+	var conns atomic.Int32
+	port := listen(t, func(c net.Conn) {
+		conns.Add(1)
+		time.Sleep(600 * time.Millisecond)
+	})
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 || open[0].Banner != "" || open[0].Service != "" || open[0].again {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if conns.Load() != 3 {
+		t.Errorf("%d connections, want 3", conns.Load())
+	}
+}
+
+// A greeting that comes only when the HEAD is sent is not lost.
+func TestGreetingInReplyToTheHead(t *testing.T) {
+	port := listen(t, func(c net.Conn) {
+		_, _ = c.Read(make([]byte, 512))
+		c.Write([]byte("SSH-2.0-OpenSSH_9.6\r\nInvalid SSH identification string.\r\n"))
+	})
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	var taken atomic.Int32
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond, Take: func() error { taken.Add(1); return nil }}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if o := open[0]; o.Service != "ssh" || o.Product != "OpenSSH" || o.Version != "9.6" || o.Banner != "SSH-2.0-OpenSSH_9.6" {
+		t.Errorf("greeting in the reply: %+v", o)
+	}
+	if taken.Load() != 1 {
+		t.Errorf("%d connects, want 1: the port was identified", taken.Load())
 	}
 }
 
