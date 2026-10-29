@@ -255,6 +255,93 @@ func TestLateGreeting(t *testing.T) {
 	}
 }
 
+// sshd under a burst of connects can hold its greeting back on one
+// connection and send it on the next: a server-first port that said
+// nothing is connected to once more.
+func TestSilentGreeterGetsASecondConnection(t *testing.T) {
+	var conns atomic.Int32
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			first := conns.Add(1) == 1
+			go func() {
+				defer c.Close()
+				if first {
+					time.Sleep(time.Second) // longer than Timeout + Banner of the scan
+					return
+				}
+				c.Write([]byte("SSH-2.0-OpenSSH_9.6\r\n"))
+			}()
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	var taken atomic.Int32
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond, Take: func() error { taken.Add(1); return nil }}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if o := open[0]; o.Service != "ssh" || o.Product != "OpenSSH" || o.Version != "9.6" || o.Banner != "SSH-2.0-OpenSSH_9.6" || o.again {
+		t.Fatalf("second look %+v", o)
+	}
+	// The first connect, the TLS probe of the identify and the second look.
+	if taken.Load() != 3 || conns.Load() != 3 {
+		t.Errorf("%d connects counted, %d made, want 3 and 3", taken.Load(), conns.Load())
+	}
+}
+
+// A server-first port that never greets keeps today's result, after one
+// more connection.
+func TestSilentGreeterStaysOpen(t *testing.T) {
+	var conns atomic.Int32
+	port := listen(t, func(c net.Conn) {
+		conns.Add(1)
+		time.Sleep(600 * time.Millisecond)
+	})
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 || open[0].Banner != "" || open[0].Service != "" || open[0].again {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if conns.Load() != 3 {
+		t.Errorf("%d connections, want 3", conns.Load())
+	}
+}
+
+// A greeting that comes only when the HEAD is sent is not lost.
+func TestGreetingInReplyToTheHead(t *testing.T) {
+	port := listen(t, func(c net.Conn) {
+		_, _ = c.Read(make([]byte, 512))
+		c.Write([]byte("SSH-2.0-OpenSSH_9.6\r\nInvalid SSH identification string.\r\n"))
+	})
+	saved := speaksFirst
+	t.Cleanup(func() { speaksFirst = saved })
+	speaksFirst = func(p int) bool { return p == port }
+	var taken atomic.Int32
+	s := &Scanner{Rate: 1000, Timeout: 100 * time.Millisecond, Banner: 100 * time.Millisecond, Take: func() error { taken.Add(1); return nil }}
+	open, err := s.Scan(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(open) != 1 {
+		t.Fatalf("open %+v err %v", open, err)
+	}
+	if o := open[0]; o.Service != "ssh" || o.Product != "OpenSSH" || o.Version != "9.6" || o.Banner != "SSH-2.0-OpenSSH_9.6" {
+		t.Errorf("greeting in the reply: %+v", o)
+	}
+	if taken.Load() != 1 {
+		t.Errorf("%d connects, want 1: the port was identified", taken.Load())
+	}
+}
+
 func TestLoopbackUnpacedUnlessRateGiven(t *testing.T) {
 	ports := make([]int, 60)
 	for i := range ports {

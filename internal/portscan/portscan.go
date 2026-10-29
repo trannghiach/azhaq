@@ -107,6 +107,8 @@ type Open struct {
 	TLS       bool     `json:"tls,omitempty"`
 	SubjectCN string   `json:"subject_cn,omitempty"`
 	SubjectAN []string `json:"subject_an,omitempty"`
+
+	again bool // a server-first port that said nothing: asked once more after the pass
 }
 
 // Scanner connects to ports at a set total rate.
@@ -166,7 +168,8 @@ type Report struct {
 // for (the Host header, the TLS server name); empty, ip. A port that did
 // not answer is asked once more after the others, when few did not: a
 // loaded or lossy host drops a SYN now and then, while a firewall that
-// drops nearly everything would only double the scan.
+// drops nearly everything would only double the scan. A port whose
+// service greets first and said nothing gets a second connection too.
 func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (Report, error) {
 	s.init()
 	var r Report
@@ -176,6 +179,9 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 		var again []Open
 		again, r.Silent, err = s.pass(ctx, host, ip, r.Silent)
 		r.Open = append(r.Open, again...)
+	}
+	if err == nil {
+		err = s.secondLook(ctx, host, ip, r.Open)
 	}
 	sort.Slice(r.Open, func(i, j int) bool { return r.Open[i].Port < r.Open[j].Port })
 	sort.Ints(r.Silent)
@@ -265,11 +271,13 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 		buf := make([]byte, 256)
 		n, err := conn.Read(buf)
 		var ne net.Error
+		var silentGreeter bool
 		if n == 0 && errors.As(err, &ne) && ne.Timeout() && speaksFirst(port) {
 			// sshd, an FTP or mail server greets first, late when
 			// loaded: wait for it rather than ask it HTTP.
 			_ = conn.SetReadDeadline(time.Now().Add(s.Timeout + s.Banner))
 			n, err = conn.Read(buf)
+			silentGreeter = n == 0 && errors.As(err, &ne) && ne.Timeout()
 		}
 		o.Banner = printable(buf[:n])
 		s.greeted(&o, buf[:n])
@@ -278,11 +286,80 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) && !s.speak(&o, conn) {
 			s.identify(ctx, &o, conn, host, ip)
 		}
+		// Nothing, not even an answer to the HEAD: sshd drops or delays
+		// its greeting when many connects arrive at once.
+		o.again = silentGreeter && o.Banner == "" && o.Service == ""
 	}
 	if o.Service == "" {
 		o.Service = guess(port, o.Banner)
 	}
 	return o, portOpen
+}
+
+// secondLook connects once more to each server-first port that said
+// nothing, and waits longer for its greeting. Each connect is paced,
+// counted and recorded like any other; what the first one found stands
+// when this one hears nothing either.
+func (s *Scanner) secondLook(ctx context.Context, host, ip string, open []Open) error {
+	sem := make(chan struct{}, s.Workers)
+	var wg sync.WaitGroup
+	var stop error
+	for i := range open {
+		if !open[i].again {
+			continue
+		}
+		open[i].again = false
+		if stop != nil || ctx.Err() != nil {
+			continue // the flag is still cleared for the rest
+		}
+		if s.wait(ctx, ip) != nil {
+			continue
+		}
+		if s.Take != nil {
+			if stop = s.Take(); stop != nil {
+				continue
+			}
+		}
+		select {
+		case <-ctx.Done():
+		case sem <- struct{}{}:
+		}
+		if ctx.Err() != nil {
+			continue
+		}
+		wg.Add(1)
+		go func(o *Open) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.greetAgain(ctx, host, ip, o)
+		}(&open[i])
+	}
+	wg.Wait()
+	if stop != nil {
+		return stop
+	}
+	return ctx.Err()
+}
+
+func (s *Scanner) greetAgain(ctx context.Context, host, ip string, o *Open) {
+	addr := net.JoinHostPort(ip, strconv.Itoa(o.Port))
+	ledger.TCP(ctx, host, addr)
+	conn, err := (&net.Dialer{Timeout: s.Timeout}).DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return
+	}
+	defer conn.Close()
+	_ = conn.SetReadDeadline(time.Now().Add(s.Timeout + 2*s.Banner))
+	buf := make([]byte, 256)
+	n, _ := conn.Read(buf)
+	if n == 0 {
+		return
+	}
+	o.Banner = printable(buf[:n])
+	s.greeted(o, buf[:n])
+	if g := guess(o.Port, o.Banner); g != "" && (o.Service == "" || strings.HasSuffix(o.Service, "?")) {
+		o.Service = g
+	}
 }
 
 // speaksFirst: ports whose usual service greets before it is asked.
@@ -317,6 +394,11 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 		}
 	} else if postgresError(answer) {
 		o.Service, o.Product, o.Banner = "postgresql", "PostgreSQL", ""
+		return
+	} else if _, product, _ := greetingProduct(answer, printable(answer)); product != "" {
+		// A greeting that came late, in reply to the HEAD.
+		o.Banner = printable(answer)
+		s.greeted(o, answer)
 		return
 	} else if text := printable(answer); text != "" && text != "(binary)" {
 		// Another protocol's error, such as redis's -ERR: not TLS.
