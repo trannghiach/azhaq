@@ -473,6 +473,8 @@ func cmdSubs(args []string) error {
 	}
 	seen := map[string]bool{}
 	answered, ran := 0, 0
+	collected := map[string]bool{} // every passive name, before the -live filter
+	bySource := map[string]int{}   // how many each source returned
 	for _, p := range payloads(st, "azhaq-subdomains") {
 		input, _ := p["domain"].(string)
 		foundBy, _ := p["found_by"].(map[string]any)
@@ -485,7 +487,14 @@ func cmdSubs(args []string) error {
 				}
 			}
 		}
+		for name, by := range foundBy {
+			for _, s := range strs(by) {
+				bySource[s]++ // sources credited with a name Azhaq kept
+			}
+			_ = name
+		}
 		for _, name := range strs(p["names"]) {
+			collected[name] = true
 			if seen[name] || (alive != nil && alive[name] == nil) {
 				continue
 			}
@@ -534,10 +543,53 @@ func cmdSubs(args []string) error {
 	if active {
 		rep.Counts["found by guessing"] = guessed
 	}
+	if *live {
+		// Show the live/dead split: a raw subdomain count is mostly names
+		// that do not resolve (stale certificate logs, wildcard noise). The
+		// live set is the one you can act on.
+		rep.Counts["collected"] = len(collected)
+		if d := len(collected) - guessed - len(seen); d > 0 {
+			rep.Counts["did not resolve"] = d
+		}
+	}
+	if s := topSources(bySource, 8); s != "" {
+		rep.Notes = append(rep.Notes, "sources: "+s)
+	}
 	if c.db != "" {
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db+" -type Hostname")
 	}
 	return rep.finish(c.json, c.silent)
+}
+
+// topSources renders the n biggest sources as "crtname 32, rapiddns 20, …",
+// so a thin result shows which sources answered and which were dark, and a
+// raw count is read next to where it came from.
+func topSources(by map[string]int, n int) string {
+	type kv struct {
+		s string
+		n int
+	}
+	var all []kv
+	for s, c := range by {
+		if c > 0 {
+			all = append(all, kv{s, c})
+		}
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].n != all[j].n {
+			return all[i].n > all[j].n
+		}
+		return all[i].s < all[j].s
+	})
+	var parts []string
+	for i, x := range all {
+		if i >= n {
+			parts = append(parts, fmt.Sprintf("+%d more", len(all)-n))
+			break
+		}
+		parts = append(parts, fmt.Sprintf("%s %d", x.s, x.n))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // probeOut prints web services as azhaq-http reports them, like httpx.
