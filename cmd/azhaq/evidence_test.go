@@ -125,3 +125,28 @@ func TestRecoveredMarkSurvivesPaging(t *testing.T) {
 		}
 	}
 }
+
+// A served description names every route; an operation of a route the
+// run fetched is answered, the others described.
+func TestOpenAPIServedOperationsCarryTheRowsLevel(t *testing.T) {
+	spec := `{"base":"https://app.test/","document":{"openapi":"3.0.1","info":{"title":"x"},
+		"paths":{"/api/users":{"get":{"responses":{"200":{"description":"ok"}}}},
+		         "/api/orders":{"get":{"responses":{"200":{"description":"ok"}}}}}}}`
+	users := urlRow("https://app.test/api/users", engine.Op{Method: "GET"})
+	users.Evidence = engine.EvAnswered
+	orders := urlRow("https://app.test/api/orders", engine.Op{Method: "GET"})
+	orders.Coverage, orders.Status, orders.Evidence = "hint", 0, engine.EvDescribed
+	g := &graphView{path: "x.db",
+		obs:  []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-openapi", Kind: "api", Payload: json.RawMessage(spec)}}},
+		rows: []engine.MapEntry{users, orders}}
+	doc, err := openAPI(g, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]string{"/api/users": "answered", "/api/orders": "described"} {
+		op := doc["paths"].(map[string]any)[p].(map[string]any)["get"].(map[string]any)
+		if op["x-azhaq-evidence"] != want {
+			t.Errorf("GET %s: %v, want %s", p, op["x-azhaq-evidence"], want)
+		}
+	}
+}

@@ -250,6 +250,7 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 		}
 	}
 	s.flagSkipped(g, origin)
+	s.flagEvidence(g, origin)
 	tidy(doc)
 	return doc, nil
 }
