@@ -507,6 +507,9 @@ func cmdSubs(args []string) error {
 		} else if n := slowSource(input, srcs); n != "" {
 			rep.Notes = append(rep.Notes, n)
 		}
+		if n := guessCheck(input, srcs); n != "" {
+			rep.Notes = append(rep.Notes, n)
+		}
 		for name, by := range foundBy {
 			for _, s := range strs(by) {
 				bySource[s]++ // sources credited with a name Azhaq kept
@@ -1581,6 +1584,29 @@ func slowSource(domain string, srcs map[string]any) string {
 		return ""
 	}
 	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s (-source-timeout bounds each source, -exclude-sources %s drops it, -v lists them all)", domain, slow, first, second, slow)
+}
+
+// guessCheck says where the time went when the DNS check of the names
+// sources only guess (subdomain.center's) took long: its pace is -dns-rate.
+func guessCheck(domain string, srcs map[string]any) string {
+	var names []string
+	var sec float64
+	checked := 0
+	for _, name := range slices.Sorted(maps.Keys(srcs)) {
+		row, _ := srcs[name].(map[string]any)
+		s, ok := row["checked_seconds"].(float64)
+		if !ok {
+			continue
+		}
+		names = append(names, name)
+		sec = max(sec, s)
+		checked += intOf(row["kept"]) + intOf(row["dropped_unresolved"])
+	}
+	if sec < 20 {
+		return ""
+	}
+	return fmt.Sprintf("%s: checking the %d names %s guessed in DNS took %.0f s, before they were kept or dropped (-dns-rate paces it; -exclude-sources %s leaves them out)",
+		domain, checked, strings.Join(names, ", "), sec, strings.Join(names, ","))
 }
 
 // sourceDetail is subs -v's line per domain: each source's names, time,

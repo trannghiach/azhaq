@@ -439,6 +439,7 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 	}
 	live := map[string]bool{}
 	var unchecked int
+	var took time.Duration // the DNS pass over the guesses, which -dns-rate paces
 	// Near the -timeout there is no room for a DNS pass over the padding
 	// sources' hundreds of names without blowing the deadline and losing the
 	// whole result: drop their unverified names, emit the rest, resume later.
@@ -456,7 +457,9 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 		unchecked = len(check)
 	} else {
 		var got []string
+		start := time.Now()
 		got, unchecked = c.opts.Verify(vctx, domain, check)
+		took = time.Since(start)
 		for _, n := range got {
 			live[n] = true
 		}
@@ -478,6 +481,7 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 		if row, ok := status[name].(map[string]any); ok {
 			row["kept"] = len(check) - len(drop)
 			row["dropped_unresolved"] = len(drop)
+			row["checked_seconds"] = round(took.Seconds()) // all the guesses at once, shared
 			if unchecked > 0 {
 				// Said, not silent: these may hold a real name. azhaq resume
 				// checks them.

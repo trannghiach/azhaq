@@ -30,6 +30,7 @@ Fixes from two independent reviews of v0.9.0.
 - `probe -no-follow` and `run -no-follow` ask each URL once and record the redirect. With `-web-ports 443`, a program-scoped probe stays at one request per host.
 - The `subs` coverage note adds up with the names printed. It says how many names came from the history, from guesses checked in DNS or as CNAME targets, which the estimate leaves out.
 - `subs` names a source that set the wall time, even without `-v`, and gives the flags that bound it or drop it.
+- `subs` also says when checking guessed names in DNS took long: for example, 1,591 subdomain.center guesses for hackerone.com took 452 s at `-dns-rate 5`. The note gives the flags that pace that check or skip it.
 - A run stopped by `-max-requests` says the cap holds for each run. `azhaq resume` sends up to that many more requests, or as many as its own `-max-requests` allows.
 - `-o` naming a directory is a usage error that says what `-o` is for. `shots` adds that its PNG files go to `-dir`.
 - An export that finds nothing says why on stderr.

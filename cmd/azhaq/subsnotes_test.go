@@ -81,3 +81,18 @@ func TestSlowSourceNamesTheOneThatSetTheTime(t *testing.T) {
 		t.Errorf("two sources near each other: %q", n)
 	}
 }
+
+func TestGuessCheckSaysWhereTheTimeWent(t *testing.T) {
+	srcs := map[string]any{
+		"subdomaincenter": map[string]any{"seconds": 10.6, "kept": 16.0, "dropped_unresolved": 1575.0, "checked_seconds": 452.0},
+		"crtsh":           map[string]any{"seconds": 14.5},
+	}
+	n := guessCheck("hackerone.com", srcs)
+	if !strings.Contains(n, "checking the 1591 names subdomaincenter guessed in DNS took 452 s") {
+		t.Errorf("note %q", n)
+	}
+	srcs["subdomaincenter"].(map[string]any)["checked_seconds"] = 3.0
+	if n := guessCheck("hackerone.com", srcs); n != "" {
+		t.Errorf("a quick check: %q", n)
+	}
+}
