@@ -180,7 +180,7 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 | Reverse DNS of a /25 | dnsx `-ptr` | 36 of 36 | 36 |
 | Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
 | A run capped at 100 requests and resumed; killed and resumed; with two workers | – | each maps everything one run maps; 197 requests over the capped run and its resumes, one run 191 | |
-| Memory, Juice Shop | katana `-jc -jsl` | 99 MB | 1.4 GB |
+| Memory, Juice Shop | katana `-jc -jsl` | 99–104 MB | 1.4–1.7 GB |
 
 The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md); katana runs as `katana -u URL -d 3 -jc -jsl -silent -nc -timeout 10 -c 10`. Parameter discovery, 6,453 names: on the local apps Azhaq is faster (1.9 s against arjun's 3.6 s for three pages; arjun also reports a `callback` VAmPI ignores); on ginandjuice.shop, both at 20 requests per second, Azhaq loses on time (74 s a page against 21–24 s), as it halves its groups for a site that refuses long query strings, but finds `category`, `searchTerm` and `search` where arjun finds nothing. On memory it loses to katana without `-jsl` (60 MB).
 
