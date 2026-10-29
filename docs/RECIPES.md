@@ -96,7 +96,7 @@ azhaq run -url https://app.example.com/ -graphql -allow app.example.com -db app.
 azhaq export -db app.db -format sdl > schema.graphql
 ```
 
-Introspection is a POST, so it needs a scope. A run that finds GraphQL without `-graphql` suggests the command.
+Introspection is a POST, held to the targets given (or the `-allow`/`-scope` named). A run that finds GraphQL without `-graphql` suggests the command.
 
 ## 11. Retry what failed
 

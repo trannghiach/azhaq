@@ -695,6 +695,11 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		}
 		args := []string{"subs", "-json", "-silent"}
 		for _, d := range ds {
+			// Passive, but the sources learn what the assistant asks about:
+			// the scope holds here too.
+			if !s.allows(d) {
+				return nil, fmt.Errorf("%s is outside the scope this server was started with", d)
+			}
 			args = append(args, "-d", d)
 		}
 		if boolean(a, "live") {

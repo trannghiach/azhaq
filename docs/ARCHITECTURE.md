@@ -95,8 +95,8 @@ Sources Azhaq does not query itself can be plugged in as external programs: [doc
 | `-probe`, `-web-ports 80,443,8080` | only fetch the targets themselves; ports to try on each name |
 | `-sources`, `-exclude-sources`, `-all-sources`, `-providers FILE` | subdomain sources and API keys (subfinder's `provider-config.yaml` format) |
 | `-resolvers FILE`, `-dns-rate N` | DNS resolvers and their pace |
-| `-dns-brute FILE`, `-permute` | active: names from a wordlist, variations of found names (need a scope) |
-| `-dirs FILE`, `-params FILE`, `-ports SPEC`, `-graphql` | active: paths from a wordlist, query parameters, TCP ports, GraphQL introspection (need a scope; the drop-ins `dirs`, `params`, `ports` take the targets you name as theirs) |
+| `-dns-brute FILE`, `-permute` | active: names from a wordlist, variations of found names (held to the targets given, or `-allow`/`-scope`) |
+| `-dirs FILE`, `-params FILE`, `-ports SPEC`, `-graphql` | active: paths from a wordlist, query parameters, TCP ports, GraphQL introspection (held to the targets given, or the scope `-allow`/`-scope` names) |
 | `-all-gets` | also request found URLs that look state-changing |
 | `-depth N`, `-max-items N`, `-parallel N`, `-host-parallel N`, `-delay D` | expansion and concurrency |
 | `-v` | a line for every finished task |

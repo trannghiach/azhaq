@@ -115,9 +115,9 @@ Every command prints results on stdout, and a summary on stderr: what failed and
 | --- | --- | --- |
 | Pages, scripts, API descriptions (at the root and under each API base), archived URL templates | GET | every run |
 | 32 built-in path checks per web service (`robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `backup`, `admin`, …) | GET | every run; `-no-paths` turns them off |
-| Path and parameter guesses, ports, GraphQL introspection | GET, a TCP connect and one `HEAD /`, POST | `-dirs`, `-params`, `-ports`, `-graphql` (need a scope) |
+| Path and parameter guesses, ports, GraphQL introspection | GET, a TCP connect and one `HEAD /`, POST | `-dirs`, `-params`, `-ports`, `-graphql`, held to the targets given or to `-allow`/`-scope` |
 | Chrome | GET, HEAD and CORS preflights, and the sign-in form; a page's own writes are refused and mapped, unless `-browser-writes`; every download is refused and listed, and a page read for its requests is loaded without its images, fonts and media | `-browser`, `-login`, `shots` |
-| Other roles' writes | POST, PUT, PATCH, DELETE | `roles -replay-writes` (needs a scope) |
+| Other roles' writes | POST, PUT, PATCH, DELETE | `roles -replay-writes`, held to the `-url` hosts or to `-allow`/`-scope` |
 
 URLs whose names say a GET would change something (`/logout`, `/createdb`, `?phpids=on`) are listed, not requested. A URL that carries a scanner's payload in its path or query (`<script>`, `../../etc/passwd`, `union select`), as archives often keep them, or a scanner's own test file, never enters the map. No request to a target goes to a host outside the scope, Chrome's included; without a scope, they stay on the site. Chrome saves nothing to disk: a download a page starts is refused and listed. Third-party sources (subdomain lists, archives, RDAP) are asked about your domains; `-passive` sends nothing to the targets. `-rate` paces it, `-max-requests` caps it, and `azhaq plan` prints it before anything is sent.
 

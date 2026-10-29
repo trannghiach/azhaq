@@ -88,10 +88,10 @@ Verdicts, worst first: anyone reads sensitive fields · reads another role's obj
 | What | Method | When |
 | --- | --- | --- |
 | Pages, scripts, API descriptions, built-in paths, archived URL templates | GET | every run, inside the scope |
-| Path and parameter guesses | GET | `-dirs`, `-params` (need a scope) |
-| GraphQL introspection | POST | `-graphql` (needs a scope) |
+| Path and parameter guesses | GET | `-dirs`, `-params` (held to the targets given, or `-allow`/`-scope`) |
+| GraphQL introspection | POST | `-graphql` (held to the targets given, or `-allow`/`-scope`) |
 | A port's service | TCP connect, one `HEAD /` to a port that says nothing | `-ports`, `ports` |
 | Chrome | what the page loads, inside the scope | `-browser`, `-login`, `shots`, `-role-login` |
-| Writes of other roles | POST, PUT, PATCH, DELETE | `roles -replay-writes` (needs a scope) |
+| Writes of other roles | POST, PUT, PATCH, DELETE | `roles -replay-writes` (held to the `-url` hosts, or `-allow`/`-scope`) |
 
 URLs whose names say a GET would change something are listed, not requested. Nothing goes to a host outside the scope.

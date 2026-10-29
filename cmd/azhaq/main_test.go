@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"fmt"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"io"
 	"os"
 	"path/filepath"
@@ -445,5 +447,12 @@ func TestSourceDetail(t *testing.T) {
 	})
 	if want := "example.org sources: crtsh 0 in 60.1s [timeout]; subdomaincenter 207 in 18.2s (6 calls)"; got != want {
 		t.Fatalf("%q", got)
+	}
+}
+
+func TestBudgetErrorIsALimit(t *testing.T) {
+	err := fmt.Errorf("role alice: %w", fmt.Errorf("%w (Chrome was refused requests while signing in)", neterr.ErrBudget))
+	if got := exitCode(err); got != exitLimit {
+		t.Fatalf("exit %d, want %d", got, exitLimit)
 	}
 }

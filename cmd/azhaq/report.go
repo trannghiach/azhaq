@@ -115,6 +115,11 @@ func (r *report) print(w io.Writer) {
 		var parts []string
 		for _, k := range sortedCountKeys(r.Counts) {
 			name := k
+			if k == "URLs" && r.what == "map rows" && r.Counts[k] > r.Results {
+				// A templated row holds many URLs: say so, or the numbers
+				// read as not adding up (44 map rows, 65 URLs).
+				name = "URLs, folded into templated rows"
+			}
 			if r.Counts[k] == 1 && (k == "websockets" || k == "client routes") {
 				name = strings.TrimSuffix(k, "s")
 			}

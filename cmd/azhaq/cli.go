@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"io"
 	"os"
 	"runtime"
@@ -284,6 +285,8 @@ func exitCode(err error) int {
 		return ee.code
 	case errors.As(err, &ue):
 		return exitUsage
+	case errors.Is(err, neterr.ErrBudget):
+		return exitLimit // a resumable stop, wherever the budget ran out (a role's Chrome sign-in)
 	default:
 		return exitError
 	}
@@ -469,7 +472,8 @@ Every command:
   exit 0 complete, 1 error, 2 usage, 3 finished with failures, 4 stopped
   by a limit (azhaq resume continues).
 Active techniques (-dirs, -params, -ports, -dns-brute, -permute, -graphql)
-need a scope (-allow or -scope). azhaq plan shows what a run would send.
+reach only the targets given, or the scope -allow or -scope names. azhaq
+plan shows what a run would send.
 `)
 }
 

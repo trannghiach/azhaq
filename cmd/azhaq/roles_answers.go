@@ -22,6 +22,7 @@ type answer struct {
 	Keys      []string `json:"keys,omitempty"`      // a JSON answer's field paths: data.user.email, data[].id
 	Error     bool     `json:"error,omitempty"`     // a JSON answer shaped like an error: {"status":"error"}, {"error":…}
 	Sensitive []string `json:"sensitive,omitempty"` // fields holding passwords, secrets, keys, tokens
+	Masked    []string `json:"masked,omitempty"`    // sensitive fields the server sent masked (********): seen, not leaked
 	Title     string   `json:"title,omitempty"`
 	Location  string   `json:"location,omitempty"` // where a redirect sends the role
 	Refusal   bool     `json:"refusal,omitempty"`  // a 2xx answer that is the origin's refusal page, or that -refusal matches
@@ -123,6 +124,7 @@ type jsonFacts struct {
 	paths   []string            // field paths, nested
 	isError bool                // shaped like an error
 	secrets []secret            // values of fields that hold credentials
+	masked  map[string]bool     // sensitive fields whose values came masked
 	ids     map[string][]string // short scalar values by field name, at any depth: what routes are filled with
 	held    map[string]bool     // the first few hundred scalar values
 	flags   map[string]bool     // paths under a list whose values are all true or false
@@ -322,7 +324,12 @@ func (f *jsonFacts) scalar(k string, x any, seen map[string]bool) {
 		seen[k+"\x00"+s] = true
 		f.ids[k] = append(f.ids[k], s)
 	}
-	if class := sensitiveField(k); class != "" && !masked(s) && !seen["\x01"+k+"\x00"+s] {
+	if class := sensitiveField(k); class != "" && masked(s) {
+		if f.masked == nil {
+			f.masked = map[string]bool{}
+		}
+		f.masked[k] = true
+	} else if class != "" && !seen["\x01"+k+"\x00"+s] {
 		seen["\x01"+k+"\x00"+s] = true
 		sum := sha256.Sum256([]byte(s))
 		f.secrets = append(f.secrets, secret{field: k, token: class == "token", sum: hex.EncodeToString(sum[:8])})
@@ -341,6 +348,13 @@ func (f *jsonFacts) apply(a *answer) {
 		}
 	}
 	sort.Strings(a.Sensitive)
+	a.Masked = nil
+	for k := range f.masked {
+		if !slices.Contains(a.Sensitive, k) {
+			a.Masked = append(a.Masked, k)
+		}
+	}
+	sort.Strings(a.Masked)
 }
 
 // scalarString is a string or number value as text; "" and other types

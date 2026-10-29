@@ -2,7 +2,7 @@
 
 `azhaq mcp` serves Azhaq to any client of the Model Context Protocol (Claude Code, Claude Desktop, Cursor, and others) over stdin and stdout. Each tool runs Azhaq itself and returns the same summary and rows the command line prints with `-json`, so what a tool call does is what a command does.
 
-The **scope**, the **request budget** and the **pace** are fixed when the server starts. No tool argument can widen them: targets outside the scope are skipped and listed in the summary, and once the budget is spent every tool that sends requests refuses.
+The **scope**, the **request budget** and the **pace** are fixed when the server starts. No tool argument can widen them: targets outside the scope are skipped and listed in the summary, a subdomain lookup for a domain outside it is refused (the passive sources would learn what the assistant asks about), and once the budget is spent every tool that sends requests refuses.
 
 ```
 azhaq mcp -scope hackerone -program security -max-requests 20000 -rate 5

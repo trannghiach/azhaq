@@ -33,6 +33,7 @@ func TestMCPProtocol(t *testing.T) {
 		`{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"azhaq_query","arguments":{"workspace":"w","limt":2}}}`,
 		`{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"azhaq_map","arguments":{"url":"https://example.com/","allow":["other.test"],"scope":"x"}}}`,
 		`{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"azhaq_diff","arguments":{"workspace":"none"}}}`,
+		`{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"azhaq_subdomains","arguments":{"domain":"outside.test"}}}`,
 	}, "\n") + "\n"
 	pr, pw := io.Pipe()
 	go func() {
@@ -75,6 +76,9 @@ func TestMCPProtocol(t *testing.T) {
 	}
 	if res(4)["isError"] != true || !strings.Contains(res(4)["content"].([]any)[0].(map[string]any)["text"].(string), "outside the scope") {
 		t.Errorf("a host outside the lock was not refused: %v", res(4))
+	}
+	if res(11)["isError"] != true || !strings.Contains(res(11)["content"].([]any)[0].(map[string]any)["text"].(string), "outside the scope") {
+		t.Errorf("a passive lookup outside the lock was not refused: %v", res(11))
 	}
 	if res(5)["isError"] != true {
 		t.Errorf("a workspace outside the directory was accepted: %v", res(5))

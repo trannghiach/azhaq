@@ -475,3 +475,12 @@ func TestRoleNotDeadWhenNothingIsGated(t *testing.T) {
 		t.Fatalf("a valid role on a site where nothing is gated was called dead: %v", dead)
 	}
 }
+
+// A field the server masks is seen, not leaked: Juice Shop's
+// /rest/user/authentication-details sends password and totpSecret as stars.
+func TestRoleMaskedFields(t *testing.T) {
+	a := answerOf(200, []byte(`{"data":[{"email":"a@x.test","password":"********************************","totpSecret":"********","deluxeToken":"8a1f7c"}]}`), "application/json")
+	if strings.Join(a.Sensitive, ",") != "deluxeToken" || strings.Join(a.Masked, ",") != "password,totpSecret" {
+		t.Fatalf("sensitive %v masked %v", a.Sensitive, a.Masked)
+	}
+}
