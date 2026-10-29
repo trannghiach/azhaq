@@ -153,7 +153,12 @@ navigator.sendBeacon('` + o + `/beacon', 'x');
 			if p.Left != "" || p.Capped {
 				t.Errorf("left %q, capped %v", p.Left, p.Capped)
 			}
-			// Every request that left was counted, the page once.
+			// Every request that left was counted, the page once. One
+			// Chrome sends after the load (a favicon) may arrive late on a
+			// loaded machine: wait for it rather than call it extra.
+			for wait := time.Now().Add(5 * time.Second); fetch.Sent() > int64(len(own.got())-before) && time.Now().Before(wait); {
+				time.Sleep(50 * time.Millisecond)
+			}
 			if n := fetch.Sent(); n != int64(len(own.got())-before) {
 				t.Errorf("counted %d requests, the server got %d: %q", n, len(own.got())-before, own.got()[before:])
 			}
