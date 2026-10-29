@@ -231,7 +231,7 @@ func Notes(obs []types.StoredObservation) []string {
 			more = fmt.Sprintf(" and %d more addresses", len(silent)-3)
 			silent = silent[:3]
 		}
-		out = append(out, fmt.Sprintf("ports that neither accepted nor refused a connect, asked twice: %s%s; filtered, or the host drops connects: scan them again to be sure (rows: filtered_ports)",
+		out = append(out, fmt.Sprintf("ports that neither accepted nor refused a connect, asked twice: %s%s; filtered, or the host drops connects: scan them again to be sure (azhaq show -db FILE HOST lists them all)",
 			strings.Join(silent, "; "), more))
 	}
 	return out
