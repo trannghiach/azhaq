@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
+	github.com/gaissmai/bart v0.29.1
 	github.com/miekg/dns v1.1.73
 	github.com/projectdiscovery/cdncheck v1.3.2
 	github.com/projectdiscovery/gologger v1.1.73
@@ -23,7 +24,6 @@ require (
 	github.com/corpix/uarand v0.2.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/gaissmai/bart v0.29.1 // indirect
 	github.com/go-json-experiment/json v0.0.0-20260213210345-44df1a37e875 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.1 // indirect

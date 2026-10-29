@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -261,11 +260,11 @@ func Links(body []byte, base *url.URL) []string {
 }
 
 var (
-	quoted   = regexp.MustCompile(`['"]([^'"\s<>]{1,512})['"]`)
-	dataLink = regexp.MustCompile(`(?:url|href|link|src|action|endpoint|api)$`)
+	quoted   = lazyRE(`['"]([^'"\s<>]{1,512})['"]`)
+	dataLink = lazyRE(`(?:url|href|link|src|action|endpoint|api)$`)
 	// handlerURL is a string that names a page: a path, or a file with a
 	// page's extension or a query (view_source.php?id=xss_r).
-	handlerURL = regexp.MustCompile(`^(?:https?://[^/\s]+/|\.{0,2}/)[^\s'"<>]*$|^[\w.-]+(?:/[\w.-]+)*(?:\.(?:php|jsp|jspx|asp|aspx|ashx|do|action|cgi|pl|html?)(?:\?[^\s'"<>]*)?|\?[\w%&=.+-]+)$`)
+	handlerURL = lazyRE(`^(?:https?://[^/\s]+/|\.{0,2}/)[^\s'"<>]*$|^[\w.-]+(?:/[\w.-]+)*(?:\.(?:php|jsp|jspx|asp|aspx|ashx|do|action|cgi|pl|html?)(?:\?[^\s'"<>]*)?|\?[\w%&=.+-]+)$`)
 )
 
 // handlerRefs are the pages a tag's scripts name: the strings of a

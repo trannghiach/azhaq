@@ -32,18 +32,18 @@ type Call struct {
 
 var (
 	// clientCall: .get( .post( … on any object (an HTTP client, axios, $).
-	clientCall = regexp.MustCompile(`\.(get|post|put|patch|delete|head)\s*\(`)
-	fetchCall  = regexp.MustCompile(`(?:^|[^\w$.])fetch\s*\(`)
-	xhrOpen    = regexp.MustCompile(`\.open\s*\(\s*["'\x60](GET|POST|PUT|PATCH|DELETE|HEAD)["'\x60]\s*,`)
+	clientCall = lazyRE(`\.(get|post|put|patch|delete|head)\s*\(`)
+	fetchCall  = lazyRE(`(?:^|[^\w$.])fetch\s*\(`)
+	xhrOpen    = lazyRE(`\.open\s*\(\s*["'\x60](GET|POST|PUT|PATCH|DELETE|HEAD)["'\x60]\s*,`)
 	// ajaxCall: $.ajax({url,type,data}), axios({url,method,data}),
 	// axios.request(…), and their (url, settings) forms.
-	ajaxCall   = regexp.MustCompile(`(?:^|[^\w$.])(?:(?:\$|jQuery)\s*\.\s*ajax|axios(?:\s*\.\s*request)?)\s*\(`)
-	methodOpt  = regexp.MustCompile(`(?i)\bmethod\s*:\s*["'\x60](get|post|put|patch|delete|head)["'\x60]`)
-	identChain = regexp.MustCompile(`^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*$`)
+	ajaxCall   = lazyRE(`(?:^|[^\w$.])(?:(?:\$|jQuery)\s*\.\s*ajax|axios(?:\s*\.\s*request)?)\s*\(`)
+	methodOpt  = lazyRE(`(?i)\bmethod\s*:\s*["'\x60](get|post|put|patch|delete|head)["'\x60]`)
+	identChain = lazyRE(`^[A-Za-z_$][\w$]*(?:\s*\.\s*[A-Za-z_$][\w$]*)*$`)
 	// originName: a variable that holds a scheme and host, not a path.
-	originName = regexp.MustCompile(`(?i)(host|server|base|origin|domain|backend|endpoint|apiurl|api_url|baseurl|root|url)`)
-	pathChars  = regexp.MustCompile(`^(?:https?://[\w.:-]+)?/[\w.~%{}@!$&'*+,;=:/?-]*$`)
-	keyRE      = regexp.MustCompile(`^\s*(?:["'\x60]?)([A-Za-z_$][\w$-]*)(?:["'\x60]?)\s*(?::|$)`)
+	originName = lazyRE(`(?i)(host|server|base|origin|domain|backend|endpoint|apiurl|api_url|baseurl|root|url)`)
+	pathChars  = lazyRE(`^(?:https?://[\w.:-]+)?/[\w.~%{}@!$&'*+,;=:/?-]*$`)
+	keyRE      = lazyRE(`^\s*(?:["'\x60]?)([A-Za-z_$][\w$-]*)(?:["'\x60]?)\s*(?::|$)`)
 )
 
 // maxCalls caps the calls read from one script.
@@ -61,7 +61,7 @@ func PageCalls(script string) []Call { return calls(script, true) }
 
 // relPath: a page-relative path that names a resource (a directory or a
 // file with an extension), not a bare word.
-var relPath = regexp.MustCompile(`^[\w~-][\w.~%{}@!$&'*+,;=:-]*(?:/[\w.~%{}@!$&'*+,;=:-]*)+$|^[\w~-][\w~-]*\.(?:jsp|jspx|php|asp|aspx|ashx|do|action|cgi|pl|json|xml|html?)$`)
+var relPath = lazyRE(`^[\w~-][\w.~%{}@!$&'*+,;=:-]*(?:/[\w.~%{}@!$&'*+,;=:-]*)+$|^[\w~-][\w~-]*\.(?:jsp|jspx|php|asp|aspx|ashx|do|action|cgi|pl|json|xml|html?)$`)
 
 func calls(script string, relative bool) []Call {
 	var out []Call

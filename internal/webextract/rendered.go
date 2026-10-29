@@ -3,7 +3,6 @@ package webextract
 import (
 	"bytes"
 	"net/url"
-	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -17,9 +16,9 @@ import (
 
 var (
 	// mdLink: [text](/path), [text](https://…), [text](./x "title").
-	mdLink = regexp.MustCompile(`\[[^\[\]\n]{1,300}\]\(\s*<?((?:https?://|\.{0,2}/)[^\s()<>"']*)>?(?:\s+"[^"\n]*")?\s*\)`)
+	mdLink = lazyRE(`\[[^\[\]\n]{1,300}\]\(\s*<?((?:https?://|\.{0,2}/)[^\s()<>"']*)>?(?:\s+"[^"\n]*")?\s*\)`)
 	// tmplExpr is an expression a client-side template fills: {{ user.name }}.
-	tmplExpr = regexp.MustCompile(`\{\{[^{}\n]{1,200}\}\}`)
+	tmplExpr = lazyRE(`\{\{[^{}\n]{1,200}\}\}`)
 	// mountIDs are the elements single-page apps render into.
 	mountIDs = map[string]bool{"root": true, "app": true, "__next": true, "__nuxt": true, "___gatsby": true, "svelte": true, "app-root": true, "react-root": true}
 )

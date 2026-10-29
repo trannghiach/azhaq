@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,11 +17,11 @@ import (
 // (n.e(742)) when it has none.
 
 var (
-	chunkFnV5   = regexp.MustCompile(`(?:^|[^\w$])` + ident + `\.u\s*=\s*(?:function\s*\((` + ident + `)\)\s*\{\s*return\s*|\(?(` + ident + `)\)?\s*=>\s*)`)
-	chunkFnV4   = regexp.MustCompile(`function\s+` + ident + `\s*\((` + ident + `)\)\s*\{\s*return\s+(` + ident + `)\.p\s*\+`)
-	publicPath  = regexp.MustCompile(`(?:^|[^\w$])` + ident + `\.p\s*=\s*"([^"\\\n]*)"`)
-	chunkLoad   = regexp.MustCompile(`(?:^|[^\w$])` + ident + `\.e\(\s*(\d+|"[\w.-]+")\s*\)`)
-	tablePair   = regexp.MustCompile(`["']?([\w.-]+)["']?\s*:\s*"([^"\\\n]*)"`)
+	chunkFnV5   = lazyRE(`(?:^|[^\w$])` + ident + `\.u\s*=\s*(?:function\s*\((` + ident + `)\)\s*\{\s*return\s*|\(?(` + ident + `)\)?\s*=>\s*)`)
+	chunkFnV4   = lazyRE(`function\s+` + ident + `\s*\((` + ident + `)\)\s*\{\s*return\s+(` + ident + `)\.p\s*\+`)
+	publicPath  = lazyRE(`(?:^|[^\w$])` + ident + `\.p\s*=\s*"([^"\\\n]*)"`)
+	chunkLoad   = lazyRE(`(?:^|[^\w$])` + ident + `\.e\(\s*(\d+|"[\w.-]+")\s*\)`)
+	tablePair   = lazyRE(`["']?([\w.-]+)["']?\s*:\s*"([^"\\\n]*)"`)
 	maxChunkIDs = 256
 )
 

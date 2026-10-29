@@ -2,7 +2,6 @@ package webextract
 
 import (
 	"net/url"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -10,15 +9,15 @@ import (
 )
 
 var (
-	numSeg  = regexp.MustCompile(`^\d+$`)
-	uuidSeg = regexp.MustCompile(`^(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-	hexSeg  = regexp.MustCompile(`^(?i)[0-9a-f]{16,}$`)
+	numSeg  = lazyRE(`^\d+$`)
+	uuidSeg = lazyRE(`^(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	hexSeg  = lazyRE(`^(?i)[0-9a-f]{16,}$`)
 	// A query value that names a page (content=about.htm, view=list,
 	// lang=en): kept, so each one is a page of its own.
-	selectorVal = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.\-]{0,31}$`)
-	digitRun    = regexp.MustCompile(`\d`)
+	selectorVal = lazyRE(`^[A-Za-z][A-Za-z0-9_.\-]{0,31}$`)
+	digitRun    = lazyRE(`\d`)
 	// fileVal names a file: content=inside_about.htm.
-	fileVal = regexp.MustCompile(`(?i)\.(html?|jspx?|php\d?|aspx?|cfm|do|action|txt|xml|json|pdf|md)$`)
+	fileVal = lazyRE(`(?i)\.(html?|jspx?|php\d?|aspx?|cfm|do|action|txt|xml|json|pdf|md)$`)
 )
 
 // selectorKeys are parameters whose word value picks a page or a view,

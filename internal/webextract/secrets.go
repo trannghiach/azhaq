@@ -2,7 +2,6 @@ package webextract
 
 import (
 	"math"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -17,34 +16,34 @@ type Secret struct {
 
 var secretPatterns = []struct {
 	kind, severity string
-	re             *regexp.Regexp
+	re             *lazyRegexp
 }{
-	{"aws-access-key-id", "medium", regexp.MustCompile(`\b((?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[A-Z0-9]{16})\b`)},
-	{"google-api-key", "medium", regexp.MustCompile(`\b(AIza[0-9A-Za-z_-]{35})\b`)},
-	{"github-token", "high", regexp.MustCompile(`\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})\b`)},
-	{"github-token", "high", regexp.MustCompile(`\b(github_pat_[A-Za-z0-9_]{60,})\b`)},
-	{"gitlab-token", "high", regexp.MustCompile(`\b(glpat-[A-Za-z0-9_-]{20})\b`)},
-	{"slack-token", "high", regexp.MustCompile(`\b(xox[baprs]-[0-9A-Za-z-]{10,})\b`)},
-	{"slack-webhook", "high", regexp.MustCompile(`(https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,})`)},
-	{"discord-webhook", "high", regexp.MustCompile(`(https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{50,})`)},
-	{"stripe-secret-key", "high", regexp.MustCompile(`\b((?:sk|rk)_live_[0-9a-zA-Z]{24,})\b`)},
-	{"stripe-publishable-key", "info", regexp.MustCompile(`\b(pk_live_[0-9a-zA-Z]{24,})\b`)},
-	{"sendgrid-key", "high", regexp.MustCompile(`\b(SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})\b`)},
-	{"mailgun-key", "high", regexp.MustCompile(`\b(key-[0-9a-f]{32})\b`)},
-	{"twilio-key", "medium", regexp.MustCompile(`\b(SK[0-9a-f]{32})\b`)},
-	{"openai-key", "high", regexp.MustCompile(`\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,})\b`)},
-	{"anthropic-key", "high", regexp.MustCompile(`\b(sk-ant-[A-Za-z0-9_-]{80,})\b`)},
-	{"private-key", "high", regexp.MustCompile(`(-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----)`)},
-	{"jwt", "info", regexp.MustCompile(`\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)},
+	{"aws-access-key-id", "medium", lazyRE(`\b((?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[A-Z0-9]{16})\b`)},
+	{"google-api-key", "medium", lazyRE(`\b(AIza[0-9A-Za-z_-]{35})\b`)},
+	{"github-token", "high", lazyRE(`\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})\b`)},
+	{"github-token", "high", lazyRE(`\b(github_pat_[A-Za-z0-9_]{60,})\b`)},
+	{"gitlab-token", "high", lazyRE(`\b(glpat-[A-Za-z0-9_-]{20})\b`)},
+	{"slack-token", "high", lazyRE(`\b(xox[baprs]-[0-9A-Za-z-]{10,})\b`)},
+	{"slack-webhook", "high", lazyRE(`(https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,})`)},
+	{"discord-webhook", "high", lazyRE(`(https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{50,})`)},
+	{"stripe-secret-key", "high", lazyRE(`\b((?:sk|rk)_live_[0-9a-zA-Z]{24,})\b`)},
+	{"stripe-publishable-key", "info", lazyRE(`\b(pk_live_[0-9a-zA-Z]{24,})\b`)},
+	{"sendgrid-key", "high", lazyRE(`\b(SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})\b`)},
+	{"mailgun-key", "high", lazyRE(`\b(key-[0-9a-f]{32})\b`)},
+	{"twilio-key", "medium", lazyRE(`\b(SK[0-9a-f]{32})\b`)},
+	{"openai-key", "high", lazyRE(`\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,})\b`)},
+	{"anthropic-key", "high", lazyRE(`\b(sk-ant-[A-Za-z0-9_-]{80,})\b`)},
+	{"private-key", "high", lazyRE(`(-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----)`)},
+	{"jwt", "info", lazyRE(`\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)},
 }
 
 var (
 	// awsSecretNear is a 40-character secret key next to an access key id.
-	awsSecret = regexp.MustCompile(`["'` + "`" + `]([A-Za-z0-9/+]{40})["'` + "`" + `]`)
+	awsSecret = lazyRE(`["'` + "`" + `]([A-Za-z0-9/+]{40})["'` + "`" + `]`)
 	// envVar is a build-time variable a bundler inlined.
-	envVar = regexp.MustCompile(`["']?((?:REACT_APP|NEXT_PUBLIC|VUE_APP|VITE|NUXT_ENV|GATSBY)_[A-Z0-9_]+)["']?\s*:\s*["']([^"'\n]{4,200})["']`)
+	envVar = lazyRE(`["']?((?:REACT_APP|NEXT_PUBLIC|VUE_APP|VITE|NUXT_ENV|GATSBY)_[A-Z0-9_]+)["']?\s*:\s*["']([^"'\n]{4,200})["']`)
 	// assigned is a value given to a name that sounds secret.
-	assigned = regexp.MustCompile(`(?i)["']?([a-z0-9_.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?key)[a-z0-9_.-]*)["']?\s*[:=]\s*["']([^"'\s]{8,200})["']`)
+	assigned = lazyRE(`(?i)["']?([a-z0-9_.-]*(?:secret|token|passw(?:or)?d|api[_-]?key|apikey|access[_-]?key|private[_-]?key|client[_-]?secret|auth[_-]?key)[a-z0-9_.-]*)["']?\s*[:=]\s*["']([^"'\s]{8,200})["']`)
 )
 
 // Secrets lists the credentials in a script, each value once.
@@ -99,7 +98,7 @@ func rank(sev string) int {
 
 // placeholder catches values that only look like secrets: field names,
 // templates, translation keys.
-var placeholderRE = regexp.MustCompile(`(?i)^(true|false|null|undefined|password|secret|token|example|changeme|your[_-]|xxx|\*+|\$\{|\{\{|%s|<.*>|[a-z]+(\.[a-z]+){1,}$|[A-Z_]+$)`)
+var placeholderRE = lazyRE(`(?i)^(true|false|null|undefined|password|secret|token|example|changeme|your[_-]|xxx|\*+|\$\{|\{\{|%s|<.*>|[a-z]+(\.[a-z]+){1,}$|[A-Z_]+$)`)
 
 func notSecret(v string) bool {
 	return placeholderRE.MatchString(v)
@@ -107,7 +106,7 @@ func notSecret(v string) bool {
 
 // notSecretName: names with "token" in them that hold a parser's tables
 // (Lezer's tokenData, tokenPrec), not a credential.
-var notSecretName = regexp.MustCompile(`(?i)token(data|prec|izers?|types?|s|ize|ized|ization|count|length|index)$`)
+var notSecretName = lazyRE(`(?i)token(data|prec|izers?|types?|s|ize|ized|ization|count|length|index)$`)
 
 // oddChars: keys and tokens are letters, digits and a few separators; a
 // value full of other punctuation is encoded data.

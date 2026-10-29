@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"strings"
 )
 
@@ -21,16 +20,16 @@ type Socket struct {
 }
 
 var (
-	wsNew = regexp.MustCompile(`\bnew\s+(?:WebSocket|SockJS|ReconnectingWebSocket)\s*\(`)
+	wsNew = lazyRE(`\bnew\s+(?:WebSocket|SockJS|ReconnectingWebSocket)\s*\(`)
 	// wsLiteral is a ws:// URL with a host.
-	wsLiteral = regexp.MustCompile(`["'\x60](wss?://[A-Za-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%!$&()*+,;=:@/-]*)?)["'\x60]`)
+	wsLiteral = lazyRE(`["'\x60](wss?://[A-Za-z0-9.-]+(?::\d+)?(?:/[A-Za-z0-9._~%!$&()*+,;=:@/-]*)?)["'\x60]`)
 	// ioName is a socket.io client call by name; ioESM the same imported
 	// by a bundler: (0,r.io)(…).
-	ioName = regexp.MustCompile(`(?:^|[^\w$.])(?:io(?:\s*\.\s*connect)?|socketIOClient)\s*\(`)
-	ioESM  = regexp.MustCompile(`\.\s*io\s*\)\s*\(`)
+	ioName = lazyRE(`(?:^|[^\w$.])(?:io(?:\s*\.\s*connect)?|socketIOClient)\s*\(`)
+	ioESM  = lazyRE(`\.\s*io\s*\)\s*\(`)
 	// ioLib is socket.io's default path, as its client library sets it.
-	ioLib  = regexp.MustCompile(`["'\x60]/socket\.io/?["'\x60]`)
-	strLit = regexp.MustCompile(`"([^"\\\n]{0,200})"|'([^'\\\n]{0,200})'|\x60([^\x60\\$]{0,200})\x60`)
+	ioLib  = lazyRE(`["'\x60]/socket\.io/?["'\x60]`)
+	strLit = lazyRE(`"([^"\\\n]{0,200})"|'([^'\\\n]{0,200})'|\x60([^\x60\\$]{0,200})\x60`)
 )
 
 // maxSockets caps the endpoints read from one script.

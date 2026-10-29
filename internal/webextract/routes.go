@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -32,28 +31,28 @@ const (
 
 var (
 	// routePath is a path key with a literal value, as route objects have.
-	routePath = regexp.MustCompile(`(?:^|[{,\s])["']?path["']?\s*:\s*["'\x60]`)
+	routePath = lazyRE(`(?:^|[{,\s])["']?path["']?\s*:\s*["'\x60]`)
 	// jsxRoute is a <Route> element or a wrapper named for one
 	// (<PrivateRoute>), opening or closing.
-	jsxRoute = regexp.MustCompile(`<(/?)([A-Z][\w.]*)?Route\b`)
-	jsxPath  = regexp.MustCompile(`\bpath\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*["'\x60]([^"'\x60$]*)["'\x60]\s*\})`)
-	jsxElem  = regexp.MustCompile(`\belement\s*=\s*\{\s*<([A-Z][\w.]*)`)
+	jsxRoute = lazyRE(`<(/?)([A-Z][\w.]*)?Route\b`)
+	jsxPath  = lazyRE(`\bpath\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*["'\x60]([^"'\x60$]*)["'\x60]\s*\})`)
+	jsxElem  = lazyRE(`\belement\s*=\s*\{\s*<([A-Z][\w.]*)`)
 	// firstComponent is what an element renders first: jsx(RequireAuth,…),
 	// createElement(PrivateRoute,…) or <RequireAuth>.
-	firstComponent = regexp.MustCompile(`^(?:\(\s*0\s*,\s*)?[\w$.]*(?:jsxs?|jsxDEV|createElement)\)?\s*\(\s*([A-Za-z_$][\w$.]*)|^<([A-Z][\w.]*)`)
-	wrapperBefore  = regexp.MustCompile(`([A-Za-z_$][\w$]*)\s*,\s*$`)
+	firstComponent = lazyRE(`^(?:\(\s*0\s*,\s*)?[\w$.]*(?:jsxs?|jsxDEV|createElement)\)?\s*\(\s*([A-Za-z_$][\w$.]*)|^<([A-Z][\w.]*)`)
+	wrapperBefore  = lazyRE(`([A-Za-z_$][\w$]*)\s*,\s*$`)
 	// guardComponent names a component that stands before a view:
 	// RequireAuth, PrivateRoute, ProtectedRoute, AuthGuard, WithAuth.
-	guardComponent = regexp.MustCompile(`(?i)^(?:require|private|protected|auth|guard|secure)|(?:auth|guard|private|protected|secured?)(?:route|wrapper|layout)?$`)
+	guardComponent = lazyRE(`(?i)^(?:require|private|protected|auth|guard|secure)|(?:auth|guard|private|protected|secured?)(?:route|wrapper|layout)?$`)
 	// guardMeta names a route meta key that asks for a session or a role.
-	guardMeta = regexp.MustCompile(`(?i)auth|login|admin|role|permission|guard|private|protect|secure|access`)
+	guardMeta = lazyRE(`(?i)auth|login|admin|role|permission|guard|private|protect|secure|access`)
 	// guardName is a guard worth naming: not a minified identifier.
-	guardName = regexp.MustCompile(`\b([A-Z][\w$]{3,}|[a-z][\w$]*Guard)\b`)
-	routeSeg  = regexp.MustCompile(`^[\w.~@$%+-]+$`)
+	guardName = lazyRE(`\b([A-Z][\w$]{3,}|[a-z][\w$]*Guard)\b`)
+	routeSeg  = lazyRE(`^[\w.~@$%+-]+$`)
 	// hashRouting: the app keeps its routes after # (/#/administration).
 	// React Router's own HashRouter calls createHashHistory, so that name
 	// says nothing of the app.
-	hashRouting = regexp.MustCompile(`useHash\s*:\s*(?:!0|true)\b|<HashRouter\b|[.(]\s*HashRouter\s*,\s*\{|\bmode\s*:\s*["'\x60]hash["'\x60]|\b(?:withHashLocation|createWebHashHistory|createHashRouter)\s*\(`)
+	hashRouting = lazyRE(`useHash\s*:\s*(?:!0|true)\b|<HashRouter\b|[.(]\s*HashRouter\s*,\s*\{|\bmode\s*:\s*["'\x60]hash["'\x60]|\b(?:withHashLocation|createWebHashHistory|createHashRouter)\s*\(`)
 )
 
 // viewKeys make an object with a path a route: it draws something, holds
@@ -302,7 +301,7 @@ func joinRoute(parent, p string) (full string, catchAll, ok bool) {
 	return "/" + strings.Join(segs, "/"), catchAll, true
 }
 
-var dynSeg = regexp.MustCompile(`^\[\[?(?:\.\.\.)?([A-Za-z_$][\w$]*)\]\]?$`)
+var dynSeg = lazyRE(`^\[\[?(?:\.\.\.)?([A-Za-z_$][\w$]*)\]\]?$`)
 
 // dynamicSegment is a file-system router's parameter as {name}: [id],
 // [...slug], [[...slug]]; "" for anything else in brackets.

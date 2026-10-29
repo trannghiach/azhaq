@@ -2,7 +2,6 @@ package webextract
 
 import (
 	"net/url"
-	"regexp"
 	"strings"
 )
 
@@ -11,7 +10,7 @@ import (
 // of out-of-band testing. A URL holding one in its path or query is never
 // stored, so it can never be requested. Each mark sits on a boundary, so
 // curlang=en, onload=init or next=../home stay.
-var payloadMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
+var payloadMarks = lazyRE(`(?i)` + strings.Join([]string{
 	`(\.\./){2,}|(\.\.\\){2,}|/etc/(passwd|shadow|hosts)\b|\bwin\.ini\b|\bboot\.ini\b|/proc/self/`,
 	`[;|&]\s*(curl|wget|nslookup|ping|id|whoami|cat|sleep|uname)\b\s`,
 	`\$\(\s*(curl|wget|id|whoami|cat|sleep|nslookup|ping|echo|uname)\b|` + "`" + `\s*(id|whoami|curl|wget|cat|sleep|uname)\b`,
@@ -29,7 +28,7 @@ var payloadMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
 // (/products/nessus is a page; nessus_test, appscan_fingerprint and
 // qualystest are not). A word searched for (?q=netsparker) is the
 // user's.
-var scannerMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
+var scannerMarks = lazyRE(`(?i)` + strings.Join([]string{
 	`(?:^|/)(?:acunetix|acumonitor|netsparker|invicti|bxss|burpcollaborator)`,
 	`[?&](?:acunetix|netsparker|invicti|bxss)[\w-]*=`,
 	`(?:^|[/?&=.])(?:bxss\.me|xss\.rocks|interactsh|oastify|burpcollaborator)`,
@@ -39,7 +38,7 @@ var scannerMarks = regexp.MustCompile(`(?i)` + strings.Join([]string{
 // randomExe is an executable at the root named by a scanner's random
 // token: /7zSo1DIz.exe. Letters and digits, 6 to 10 of them, and nothing
 // else in the path.
-var randomExe = regexp.MustCompile(`^/([A-Za-z0-9]{6,10})\.(?:exe|dll|scr)$`)
+var randomExe = lazyRE(`^/([A-Za-z0-9]{6,10})\.(?:exe|dll|scr)$`)
 
 // Payload reports a URL that carries a scanner's payload in its path or
 // query (see payloadMarks), or a scanner's own name or random file
@@ -186,11 +185,11 @@ func StringNoise(p string) bool {
 }
 
 var (
-	pkgName = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
-	letters = regexp.MustCompile(`^[A-Za-z]+$`)
+	pkgName = lazyRE(`^[a-z0-9][a-z0-9._-]*$`)
+	letters = lazyRE(`^[A-Za-z]+$`)
 	// versionOnly is an API version prefix and nothing under it: /v3,
 	// /api/v2.
-	versionOnly = regexp.MustCompile(`^/(?:api/)?v\d{1,2}(?:\.\d{1,2})?/?$`)
+	versionOnly = lazyRE(`^/(?:api/)?v\d{1,2}(?:\.\d{1,2})?/?$`)
 )
 
 // VersionPrefix reports a URL whose path is an API version prefix alone

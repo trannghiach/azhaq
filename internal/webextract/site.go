@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -119,12 +118,12 @@ var (
 	// credential shapes a snippet must not carry out of a signed-in
 	// page's inline script: JWTs, bearer tokens, secrets set to literals
 	// or in a query string, long hex and base64 runs.
-	jwtShape    = regexp.MustCompile(`eyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]*`)
-	bearerShape = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[\w.~+/=-]{8,}`)
-	secretSet   = regexp.MustCompile("(?i)((?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|csrf)[\\w-]*[\"']?\\s*[:=]\\s*[\"'`])[^\"'`\\s${}()]{4,}([\"'`])")
-	secretQuery = regexp.MustCompile("(?i)([?&](?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|key|sig)=)[^&\"'`\\s]{4,}")
-	longRun     = regexp.MustCompile(`[A-Za-z0-9+/_=-]{24,}`)
-	hexRun      = regexp.MustCompile(`^[0-9a-fA-F]{32,}$`)
+	jwtShape    = lazyRE(`eyJ[\w-]{6,}\.[\w-]{6,}\.[\w-]*`)
+	bearerShape = lazyRE(`(?i)\b(bearer|basic)\s+[\w.~+/=-]{8,}`)
+	secretSet   = lazyRE("(?i)((?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|csrf)[\\w-]*[\"']?\\s*[:=]\\s*[\"'`])[^\"'`\\s${}()]{4,}([\"'`])")
+	secretQuery = lazyRE("(?i)([?&](?:pass(?:word|wd)?|pwd|secret|token|api[_-]?key|apikey|auth|session|sid|key|sig)=)[^&\"'`\\s]{4,}")
+	longRun     = lazyRE(`[A-Za-z0-9+/_=-]{24,}`)
+	hexRun      = lazyRE(`^[0-9a-fA-F]{32,}$`)
 )
 
 // redact blanks the values of credential shapes in a snippet.

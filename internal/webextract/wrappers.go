@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"strings"
 )
 
@@ -65,7 +64,7 @@ const (
 
 var (
 	httpMethods = map[string]bool{"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true, "HEAD": true, "OPTIONS": true}
-	plainIdent  = regexp.MustCompile(`^[A-Za-z_$][\w$]*$`)
+	plainIdent  = lazyRE(`^[A-Za-z_$][\w$]*$`)
 	// notWrappers are names whose calls are read as requests already, and
 	// words that open a block like a function does.
 	notWrappers = map[string]bool{
@@ -259,7 +258,7 @@ func prefixValue(script, ex string, pos int) (string, bool) {
 }
 
 // compoundSet is an assignment that changes a value in place: url+=…
-var compoundSet = regexp.MustCompile(`^(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)=`)
+var compoundSet = lazyRE(`^(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)=`)
 
 // reassigned reads what a function does to its URL parameter between its
 // body's start and the request at pos: nothing, or one

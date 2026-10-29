@@ -4,29 +4,28 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
 var (
-	absURL = regexp.MustCompile(`https?://[A-Za-z0-9._~:/?#\[\]@!$&*+,;=%-]+`)
+	absURL = lazyRE(`https?://[A-Za-z0-9._~:/?#\[\]@!$&*+,;=%-]+`)
 	// relURL is a path in a string; [id] and [...slug] are a file-system
 	// router's parameters (/admin/users/[userId]).
-	relURL = regexp.MustCompile(`['"\x60](/[A-Za-z0-9._~/?#&=+\[\]-]{1,256})['"\x60]`)
+	relURL = lazyRE(`['"\x60](/[A-Za-z0-9._~/?#&=+\[\]-]{1,256})['"\x60]`)
 	// dotURL is a link written relative to the page: "./redirect?to=".
-	dotURL = regexp.MustCompile(`['"\x60](\./[A-Za-z][A-Za-z0-9._~/-]{0,200})(?:\?[A-Za-z0-9._~&=+-]*)?['"\x60?]`)
+	dotURL = lazyRE(`['"\x60](\./[A-Za-z][A-Za-z0-9._~/-]{0,200})(?:\?[A-Za-z0-9._~&=+-]*)?['"\x60?]`)
 	// numericPath is "/160" or "/2/3": sizes and ratios, not routes.
-	numericPath = regexp.MustCompile(`^[/0-9.]+$`)
-	jsonPath    = regexp.MustCompile(`"(?:url|href|path|route|page|api|endpoint)"\s*:\s*"(/[A-Za-z0-9._~/?#&=+-]{1,256})"`)
+	numericPath = lazyRE(`^[/0-9.]+$`)
+	jsonPath    = lazyRE(`"(?:url|href|path|route|page|api|endpoint)"\s*:\s*"(/[A-Za-z0-9._~/?#&=+-]{1,256})"`)
 	// scriptRef matches module imports and chunk names: "./chunk-AB12.js",
 	// "../lib/x.mjs", "/static/js/42.3f9c.chunk.js", "chunk-AB12.js".
-	scriptRef = regexp.MustCompile(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/\[\]-]{0,200}\.m?js)['"\x60]`)
+	scriptRef = lazyRE(`['"\x60]((?:\.{1,2}/|/)?[A-Za-z0-9_~@/-][A-Za-z0-9._~@/\[\]-]{0,200}\.m?js)['"\x60]`)
 	// brackets is a path segment with a file-system router's parameter.
-	brackets = regexp.MustCompile(`\[\[?(?:\.\.\.)?[A-Za-z_$][\w$]*\]\]?`)
+	brackets = lazyRE(`\[\[?(?:\.\.\.)?[A-Za-z_$][\w$]*\]\]?`)
 	// nameTemplate is a bundler's file name template: a placeholder next
 	// to a dot ([name].[contenthash].js, [id].js). A page's chunk has a
 	// hash after a dash ([userId]-9f8e.js).
-	nameTemplate = regexp.MustCompile(`\][.]|[.]\[`)
+	nameTemplate = lazyRE(`\][.]|[.]\[`)
 )
 
 // bracketPath maps a file-system router's parameters to the map's:
@@ -256,7 +255,7 @@ func trimURLJunk(s string) string {
 	return strings.TrimRight(s, ".,);'\"")
 }
 
-var sourceMapRE = regexp.MustCompile(`//[#@]\s*sourceMappingURL=(\S+)\s*$`)
+var sourceMapRE = lazyRE(`//[#@]\s*sourceMappingURL=(\S+)\s*$`)
 
 // SourceMapURL is the map a script names in its last line, resolved
 // against the script, or "" (inline data: maps included as given).
@@ -280,8 +279,8 @@ func SourceMapURL(script string, scriptURL *url.URL) string {
 }
 
 var (
-	gqlDocument = regexp.MustCompile(`\b(query|mutation|subscription)\s+([A-Za-z_]\w*)\s*[({]`)
-	gqlAST      = regexp.MustCompile(`"?operation"?\s*:\s*"(query|mutation|subscription)"\s*,\s*"?name"?\s*:\s*\{\s*"?kind"?\s*:\s*"Name"\s*,\s*"?value"?\s*:\s*"(\w+)"`)
+	gqlDocument = lazyRE(`\b(query|mutation|subscription)\s+([A-Za-z_]\w*)\s*[({]`)
+	gqlAST      = lazyRE(`"?operation"?\s*:\s*"(query|mutation|subscription)"\s*,\s*"?name"?\s*:\s*\{\s*"?kind"?\s*:\s*"Name"\s*,\s*"?value"?\s*:\s*"(\w+)"`)
 )
 
 // GraphQLOps lists the GraphQL operations a script carries, as
@@ -290,7 +289,7 @@ var (
 func GraphQLOps(script string) []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, re := range []*regexp.Regexp{gqlDocument, gqlAST} {
+	for _, re := range []*lazyRegexp{gqlDocument, gqlAST} {
 		for _, m := range re.FindAllStringSubmatch(script, -1) {
 			op := m[1] + " " + m[2]
 			if !seen[op] && len(out) < 500 {

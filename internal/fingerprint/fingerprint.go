@@ -1,5 +1,5 @@
 // Package fingerprint names what answers a request: technologies from
-// headers and body (wappalyzergo), CDN, WAF and cloud ranges (cdncheck),
+// headers and body (wappalyzergo), CDN, WAF and cloud ranges (cdncheck's),
 // and the Shodan-style favicon hash. All data is embedded; nothing here
 // sends a request.
 package fingerprint
@@ -15,15 +15,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/projectdiscovery/cdncheck"
+	"github.com/trannghiach/azhaq/internal/cdnranges"
 	"github.com/trannghiach/azhaq/internal/wappalyzer"
 )
 
 var (
 	techOnce sync.Once
 	techDB   *wappalyzer.Wappalyze
-	cdnOnce  sync.Once
-	cdnDB    *cdncheck.Client
 )
 
 func tech() *wappalyzer.Wappalyze {
@@ -36,13 +34,6 @@ func tech() *wappalyzer.Wappalyze {
 		debug.SetGCPercent(old)
 	})
 	return techDB
-}
-
-func cdn() *cdncheck.Client {
-	cdnOnce.Do(func() {
-		cdnDB = cdncheck.New()
-	})
-	return cdnDB
 }
 
 // Tech lists the technologies a response shows, sorted, each as "Name" or
@@ -67,7 +58,7 @@ func Network(ip net.IP) (name, kind string) {
 	if ip == nil {
 		return "", ""
 	}
-	ok, name, kind, err := cdn().Check(ip)
+	ok, name, kind, err := cdnranges.Check(ip)
 	if err != nil || !ok {
 		return "", ""
 	}
@@ -86,7 +77,7 @@ func NetworkByName(names ...string) (name, kind string) {
 	if len(clean) == 0 {
 		return "", ""
 	}
-	ok, name, kind, err := cdn().CheckSuffix(clean...)
+	ok, name, kind, err := cdnranges.CheckSuffix(clean...)
 	if err != nil || !ok {
 		return "", ""
 	}

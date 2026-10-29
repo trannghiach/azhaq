@@ -3,7 +3,6 @@ package webextract
 import (
 	"encoding/json"
 	"net/url"
-	"regexp"
 	"strings"
 )
 
@@ -108,11 +107,11 @@ func ReadManifest(body []byte) (Manifest, bool) {
 }
 
 var (
-	buildID     = regexp.MustCompile(`^[\w-]{1,64}$`)
-	nextBuildID = regexp.MustCompile(`"buildId"\s*:\s*"([\w-]{1,64})"`)
-	nuxtBuildID = regexp.MustCompile(`\bbuildId\s*:\s*"([\w-]{1,64})"|"buildId"\s*:\s*"([\w-]{1,64})"`)
-	nuxtAssets  = regexp.MustCompile(`\bbuildAssetsDir\s*:\s*"(/[\w./-]{0,64}/)"`)
-	craMain     = regexp.MustCompile(`^(.*/)static/js/(?:main|bundle)\.[0-9a-f]{8,}\.js$`)
+	buildID     = lazyRE(`^[\w-]{1,64}$`)
+	nextBuildID = lazyRE(`"buildId"\s*:\s*"([\w-]{1,64})"`)
+	nuxtBuildID = lazyRE(`\bbuildId\s*:\s*"([\w-]{1,64})"|"buildId"\s*:\s*"([\w-]{1,64})"`)
+	nuxtAssets  = lazyRE(`\bbuildAssetsDir\s*:\s*"(/[\w./-]{0,64}/)"`)
+	craMain     = lazyRE(`^(.*/)static/js/(?:main|bundle)\.[0-9a-f]{8,}\.js$`)
 )
 
 // PageManifests lists the build manifests a page's framework leaves at

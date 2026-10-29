@@ -1,7 +1,6 @@
 package webextract
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -19,9 +18,9 @@ import (
 const ident = `[A-Za-z_$][\w$]*`
 
 var (
-	pathish     = regexp.MustCompile(`^(https?://[\w.-]+(:\d+)?)?/?[\w.~%<>{}:-]+(/[\w.~%<>{}:-]*)+$`)
-	twoSegments = regexp.MustCompile(`[\w-]/[\w{<]`)
-	placeholder = regexp.MustCompile(`<(\w+)>`)
+	pathish     = lazyRE(`^(https?://[\w.-]+(:\d+)?)?/?[\w.~%<>{}:-]+(/[\w.~%<>{}:-]*)+$`)
+	twoSegments = lazyRE(`[\w-]/[\w{<]`)
+	placeholder = lazyRE(`<(\w+)>`)
 )
 
 type memberRef struct {
