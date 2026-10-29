@@ -39,6 +39,8 @@ func classOf(verdict string) (class, label string) {
 		return classRead, "Broken object level authorization"
 	case verdictWriteCross, verdictWriteAnyone:
 		return classWrite, "Broken object level authorization (write)"
+	case verdictWriteUnread:
+		return classWrite, "Broken object level authorization (write accepted, not read back)"
 	case verdictAnyoneSecrets:
 		return classExposure, "Excessive data exposure"
 	}

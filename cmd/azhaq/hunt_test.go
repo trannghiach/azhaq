@@ -9,7 +9,7 @@ import (
 
 // hunt weighs the roles verdicts by their text; the text lives here.
 func TestHuntKnowsTheRolesVerdicts(t *testing.T) {
-	for _, v := range []string{verdictCross, verdictAnyoneSecrets, verdictWriteCross, verdictWriteAnyone} {
+	for _, v := range []string{verdictCross, verdictAnyoneSecrets, verdictWriteCross, verdictWriteAnyone, verdictWriteUnread} {
 		rows, err := hunt.ReadRoles(strings.NewReader(`{"url":"http://t/x","verdict":"` + v + `"}`))
 		if err != nil || len(rows) != 1 {
 			t.Fatal(err)

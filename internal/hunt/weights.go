@@ -54,6 +54,8 @@ var verdictWeight = map[string]int{
 	"writes another role's object":        105,
 	"anyone reads sensitive fields":       100,
 	"reads another role's object":         95,
+	// Accepted, but the owner's object cannot show the change: below a proof.
+	"writes another role's object: accepted; the change cannot be read back to confirm": 90,
 }
 
 // confidenceScale is in percent; a verdict without a confidence is whole.
