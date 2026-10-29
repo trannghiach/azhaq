@@ -34,12 +34,9 @@ var fanoutTimeout = 15 * time.Second
 
 const (
 	maxNames = 20000
-	// DefaultSourceTimeout bounds each source on a direct `subs -d` run
-	// (-source-timeout), apart from the run's -timeout: a slow source
-	// (crt.sh takes 30 s and more for a large domain) is abandoned at it
-	// and listed as failed, retryable, while the names the others gave are
-	// kept. It alone makes the exit code 3 only when no other source
-	// answered.
+	// DefaultSourceTimeout bounds each passive source apart from the run's
+	// -timeout (-source-timeout): a slow one (crt.sh) is abandoned and
+	// listed, retryable and non-fatal while the others answered.
 	DefaultSourceTimeout = 60 * time.Second
 	// lateGrace is how long after a source's deadline Run still waits for
 	// it: some sources ignore the context (subfinder's crt.sh tries a
@@ -389,13 +386,9 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 	}
 	live := map[string]bool{}
 	var unchecked int
-	// A DNS pass over the padding sources' names (hundreds of them) takes
-	// longer than the room left before the run's -timeout, and running it
-	// then would blow the deadline so the engine stores nothing at all (the
-	// result is dropped). When the wait was cut, or the deadline is too near
-	// to finish the check and still emit, drop the unverified padding-only
-	// names — they are mostly noise — and emit the rest now; azhaq resume
-	// checks them. Otherwise the check runs, bounded to leave room to emit.
+	// Near the -timeout there is no room for a DNS pass over the padding
+	// sources' hundreds of names without blowing the deadline and losing the
+	// whole result: drop their unverified names, emit the rest, resume later.
 	vctx, skip := ctx, cut
 	if dl, ok := ctx.Deadline(); ok {
 		if left := time.Until(dl); left < emitGrace {
