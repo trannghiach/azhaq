@@ -28,8 +28,8 @@ var zone = map[string][]string{
 	"vpn.azqlab.lan.":       {"A 127.0.0.1"},
 	"staging.azqlab.lan.":   {"CNAME app.azqlab.lan."},
 	"old-shop.azqlab.lan.":  {"CNAME azq-lab-gone-7c1e.azurewebsites.net."},
-	"assets.azqlab.lan.":    {"CNAME azq-lab-gone-7c1e.s3.amazonaws.com."},
-	"docs.azqlab.lan.":      {"CNAME azq-lab-gone-7c1e.github.io."},
+	"assets.azqlab.lan.":    {"CNAME azq-lab-gone-7c1e.azureedge.net."},
+	"docs.azqlab.lan.":      {"CNAME azq-lab-gone-7c1e.us-east-1.elasticbeanstalk.com."},
 	"real.wild.azqlab.lan.": {"A 127.0.0.3"},
 }
 
