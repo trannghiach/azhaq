@@ -39,7 +39,7 @@ Any client that takes a JSON configuration:
 | --- | --- |
 | `azhaq_scope` | the scope, budget and pace fixed at start, and how much of the budget is used |
 | `azhaq_plan` | what a map would take, leave out and send, without sending anything |
-| `azhaq_map` | map a URL, a domain or a list into a workspace; returns the summary and the highlights (auth-gated, forbidden, API routes) |
+| `azhaq_map` | map a URL, a domain or a list into a workspace; returns the summary and the highlights (auth-gated, forbidden, API routes). `browser` loads pages in Chrome too; `graphql` asks each GraphQL endpoint for its schema (an introspection POST, counted; recovered from validation errors where introspection is off) |
 | `azhaq_resume` | continue the run of a workspace that the budget, `timeout_seconds` or a cancellation stopped, where it stopped, with the server's scope, pace and what is left of its budget; returns what `azhaq_map` returns. A workspace keeps no session: give `headers` or `login` again. A run started with a scope wider than the server's is not resumed |
 | `azhaq_subdomains` | subdomains from passive sources, with the sources of each name; `live` for names that resolve |
 | `azhaq_probe` | web services of targets, like httpx |
@@ -50,6 +50,8 @@ Any client that takes a JSON configuration:
 | `azhaq_export` | a workspace as OpenAPI, GraphQL introspection JSON or SDL, Burp scope, nuclei targets, URL or host lists, HTML, GraphML: written to a file, and returned a page at a time, each page a document of its own (below) |
 | `azhaq_diff` | what the last run into a workspace added and lost |
 | `azhaq_workspaces` | the workspaces written so far |
+
+What the tools do not start, on purpose: anything that sends a write or a body the client chooses (`roles -replay-writes`, `-browser-writes`, `fuzz`), path and parameter wordlists (`-dirs`, `-params`), DNS brute force and permutations, and UDP scans. Run those from the command line, where the person running them sees the flags.
 
 Results are one text block of compact JSON (not repeated as `structuredContent`). A result carries at most `limit` rows (100 by default, never more than 1000) and says when there are more, so one call does not fill a client's context: ask `azhaq_query` the next question instead. A summary names its next steps as tool calls rather than shell commands: a run a limit stopped says `"resume":"azhaq_resume {\"workspace\":\"juice\"} continues it"`, and its `next` entries are `azhaq_query` and `azhaq_export` calls.
 

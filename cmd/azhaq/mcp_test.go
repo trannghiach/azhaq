@@ -282,9 +282,12 @@ func TestMCPMapAndResume(t *testing.T) {
 		t.Errorf("resume of no workspace: %s", text)
 	}
 
-	// A complete map leaves no list behind.
-	if _, isErr := callText(t, s, "azhaq_map", map[string]any{"targets": []any{"127.0.0.1:3001"}, "workspace": "w2"}); isErr {
+	// A complete map leaves no list behind; graphql asks for the schemas.
+	if _, isErr := callText(t, s, "azhaq_map", map[string]any{"targets": []any{"127.0.0.1:3001"}, "workspace": "w2", "graphql": true}); isErr {
 		t.Fatal("map failed")
+	}
+	if raw, _ := os.ReadFile(filepath.Join(dir, "args")); !strings.Contains(string(raw), " -graphql") {
+		t.Errorf("graphql was not passed on: %s", raw)
 	}
 	if lists, _ := filepath.Glob(filepath.Join(dir, listPrefix+"*")); len(lists) != 0 {
 		t.Errorf("left behind: %v", lists)

@@ -49,7 +49,7 @@ func cmdWatch(args []string) error {
 	var hooks stringsFlag
 	fs.Var(&hooks, "notify", "webhook for changes: Slack, Discord, Telegram (…/sendMessage?chat_id=…) or any JSON endpoint (repeatable)")
 	notifyCmd := fs.String("notify-cmd", "", "command that gets the change set as JSON on stdin")
-	always := fs.Bool("always", false, "notify after every run, not only when something changed")
+	always := fs.Bool("always", false, "notify after every run, the first (the baseline) included, not only when something changed")
 	jsonOut := fs.Bool("json", false, "print the change set as JSON")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -77,7 +77,8 @@ func cmdWatch(args []string) error {
 		} else {
 			fmt.Print(ch.text())
 		}
-		if ch.any() || *always {
+		// The first run is the baseline, not a change: -always sends it too.
+		if (ch.any() && !ch.Baseline) || *always {
 			for _, h := range hooks {
 				if err := notify.Send(ctx, h, ch.text(), ch); err != nil {
 					fmt.Fprintf(os.Stderr, "azhaq watch: %v\n", err)

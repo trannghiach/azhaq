@@ -192,7 +192,7 @@ func TestWatchRoutesReachTheHook(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	last := posts[len(posts)-1]
-	if len(posts) != 2 || len(last.Data.Routes) != 2 || last.Data.Routes[0].Script != site.URL+"/main.js" ||
+	if len(posts) != 1 || len(last.Data.Routes) != 2 || last.Data.Routes[0].Script != site.URL+"/main.js" ||
 		!strings.Contains(last.Text, "+ POST /api/v2/export {format, userId}  (main.js)") || !strings.Contains(last.Text, "- /api/legacy/report") {
 		t.Errorf("hook posts %+v", posts)
 	}

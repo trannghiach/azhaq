@@ -324,7 +324,7 @@ A web page's answer is compared by status and title, and a JSON listing's also b
 
 ## watch
 
-`azhaq watch -db FILE -- RUN FLAGS` runs the run options into the workspace and compares its last two runs, in the terms a person watching a target cares about. The text names each kind of change that happened, with at most 20 lines each (`… and N more`), and says `no change` when nothing did. The first run of a workspace is the baseline: everything in it is new, and it lists no routes.
+`azhaq watch -db FILE -- RUN FLAGS` runs the run options into the workspace and compares its last two runs, in the terms a person watching a target cares about. The text names each kind of change that happened, with at most 20 lines each (`… and N more`), and says `no change` when nothing did. The first run of a workspace is the baseline: everything in it is new, and it lists no routes. The baseline is printed but not sent to `-notify` or `-notify-cmd` (`-always` sends it, and every run after it).
 
 ```
 azhaq watch app.db: 2026-10-29 23:29:48 against 2026-10-29 23:29:48

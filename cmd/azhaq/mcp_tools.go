@@ -49,6 +49,7 @@ var (
 	pScope     = prop("boolean", "seed from the program scope the server was started with")
 	pPassive   = prop("boolean", "send nothing to the targets: third-party sources and DNS only")
 	pBrowser   = prop("boolean", "also load pages in Chrome to see the requests their scripts make (needs Chrome on the machine); Chrome sends GET, HEAD and OPTIONS only, and maps the writes pages would send without sending them")
+	pGraphQL   = prop("boolean", "also ask each GraphQL endpoint found for its schema: an introspection query, a read-only POST that counts against the budget; where introspection is off, the schema is recovered from the endpoint's validation errors (marked partial)")
 	pDepth     = whole(0, "how many steps from the targets to follow; 0 maps the targets alone (default 4)")
 	pTimeout   = whole(1, "stop after this many seconds and keep what was found")
 	pHeaders   = strs1("request headers for every request, \"Name: value\" (a session cookie, an Authorization token, a bug bounty identification header)")
@@ -78,7 +79,7 @@ func annotations(readOnly, openWorld bool, title string) map[string]any {
 
 func mcpTools() []map[string]any {
 	planProps := map[string]any{"url": pURL, "domain": pDomain, "targets": pTargets, "program_scope": pScope,
-		"passive": pPassive, "browser": pBrowser, "depth": pDepth, "timeout_seconds": pTimeout, "headers": pHeaders, "login": pLogin}
+		"passive": pPassive, "browser": pBrowser, "graphql": pGraphQL, "depth": pDepth, "timeout_seconds": pTimeout, "headers": pHeaders, "login": pLogin}
 	mapProps := map[string]any{"workspace": pWorkspace, "limit": pLimit}
 	for k, v := range planProps {
 		mapProps[k] = v
@@ -91,7 +92,7 @@ func mcpTools() []map[string]any {
 			"description": "What azhaq_map would take, leave out of the scope (and why), run and send for these targets, without sending anything: collectors per target, built-in paths, active techniques, limits.",
 			"inputSchema": obj(planProps), "annotations": annotations(true, false, "Plan a run")},
 		{"name": "azhaq_map", "title": "Map a target",
-			"description": "Map a URL, a domain or a list of targets into a workspace: names and their addresses, web services, pages, routes the JavaScript calls (method, query and body fields), API descriptions and their operations, forms, parameters, what needs a session (401) or is refused (403). GETs only; found URLs that look like they change something (logout, delete, save) are listed, not requested. Returns the summary (failures, skipped targets, limits hit) and the highlights: auth-gated, forbidden and API routes. Read the rest with azhaq_query. A run the budget, timeout_seconds or a cancellation stopped continues with azhaq_resume; mapping again starts over.",
+			"description": "Map a URL, a domain or a list of targets into a workspace: names and their addresses, web services, pages, routes the JavaScript calls (method, query and body fields), API descriptions and their operations, forms, parameters, what needs a session (401) or is refused (403). GETs only (with graphql, also the introspection POST); found URLs that look like they change something (logout, delete, save) are listed, not requested. Returns the summary (failures, skipped targets, limits hit) and the highlights: auth-gated, forbidden and API routes. Read the rest with azhaq_query. A run the budget, timeout_seconds or a cancellation stopped continues with azhaq_resume; mapping again starts over.",
 			"inputSchema": obj(mapProps), "annotations": annotations(false, true, "Map a target")},
 		{"name": "azhaq_resume", "title": "Resume a run",
 			"description": "Continue the run of a workspace that a limit (the request budget, timeout_seconds) or a cancellation stopped, where it stopped: the answers it got are not asked for again. Holds to the server's scope and pace and spends what is left of its budget. Returns the summary and the highlights, like azhaq_map. A workspace keeps no session: give headers or login again if the run had them.",

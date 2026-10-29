@@ -628,6 +628,9 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		if boolean(a, "browser") {
 			f = append(f, "-browser")
 		}
+		if boolean(a, "graphql") {
+			f = append(f, "-graphql")
+		}
 		if d, ok := a["depth"].(float64); ok && d >= 0 && d <= 1<<30 {
 			f = append(f, "-depth", fmt.Sprint(int(d))) // 0 too: the targets alone
 		}
@@ -1021,7 +1024,7 @@ func (s *mcpServer) resumable(db string) (string, error) {
 
 // mcpRunFlags are the run options the tools of a server start runs with.
 var mcpRunFlags = map[string]bool{
-	"url": true, "domain": true, "cidr": true, "passive": true, "browser": true, "depth": true, "timeout": true,
+	"url": true, "domain": true, "cidr": true, "passive": true, "browser": true, "graphql": true, "depth": true, "timeout": true,
 	"header": true, "login": true, "login-user": true, "max-requests": true, "rate": true, "deny": true, "quiet": true,
 	"json": true, "probe": true, "no-favicon": true, "skip": true, "port-rate": true, "max-items": true, "live": true,
 }

@@ -99,7 +99,7 @@ func TestWatchReportsOnlyWhatChanged(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(hooks) != 3 || !strings.Contains(hooks[1], "+ 1 URLs") || !strings.Contains(hooks[2], "- 1 URLs gone") {
-		t.Errorf("webhook calls %q (the unchanged run must not notify)", hooks)
+	if len(hooks) != 2 || !strings.Contains(hooks[0], "+ 1 URLs") || !strings.Contains(hooks[1], "- 1 URLs gone") {
+		t.Errorf("webhook calls %q (the baseline and the unchanged run must not notify)", hooks)
 	}
 }
