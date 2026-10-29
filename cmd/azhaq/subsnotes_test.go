@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -47,6 +48,9 @@ func TestCoverageNoteTesla(t *testing.T) {
 	t.Log(notes[0])
 	if !strings.Contains(notes[0], "about 485 names; this run has 481 of them (99%)") {
 		t.Errorf("live note %q", notes[0])
+	}
+	if want := fmt.Sprintf("the other %d of the %d names came from", len(live)-481, len(live)); len(live) > 481 && !strings.Contains(notes[0], want) {
+		t.Errorf("live note %q does not reconcile with the %d names printed", notes[0], len(live))
 	}
 }
 

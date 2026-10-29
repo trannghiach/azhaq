@@ -33,8 +33,14 @@ func subsNotes(ps []map[string]any, keep map[string]bool) []string {
 		}
 	}
 	if observed > 0 {
-		notes = append(notes, fmt.Sprintf("coverage: the independent sources hold about %d names; this run has %d of them (%d%%) — an estimate of what the sources know, not of every name that exists",
-			int(estimated+0.5), observed, int(100*float64(observed)/estimated+0.5)))
+		note := fmt.Sprintf("coverage: the independent sources hold about %d names; this run has %d of them (%d%%) — an estimate of what the sources know, not of every name that exists",
+			int(estimated+0.5), observed, int(100*float64(observed)/estimated+0.5))
+		if keep != nil && len(keep) > observed {
+			// Reconciles with the count printed: the rest have no
+			// independent source to estimate from.
+			note += fmt.Sprintf("; the other %d of the %d names came from the name history, from guesses checked in DNS or as CNAME targets, which the estimate leaves out", len(keep)-observed, len(keep))
+		}
+		notes = append(notes, note)
 	}
 	return notes
 }
