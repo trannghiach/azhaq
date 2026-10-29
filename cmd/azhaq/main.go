@@ -822,7 +822,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		case fetch.Killed() != nil:
 			rep.Stopped = killStopped(left)
 		case fetch.Spent():
-			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done", fetch.MaxRequests, left)
+			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done (the cap holds for each run: azhaq resume sends up to %d more, or as many as its -max-requests says, 0 for no cap)", fetch.MaxRequests, left, fetch.MaxRequests)
 		case len(fetch.OriginsDown()) > 0:
 			rep.Stopped = fmt.Sprintf("%s stopped answering after %d timeouts, %d tasks known and not done", strings.Join(fetch.OriginsDown(), ", "), fetch.OriginTrips, left)
 		default:
