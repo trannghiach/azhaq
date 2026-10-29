@@ -28,6 +28,7 @@ import (
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/gqlcol"
@@ -497,6 +498,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	// before, so their kept answers serve.
 	if *resumeRun != "" {
 		fetch.SetProbeToken(st.GetMeta("probe:" + *resumeRun))
+		markDescribed(st) // the description guesses already answered stay answered
 	} else {
 		_ = st.SetMeta("probe:"+st.RunID(), fetch.ProbeToken())
 		_ = st.DropResponses(st.RunID())
@@ -1855,4 +1857,22 @@ func browserOnly(obs []types.StoredObservation) (only, pages int) {
 		}
 	}
 	return only, len(rendered)
+}
+
+// markDescribed tells fetch which origins the workspace's run already read
+// an API description from, so a resumed run does not guess its locations
+// again (the mark lives in the process that found it).
+func markDescribed(st *store.Store) {
+	obs, err := st.Observations()
+	if err != nil {
+		return
+	}
+	for _, o := range obs {
+		if o.Collector != apicol.Name || (o.Kind != "api" && o.Kind != "api-ui") {
+			continue
+		}
+		if u, err := url.Parse(o.Source); err == nil && u.Host != "" {
+			fetch.MarkDescribed(u.Scheme + "://" + u.Host)
+		}
+	}
 }
