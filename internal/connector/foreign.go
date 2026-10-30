@@ -151,7 +151,7 @@ func lineFacts(raw []byte, m map[string]any, exported map[string][2]string) ([]F
 		return httpxFacts(m), FormatHTTPX, nil
 	case has("url") && has("status") && has("redirectlocation"):
 		return ffufFacts(m, ""), FormatFFUF, nil // ffuf -json: one result per line
-	case has("host") && has("port") && !has("url"):
+	case (has("host") || has("ip")) && has("port") && !has("url"): // naabu: "host" only when it was given a name
 		host, ip := str("host"), str("ip")
 		port := fmt.Sprint(m["port"])
 		if host == "" {

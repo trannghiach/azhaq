@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -403,5 +404,20 @@ func TestMCPConcurrentCallsShareTheBudget(t *testing.T) {
 	runs := strings.Count(string(raw), "run ")
 	if n != 1 || s.used != 2 {
 		t.Errorf("%d calls refused, used %d, runs started %d:\n%s", n, s.used, runs, raw)
+	}
+}
+
+// A client that sends the language-server shutdown gets an answer, not
+// method-not-found, and the server ends when stdin closes.
+func TestMCPShutdownAnswered(t *testing.T) {
+	s := &mcpServer{dir: t.TempDir(), lock: []string{"-allow", "127.0.0.1"}, locked: true, budget: 10}
+	in := strings.NewReader(`{"jsonrpc":"2.0","id":7,"method":"shutdown"}` + "\n")
+	var out bytes.Buffer
+	if err := s.serve(in, &out); err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if json.Unmarshal(bytes.TrimSpace(out.Bytes()), &m) != nil || m["id"] != float64(7) || m["error"] != nil || m["result"] == nil {
+		t.Errorf("answer %s", out.String())
 	}
 }

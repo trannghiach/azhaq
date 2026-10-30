@@ -251,6 +251,27 @@ func TestReplayWriteCreate(t *testing.T) {
 	}
 }
 
+// A create the other roles' requests made the server fail (a unique key it
+// already holds: SQLAlchemy's 500) is no refusal, and is said to be neither.
+func TestReplayWriteServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("A") == "" {
+			w.WriteHeader(401)
+			return
+		}
+		w.WriteHeader(500)
+		w.Write([]byte("sqlite3.IntegrityError: UNIQUE constraint failed: books.book_title"))
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	post := writeReq{owner: "alice", method: "POST", url: srv.URL + "/books/v1", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"title":"t"}`), status: 200, from: "alice.har"}
+	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteFailed {
+		t.Fatalf("rows %+v", rows)
+	}
+}
+
 // An empty write that changes the owner's object stops there: nobody
 // else is asked.
 func TestReplayWriteChangedObject(t *testing.T) {

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Write replay no longer calls a server error a refusal: when every other role's write got a 5xx (a unique key the server already held: SQLAlchemy's 500), the verdict is `the other roles' writes failed with a server error (5xx): neither refused nor accepted`.
+- `ingest` reads naabu's JSON lines for an address, which carry `ip` and no `host`; they were refused as a format it does not know.
+- `azhaq mcp` answers a `shutdown` request (sent by clients built on the language-server pattern) instead of `method not found`, and ends when stdin closes.
+
 ## v0.10.0
 
 ### `subs`

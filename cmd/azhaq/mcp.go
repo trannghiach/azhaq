@@ -251,6 +251,11 @@ func (s *mcpServer) request(ctx context.Context, m rpcMsg) {
 		})
 	case "ping":
 		s.reply(m.ID, map[string]any{})
+	case "shutdown":
+		// Not MCP's (the client closes stdin), but clients built on the
+		// language-server pattern send it: answered, and the server ends
+		// when stdin does.
+		s.reply(m.ID, map[string]any{})
 	case "tools/list":
 		s.reply(m.ID, map[string]any{"tools": mcpTools()})
 	case "tools/call":

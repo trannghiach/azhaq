@@ -30,7 +30,10 @@ const (
 	verdictWriteOwner    = "only its owner writes it"
 	verdictWriteVoid     = "the owner's own write was refused"
 	verdictWriteRefused  = "the other roles were refused"
-	verdictWriteDry      = "would be sent (-dry-writes)"
+	// Every other role's write ended in a server error: neither refused nor
+	// let through, so nothing is said about who may write.
+	verdictWriteFailed = "the other roles' writes failed with a server error (5xx): neither refused nor accepted"
+	verdictWriteDry    = "would be sent (-dry-writes)"
 	// A write another role sent was answered 2xx, and nothing the owner's
 	// object shows can tell whether it took.
 	verdictWriteUnread = "writes another role's object: accepted; the change cannot be read back to confirm"
@@ -46,6 +49,22 @@ func init() {
 	verdictOrder[verdictWriteOwner] = 20
 	verdictOrder[verdictWriteVoid] = 21
 	verdictOrder[verdictWriteRefused] = 20
+	verdictOrder[verdictWriteFailed] = 19
+}
+
+// serverFailed: every other role that was asked got a 5xx.
+func serverFailed(row *roleRow) bool {
+	n := 0
+	for name, a := range row.Answers {
+		if name == row.Owner || a.Status == 0 {
+			continue
+		}
+		if a.Status < 500 {
+			return false
+		}
+		n++
+	}
+	return n > 0
 }
 
 // writeOp is a write a route takes, as a role's run found it: PUT
@@ -363,9 +382,12 @@ func replayCollection(row *roleRow, roles []role, w writeReq, send func(role, wr
 		}
 	}
 	row.Readers = let
-	if len(let) > 0 {
+	switch {
+	case len(let) > 0:
 		row.Verdict = verdictWriteCreate
-	} else {
+	case serverFailed(row):
+		row.Verdict = verdictWriteFailed
+	default:
 		row.Verdict = verdictWriteRefused
 	}
 	return nil
@@ -636,6 +658,8 @@ func writeVerdict(row *roleRow, let, proven []string, anon map[string]bool, owne
 			row.OwnerBy += "; the owner's object could not be read to verify the write"
 		}
 		return verdictWriteNoChange
+	case serverFailed(row):
+		return verdictWriteFailed
 	case ownerLet:
 		return verdictWriteOwner
 	case !ownerAsked:

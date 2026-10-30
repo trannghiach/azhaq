@@ -205,3 +205,16 @@ not a url at all
 		t.Error("a file with nothing readable ingested")
 	}
 }
+
+// naabu given an address writes no "host": the line is still naabu's.
+func TestReadNaabuAddressOnly(t *testing.T) {
+	in := `{"ip":"127.0.0.1","timestamp":"2026-10-30T21:24:37.9532617Z","port":22,"protocol":"tcp","tls":false}` + "\n" +
+		`{"ip":"127.0.0.1","timestamp":"2026-10-30T21:24:37.9532617Z","port":11369,"protocol":"tcp","tls":false}`
+	facts, formats, err := ReadAny([]byte(in))
+	if err != nil || formats[FormatNaabu] != 2 || len(facts) != 2 {
+		t.Fatalf("%v %v %d", err, formats, len(facts))
+	}
+	if typ, key := facts[0].Entity(); typ != "IPAddress" || key != "127.0.0.1" {
+		t.Errorf("entity %s %s", typ, key)
+	}
+}
