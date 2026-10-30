@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.10.0
+
+### probe (httpx)
+
+- `probe` follows no redirect unless given `-fr` (with `-maxr`, `-fhr`, `-rhsts`), as httpx does. A row's status, title, length and content type all come from one answer; with `-fr` they are the last answer's and the chain is in `chain_status_codes` and `final_url`. `run` keeps following.
+- `probe` takes httpx's matchers and filters over the response as sent: `-mc/-fc`, `-ml/-fl`, `-mlc/-flc`, `-mwc/-fwc`, `-mfc/-ffc`, `-ms/-fs`, `-mr/-fe`, `-mcdn/-fcdn`, `-mrt/-frt`, `-mdc/-fdc`, `-fd`, `-fpt/-fep`. The summary says how many rows they left out and which conditions could not be judged.
+- A target that is dropped for a wildcard answer, or that gets no answer, is a row with `failed: true` and an `error` (`-probe` prints `[FAILED]`), and the summary counts it. A name that resolves only through a wildcard is probed, not dropped.
+- `probe` stores and prints responses: `-sr`, `-srd`, `-ob`, `-store-chain`, `-rstr`, `-rsts`, `-irh`, `-irr`, `-irrb`, `-include-chain`, `-debug`, `-debug-req`, `-debug-resp`, `-ss` (screenshots).
+- `probe` reports `tls` (`-tls-grab`, read from the handshake the request made: no extra connection), `cname`, `resolvers`, `asn`, `hash` (`-hash`), `jarm_hash`, `body_preview`, `extracts` (`-er`, `-ep`), `favicon_md5`, `favicon_path`, `favicon_url`, `websocket`, `http2`, `pipeline`, `vhost`, `sni`, `cpe`, `wordpress`, `knowledgebase`, `csp`, `body_fqdn` and `body_domains`.
+- `probe` takes httpx's input flags: `-p` ports and ranges with `http:` and `https:` (also for addresses), `-path`, `-nf`, `-pa`, `-e`, `-sni`, `-no-decode`, `-tls-probe`, `-csp-probe`, `-im burp`, `-vi`, JSON target lines, address ranges, AS numbers, comma lists, globs, `*.example.com`; its display and output flags: `-sc -cl -ct -title -td -server -ip -rt -lc -wc -location -method -cdn -cname -asn -ldp`, `-csv`, `-csvo`, `-md`, `-oa`, `-eof`, `-lof`; and its request flags: `-rlm`, `-delay`, `-retries`, `-req-timeout`, `-maxhr`, `-proxy`, `-auto-referer`, `-random-agent`, `-cff`.
+- A bare `host:port` is asked over plain HTTP first on port 8080 and on ports above 1024, as httpx does, and asked again over TLS when plain HTTP is answered 400. `probe` accepts TLS 1.0 and 1.1 servers and sends no `Accept` header.
+- `probe -x`, `-body` and `-rr` send the methods, body or raw request you give to the targets in scope, counted, paced and in the ledger; the summary says non-GET requests were sent. They can change data on the target.
+- A page in Shift-JIS, GBK, Big5 or another declared charset has its title read in UTF-8; httpx reads only GBK, Big5 and EUC-KR.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

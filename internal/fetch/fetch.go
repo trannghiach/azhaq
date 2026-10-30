@@ -1,13 +1,16 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
 	"io"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"net/http/httputil"
 	"net/url"
 	"sort"
 	"strings"
@@ -60,6 +63,11 @@ type Result struct {
 	IP string
 	// Elapsed covers every hop, headers and body.
 	Elapsed time.Duration
+	// Method is the request's, empty for a GET.
+	Method string
+	// Raw is the request and the last response as they went over the wire,
+	// kept when KeepRaw is set.
+	Raw *Raw
 
 	cut bool // the chain stopped before its end: the budget, a failure or an interrupt
 }
@@ -134,6 +142,59 @@ var Delay time.Duration
 // recorded with its Location, as httpx does by default.
 var NoFollow bool
 
+// TLSMin is the lowest TLS version spoken: 1.2, or 1.0 for probe, as httpx
+// accepts it.
+var TLSMin uint16 = tls.VersionTLS12
+
+// SNI, when set, is the server name every TLS handshake asks for (-sni).
+var SNI string
+
+// RequestTimeout bounds each request; zero keeps the defaults (30 s in
+// all, 10 s to the first byte).
+var RequestTimeout time.Duration
+
+// ProxyURL, when set, sends every request through this proxy (http, https or
+// socks5), not the one the environment names (probe -proxy).
+var ProxyURL *url.URL
+
+// RespectHSTS upgrades a followed redirect to https when the answer sent
+// Strict-Transport-Security (probe -rhsts).
+var RespectHSTS bool
+
+// AutoReferer sends each request with its own URL as Referer (probe).
+var AutoReferer bool
+
+// RandomAgent picks a browser's User-Agent for each request (probe).
+var RandomAgent bool
+
+// ReadLimit, when above zero, is the most bytes read of any answer (probe
+// -rstr); the defaults hold 2 MiB for a page, 16 MiB for a script.
+var ReadLimit int
+
+// NoReuse opens a connection for every request and asks the server to close
+// it (probe, as httpx: the headers a server answers with are then the ones
+// httpx sees).
+var NoReuse bool
+
+// NoAccept sends no Accept header unless one is given (probe, as httpx):
+// a server that picks its answer by Accept then answers as it does to httpx.
+var NoAccept bool
+
+// MaxRedirects is how many redirects a GET follows (-maxr); NoFollow
+// turns following off.
+var MaxRedirects = 5
+
+// SameHostOnly keeps redirects to the host asked (-fhr), not its site.
+var SameHostOnly bool
+
+// KeepRaw keeps each request and response head in Result.Raw (probe's
+// matchers, raw output and certificate data read them).
+var KeepRaw bool
+
+// Retries is how many more times a request that got no answer is sent
+// (-retries); each counts as a request.
+var Retries int
+
 // OriginTrips is how many connects or timeouts in a row, with no answer
 // between them, stop an origin for the rest of the run: its remaining
 // requests are refused with neterr.ErrOriginDown, and the work waits for
@@ -164,6 +225,21 @@ func Reset() {
 	Memos = nil
 	Delay = 0
 	NoFollow = false
+	MaxRedirects = 5
+	SameHostOnly = false
+	KeepRaw = false
+	NoAccept = false
+	NoReuse = false
+	ProxyURL = nil
+	RespectHSTS = false
+	AutoReferer = false
+	RandomAgent = false
+	ReadLimit = 0
+	OriginTrips = 5
+	Retries = 0
+	TLSMin = tls.VersionTLS12
+	SNI = ""
+	RequestTimeout = 0
 	cacheMu.Unlock()
 	originMu.Lock()
 	origins = map[string]*origin{}
@@ -289,22 +365,45 @@ func Client(c *http.Client) *http.Client {
 	// Headers within 10 s, like httpx: CDN edges and bot managers often
 	// answer slowly. The body gets longer: a 1 MB bundle on a slow link
 	// is not a dead host.
+	total, header, handshake := 30*time.Second, 10*time.Second, 5*time.Second
+	if RequestTimeout > 0 {
+		total, header, handshake = RequestTimeout, RequestTimeout, min(handshake, RequestTimeout)
+	}
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: total,
 		Transport: ledger.Wrap(&http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
+			Proxy:                 proxyFunc(),
 			DialContext:           dial,
-			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
+			DisableKeepAlives:     NoReuse,
+			TLSHandshakeTimeout:   handshake,
+			ResponseHeaderTimeout: header,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
-				MinVersion:         tls.VersionTLS12,
+				MinVersion:         TLSMin,
+				ServerName:         SNI,
 			},
 		}),
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
+}
+
+func proxyFunc() func(*http.Request) (*url.URL, error) {
+	if ProxyURL != nil {
+		return http.ProxyURL(ProxyURL)
+	}
+	return http.ProxyFromEnvironment
+}
+
+// agents are the browsers' User-Agents RandomAgent picks among.
+var agents = []string{
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+	"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:132.0) Gecko/20100101 Firefox/132.0",
+	"Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
 }
 
 // recorded is c with its requests entered in the run's ledger: c itself when
@@ -457,6 +556,13 @@ func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byt
 }
 
 func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
+	return DoReq(ctx, c, raw, nil)
+}
+
+// DoReq is Do for a request that is not a plain GET (a method, a body, headers
+// for this request only): its answer is kept apart from the GET's.
+func DoReq(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, bool, error) {
+	key := rq.Key(raw)
 	if EndsSession(raw) {
 		return Result{}, false, neterr.ErrEndsSession
 	}
@@ -464,12 +570,12 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		return Result{}, false, neterr.ErrOutOfScope
 	}
 	cacheMu.Lock()
-	if e, ok := cache[raw]; ok {
+	if e, ok := cache[key]; ok {
 		cacheMu.Unlock()
 		markStopped(ctx, e.err)
 		return e.res, true, e.err
 	}
-	if wait, ok := inflight[raw]; ok {
+	if wait, ok := inflight[key]; ok {
 		cacheMu.Unlock()
 		done := timing.Start(ctx, "fetch.wait", raw)
 		select {
@@ -480,7 +586,7 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		}
 		done()
 		cacheMu.Lock()
-		e := cache[raw]
+		e := cache[key]
 		cacheMu.Unlock()
 		markStopped(ctx, e.err)
 		return e.res, true, e.err
@@ -490,16 +596,18 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		return Result{}, false, err // not cached: the origin may answer again in a later run
 	}
 	wait := make(chan struct{})
-	inflight[raw] = wait
+	inflight[key] = wait
 	cacheMu.Unlock()
 
 	if Keep != nil {
-		if res, ok := Keep.Load(raw); ok {
+		if res, ok := Keep.Load(key); ok {
 			// Asked before this run was stopped: not sent, not counted.
 			cacheMu.Lock()
-			cache[raw] = cacheEnt{res: res}
-			cacheHopsLocked(res)
-			delete(inflight, raw)
+			cache[key] = cacheEnt{res: res}
+			if rq.Plain() {
+				cacheHopsLocked(res)
+			}
+			delete(inflight, key)
 			close(wait)
 			cacheMu.Unlock()
 			return res, false, nil
@@ -508,8 +616,8 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	release, err := acquireHost(ctx, raw)
 	if err != nil {
 		cacheMu.Lock()
-		cache[raw] = cacheEnt{err: err}
-		delete(inflight, raw)
+		cache[key] = cacheEnt{err: err}
+		delete(inflight, key)
 		close(wait)
 		cacheMu.Unlock()
 		return Result{}, false, err
@@ -519,8 +627,8 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		// on the host: whoever waits on this URL gets the refusal too.
 		release()
 		cacheMu.Lock()
-		cache[raw] = cacheEnt{err: err}
-		delete(inflight, raw)
+		cache[key] = cacheEnt{err: err}
+		delete(inflight, key)
 		close(wait)
 		cacheMu.Unlock()
 		return Result{}, false, err
@@ -532,8 +640,8 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 			t.Stop()
 			release()
 			cacheMu.Lock()
-			cache[raw] = cacheEnt{err: ctx.Err()}
-			delete(inflight, raw)
+			cache[key] = cacheEnt{err: ctx.Err()}
+			delete(inflight, key)
 			close(wait)
 			cacheMu.Unlock()
 			return Result{}, false, ctx.Err()
@@ -541,21 +649,21 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 		}
 	}
 	done := timing.Start(ctx, "fetch", raw)
-	res, err := do(ctx, c, raw)
+	res, err := do(ctx, c, raw, rq)
 	done()
 	release()
 	noteOrigin(ctx, raw, err)
 	cacheMu.Lock()
-	cache[raw] = cacheEnt{res: res, err: err}
+	cache[key] = cacheEnt{res: res, err: err}
 	var hops []Result
-	if err == nil {
+	if err == nil && rq.Plain() {
 		hops = cacheHopsLocked(res)
 	}
-	delete(inflight, raw)
+	delete(inflight, key)
 	close(wait)
 	cacheMu.Unlock()
 	if err == nil && !res.cut && ctx.Err() == nil && Keep != nil {
-		Keep.Keep(raw, res)
+		Keep.Keep(key, res)
 		for _, hop := range hops {
 			Keep.Keep(hop.RequestURL, hop)
 		}
@@ -613,8 +721,13 @@ func hopResults(res Result) []Result {
 	return out
 }
 
-func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
+func do(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, error) {
 	c = noFollow(c)
+	if rq != nil && rq.IP != "" {
+		c = pinned(c, rq.IP)
+	}
+	method := rq.method()
+	body := rq.body()
 	current := raw
 	var hops []Hop
 	var firstHeader http.Header
@@ -625,8 +738,12 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 	var lastHeader http.Header
 	var remoteIP string
 	var cut bool
+	var kept *Raw
+	if KeepRaw {
+		kept = &Raw{}
+	}
 	start := time.Now()
-	for i := 0; i < 6; i++ {
+	for i := 0; i <= MaxRedirects; i++ {
 		rctx := ctx
 		if i == 0 {
 			rctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(ci httptrace.GotConnInfo) {
@@ -637,19 +754,45 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 				}
 			}})
 		}
-		req, err := http.NewRequestWithContext(rctx, http.MethodGet, current, nil)
+		var rd io.Reader
+		if len(body) > 0 {
+			rd = bytes.NewReader(body)
+		}
+		req, err := http.NewRequestWithContext(rctx, method, current, rd)
 		if err != nil {
 			return Result{}, err
 		}
 		ApplyHeaders(req)
-		if err := Spend(ctx); err != nil {
-			if i > 0 {
-				cut = true
-				break // the redirect is recorded; its target is not requested
-			}
-			return Result{}, err
+		if i == 0 {
+			rq.apply(req)
 		}
-		resp, err := c.Do(req)
+		var reqDump []byte
+		if kept != nil {
+			reqDump = dumpRequest(req, body)
+			if i == 0 {
+				kept.Request = reqDump
+			}
+		}
+		var resp *http.Response
+		for try := 0; ; try++ {
+			if err := Spend(ctx); err != nil {
+				if i > 0 {
+					cut = true
+					break // the redirect is recorded; its target is not requested
+				}
+				return Result{}, err
+			}
+			resp, err = c.Do(req)
+			if err == nil || i > 0 || try >= Retries || ctx.Err() != nil || !neterr.Unanswered(err) {
+				break
+			}
+			if len(body) > 0 {
+				req.Body = io.NopCloser(bytes.NewReader(body))
+			}
+		}
+		if cut {
+			break
+		}
 		if err != nil {
 			if i > 0 {
 				cut = true
@@ -657,7 +800,13 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 			}
 			return Result{}, err
 		}
-		body, truncated, err := readBody(resp.Body, bodyLimit(resp))
+		var head string
+		if kept != nil {
+			if d, err := httputil.DumpResponse(resp, false); err == nil {
+				head = string(d)
+			}
+		}
+		rbody, truncated, err := readBody(resp.Body, bodyLimit(resp))
 		resp.Body.Close()
 		if err != nil {
 			if i > 0 {
@@ -665,6 +814,11 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 				break
 			}
 			return Result{}, err
+		}
+		if kept != nil {
+			kept.Head, kept.Proto = head, resp.Proto
+			kept.TLS = tlsInfo(resp.TLS)
+			kept.Chain = append(kept.Chain, RawHop{Request: string(reqDump), Response: head})
 		}
 		loc := strings.TrimSpace(resp.Header.Get("Location"))
 		reqURL := current
@@ -676,7 +830,7 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 			firstHeader = resp.Header.Clone()
 			firstLine = resp.Status
 		}
-		lastBody = body
+		lastBody = rbody
 		lastTrunc = truncated
 		lastHeader = resp.Header
 		lastURL = reqURL
@@ -687,11 +841,21 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		if err != nil || !inScope(next.String()) || !followable(raw, next.String()) {
 			break // the hop is recorded with its Location; the target is not requested
 		}
+		if RespectHSTS && next.Scheme == "http" && resp.Header.Get("Strict-Transport-Security") != "" {
+			next.Scheme = "https"
+		}
+		if resp.StatusCode != 307 && resp.StatusCode != 308 {
+			method, body = http.MethodGet, nil // as a browser: a redirect after a write is read
+		}
 		current = next.String()
 	}
 	status := 0
 	if len(hops) > 0 {
 		status = hops[0].Status
+	}
+	m := rq.method()
+	if m == http.MethodGet {
+		m = ""
 	}
 	return Result{
 		RequestURL: raw,
@@ -706,6 +870,8 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 		FinalHeader: lastHeader,
 		IP:          viaProxy(c, raw, remoteIP),
 		Elapsed:     time.Since(start),
+		Method:      m,
+		Raw:         kept,
 		cut:         cut,
 	}, nil
 }
@@ -754,9 +920,16 @@ func ApplyHeaders(req *http.Request) {
 		req.Header.Del("Host")
 	}
 	if req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", UserAgent)
+		ua := UserAgent
+		if RandomAgent {
+			ua = agents[rand.IntN(len(agents))]
+		}
+		req.Header.Set("User-Agent", ua)
 	}
-	if req.Header.Get("Accept") == "" {
+	if AutoReferer && req.Header.Get("Referer") == "" {
+		req.Header.Set("Referer", req.URL.String())
+	}
+	if req.Header.Get("Accept") == "" && !NoAccept {
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	}
 }
@@ -773,6 +946,9 @@ func readBody(r io.Reader, limit int) ([]byte, bool, error) {
 }
 
 func bodyLimit(resp *http.Response) int {
+	if ReadLimit > 0 {
+		return ReadLimit
+	}
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	if strings.Contains(ct, "javascript") || strings.Contains(ct, "ecmascript") || strings.Contains(ct, "json") {
 		return MaxScriptBody
@@ -786,6 +962,27 @@ func bodyLimit(resp *http.Response) int {
 		}
 	}
 	return MaxBody
+}
+
+// pinned is c with every connection going to ip, not one pooled for the name.
+func pinned(c *http.Client, ip string) *http.Client {
+	t, ok := ledger.Unwrap(c.Transport).(*http.Transport)
+	if !ok {
+		return c
+	}
+	tc := t.Clone()
+	tc.DisableKeepAlives = true
+	d := &net.Dialer{Timeout: 5 * time.Second}
+	tc.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		_, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+		return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
+	}
+	cp := *c
+	cp.Transport = ledger.Wrap(tc)
+	return &cp
 }
 
 func noFollow(c *http.Client) *http.Client {
@@ -845,7 +1042,12 @@ func mustURL(raw string) *url.URL {
 // next is on raw's site. A redirect to a third party (an asset host, an
 // identity provider) is recorded with its Location, and that party's
 // page is never reported as the target's.
-func followable(raw, next string) bool { return SameSite(raw, next) }
+func followable(raw, next string) bool {
+	if SameHostOnly {
+		return hostOf(raw) == hostOf(next)
+	}
+	return SameSite(raw, next)
+}
 
 // SameSite says whether other belongs to the site of page, the way
 // redirects are followed: with a scope, when the scope allows other's

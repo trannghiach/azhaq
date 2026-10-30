@@ -319,3 +319,8 @@ func Generic(name string, ip net.IP) bool {
 	}
 	return normalize.SharedSuffix(name) != ""
 }
+
+// Announced is the prefixes an AS announces and its holder's name.
+func (a *ASN) Announced(ctx context.Context, asn string) ([]string, string, error) {
+	return a.announced(ctx, asn)
+}

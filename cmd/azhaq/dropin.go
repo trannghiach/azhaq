@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -23,8 +22,6 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/engine"
-	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -644,148 +641,6 @@ func topSources(by map[string]int, n int) string {
 	return strings.Join(parts, ", ")
 }
 
-// probeOut prints web services as azhaq-http reports them, like httpx.
-type probeOut struct {
-	w     *writer
-	c     *common
-	mu    sync.Mutex
-	cdn   map[string][2]string
-	seen  map[string]bool
-	input map[string]string // seed key → the target as given
-}
-
-func (p *probeOut) see(ent types.Entity, o types.Observation) {
-	switch o.Collector {
-	case "azhaq-dns":
-		m := payloadOf(o)
-		fqdn, _ := m["fqdn"].(string)
-		name, _ := m["cdn"].(string)
-		kind, _ := m["cdn_type"].(string)
-		if fqdn != "" && name != "" {
-			p.mu.Lock()
-			p.cdn[fqdn] = [2]string{name, kind}
-			p.mu.Unlock()
-		}
-	case "azhaq-http":
-		r, ok := engine.ProbeRowOf(o)
-		if !ok {
-			return
-		}
-		p.mu.Lock()
-		dup := p.seen[r.URL]
-		p.seen[r.URL] = true
-		host := normalize.HostFromURL(r.URL)
-		c, known := p.cdn[host]
-		p.mu.Unlock()
-		if dup {
-			return
-		}
-		var addrs []string
-		if net.ParseIP(host) == nil {
-			addrs = fetch.Resolve(context.Background(), host) // the answer HTTP connected with
-		}
-		if !known {
-			for _, a := range append([]string{r.IP}, addrs...) {
-				if name, kind := fingerprint.Network(net.ParseIP(a)); name != "" {
-					c = [2]string{name, kind}
-					break
-				}
-			}
-		}
-		r.CDN, r.CDNType = c[0], c[1]
-		switch {
-		case p.w.json:
-			in := p.input[ent.Key]
-			if in == "" {
-				in = ent.Key
-			}
-			p.w.obj(httpxRow(r, in, addrs))
-		case p.c.silent:
-			p.w.line(r.URL)
-		default:
-			p.w.line(r.Line())
-		}
-	}
-}
-
-// cmdProbe is httpx: one line per web service, as each answers.
-func cmdProbe(args []string) error {
-	fs := newFlags("probe")
-	var c common
-	c.register(fs)
-	var urls stringsFlag
-	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
-	list := fs.String("l", "", "file of targets (- for stdin)")
-	given := inherit(fs, append([]string{"web-ports", "parallel", "host-parallel", "delay", "no-follow", "no-tech", "resolvers"}, targetFlags...)...)
-	favicon := fs.Bool("favicon", false, "also hash each front page's favicon (one or two more requests per service)")
-	if err := parse(fs, args); err != nil {
-		return err
-	}
-	targets, err := inputs(urls, *list)
-	if err != nil {
-		return err
-	}
-	if len(targets) == 0 {
-		return usagef("give -u TARGET, -l FILE or targets on stdin")
-	}
-	path, rm, err := tempList(targets)
-	if err != nil {
-		return err
-	}
-	defer rm()
-	w, err := newWriter(&c)
-	if err != nil {
-		return err
-	}
-	// httpx's input field is the line as given, not the URL it became.
-	input := map[string]string{}
-	for _, t := range targets {
-		if s, err := listSeed(t); err == nil {
-			input[normalize.Seed(s).Key()] = t
-		}
-	}
-	out := &probeOut{w: w, c: &c, cdn: map[string][2]string{}, seen: map[string]bool{}, input: input}
-	rep := newReport("probe")
-	rep.what = "web services"
-	run := append([]string{"-list", path, "-probe"}, given()...)
-	if !*favicon {
-		run = append(run, "-no-favicon")
-	}
-	st, done, err := runPreset(&c, run, rep, out.see)
-	if err != nil {
-		return err
-	}
-	defer done()
-	if err := w.close(); err != nil {
-		return err
-	}
-	rep.Results, rep.Counts = w.count(), nil
-	if quiet := silentHosts(st); len(quiet) > 0 {
-		rep.Counts = map[string]int{"hosts without a web service": len(quiet)}
-		// Every target ends as a service, a failure or a skip: a name
-		// that resolved and has neither is a gap, said as a failure.
-		accounted := map[string]bool{}
-		for _, f := range rep.Failed {
-			for _, t := range f.Targets {
-				accounted[normalize.HostFromURL(t)], accounted[t] = true, true
-			}
-		}
-		for _, sk := range rep.Skipped {
-			accounted[normalize.HostFromURL(sk.Target)], accounted[sk.Target] = true, true
-		}
-		var gaps []string
-		for _, h := range quiet {
-			if !accounted[h] {
-				gaps = append(gaps, h)
-			}
-		}
-		if len(gaps) > 0 {
-			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-http", Error: "no answer and no failure recorded", Retryable: true, Count: len(gaps), Targets: gaps})
-		}
-	}
-	return rep.finish(c.json, c.silent)
-}
-
 // silentHosts are the names that resolved but answered no web request:
 // no service on the ports tried, or a filter that drops the requests.
 func silentHosts(st *store.Store) []string {
@@ -817,78 +672,6 @@ func silentHosts(st *store.Store) []string {
 		}
 	}
 	sort.Strings(out)
-	return out
-}
-
-// httpxRow names the fields the way httpx -json does (v1.12): host is the
-// name, host_ip the address the request connected to, a the addresses the
-// name resolved to, status_code the first answer (a 302 stays a 302, as
-// httpx prints it without -fr). Where a redirect chain led within the
-// scope, final_url and final_status_code say where it ended.
-func httpxRow(r engine.ProbeRow, input string, addrs []string) map[string]any {
-	status := r.Status
-	u, _ := url.Parse(r.URL)
-	host, port, scheme, path := "", "", "", "/"
-	if u != nil {
-		host, scheme = u.Hostname(), u.Scheme
-		port = u.Port()
-		if port == "" {
-			port = map[string]string{"http": "80", "https": "443"}[scheme]
-		}
-		if u.Path != "" {
-			path = u.Path
-		}
-	}
-	if input == "" {
-		input = host
-	}
-	if len(addrs) == 0 && r.IP != "" {
-		addrs = []string{r.IP}
-	}
-	var a, aaaa []string
-	for _, ip := range addrs {
-		if strings.Contains(ip, ":") {
-			aaaa = append(aaaa, ip)
-		} else {
-			a = append(a, ip)
-		}
-	}
-	out := map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339Nano), "url": strings.TrimSuffix(r.URL, "/"), "input": input,
-		"host": host, "host_ip": r.IP, "port": port, "scheme": scheme, "path": path, "method": "GET",
-		"status_code": status, "content_length": r.Length, "words": r.Words, "lines": r.Lines,
-		"time": fmt.Sprintf("%dms", r.MS), "a": a, "failed": false,
-	}
-	if len(aaaa) > 0 {
-		out["aaaa"] = aaaa
-	}
-	for k, v := range map[string]string{"title": r.Title, "webserver": r.Server, "content_type": r.ContentType} {
-		if v != "" {
-			out[k] = v
-		}
-	}
-	if len(r.Tech) > 0 {
-		out["tech"] = r.Tech
-	}
-	if r.Favicon != "" {
-		out["favicon"] = r.Favicon
-	}
-	if r.CDN != "" {
-		out["cdn"], out["cdn_name"], out["cdn_type"] = r.CDNType != "cloud", r.CDN, r.CDNType
-	}
-	if r.FinalURL != "" {
-		out["final_url"] = r.FinalURL
-	}
-	if r.FinalStatus != 0 {
-		out["final_status_code"] = r.FinalStatus
-		out["chain_status_codes"] = []int{r.Status, r.FinalStatus}
-	}
-	if r.Location != "" {
-		out["location"] = r.Location
-	}
-	if r.CatchAll {
-		out["catchall"] = true
-	}
 	return out
 }
 

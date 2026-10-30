@@ -24,6 +24,18 @@
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
+**`probe` shows a redirect, not the page.** `probe` follows no redirect, as httpx. `-fr` follows them inside the site (`-fhr`: the same host; `-maxr N` stops at the Nth redirect, as httpx counts it, so follows N-1); `status_code`, `title` and the rest are then the last answer's.
+
+**`probe -timeout 5` is refused.** `-timeout` bounds the whole run and takes a duration (`5m`); httpx's per-request `-timeout` is `-req-timeout 5s` here. A run stopped by `-timeout` exits 4 and `azhaq resume` continues it.
+
+**A `probe` row has `failed: true`.** The target did not answer: it does not resolve, the port is closed, the host stopped answering after `-maxhr` tries, or the scope left it out. `error` says which; the summary counts them under `without an answer`, and exit 3 follows when the failure is worth another try. `-probe` prints `[FAILED]` lines in the text output.
+
+**A name resolves only through a wildcard, and `probe` still asks it.** The names given to `probe` are the ones you want asked; the summary notes how many were wildcard answers. `subs -live`, `dns` and `run` still leave them out.
+
+**`probe -kb` says the model is not there.** The classifier reads `~/.dit/model.json` (or `$AZHAQ_DIT_MODEL`); azhaq never downloads it. Fetch it once from the address in the message.
+
+**`probe -x POST` sent requests.** `-x`, `-body` and `-rr` send what you give to the targets in scope, and a POST, PUT or DELETE can change data there. Each request is counted, paced by `-rate` and in the ledger; the summary lists the methods sent.
+
 **A UDP port is `open|filtered`.** The port stayed silent when asked twice and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`. `ports -json` lists them; the plain output lists only the open ones.
 
 **`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random 500 of about 6,300 tesla.com names per call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.

@@ -52,6 +52,7 @@ type Options struct {
 	Shots      string           // azhaq-shots: screenshot directory (runs only when set)
 	Browser    *browser.Browser // the run's Chrome, started on first use
 	Render     bool             // azhaq-render: load pages in Chrome (-browser)
+	HTTP       *httpcol.Spec    // azhaq probe's httpx flags; nil outside probe
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -65,6 +66,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	hc.NoTech = o.NoTech
 	hc.Probe = o.Probe
 	hc.NoFavicon = o.NoFavicon
+	hc.Spec = o.HTTP
 	cat.MustRegister(hc)
 	crawlcol.Register(cat, client)
 	jscol.Register(cat, client)
@@ -82,6 +84,7 @@ func Register(cat *catalog.Catalog, o Options) {
 		pool = dnsr.New(dnsr.Options{})
 	}
 	dnsc := dnscol.New(pool)
+	dnsc.KeepWild, dnsc.NoHints = o.HTTP != nil, o.HTTP != nil
 	cat.MustRegister(dnsc)
 	cat.MustRegister(&brutecol.Brute{Pool: pool, Wild: dnsc.Wild, Words: o.BruteWords})
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})

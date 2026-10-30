@@ -2,6 +2,7 @@ package httpcol
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"html"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"regexp"
 	"slices"
@@ -46,6 +48,8 @@ type Collector struct {
 	// Probe answers like httpx: one request per service, no catch-all
 	// check (nothing is crawled from it).
 	Probe bool
+	// Spec is azhaq probe's own: httpx's flags. Nil answers as a run does.
+	Spec *Spec
 
 	emitted sync.Map // URLs already reported in this run
 	ownURL  sync.Map // URLs reported by their own URL task
@@ -90,15 +94,27 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	answeredURL := ""
 	// Each group is one service (a port); its URLs are tried in order and
 	// the first that answers stands for it.
+	variants := c.variants(groups0(groups))
 	for _, group := range groups {
-		for _, raw := range group {
+		for gi, raw := range group {
 			if ctx.Err() != nil {
 				return meta, ctx.Err()
 			}
-			obs, hint, _, err := c.fetch(ctx, raw)
+			if why := c.excluded(ctx, raw); why != "" {
+				lastErr = fmt.Errorf("not requested: %s", why)
+				continue
+			}
+			obs, hint, _, err := c.fetch(ctx, raw, variants[0])
 			if err != nil {
 				lastErr = err
 				continue
+			}
+			if c.Spec != nil && gi == 0 && len(group) > 1 && strings.HasPrefix(raw, "http://") && statusOf(obs) == http.StatusBadRequest {
+				// A plain request to a TLS port is answered 400: ask again over
+				// TLS, as httpx does, and keep the 400 when that does not answer.
+				if o2, h2, _, err := c.fetch(ctx, group[1], variants[0]); err == nil {
+					raw, obs, hint = group[1], o2, h2
+				}
 			}
 			answered = true
 			answeredURL = raw
@@ -119,13 +135,32 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				return meta, err
 			}
 			meta.EmitCount++
-			if hint.Key() != "" {
+			if hint.Key() != "" && c.Spec == nil {
 				meta.NextHints = append(meta.NextHints, hint)
+			}
+			for _, n := range TakeNames(obs.Source) {
+				meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}})
+			}
+			// Other methods of -x, and the other addresses of -pa, go to the URL
+			// that answered, one request each.
+			for _, rq := range c.more(ctx, raw, variants) {
+				o, _, _, err := c.fetch(ctx, raw, rq)
+				if err != nil {
+					lastErr = err
+					continue
+				}
+				if _, dup := c.emitted.LoadOrStore(o.Source, true); dup {
+					continue
+				}
+				if err := emit(o); err != nil {
+					return meta, err
+				}
+				meta.EmitCount++
 			}
 			break
 		}
 	}
-	if seed.Type == types.TypeURL && seed.Keys[FallbackKey] != "" && len(groups) == 1 {
+	if seed.Type == types.TypeURL && seed.Keys[FallbackKey] != "" && len(groups) == 1 && c.Spec == nil {
 		// Input like host:port: the scheme that answered goes on as its own
 		// URL, and the guess is dropped so the other collectors read the
 		// page that exists.
@@ -153,11 +188,88 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 const FallbackKey = "fallback"
 
 func (c *Collector) targets(seed types.Seed) [][]string {
+	groups := c.baseTargets(seed)
+	if c.Spec == nil || len(groups) == 0 {
+		return groups
+	}
+	if c.Spec.NoFallback {
+		// Both schemes are asked and reported: each URL is a service.
+		var split [][]string
+		for _, g := range groups {
+			for _, u := range g {
+				split = append(split, []string{u})
+			}
+		}
+		groups = split
+	}
+	paths := c.Spec.Paths
+	if c.Spec.Raw != nil {
+		paths = []string{c.Spec.Raw.Path}
+	}
+	if len(paths) == 0 {
+		return groups
+	}
+	// -path asks each target for these paths in place of its own.
+	var out [][]string
+	for _, g := range groups {
+		for _, p := range paths {
+			var ng []string
+			for _, u := range g {
+				if v, ok := withPath(u, p); ok {
+					ng = append(ng, v)
+				}
+			}
+			if len(ng) > 0 {
+				out = append(out, ng)
+			}
+		}
+	}
+	return out
+}
+
+// withPath is u with its path and query replaced by p.
+func withPath(u, p string) (string, bool) {
+	pu, err := url.Parse(u)
+	if err != nil {
+		return "", false
+	}
+	if p == "" {
+		p = "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	rel, err := url.Parse(p)
+	if err != nil {
+		return "", false
+	}
+	pu.Path, pu.RawPath, pu.RawQuery = rel.Path, rel.RawPath, rel.RawQuery
+	n, err := normalize.URL(pu.String())
+	return n, err == nil
+}
+
+// HTTPFirst says a bare host:port is asked over plain HTTP first, as httpx
+// does: ports 80 and 8080, and any above 1024 (a TLS port there is
+// answered 400, or closes the connection, and is asked again over TLS).
+func HTTPFirst(port int) bool { return port == 80 || port == 8080 || port > 1024 }
+
+func (c *Collector) baseTargets(seed types.Seed) [][]string {
 	switch seed.Type {
 	case types.TypeURL:
 		u, err := normalize.URL(seed.Keys["url"])
 		if err != nil {
 			return nil
+		}
+		if p, err := url.Parse(u); err == nil && c.Spec != nil {
+			if seed.Keys[FallbackKey] == "https" && p.Scheme == "http" {
+				p.Scheme = "https"
+				if p.Port() == "" {
+					p.Host = net.JoinHostPort(p.Hostname(), "80")
+				}
+				if h, err := normalize.URL(p.String()); err == nil {
+					return [][]string{{u, h}}
+				}
+			}
 		}
 		if seed.Keys[FallbackKey] == "http" && strings.HasPrefix(u, "https://") {
 			if p, err := url.Parse(u); err == nil {
@@ -179,33 +291,219 @@ func (c *Collector) targets(seed types.Seed) [][]string {
 		if ip := net.ParseIP(h); ip != nil && ip.To4() == nil {
 			h = "[" + h + "]"
 		}
+		if c.Spec != nil && len(c.Spec.Ports) > 0 {
+			var out [][]string
+			for _, ps := range c.Spec.Ports {
+				out = append(out, portGroup(h, ps, true))
+			}
+			return out
+		}
 		if len(c.Ports) == 0 {
 			return [][]string{{"https://" + h + "/", "http://" + h + "/"}}
 		}
 		var out [][]string
 		for _, p := range c.Ports {
-			hp := net.JoinHostPort(h, strconv.Itoa(p))
-			switch p {
-			case 80:
-				out = append(out, []string{"http://" + h + "/", "https://" + hp + "/"})
-			case 443:
-				out = append(out, []string{"https://" + h + "/", "http://" + hp + "/"})
-			default:
-				out = append(out, []string{"https://" + hp + "/", "http://" + hp + "/"})
-			}
+			out = append(out, portGroup(h, PortSpec{Port: p}, c.Spec != nil))
 		}
 		return out
 	}
 	return nil
 }
 
-func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, types.Seed, bool, error) {
-	res, cached, err := fetch.Do(ctx, c.Client, raw)
+// portGroup is the URLs of one web port of a host, in the order they are
+// tried: the scheme given, or both, the likelier first.
+func portGroup(h string, ps PortSpec, probe bool) []string {
+	hp := net.JoinHostPort(strings.Trim(h, "[]"), strconv.Itoa(ps.Port))
+	plain, secure := hp, hp
+	switch ps.Port {
+	case 80:
+		plain = h
+	case 443:
+		secure = h
+	}
+	httpURL, httpsURL := "http://"+plain+"/", "https://"+secure+"/"
+	switch ps.Scheme {
+	case "http":
+		return []string{httpURL}
+	case "https":
+		return []string{httpsURL}
+	}
+	if ps.Port == 80 || probe && ps.Port != 443 && HTTPFirst(ps.Port) {
+		return []string{httpURL, "https://" + hp + "/"}
+	}
+	if ps.Port == 443 {
+		return []string{httpsURL, "http://" + hp + "/"}
+	}
+	return []string{"https://" + hp + "/", "http://" + hp + "/"}
+}
+
+// variants are the requests sent to each URL that answers: one GET, or
+// what -x, -body and -rr ask for.
+func (c *Collector) variants(raw string) []*fetch.Req {
+	s := c.Spec
+	if s == nil {
+		return []*fetch.Req{nil}
+	}
+	base := c.methodVariants()
+	opt, ok := s.PerHost[strings.ToLower(normalize.HostFromURL(raw))]
+	if !ok {
+		return base
+	}
+	// A line gave a virtual host or an address for this host: every request
+	// goes to that address, once for each virtual host.
+	vhosts := opt.VHosts
+	if len(vhosts) == 0 {
+		vhosts = []string{""}
+	}
+	var out []*fetch.Req
+	for _, vh := range vhosts {
+		for _, v := range base {
+			cp := &fetch.Req{IP: opt.IP}
+			if v != nil {
+				cp.Method, cp.Body = v.Method, v.Body
+				cp.Header = v.Header.Clone()
+			}
+			if vh != "" {
+				if cp.Header == nil {
+					cp.Header = http.Header{}
+				}
+				cp.Header.Set("Host", vh)
+			}
+			out = append(out, cp)
+		}
+	}
+	return out
+}
+
+func (c *Collector) methodVariants() []*fetch.Req {
+	s := c.Spec
+	if s.Raw != nil {
+		return []*fetch.Req{{Method: s.Raw.Method, Body: s.Raw.Body, Header: s.Raw.Header}}
+	}
+	methods := s.Methods
+	if len(methods) == 0 {
+		methods = []string{http.MethodGet}
+	}
+	var out []*fetch.Req
+	for _, m := range methods {
+		rq := &fetch.Req{Method: m}
+		if s.Body != "" {
+			rq.Body = []byte(s.Body)
+		}
+		out = append(out, rq)
+	}
+	return out
+}
+
+// more are the requests after the first for a URL that answered: the other
+// methods, and with -pa each of those to every address of the name.
+func (c *Collector) more(ctx context.Context, raw string, variants []*fetch.Req) []*fetch.Req {
+	if c.Spec == nil || !c.Spec.AllIPs {
+		return variants[1:]
+	}
+	var ips []string
+	if h := normalize.HostFromURL(raw); h != "" && net.ParseIP(h) == nil {
+		ips = fetch.Resolve(ctx, h)
+	}
+	if len(ips) < 2 {
+		return variants[1:]
+	}
+	var out []*fetch.Req
+	for i, ip := range ips {
+		for j, v := range variants {
+			if i == 0 && j == 0 {
+				continue
+			}
+			cp := &fetch.Req{IP: ip}
+			if v != nil {
+				cp.Method, cp.Body, cp.Header = v.Method, v.Body, v.Header
+			}
+			out = append(out, cp)
+		}
+	}
+	return out
+}
+
+// excluded says why raw is not requested under -e, or "".
+func (c *Collector) excluded(ctx context.Context, raw string) string {
+	s := c.Spec
+	if s == nil || len(s.Exclude)+len(s.ExcludePorts)+len(s.ExcludeNets)+len(s.excludeRe) == 0 {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	port := u.Port()
+	if port == "" {
+		port = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+	}
+	n, _ := strconv.Atoi(port)
+	if slices.Contains(s.ExcludePorts, n) {
+		return "port " + port + " is excluded (-e)"
+	}
+	for _, re := range s.excludeRe {
+		if re.MatchString(raw) {
+			return "matches -e " + re.String()
+		}
+	}
+	ips := []string{u.Hostname()}
+	if net.ParseIP(u.Hostname()) == nil {
+		ips = fetch.Resolve(ctx, u.Hostname())
+	}
+	for _, a := range ips {
+		ip := net.ParseIP(a)
+		if ip == nil {
+			continue
+		}
+		for _, n := range s.ExcludeNets {
+			if pf, err := netip.ParsePrefix(n); err == nil && pf.Contains(addrOf(ip)) {
+				return "inside " + n + " (-e)"
+			} else if a, err := netip.ParseAddr(n); err == nil && a == addrOf(ip) {
+				return a.String() + " is excluded (-e)"
+			}
+		}
+		if slices.Contains(s.Exclude, "private-ips") && (ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()) {
+			return "a private address (-e private-ips)"
+		}
+		if slices.Contains(s.Exclude, "cdn") && port != "80" && port != "443" {
+			if name, _ := fingerprint.Network(ip); name != "" {
+				return "a CDN address answers on ports 80 and 443 only (-e cdn)"
+			}
+		}
+	}
+	return ""
+}
+
+func addrOf(ip net.IP) netip.Addr {
+	a, _ := netip.AddrFromSlice(ip)
+	return a.Unmap()
+}
+
+func statusOf(o types.Observation) int {
+	var p struct {
+		Status int `json:"status"`
+	}
+	_ = json.Unmarshal(o.Payload, &p)
+	return p.Status
+}
+
+func (c *Collector) fetch(ctx context.Context, raw string, rq *fetch.Req) (types.Observation, types.Seed, bool, error) {
+	res, cached, err := fetch.DoReq(ctx, c.Client, raw, rq)
 	if err != nil {
 		return types.Observation{}, types.Seed{}, cached, err
 	}
+	data := res.Body
 	title := ""
-	if m := titleRE.FindSubmatch(res.Body); len(m) == 2 {
+	if c.Spec != nil {
+		data = res.Body
+		if !c.Spec.NoDecode {
+			data = decode(res.Body, lastHeader(res))
+		}
+		if canHaveTitle(headerGet(lastHeader(res), "Content-Type")) {
+			title = domTitle(data)
+		}
+	} else if m := titleRE.FindSubmatch(res.Body); len(m) == 2 {
 		title = strings.Join(strings.Fields(html.UnescapeString(string(m[1]))), " ")
 		if !utf8.ValidString(title) {
 			title = ""
@@ -219,22 +517,33 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 	if n, err := normalize.URL(res.URL); err == nil {
 		final = n
 	}
-	row := describe(reqURL, final, res, title, c.NoTech)
+	dres := res
+	dres.Body = data
+	row := describe(reqURL, final, dres, title, c.NoTech, c.Spec != nil)
 	catchAll := !c.Probe && fetch.CatchAll(ctx, c.Client, res)
 	if catchAll {
 		// Same answer as a path that does not exist: not a page of its own.
 		row["catchall"] = true
 	}
 	if !c.NoFavicon && !catchAll && (isRoot(reqURL) || isRoot(final)) {
-		if hash, from := c.favicon(ctx, final, res); hash != "" {
+		if hash, from, icon := c.favicon(ctx, final, res); hash != "" {
 			row["favicon"] = hash
 			row["favicon_url"] = from
+			if c.Spec != nil {
+				sum := md5.Sum(icon)
+				row["favicon_md5"] = hex.EncodeToString(sum[:])
+				row["favicon_path"] = iconHref(res.Body, final, from)
+			}
 		}
+	}
+	source := reqURL
+	if c.Spec != nil {
+		source = c.probeFields(ctx, row, raw, reqURL, final, res, data, rq)
 	}
 	payload, _ := json.Marshal(row)
 	obs := types.Observation{
 		Collector:  Name,
-		Source:     reqURL,
+		Source:     source,
 		Kind:       "application",
 		Payload:    payload,
 		Confidence: 0.9,
@@ -249,7 +558,14 @@ func (c *Collector) fetch(ctx context.Context, raw string) (types.Observation, t
 	return obs, hint, cached, nil
 }
 
-func describe(reqURL, final string, res fetch.Result, title string, noTech bool) map[string]any {
+func lastHeader(res fetch.Result) http.Header {
+	if res.FinalHeader != nil {
+		return res.FinalHeader
+	}
+	return res.Header
+}
+
+func describe(reqURL, final string, res fetch.Result, title string, noTech, everyAnswer bool) map[string]any {
 	sum := sha256.Sum256(res.Body)
 	out := map[string]any{
 		"url":          reqURL,
@@ -279,9 +595,9 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech bool)
 	}
 	// Documents get the full fingerprint; a site's front page that is not
 	// HTML (an API root) still gets its headers read (Server, cookies).
-	if !noTech && (page(last) || isRoot(reqURL) || isRoot(final)) {
+	if !noTech && (everyAnswer || page(last) || isRoot(reqURL) || isRoot(final)) {
 		var body []byte
-		if page(last) {
+		if everyAnswer || page(last) {
 			body = res.Body[:min(len(res.Body), maxTechBody)]
 		}
 		if tech := fingerprint.Tech(last, body); len(tech) > 0 {
@@ -523,10 +839,10 @@ func isRoot(raw string) bool {
 
 // favicon hashes the page's icon: its <link rel=icon> targets (.ico
 // first) or /favicon.ico, at most two requests, like httpx -favicon.
-func (c *Collector) favicon(ctx context.Context, page string, res fetch.Result) (hash, from string) {
+func (c *Collector) favicon(ctx context.Context, page string, res fetch.Result) (hash, from string, data []byte) {
 	base, err := url.Parse(page)
 	if err != nil {
-		return "", ""
+		return "", "", nil
 	}
 	icons := webextract.Icons(res.Body, base)
 	if len(icons) == 0 {
@@ -543,7 +859,7 @@ func (c *Collector) favicon(ctx context.Context, page string, res fetch.Result) 
 		if strings.HasPrefix(strings.ToLower(icon), "data:") {
 			if data := decodeDataURL(icon); data != nil {
 				if h, ok := fingerprint.Favicon(data); ok {
-					return h, "data:"
+					return h, "data:", data
 				}
 			}
 			continue
@@ -554,10 +870,10 @@ func (c *Collector) favicon(ctx context.Context, page string, res fetch.Result) 
 			continue
 		}
 		if h, ok := fingerprint.Favicon(r.Body); ok {
-			return h, icon
+			return h, icon, r.Body
 		}
 	}
-	return "", ""
+	return "", "", nil
 }
 
 func decodeDataURL(raw string) []byte {
@@ -576,4 +892,13 @@ func decodeDataURL(raw string) []byte {
 func sameSite(a, b string) bool {
 	ha, hb := normalize.HostFromURL(a), normalize.HostFromURL(b)
 	return ha != "" && (ha == hb || normalize.SameSite(ha, hb))
+}
+
+// groups0 is the first URL of the first group: the one whose host picks the
+// per-host options.
+func groups0(groups [][]string) string {
+	if len(groups) > 0 && len(groups[0]) > 0 {
+		return groups[0][0]
+	}
+	return ""
 }

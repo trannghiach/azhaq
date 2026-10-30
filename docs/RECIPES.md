@@ -156,3 +156,15 @@ Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for
 `touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
+
+## 16. Probe web services like httpx
+
+```
+azhaq probe -l hosts.txt -p 80,443,8000-8100 -mc 200,401 -ms admin -title -td -sc
+azhaq probe -l hosts.txt -fr -tls-grab -hash md5 -jarm -json -o web.jsonl
+azhaq probe -l hosts.txt -sr -srd out -irh -irr -json     # every request and response, kept
+azhaq probe -l hosts.txt -mdc 'status_code == 200 && contains(body, "login")' -json
+azhaq probe -u https://app.example.com -x GET,OPTIONS -path /api,/admin -rate 5
+```
+
+Each target given ends as a row, a failure or a skip; with `-json`, a target with no answer is a row with `failed: true`. Matchers and filters read the response as sent (headers and body); the summary says how many rows they left out. `-x POST -body …` and `-rr FILE` send writes: they can change data on the target, count against `-max-requests` and `-rate`, and are in the ledger.
