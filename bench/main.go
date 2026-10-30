@@ -105,6 +105,7 @@ func main() {
 	flag.StringVar(&refBin, "refbin", os.Getenv("AZHAQ_REFBIN"), "a folder of reference tool binaries to use before bench/.work/bin (env AZHAQ_REFBIN)")
 	flag.StringVar(&nmapAt, "nmap", os.Getenv("AZHAQ_NMAP"), "nmap, or a script that runs an unpacked one (env AZHAQ_NMAP; else nmap in PATH)")
 	readme := flag.Bool("readme", false, "rewrite the benchmark table in README.md from the newest record in -out, and exit")
+	toolsOnly := flag.Bool("tools-only", false, "install the reference tools (and arjun) into -work/bin and exit: for a machine that runs them by hand")
 	flag.BoolVar(&fresh, "fresh", false, "run the reference tools again instead of reusing today's cached results")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
 	flag.StringVar(&work, "work", "bench/.work", "scratch directory")
@@ -175,6 +176,15 @@ func main() {
 	if !(len(sel) == 1 && sel["regress"]) { // regress uses what $AZHAQ_REFBIN holds
 		must(installTools(binDir))
 		must(installBuilt(binDir))
+	}
+	if *toolsOnly {
+		a, err := installArjun()
+		must(err)
+		link := filepath.Join(binDir, "arjun")
+		_ = os.Remove(link)
+		must(os.Symlink(a, link))
+		fmt.Println(binDir)
+		return
 	}
 
 	// The flags that gate a section when no -only names one.

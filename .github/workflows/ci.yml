@@ -2,7 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    # Every branch the work is pushed on: the race tests run here, not on the
+    # author's machine. ci-results holds the workflows' outputs only.
+    branches-ignore: [ci-results]
   pull_request:
 
 permissions:

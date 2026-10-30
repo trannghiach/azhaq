@@ -1,0 +1,64 @@
+name: trial
+
+# A blind review of the newest release by Codex (gpt-6-luna, xhigh) on a
+# runner, with the local trials' brief (.github/ci/trial/BRIEF.md). The
+# reviewer installs azhaq from the release; the source is removed from the
+# runner first. REPORT.md and the notes are encrypted to the maintainer's
+# age key and go to the ci-results branch under trial/NAME/. Push a tag
+# trial-NAME.
+on:
+  push:
+    tags: ["trial-*"]
+
+permissions:
+  contents: write
+
+env:
+  AGE_RECIPIENT: age10llepsf6tflh3wjlfu8awk203049vfsn5vxw9uc3y23qlq9dhy7sm20pex
+
+jobs:
+  codex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: packages
+        run: sudo apt-get update -q && sudo apt-get install -y -q dnsutils age
+      - name: labs
+        run: .github/ci/labs.sh
+      - name: codex
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: .github/ci/codex.sh
+      - name: remove the source
+        # As a new user, the reviewer has the release and GitHub, not a checkout.
+        run: |
+          mkdir -p "$HOME/ci" "$HOME/trial"
+          cp .github/ci/publish.sh .github/ci/trial/BRIEF.md "$HOME/ci/"
+          find "$GITHUB_WORKSPACE" -mindepth 1 -delete
+      - name: review
+        run: |
+          v=$(curl -s "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          echo "release under review: $v"
+          sed "s/__VERSION__/$v/" "$HOME/ci/BRIEF.md" > "$HOME/ci/brief.md"
+          cd "$HOME/trial"
+          timeout 4h codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C "$HOME/trial" \
+            -m gpt-6-luna -c model_reasoning_effort=xhigh --json "$(cat "$HOME/ci/brief.md")" < /dev/null \
+            > "$HOME/ci/stream.jsonl" 2> "$HOME/ci/stderr.txt" || echo "codex ended with $?"
+      - name: publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$HOME/trial"
+          { [ -f REPORT.md ] && echo REPORT.md
+            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' \) -size -2M 2>/dev/null; } > "$HOME/ci/list"
+          tail -n 300 "$HOME/ci/stream.jsonl" > "$HOME/ci/stream-tail.jsonl" 2>/dev/null || true
+          tar czf "$HOME/ci/trial.tgz" -T "$HOME/ci/list" -C "$HOME/ci" stream-tail.jsonl stderr.txt
+          age -r "$AGE_RECIPIENT" -o "$HOME/ci/trial.tgz.age" "$HOME/ci/trial.tgz"
+          "$HOME/ci/publish.sh" "trial/$GITHUB_REF_NAME" "$HOME/ci/trial.tgz.age"
+          [ -s REPORT.md ] && echo "::notice title=trial::REPORT.md written" || echo "::warning title=trial::no REPORT.md"

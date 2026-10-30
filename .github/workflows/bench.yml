@@ -1,0 +1,50 @@
+name: bench
+
+# The whole benchmark on a runner, both profiles by default. Push an
+# annotated tag bench-NAME whose message holds the bench's flags (for
+# example "-only probe,apps -profile polite", or nothing for everything).
+# The record and the log go to the ci-results branch under bench/NAME/.
+on:
+  push:
+    tags: ["bench-*"]
+
+permissions:
+  contents: write
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: reference tools from apt
+        run: sudo apt-get update -q && sudo apt-get install -y -q nmap dnsutils
+      - name: bench
+        run: |
+          args=""
+          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
+            args=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
+          fi
+          echo "bench flags: $args"
+          # shellcheck disable=SC2086 # the flags are words
+          go run ./bench $args -nmap "$(command -v nmap)" 2>&1 | tee bench.log || true
+      - name: publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          files=(bench.log)
+          f=$(ls -t bench/history/*.json 2>/dev/null | head -1 || true)
+          [ -n "$f" ] && files+=("$f")
+          .github/ci/publish.sh "bench/$GITHUB_REF_NAME" "${files[@]}"
+      - name: failed checks
+        # Annotations read without a login; the record is on ci-results.
+        run: |
+          f=$(ls -t bench/history/*.json | head -1)
+          jq -r '"::notice title=bench::\([.checks[] | select(.pass)] | length) of \(.checks | length) checks pass"' "$f"
+          jq -r '.checks[] | select(.pass | not) | "::warning title=FAIL::\(.name): \(.detail | .[0:300])"' "$f" | head -40

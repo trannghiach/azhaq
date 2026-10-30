@@ -1,0 +1,66 @@
+name: hunt
+
+# Hunters before a release: one Codex agent per area uses the build of this
+# commit against the labs (.github/ci/labs.sh) and writes FINDINGS.md, which
+# is encrypted to the maintainer's age key and goes to the ci-results branch
+# under hunt/NAME/. Push a tag hunt-NAME.
+on:
+  push:
+    tags: ["hunt-*"]
+
+permissions:
+  contents: write
+
+env:
+  AGE_RECIPIENT: age10llepsf6tflh3wjlfu8awk203049vfsn5vxw9uc3y23qlq9dhy7sm20pex
+  MODEL: gpt-5.6-luna
+
+jobs:
+  hunt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        area: [web, fuzz, net, controls]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: packages
+        run: sudo apt-get update -q && sudo apt-get install -y -q nmap dnsutils age
+      - name: labs
+        run: .github/ci/labs.sh
+      - name: azhaq and the reference tools
+        run: |
+          mkdir -p "$HOME/hunt/bin" "$HOME/hunt/${{ matrix.area }}"
+          go build -o "$HOME/hunt/bin/azhaq" ./cmd/azhaq
+          go run ./bench -tools-only -work "$HOME/ref"
+          rm -f "$HOME/ref/bin/azhaq"
+          ls "$HOME/ref/bin"
+      - name: codex
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: .github/ci/codex.sh
+      - name: hunt
+        run: |
+          a=${{ matrix.area }}
+          prompt=$(cat .github/ci/hunt/BRIEF.md .github/ci/hunt/AREA-$a.md | sed "s#/home/runner/hunt/AREA/#/home/runner/hunt/$a/#")
+          cd "$HOME/hunt/$a"
+          timeout 110m codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C "$HOME/hunt/$a" \
+            -m "$MODEL" -c model_reasoning_effort=high --json "$prompt" < /dev/null > "$HOME/hunt/$a.stream.jsonl" 2> "$HOME/hunt/$a.stderr.txt" || echo "codex ended with $?"
+          ls -la
+      - name: publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          a=${{ matrix.area }}
+          cd "$HOME/hunt"
+          tail -n 200 "$a.stream.jsonl" > "$a.stream-tail.jsonl" 2>/dev/null || true
+          tar czf "$a.tgz" --ignore-failed-read "$a/FINDINGS.md" "$a.stream-tail.jsonl" "$a.stderr.txt"
+          age -r "$AGE_RECIPIENT" -o "$a.tgz.age" "$a.tgz"
+          "$GITHUB_WORKSPACE/.github/ci/publish.sh" "hunt/$GITHUB_REF_NAME" "$a.tgz.age"
+          [ -s "$a/FINDINGS.md" ] && echo "::notice title=$a::FINDINGS.md written ($(wc -l < "$a/FINDINGS.md") lines)" || echo "::warning title=$a::no FINDINGS.md"

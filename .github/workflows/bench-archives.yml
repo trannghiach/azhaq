@@ -3,10 +3,10 @@ name: bench-archives
 # The domain benchmark (subdomains and historical URLs, passive lookups
 # only) from GitHub's network: the Wayback Machine and Common Crawl refuse
 # some addresses, and this checks Azhaq against gau where they answer.
-# Push a tag bench-* or run it by hand.
+# Push a tag archives-* or run it by hand.
 on:
   push:
-    tags: ["bench-*"]
+    tags: ["archives-*"]
   workflow_dispatch:
 
 permissions:

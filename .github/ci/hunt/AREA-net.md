@@ -1,0 +1,7 @@
+## Your area: net (folder AREA = net)
+
+Commands: `dns` (vs dnsx), `subs` (vs subfinder and subfinder | dnsx), `ports` (vs naabu and `nmap -sT -sV` / `nmap -sU` with sudo if you need UDP). CHANGELOG sections: `dns`, `subs`, `ports`; MIGRATING: dnsx, subfinder, naabu, nmap.
+
+- dns: the DNS lab (every record type, `-all`, `-axfr`, `-ptr` on 127.0.0.0/24, wildcard, dangling CNAMEs, `-rcode`, `-resp`, `-json` row per answered name) and dig as ground truth; vs dnsx same flags, default and `-rl 10`. Brute force `-d azqlab.lan -w WORDS`.
+- subs: `subs -d azqlab.lan -w WORDS -resolvers 127.0.0.1:5354` for wildcard and takeover; hackerone.com passive and `-live` (two runs max) vs `subfinder | dnsx -a -cname` at default and `-dns-rate 10` / dnsx `-rl 10` with the same resolvers. Do the counts add up? Are `unverified` names honest? Is a source that answers with an error page (a quota message) counted as failed?
+- ports: 127.0.0.1 (the services lab ports and the lab apps; top-1000 and the explicit list) and scanme.nmap.org (twice max). vs naabu (open ports, time) and nmap -sV (service names and versions, port by port). UDP: `-pu` on 127.0.0.1 (5354, 10053, 10161, 21211, and a silent port) vs nmap -sU. A scan stopped by `-max-requests` or the kill file: are the ports it found kept, and does `resume` continue without asking them again? Every connect counted and in the ledger? Targets all outside the scope: exit 2?
