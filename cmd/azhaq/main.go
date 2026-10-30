@@ -251,6 +251,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return err
 	}
 	out.json, out.quiet = *jsonOut, *quiet
+	// Port lists are checked before anything is sent (a sign-in comes first).
+	if _, err := portscan.Ports(*portsSpec); *portsSpec != "" && err != nil {
+		return usagef("-ports: %v", err)
+	}
+	if _, err := portscan.UDPPorts(*portsUDP); *portsUDP != "" && err != nil {
+		return usagef("-ports-udp: %v", err)
+	}
 
 	fetch.Reset()
 	fetch.Delay = *delay
