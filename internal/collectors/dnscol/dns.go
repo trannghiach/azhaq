@@ -127,6 +127,13 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 			payload["takeover"] = f
 		}
 	}
+	if len(a.CNAME) > 0 && !a.Live() && (a.Status == dnsr.StatusCNAME || a.Status == dnsr.StatusNXDomain) {
+		// A name that is only a CNAME exists in DNS: a wildcard's is told
+		// from a real one, as for a name with an address.
+		if apex := normalize.RegistrableDomain(host); apex != "" && host != apex && c.Wild.Match(ctx, host, apex, a) {
+			payload["wildcard"] = true
+		}
+	}
 	switch a.Status {
 	case dnsr.StatusReserved:
 		payload["skipped"] = "reserved" // may still be in /etc/hosts: let HTTP try

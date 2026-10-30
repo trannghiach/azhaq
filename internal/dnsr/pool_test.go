@@ -286,3 +286,87 @@ func TestSickResolverBenchedAndRecovers(t *testing.T) {
 		}
 	}
 }
+
+// A resolver whose NXDOMAINs a second resolver has confirmed trustedAfter
+// times running is asked about one in auditEvery only; the first one it
+// gets wrong brings the second opinions back.
+func TestTrustedNXDOMAINIsAuditedNotRepeated(t *testing.T) {
+	var asked atomic.Int32
+	var lie atomic.Bool
+	liar := func(w dns.ResponseWriter, r *dns.Msg) {
+		asked.Add(1)
+		if lie.Load() && r.Question[0].Qtype == dns.TypeA && strings.HasPrefix(r.Question[0].Name, "www.") {
+			m := new(dns.Msg)
+			m.SetReply(r)
+			m.Rcode = dns.RcodeNameError
+			_ = w.WriteMsg(m)
+			return
+		}
+		testZone(w, r)
+	}
+	honest := func(w dns.ResponseWriter, r *dns.Msg) { asked.Add(1); testZone(w, r) }
+	p := New(Options{Resolvers: []string{serve(t, liar), serve(t, honest)}, PerSecond: -1, Timeout: time.Second})
+	ctx := context.Background()
+	dead := func(n int, prefix string) {
+		for i := range n {
+			if a := p.Resolve(ctx, fmt.Sprintf("%s%d.example.org", prefix, i)); a.Status != StatusNXDomain {
+				t.Fatalf("%+v", a)
+			}
+		}
+	}
+	dead(2*trustedAfter+8, "a") // each resolver is confirmed trustedAfter times: two queries a name
+	if got, want := int(asked.Load()), 2*(2*trustedAfter+8); got < want-8 {
+		t.Fatalf("%d queries before trust, want about %d", got, want)
+	}
+	asked.Store(0)
+	const n = 8 * auditEvery
+	dead(n, "b")
+	if got := int(asked.Load()); got > n+n/4 {
+		t.Fatalf("%d queries for %d trusted names: they are still confirmed one by one", got, n)
+	}
+	// A name with a CNAME chain is always confirmed.
+	if a := p.Resolve(ctx, "api.example.org"); a.Status != StatusOK {
+		t.Fatalf("%+v", a)
+	}
+	// A resolver that now says NXDOMAIN for a name that exists is caught
+	// by the audit, and confirmed name by name again.
+	lie.Store(true)
+	for range 4 * auditEvery {
+		p.forget("www.example.org")
+		p.Resolve(ctx, "www.example.org")
+	}
+	h := p.health[p.servers[0]]
+	h.mu.Lock()
+	agree := h.nxAgree
+	h.mu.Unlock()
+	if agree >= trustedAfter {
+		t.Errorf("a resolver that lied is still trusted (%d)", agree)
+	}
+}
+
+// An answer too big for 512 bytes (a long CNAME chain, many addresses) is
+// asked for with EDNS0 and arrives in one datagram: a name with a big
+// answer is not a failed lookup.
+func TestBigAnswerFitsWithEDNS0(t *testing.T) {
+	big := func(w dns.ResponseWriter, r *dns.Msg) {
+		m := new(dns.Msg)
+		m.SetReply(r)
+		opt := r.IsEdns0()
+		if opt == nil || opt.UDPSize() < 1232 {
+			m.Truncated = true // what a real server does to a plain query
+			_ = w.WriteMsg(m)
+			return
+		}
+		m.Compress = true
+		for i := range 50 {
+			rr, _ := dns.NewRR(fmt.Sprintf("big.example.org. 60 IN A 192.0.2.%d", i+1))
+			m.Answer = append(m.Answer, rr)
+		}
+		m.SetEdns0(1232, false)
+		_ = w.WriteMsg(m)
+	}
+	p := New(Options{Resolvers: []string{serve(t, big)}, PerSecond: -1, Timeout: time.Second})
+	if a := p.Resolve(context.Background(), "big.example.org"); a.Status != StatusOK || len(a.A) != 50 {
+		t.Fatalf("%+v", a)
+	}
+}

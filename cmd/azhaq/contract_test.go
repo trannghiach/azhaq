@@ -396,7 +396,7 @@ func TestContractAllSourcesCountsOffByDefaultApart(t *testing.T) {
 	restore := subcol.UseTestSources(sources(nil)...)
 	defer restore()
 	_, rep, code := runContract(t, "subs", "-d", "example.org", "-all-sources")
-	want := map[string]int{"sources asked": 3, "sources answered": 2, "sources failed": 0, "off-by-default failed": 1}
+	want := map[string]int{"sources asked": 3, "sources answered": 2, "sources failed": 0, "off-by-default failed": 1, "from sources": 2}
 	if code != exitOK || !reflect.DeepEqual(rep.Counts, want) || rep.Degraded {
 		t.Errorf("exit %d degraded %v counts %v, want %v and not degraded", code, rep.Degraded, rep.Counts, want)
 	}
@@ -409,7 +409,7 @@ func TestContractAllSourcesCountsOffByDefaultApart(t *testing.T) {
 	restore()
 	defer subcol.UseTestSources(sources(errors.New("down"))...)()
 	_, rep, code = runContract(t, "subs", "-d", "example.org", "-all-sources")
-	want = map[string]int{"sources asked": 3, "sources answered": 1, "sources failed": 1, "off-by-default failed": 1}
+	want = map[string]int{"sources asked": 3, "sources answered": 1, "sources failed": 1, "off-by-default failed": 1, "from sources": 2}
 	if !reflect.DeepEqual(rep.Counts, want) || !rep.Degraded {
 		t.Errorf("exit %d degraded %v counts %v, want %v and degraded", code, rep.Degraded, rep.Counts, want)
 	}

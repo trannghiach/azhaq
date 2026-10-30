@@ -88,6 +88,38 @@ type Pool struct {
 type health struct {
 	mu                  sync.Mutex
 	tries, fails, skips int
+	// nxAgree is how many NXDOMAIN answers in a row a second resolver
+	// confirmed: a resolver that has been right so many times is asked for a
+	// second opinion on one in auditEvery only, to catch it going wrong.
+	nxAgree, nxSkips int
+}
+
+const (
+	trustedAfter = 64 // confirmed NXDOMAINs in a row before the audit sampling starts
+	auditEvery   = 16
+)
+
+// confirmNX says whether an NXDOMAIN this resolver gave needs a second
+// opinion: always until it has been confirmed trustedAfter times in a row,
+// then one in auditEvery; a disagreement starts the count again.
+func (h *health) confirmNX() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.nxAgree < trustedAfter {
+		return true
+	}
+	h.nxSkips++
+	return h.nxSkips%auditEvery == 0
+}
+
+func (h *health) nxResult(agreed bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if agreed {
+		h.nxAgree++
+	} else {
+		h.nxAgree = 0
+	}
 }
 
 func (h *health) note(failed bool) {
@@ -303,10 +335,12 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 	// A second resolver is asked once before the name is called dead, and
 	// its addresses win. Names under a wildcard zone and wildcard probes
 	// are not worth the query: they answer alike everywhere.
+	asked := false
 	second := func() bool {
 		if !p.confirms(name) {
 			return false
 		}
+		asked = true
 		m2, _, err := p.query(ctx, q, from)
 		if err != nil || m2.Rcode != dns.RcodeSuccess {
 			return false
@@ -322,13 +356,23 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 		// resolver says does not exist almost never exists, and confirming
 		// every miss would double a wordlist's queries; a NODATA or a
 		// dangling CNAME below is still confirmed.
-		if !bulk(ctx) && second() {
-			a.Status = StatusOK
-			return a
+		// A name that is no CNAME's target and that a resolver has been right
+		// about trustedAfter times running is asked about once in auditEvery.
+		_, chain := records(m, dns.TypeA)
+		h := p.health[from]
+		if !bulk(ctx) && (len(chain) > 0 || h == nil || h.confirmNX()) {
+			found := second()
+			if h != nil && asked {
+				h.nxResult(!found)
+			}
+			if found {
+				a.Status = StatusOK
+				return a
+			}
 		}
 		// A CNAME chain the resolver followed to a name that does not exist
 		// says where the name points: a dangling one.
-		_, a.CNAME = records(m, dns.TypeA)
+		a.CNAME = chain
 		a.Status = StatusNXDomain
 		return a
 	}
@@ -386,6 +430,7 @@ func question(name string, qtype uint16) *dns.Msg {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	q.RecursionDesired = true
+	q.SetEdns0(1232, false) // an answer with a long CNAME chain fits a datagram
 	return q
 }
 
@@ -510,7 +555,9 @@ func (p *Pool) exchange(ctx context.Context, q *dns.Msg, server string) (*dns.Ms
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
 	in, _, err := p.udp.ExchangeContext(ctx, q, server)
-	if err == nil && in.Truncated {
+	// A reply too big for a plain UDP datagram (a long CNAME chain) is read
+	// again over TCP, as a truncated one is.
+	if (err == nil && in.Truncated) || errors.Is(err, dns.ErrBuf) {
 		in, _, err = p.tcp.ExchangeContext(ctx, q, server)
 	}
 	return in, err

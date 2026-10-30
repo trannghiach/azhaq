@@ -1,15 +1,15 @@
 module github.com/trannghiach/azhaq
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
-	github.com/gaissmai/bart v0.29.1
+	github.com/gaissmai/bart v0.30.0
 	github.com/miekg/dns v1.1.73
 	github.com/projectdiscovery/cdncheck v1.3.2
 	github.com/projectdiscovery/gologger v1.1.73
-	github.com/projectdiscovery/subfinder/v2 v2.17.0
+	github.com/projectdiscovery/subfinder/v2 v2.14.1-0.20261026103132-98ef8711acb9
 	github.com/projectdiscovery/wappalyzergo v0.3.5
 	github.com/stretchr/testify v1.12.1
 	go.yaml.in/yaml/v3 v3.0.5
@@ -37,9 +37,9 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/projectdiscovery/blackrock v0.0.2 // indirect
-	github.com/projectdiscovery/ratelimit v0.0.92 // indirect
+	github.com/projectdiscovery/ratelimit v0.0.94 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.116 // indirect
-	github.com/projectdiscovery/utils v0.11.6 // indirect
+	github.com/projectdiscovery/utils v0.11.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect

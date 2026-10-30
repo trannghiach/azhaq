@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -34,7 +35,9 @@ const Name = "azhaq-subdomains"
 var fanoutTimeout = 15 * time.Second
 
 const (
-	maxNames = 20000
+	// DefaultMaxNames is how many names a domain keeps (-max-names): the
+	// name history's cap, so what the history holds is never cut by it.
+	DefaultMaxNames = 200000
 	// DefaultSourceTimeout bounds each passive source apart from the run's
 	// -timeout (-source-timeout): a slow one (crt.sh) is abandoned and
 	// listed, retryable and non-fatal while the others answered.
@@ -47,8 +50,8 @@ const (
 	// sources: the engine drops what a task emits once its context has
 	// ended, so what the sources gave by then is emitted while the run is
 	// live, as a partial result, not thrown away.
-	emitGrace = 5 * time.Second
-	maxBody   = 32 << 20
+	emitGrace      = 5 * time.Second
+	defaultMaxBody = 32 << 20
 )
 
 func init() {
@@ -70,9 +73,33 @@ type Options struct {
 	// is abandoned and listed as failed, and the others' names are kept.
 	SourceTimeout time.Duration
 	// Verify returns the names that resolve, not to a wildcard of domain
-	// (what is kept of the names only a padding source gave), and how many
-	// it could not check (the resolvers failed). Nil keeps them all.
-	Verify func(ctx context.Context, domain string, names []string) (live []string, unchecked int)
+	// (what is kept of the names only a padding source gave or the history
+	// holds), and the ones it could not check (the resolvers failed). Nil
+	// checks nothing.
+	Verify func(ctx context.Context, domain string, names []string) (live, failed []string)
+	// NoCheck sends no DNS query for those names, whatever Verify is: they
+	// are listed unverified (subs without -live).
+	NoCheck bool
+	// SourceRate caps each source's requests per second (-source-rate); a
+	// source's own default, if lower, stays. SourceRates sets single
+	// sources (-source-rates name=N/unit) and wins over both.
+	SourceRate  float64
+	SourceRates map[string]float64
+	// MaxResults caps the names a paging source gives (-max-results).
+	MaxResults int
+	// MaxTime bounds the wait on all sources of a domain (-max-time).
+	MaxTime time.Duration
+	// MaxBody caps a source's response body in bytes (-max-body).
+	MaxBody int64
+	// MaxNames caps the names kept per domain (-max-names).
+	MaxNames int
+	// DNSPaced says the resolvers have a rate (-dns-rate): checking guesses
+	// costs time, so the guessing is bounded by what the real names cost.
+	DNSPaced bool
+	// Recursive runs only the sources that handle subdomains of a subdomain.
+	Recursive bool
+	// Proxy sends every source request through this URL (-proxy).
+	Proxy string
 }
 
 type Collector struct {
@@ -83,10 +110,30 @@ type Collector struct {
 
 func New(o Options) *Collector {
 	if o.Client == nil {
-		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: http.DefaultTransport.(*http.Transport).Clone()}
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		if p, err := url.Parse(o.Proxy); err == nil && o.Proxy != "" {
+			tr.Proxy = http.ProxyURL(p)
+		}
+		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: tr}
 	}
+	// Every source's request goes through the transport that waits out a 429.
+	cl := *o.Client
+	if _, ok := cl.Transport.(*retryTransport); !ok {
+		base := cl.Transport
+		if base == nil {
+			base = http.DefaultTransport
+		}
+		cl.Transport = &retryTransport{next: base}
+	}
+	o.Client = &cl
 	if o.SourceTimeout <= 0 {
 		o.SourceTimeout = DefaultSourceTimeout
+	}
+	if o.MaxNames <= 0 {
+		o.MaxNames = DefaultMaxNames
+	}
+	if o.MaxBody <= 0 {
+		o.MaxBody = defaultMaxBody
 	}
 	all := allSources()
 	if fake := testSourcesInUse(); fake != nil {
@@ -94,8 +141,15 @@ func New(o Options) *Collector {
 	}
 	l := limit.New(0, 1)
 	for _, s := range all {
-		if s.perSec > 0 {
-			l.Set(s.name, s.perSec)
+		rate := s.perSec
+		if o.SourceRate > 0 && (rate <= 0 || o.SourceRate < rate) {
+			rate = o.SourceRate
+		}
+		if r, ok := o.SourceRates[s.name]; ok {
+			rate = r
+		}
+		if rate > 0 {
+			l.Set(s.name, rate)
 		}
 	}
 	return &Collector{opts: o, sources: all, limiter: l}
@@ -143,6 +197,9 @@ func (c *Collector) plan() (run []source, skipped map[string]string) {
 		case len(only) > 0 && !only[s.name]:
 			continue
 		case len(only) == 0 && !c.opts.All && !s.deflt:
+			continue
+		case c.opts.Recursive && !s.recurse && s.name != historyName:
+			skipped[s.name] = "does not look for subdomains of subdomains (-recursive)"
 			continue
 		case s.need == requiredKey && len(c.opts.Keys[s.name]) == 0:
 			skipped[s.name] = "needs a key"
@@ -207,71 +264,84 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			errLate = errors.New(types.CutShort)
 		}
 	}
+	if mt := c.opts.MaxTime; mt > 0 && mt < wait {
+		wait = mt
+		errLate = fmt.Errorf("no answer in %s (-max-time)", mt)
+	}
 	results := make([]outcome, len(run))
 	calls := make([]atomic.Int32, len(run))
 	rounds := make([]roundLog, len(run))
-	var hintMu sync.Mutex
-	hinted := map[string]bool{}
-	early := true
-	// Each source's names go to DNS as soon as it answers.
-	finished := false // set once Run stops waiting; late sources are ignored
-	pass := func(names []string) {
-		hintMu.Lock()
-		defer hintMu.Unlock()
-		if finished || !early {
-			return // nothing listens: the names go in NextHints at the end
-		}
-		var seeds []types.Seed
-		for _, raw := range names {
-			if n := clean(raw, domain); n != "" && !hinted[n] && len(hinted) < maxNames {
-				hinted[n] = true
-				seeds = append(seeds, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}})
-			}
-		}
-		if early && !catalog.Hint(ctx, seeds...) {
-			early = false
-			for _, s := range seeds {
-				delete(hinted, s.Keys["fqdn"])
-			}
-		}
+	throttles := make([]throttle, len(run))
+	partials := make([]partialNames, len(run))
+	notes := make([]rowNote, len(run))
+	h := newHinter(ctx, domain, c.opts.MaxNames)
+	// A padding source's guesses are resolved as its rounds arrive; that
+	// needs resolvers and a reason: a source that guesses, or the history.
+	var chk *checker
+	if c.opts.Verify != nil && !c.opts.NoCheck {
+		chk = newChecker(ctx, domain, c.opts.Verify, h.pass)
+		chk.paced = c.opts.DNSPaced
 	}
-	var wg sync.WaitGroup
+	var cancels []context.CancelFunc
+	var wgFetch, wgSample sync.WaitGroup
+	var mu sync.Mutex // results, reported
 	reported := make([]bool, len(run))
+	closed := false
 	for i, s := range run {
+		var sctx context.Context
+		var cancel context.CancelFunc
+		wg := &wgFetch
+		if s.sampler {
+			// It asks its source within its own time and resolves what it
+			// gets on the run's: the DNS check is paced by -dns-rate.
+			sctx, cancel = context.WithCancel(ctx)
+			wg = &wgSample
+		} else {
+			sctx, cancel = context.WithTimeout(ctx, timeout)
+		}
+		cancels = append(cancels, cancel)
+		sctx = context.WithValue(sctx, callsKey{}, &calls[i])
+		sctx = context.WithValue(sctx, roundsKey{}, &rounds[i])
+		sctx = context.WithValue(sctx, partialKey{}, &partials[i])
+		sctx = withThrottle(sctx, &throttles[i])
+		sctx = context.WithValue(sctx, noteKey{}, &notes[i])
+		if chk != nil {
+			sctx = context.WithValue(sctx, checkerKey{}, chk)
+		}
 		wg.Add(1)
-		go func(i int, s source) {
+		go func(i int, s source, sctx context.Context, wg *sync.WaitGroup) {
 			defer wg.Done()
-			sctx, cancel := context.WithTimeout(ctx, timeout)
-			defer cancel()
-			sctx = context.WithValue(sctx, callsKey{}, &calls[i])
-			sctx = context.WithValue(sctx, roundsKey{}, &rounds[i])
 			sess := &subscraping.Session{
 				Extractor:           ext,
 				Client:              c.opts.Client,
 				RequestLimiter:      c.limiter,
 				Timeout:             int(timeout / time.Second),
-				MaxResponseBodySize: maxBody,
+				MaxResponseBodySize: c.opts.MaxBody,
+				MaxResults:          c.opts.MaxResults,
 			}
 			done := timing.Start(ctx, "source."+s.name)
 			t0 := time.Now()
 			names, err := s.collect(sctx, domain, c.opts.Keys[s.name], sess)
 			done()
-			if sctx.Err() != nil && ctx.Err() == nil && (err == nil || contextEnded(err)) {
+			if !s.sampler && sctx.Err() != nil && ctx.Err() == nil && (err == nil || contextEnded(err)) {
 				err = errSource // the names it gave by then are kept
 			}
-			hintMu.Lock()
-			if !finished {
+			mu.Lock()
+			if !closed {
 				results[i] = outcome{names: names, err: err, took: time.Since(t0)}
 				reported[i] = true
 			}
-			hintMu.Unlock()
+			mu.Unlock()
 			if !s.verify {
-				pass(names) // a padding source's names wait for their check
+				chk.know(cleaned(names, domain))
+				h.pass(names) // a padding source's names wait for their check
 			}
-		}(i, s)
+		}(i, s, sctx, wg)
 	}
-	all := make(chan struct{})
-	go func() { wg.Wait(); close(all) }()
+	fetched := make(chan struct{})
+	go func() { wgFetch.Wait(); close(fetched) }()
+	sampled := make(chan struct{})
+	go func() { wgSample.Wait(); close(sampled) }()
 	t0 := time.Now()
 	timer := time.NewTimer(wait)
 	defer timer.Stop()
@@ -279,39 +349,72 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	// run, not a source's bound, stopped the wait: the result is partial.
 	late, cut := errSource, false
 	select {
-	case <-all:
+	case <-fetched:
 	case <-ctx.Done():
 	case <-timer.C:
 		late, cut = errLate, errLate != errSource
+	}
+	// The sources that resolve their guesses are waited for until the run
+	// must stop, less the time to emit what was gathered.
+	sampleLate := errors.New(types.CutShort)
+	if ctx.Err() == nil {
+		var stop <-chan time.Time
+		if dl, ok := ctx.Deadline(); ok {
+			left := time.Until(dl)
+			t := time.NewTimer(max(left-min(emitGrace, left/4), 0))
+			defer t.Stop()
+			stop = t.C
+		}
+		select {
+		case <-sampled:
+		case <-ctx.Done():
+		case <-stop:
+			cut = true
+		}
 	}
 	if ctx.Err() != nil {
 		// Ctrl-C, or the deadline came first: the sources that gave up
 		// with the run are not failures of their own.
 		late, cut = fmt.Errorf("stopped with the run (%v)", ctx.Err()), true
+		sampleLate = late
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			late = errors.New(types.CutShort)
+			sampleLate = late
 		}
 	}
 	// The names gathered so far are emitted whatever stopped the wait: a
 	// recon tool never throws away work it already did.
-	hintMu.Lock()
-	finished = true
+	mu.Lock()
+	closed = true
 	partial := false
-	for i := range run {
+	for i, s := range run {
+		stopped := late
+		if s.sampler {
+			stopped = sampleLate
+		}
 		switch {
 		case !reported[i]:
-			results[i] = outcome{err: late, took: time.Since(t0)}
+			results[i] = outcome{names: partials[i].snapshot(), err: stopped, took: time.Since(t0)}
 			partial = partial || cut
 		case ctx.Err() != nil && contextEnded(results[i].err):
-			results[i].err = late
+			results[i].err = stopped
 			partial = true
 		}
 	}
-	hintMu.Unlock()
+	mu.Unlock()
+	h.stop()
+	if chk != nil {
+		chk.close()
+	}
+	for _, cancel := range cancels {
+		cancel() // a source still checking stops asking
+	}
 
 	seen := map[string]bool{}
 	var names []string
+	cutNames := 0
 	foundBy := map[string][]string{} // name → the sources that gave it
+	wildcard := map[string]bool{}    // names a certificate gave as *.name
 	status := map[string]any{}
 	named := set(c.opts.Only)
 	var failed []string
@@ -322,18 +425,23 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		mine := map[string]bool{}
 		for _, raw := range r.names {
 			name := clean(raw, domain)
+			if name != "" && strings.HasPrefix(strings.TrimSpace(raw), "*.") {
+				wildcard[name] = true
+			}
 			if name == "" || mine[name] {
 				continue
 			}
 			mine[name] = true
 			n++
-			if !seen[name] && len(names) < maxNames {
+			if !seen[name] {
+				if len(names) >= c.opts.MaxNames {
+					cutNames++
+					continue
+				}
 				seen[name] = true
 				names = append(names, name)
 			}
-			if seen[name] {
-				foundBy[name] = append(foundBy[name], s.name)
-			}
+			foundBy[name] = append(foundBy[name], s.name)
 		}
 		row["count"] = n
 		if !s.deflt && !named[s.name] {
@@ -345,6 +453,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if est, ok := schnabel(rounds[i].snapshot()); ok {
 			row["population_estimate"] = int(est + 0.5)
 		}
+		if st := rounds[i].statSnapshot(); len(st) > 0 {
+			row["rounds"] = st
+		}
+		throttles[i].fields(row)
+		if n := notes[i].get(); n != "" {
+			row["partial"] = n
+		}
 		if r.err != nil {
 			row["error"] = shorten(r.err.Error())
 			failed = append(failed, s.name)
@@ -354,12 +469,36 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	for name, why := range skipped {
 		status[name] = map[string]any{"skipped": why}
 	}
-	names, foundBy = c.verifyPadded(ctx, domain, run, names, foundBy, status, cut)
+	union := len(names)
+	names, foundBy, st := c.settle(ctx, domain, run, names, foundBy, status, cut, chk)
 	sort.Strings(names)
 	for _, by := range foundBy {
 		sort.Strings(by)
 	}
 	payload := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status, "found_by": foundBy}
+	payload["from_sources"] = union
+	if st.dropped > 0 {
+		payload["dropped"] = st.dropped
+	}
+	if len(st.unverified) > 0 {
+		sort.Strings(st.unverified)
+		payload["unverified"] = st.unverified
+	}
+	if st.asked > 0 {
+		payload["checked"] = st.asked
+	}
+	if len(wildcard) > 0 {
+		var ws []string
+		for n := range wildcard {
+			ws = append(ws, n)
+		}
+		sort.Strings(ws)
+		payload["wildcard_certificate"] = ws
+	}
+	if cutNames > 0 {
+		payload["cut"] = true
+		payload["names_cut"] = cutNames
+	}
 	dep := map[string]bool{historyName: true}
 	for _, s := range run {
 		if s.verify {
@@ -370,7 +509,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		payload["coverage"] = cov
 	}
 	if !c.opts.NoHistory {
-		if err := remember(domain, names, foundBy, dep, c.opts.Verify == nil); err != nil {
+		if err := remember(domain, names, foundBy, st.skip); err != nil {
 			payload["history_error"] = shorten(err.Error())
 		}
 	}
@@ -401,25 +540,38 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return meta, err
 	}
 	for _, n := range names {
-		if !hinted[n] {
+		if !h.was(n) {
 			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}})
 		}
 	}
 	return meta, nil
 }
 
-// verifyPadded drops the names only padding sources gave (source.verify)
-// that do not resolve, and notes in each such source's status how many it
-// kept.
-func (c *Collector) verifyPadded(ctx context.Context, domain string, run []source, names []string, foundBy map[string][]string, status map[string]any, cut bool) ([]string, map[string][]string) {
+// settled is what became of the names a padding source or the history gave.
+type settled struct {
+	dropped    int             // did not resolve: left out
+	unverified []string        // not checked: listed, flagged
+	asked      int             // names sent to the resolvers, in all
+	skip       map[string]bool // not stored in the history: never seen to resolve
+}
+
+// settle drops the names only padding sources gave (source.verify) that do
+// not resolve, lists the ones it could not check, and notes in each such
+// source's status how many it kept. Names a source's rounds already had
+// checked are not asked again.
+func (c *Collector) settle(ctx context.Context, domain string, run []source, names []string, foundBy map[string][]string, status map[string]any, cut bool, chk *checker) ([]string, map[string][]string, settled) {
+	st := settled{skip: map[string]bool{}}
 	padding := map[string]bool{}
 	for _, s := range run {
 		if s.verify {
 			padding[s.name] = true
 		}
 	}
-	if len(padding) == 0 || c.opts.Verify == nil {
-		return names, foundBy
+	if chk != nil {
+		st.asked = chk.asked
+	}
+	if len(padding) == 0 {
+		return names, foundBy, st
 	}
 	var check []string
 	for _, n := range names {
@@ -435,42 +587,65 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 		}
 	}
 	if len(check) == 0 {
-		return names, foundBy
+		return names, foundBy, st
 	}
-	live := map[string]bool{}
-	var unchecked int
-	var took time.Duration // the DNS pass over the guesses, which -dns-rate paces
-	// Near the -timeout there is no room for a DNS pass over the padding
-	// sources' hundreds of names without blowing the deadline and losing the
-	// whole result: drop their unverified names, emit the rest, resume later.
-	vctx, skip := ctx, cut
-	if dl, ok := ctx.Deadline(); ok {
-		if left := time.Until(dl); left < emitGrace {
-			skip = true
-		} else {
-			var cancel context.CancelFunc
-			vctx, cancel = context.WithTimeout(ctx, left-emitGrace)
-			defer cancel()
+	why := ""
+	took := time.Duration(0)
+	if chk != nil {
+		took = chk.took
+		var more []string // not asked by the rounds, or the resolvers failed
+		for _, n := range check {
+			if v := chk.verdict(n); v == 0 || v == nameUnchecked {
+				more = append(more, n)
+			}
 		}
-	}
-	if skip {
-		unchecked = len(check)
+		// Near the -timeout there is no room for a DNS pass over hundreds of
+		// names without blowing the deadline and losing the whole result:
+		// list them unverified, emit the rest, resume later.
+		vctx, skip := ctx, cut
+		if dl, ok := ctx.Deadline(); ok {
+			if left := time.Until(dl); left < emitGrace {
+				skip = true
+			} else {
+				var cancel context.CancelFunc
+				vctx, cancel = context.WithTimeout(ctx, left-emitGrace)
+				defer cancel()
+			}
+		}
+		if len(more) > 0 && !skip {
+			chk.mu.Lock()
+			for _, n := range more {
+				delete(chk.state, n)
+			}
+			chk.closed = false
+			chk.mu.Unlock()
+			start := time.Now()
+			chk.checkWith(vctx, more)
+			took += time.Since(start)
+			st.asked = chk.asked
+		} else if len(more) > 0 {
+			why = types.CutShort
+		}
 	} else {
-		var got []string
-		start := time.Now()
-		got, unchecked = c.opts.Verify(vctx, domain, check)
-		took = time.Since(start)
-		for _, n := range got {
-			live[n] = true
-		}
+		why = "not asked: no -live"
 	}
 	drop := map[string]bool{}
 	for _, n := range check {
-		if !live[n] {
+		v := int8(0)
+		if chk != nil {
+			v = chk.verdict(n)
+		}
+		switch v {
+		case nameLive:
+		case nameDead:
 			drop[n] = true
 			delete(foundBy, n)
+		default:
+			st.unverified = append(st.unverified, n)
+			st.skip[n] = true
 		}
 	}
+	st.dropped = len(drop)
 	kept := names[:0]
 	for _, n := range names {
 		if !drop[n] {
@@ -479,21 +654,35 @@ func (c *Collector) verifyPadded(ctx context.Context, domain string, run []sourc
 	}
 	for name := range padding {
 		if row, ok := status[name].(map[string]any); ok {
-			row["kept"] = len(check) - len(drop)
+			row["kept"] = len(check) - len(drop) - len(st.unverified)
 			row["dropped_unresolved"] = len(drop)
-			row["checked_seconds"] = round(took.Seconds()) // all the guesses at once, shared
-			if unchecked > 0 {
+			if len(st.unverified) > 0 {
+				row["unverified"] = len(st.unverified)
+			}
+			if chk != nil {
+				row["checked_seconds"] = round(took.Seconds()) // all the guesses at once, shared
+			}
+			if why != "" && chk != nil {
 				// Said, not silent: these may hold a real name. azhaq resume
 				// checks them.
-				why := "the DNS lookups failed"
-				if skip {
-					why = types.CutShort
-				}
-				row["error"] = fmt.Sprintf("%d of its names not checked: %s; azhaq resume checks them", unchecked, why)
+				row["error"] = fmt.Sprintf("%d of its names not checked: %s; azhaq resume checks them", len(st.unverified), why)
+			} else if chk != nil && len(st.unverified) > 0 {
+				row["error"] = fmt.Sprintf("%d of its names not checked: the DNS lookups failed; azhaq resume checks them", len(st.unverified))
 			}
 		}
 	}
-	return kept, foundBy
+	return kept, foundBy, st
+}
+
+// cleaned is the names in canonical form under domain.
+func cleaned(names []string, domain string) []string {
+	out := make([]string, 0, len(names))
+	for _, raw := range names {
+		if n := clean(raw, domain); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // clean returns name in canonical form if it is domain or under it.

@@ -102,9 +102,8 @@ func historySource() source {
 
 // remember stores the names a run kept (foundBy gives each one's sources),
 // through a temp file and a rename so a crash leaves the old file whole.
-// With unverified, a name only padding sources gave was never checked and
-// is not stored.
-func remember(domain string, names []string, foundBy map[string][]string, padding map[string]bool, unverified bool) error {
+// A name in unverified was never seen to resolve and is not stored.
+func remember(domain string, names []string, foundBy map[string][]string, unverified map[string]bool) error {
 	path := historyPath(domain)
 	if path == "" || len(names) == 0 {
 		return nil
@@ -122,7 +121,7 @@ func remember(domain string, names []string, foundBy map[string][]string, paddin
 	stamp := now().UTC().Format(time.RFC3339)
 	for _, n := range names {
 		by := foundBy[n]
-		if unverified && allIn(by, padding) {
+		if unverified[n] {
 			continue
 		}
 		e, ok := m[n]
@@ -177,15 +176,6 @@ func remember(domain string, names []string, foundBy map[string][]string, paddin
 		return err
 	}
 	return nil
-}
-
-func allIn(xs []string, set map[string]bool) bool {
-	for _, x := range xs {
-		if !set[x] {
-			return false
-		}
-	}
-	return true
 }
 
 func has(xs []string, x string) bool {

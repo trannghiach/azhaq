@@ -114,7 +114,7 @@ func TestSampledRowGivesPopulationEstimate(t *testing.T) {
 		return a, nil
 	}})
 	one := fake("once", noKey, true, []string{"www.example.org"}, nil)
-	c := collector(Options{SourceTimeout: 5 * time.Second, NoHistory: true}, s, one)
+	c := collector(Options{SourceTimeout: 5 * time.Second, NoHistory: true, Verify: allLive}, s, one)
 	payload, _ := run(t, c, context.Background())
 	rows := payload["sources"].(map[string]any)
 	// the third round adds nothing, so the source stops: C·M = 0, 4·4, 6·6 over recaptures 0, 2, 6 → 6.5

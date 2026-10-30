@@ -219,6 +219,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
 	noHistory := fs.Bool("no-history", false, "do not read or write the name history (names earlier runs found, kept under $AZHAQ_DATA_DIR, else ~/.local/share/azhaq, and checked by DNS in each run)")
 	sourceTimeout := fs.Duration("source-timeout", subcol.DefaultSourceTimeout, "give each subdomain source this long; a slower one (crt.sh) is abandoned, listed as failed, and the names the others gave are kept (not -timeout, the run's bound)")
+	sourceRate := fs.Float64("source-rate", 0, "requests per second to each subdomain source, as subfinder -rl (0: each source's own pace); a source's lower own pace stays")
+	sourceRates := fs.String("source-rates", "", "pace single subdomain sources, as subfinder -rls: name=N/unit, comma-separated, unit s, m or h (hackertarget=10/m,crtsh=1/s)")
+	maxResults := fs.Int("max-results", 0, "most names one paging subdomain source gives (0: no cap), as subfinder -mr")
+	maxTime := fs.Duration("max-time", 0, "wait this long for all subdomain sources of a domain, then go on with what they gave (0: -source-timeout and a short grace bound the wait), as subfinder -max-time")
+	maxBody := fs.Int64("max-body", 0, "largest response body read from a subdomain source, in bytes (default 33554432), as subfinder -rsr")
+	sourceProxy := fs.String("source-proxy", "", "send every subdomain source request through this proxy URL, as subfinder -proxy (else HTTP_PROXY and HTTPS_PROXY)")
 	providersFile := fs.String("providers", "", "API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml)")
 	resolversFile := fs.String("resolvers", "", "DNS resolvers, one per line (default: public resolvers)")
 	dnsRate := fs.Float64("dns-rate", 0, "DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx)")
@@ -625,7 +631,22 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("provider keys: %w", err)
 	}
-	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources, NoHistory: *noHistory, SourceTimeout: *sourceTimeout}
+	if unknown := subcol.Unknown(splitList(*sourcesList)); len(unknown) > 0 {
+		msg := "no source named " + strings.Join(unknown, ", ") + " (azhaq subs -ls lists them)"
+		if len(unknown) == len(splitList(*sourcesList)) {
+			return usagef("-sources: %s", msg)
+		}
+		rep.Notes = append(rep.Notes, msg)
+	}
+	rates, err := parseSourceRates(*sourceRates)
+	if err != nil {
+		return usagef("-source-rates: %v", err)
+	}
+	if *sourceRate < 0 || *maxResults < 0 || *maxBody < 0 || *maxTime < 0 {
+		return usagef("-source-rate, -max-results, -max-time and -max-body are not negative")
+	}
+	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources, NoHistory: *noHistory, SourceTimeout: *sourceTimeout,
+		SourceRate: *sourceRate, SourceRates: rates, MaxResults: *maxResults, MaxTime: *maxTime, MaxBody: *maxBody, MaxNames: *maxNames, NoCheck: subsMode.NoCheck, DNSPaced: *dnsRate > 0, Recursive: subsMode.Recursive, Proxy: *sourceProxy}
 	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout}
 	if *urlsOut != "" && *resumeRun == "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends

@@ -11,12 +11,14 @@ import (
 // TestSource is a fake passive source. For tests only: it lets a command
 // run with no network.
 type TestSource struct {
-	Name    string
-	Default bool // in the default set
-	Names   []string
-	Err     error // returned after Names
-	Delay   time.Duration
-	Sampled bool // asked again by sampled(), as a keyless source is
+	Name      string
+	Default   bool // in the default set
+	Names     []string
+	Err       error // returned after Names
+	Delay     time.Duration
+	Sampled   bool // asked again by sampled(), as a keyless source is
+	Padding   bool // its names are guesses: kept only when they resolve
+	Recursive bool // handles subdomains of subdomains
 }
 
 var (
@@ -39,6 +41,10 @@ func UseTestSources(srcs ...TestSource) (restore func()) {
 			}
 			return ts.Names, ts.Err
 		}}
+		s.recurse = ts.Recursive
+		if ts.Padding {
+			s = verified(s)
+		}
 		if ts.Sampled {
 			s = sampled(s)
 		}
