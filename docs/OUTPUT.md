@@ -345,6 +345,7 @@ A map write (empty body) is first sent with its owner's session; when the owner 
 | `only its owner writes it` | `-all` | the others were refused |
 | `the owner's own write was refused` | `-all` | the owner was not let, or its empty write changed its object: nothing to compare |
 | `the other roles were refused` | `-all` | a DELETE (never asked of its owner) that no other role was let to send |
+| `the other roles' writes failed with a server error (5xx): neither refused nor accepted` | `-all` | every other role's write was answered 5xx (a unique key the server already held, a crash): nothing is said about who may write |
 
 The row's `owner_by` says where the write came from (`alice.har`, `PUT /api/BasketItems/{id} with an empty body`) and what proved it (`after bob's PUT the owner's object changed to match it`, `after bob's DELETE the owner's object is gone (404)`); `confidence` is `proved` on a proven cross write; `evidence` says who was let; `azhaq roles show -dir DIR -method PUT URL` prints each role's curl line with the write's body.
 
