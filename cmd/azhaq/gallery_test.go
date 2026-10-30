@@ -49,6 +49,28 @@ func galleryWorkspace(t *testing.T, dir, name string) string {
 	return db
 }
 
+// galleryUp waits for the gallery at addr to answer, and fails the test
+// when it does not: a SIGINT sent before the gallery listens for it would
+// end the whole test binary.
+func galleryUp(t *testing.T, addr string, done chan error) []byte {
+	t.Helper()
+	for i := 0; i < 400; i++ {
+		select {
+		case err := <-done:
+			t.Fatalf("the gallery ended before it served: %v", err)
+		default:
+		}
+		if r, err := http.Get("http://" + addr + "/api/stats"); err == nil {
+			body, _ := io.ReadAll(r.Body)
+			r.Body.Close()
+			return body
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatal("the gallery did not answer in 20 s")
+	return nil
+}
+
 func TestGalleryServesAndStops(t *testing.T) {
 	dir := t.TempDir()
 	a := galleryWorkspace(t, dir, "a")
@@ -61,15 +83,7 @@ func TestGalleryServesAndStops(t *testing.T) {
 	l.Close()
 	done := make(chan error, 1)
 	go func() { done <- cmdGallery([]string{"-workspace", dir, "-listen", addr}) }()
-	var body []byte
-	for i := 0; i < 100; i++ {
-		if r, err := http.Get("http://" + addr + "/api/stats"); err == nil {
-			body, _ = io.ReadAll(r.Body)
-			r.Body.Close()
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	body := galleryUp(t, addr, done)
 	var st struct{ Pages int }
 	if json.Unmarshal(body, &st) != nil || st.Pages != 2 {
 		t.Fatalf("stats %s", body)
@@ -121,13 +135,7 @@ func TestGalleryRefusals(t *testing.T) {
 	l.Close()
 	done := make(chan error, 1)
 	go func() { done <- cmdGallery([]string{"-db", db, "-listen", addr}) }()
-	for i := 0; i < 100; i++ {
-		if r, err := http.Get("http://" + addr + "/api/stats"); err == nil {
-			r.Body.Close()
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	galleryUp(t, addr, done)
 	_ = syscall.Kill(os.Getpid(), syscall.SIGINT)
 	select {
 	case err := <-done:
