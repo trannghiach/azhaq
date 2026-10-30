@@ -153,6 +153,6 @@ touch app.db.stop
 
 Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for each request or connection sent to a target, with its time, URL or `ip:port`, the scope rule that allowed it and the collector, each line holding the hash of the one before. Give the client's blue team `azhaq ledger -csv`, and show `-verify` passing on the file as delivered (exit 0; an edited, removed or reordered line is exit 3 naming the first bad line). `-summary` counts by kind, host, method and scope rule.
 
-`touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
+`touch app.db.stop` from another terminal stops the run: within a tenth of a second nothing more is sent, not even requests already waiting for `-rate`, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.

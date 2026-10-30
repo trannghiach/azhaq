@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.10.0
+
+### Fixed
+
+- The kill file stops sending within a tenth of a second, also for requests that were already waiting for `-rate`. Before, at `-rate 2`, requests counted before the file appeared still went out for up to 2.7 s (Chrome's included). A bench check now measures this on every path.
+- MCP calls that send requests run one at a time. Before, calls made at once each spent the whole budget and each kept the pace on its own.
+- A request Chrome answers from its cache is neither listed in the ledger nor counted. Before, a signed-in run of a multi-page app listed every page's shared scripts and styles.
+- A `-timeout` reached while requests wait for `-rate` stops the run: exit 4, and `resume` continues. Before, it failed them with exit 3. `-H 'Host: x'` now sets the Host the request goes with.
+- A bad port list is a usage error, caught before anything is sent.
+
+### Bench
+
+- A `claims` section checks every safety claim on every path a request takes, unpaced and at `-rate 10` and `-rate 2`. Each run's summary count, its ledger and an independent logging proxy (or the listeners, for TCP and UDP) must agree exactly. The paths: HTTP, Chrome, sign-in, roles, write replay, path and parameter sweeps, fuzz, ports, MCP, budgets and the kill switch.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

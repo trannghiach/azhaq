@@ -162,7 +162,7 @@ azhaq ledger -csv app.db.ledger.jsonl       # for a client report or a blue team
 
 `-ledger FILE` writes it elsewhere, `-ledger off` not at all. A drop-in command without `-db` uses a temporary workspace and writes a ledger only with `-ledger FILE`.
 
-`-kill-file PATH` (default `DB.stop`) is the kill switch. Create the file and, within half a second, nothing more is sent. The run exits 4 with `stopped` naming the kill switch. Remove the file and `azhaq resume -db DB` continues. A drop-in command without `-db` has no default kill file. `azhaq roles` keeps one ledger, `roles.ledger.jsonl`, and one stop file, `roles.stop`, in its `-dir`; `roles.stop` stops the runs of the roles (`roles` exits 4), and the replay that follows does not look for it.
+`-kill-file PATH` (default `DB.stop`) is the kill switch. Create the file and, within a tenth of a second, nothing more is sent, not even a request that was already waiting for `-rate` (Chrome's included). The run exits 4 with `stopped` naming the kill switch. Remove the file and `azhaq resume -db DB` continues. A drop-in command without `-db` has no default kill file. `azhaq roles` keeps one ledger, `roles.ledger.jsonl`, and one stop file, `roles.stop`, in its `-dir`; `roles.stop` stops the runs of the roles (`roles` exits 4), and the replay that follows does not look for it.
 
 ## A workspace
 
