@@ -32,6 +32,12 @@
 
 **`shots` says `screenshot … not taken`.** The page's images, scripts and styles count against `-max-requests`, and too few were left; the note says how many the page needs and how many were left. Raise `-max-requests`.
 
+**`shots` on a port Chrome refuses (6000, 6666, 10080) says `net::ERR_UNSAFE_PORT`.** Chrome keeps a list of ports it will not open; `shots` and `run -screenshots` allow them by default. `-unsafe-ports=false` brings Chrome's refusal back.
+
+**`shots -u URL` with a path takes a picture of that page.** The URLs a run finds itself are shot only when they are front pages; a URL you give is shot as given, one file per page (`http_host_port_path_hash.png`).
+
+**`shots` of a page that calls `alert()` on load.** The dialog is accepted and the page is shot; nothing waits for a click.
+
 **`shots` says `screenshot … is partial` and exits 3.** The picture was taken while some of the page's images, styles or scripts had not loaded (the row has `"partial":true`, `unloaded` and `resources`). The page was slow, or `-rate` is low for it: a page of 40 requests at `-rate 2` needs 20 seconds, and its time runs from when it last moved, so a slow pace alone does not cut it short; a server that stops answering does. Raise `-rate`, or give the page more time.
 
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.

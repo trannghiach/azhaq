@@ -313,6 +313,9 @@ func addRecord(row map[string]any, p browser.Page, noTech bool) {
 	if r.Protocol != "" {
 		row["protocol"] = r.Protocol
 	}
+	if r.ContentLength > 0 {
+		row["content_length"] = r.ContentLength // bytes on the wire for the page's document
+	}
 	if len(r.Headers) > 0 {
 		row["headers"] = r.Headers
 	}

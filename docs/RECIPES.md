@@ -156,3 +156,12 @@ Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for
 `touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
+
+## 16. Screenshots at a polite pace, for a report
+
+```
+azhaq shots -l services.txt -dir shots -rate 3 -json -o shots.jsonl -csv shots.csv -db shots.db
+azhaq export -db shots.db -format html > shots.html
+```
+
+Each page is taken whole, or marked `partial` with a note and exit 3: at `-rate 3` a page of 40 requests takes about 13 seconds, and its time runs from when it last moved, so the pace alone never blanks a picture. `-p small|medium|large` and address ranges (`-u 192.0.2.0/28`) find the services; `-nmap scan.xml` and `-nessus scan.nessus` take them from a scan; `-shot-format jpeg -shot-fullpage` makes smaller, taller pictures. `shots.html` is one file with its pictures embedded, grouped by how they look, and opens from any directory.

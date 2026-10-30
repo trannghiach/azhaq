@@ -5,9 +5,12 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/url"
 	"testing"
 
+	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func pngOf(t *testing.T, draw func(x, y int) uint8) []byte {
@@ -89,5 +92,39 @@ func TestNotTakenSaysWhatThePageNeeds(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("notes %q, want %q", got, want)
+	}
+}
+
+func TestSkipKeepsWhatTheUserNamed(t *testing.T) {
+	c := &Collector{Dir: "d", Browser: &browser.Browser{}}
+	path := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://h/a/b?x=1"}}
+	if !c.Skip(path) {
+		t.Error("a URL a run found, with a path, was shot")
+	}
+	path.Keys[types.GivenKey] = "1"
+	if c.Skip(path) {
+		t.Error("a URL the user gave, with a path, was skipped")
+	}
+}
+
+func TestGuessesFollowThePorts(t *testing.T) {
+	c := &Collector{}
+	if g := c.guesses("h"); len(g) != 1 || g[0][0] != "https://h/" || g[0][1] != "http://h/" {
+		t.Errorf("no ports: %v", g)
+	}
+	c = &Collector{Ports: []int{80, 443, 8080}, Only: "http"}
+	g := c.guesses("[::1]")
+	if len(g) != 3 || g[0][0] != "http://[::1]/" || g[2][0] != "http://[::1]:8080/" || len(g[1]) != 1 {
+		t.Errorf("ports, http only: %v", g)
+	}
+}
+
+func TestBaseNameKeepsPagesApart(t *testing.T) {
+	a, _ := url.Parse("http://h:3000/")
+	b, _ := url.Parse("http://h:3000/a?x=1")
+	c, _ := url.Parse("http://h:3000/a?x=2")
+	na, nb, nc := baseName(a, a.String()), baseName(b, b.String()), baseName(c, c.String())
+	if na != "http_h_3000" || nb == na || nb == nc {
+		t.Errorf("names %q %q %q", na, nb, nc)
 	}
 }

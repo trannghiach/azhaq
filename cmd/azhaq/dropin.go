@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -1515,6 +1516,7 @@ func cmdShots(args []string) error {
 	fs.Var(&urls, "u", "target: URL (its path and query are kept), host, host:port, IP or address range such as 192.0.2.0/24 (repeatable)")
 	list := fs.String("l", "", "file of targets (- for stdin)")
 	dir := fs.String("dir", "screenshots", "directory for the picture files")
+	csvOut := fs.String("csv", "", "also write one row per page to this CSV file (url, final_url, response_code, title, technologies, file, phash, partial)")
 	ports := fs.String("p", "", "web ports to try on each host, comma-separated: numbers, ranges, small (80, 443), medium or large (default: 443, then 80)")
 	noHTTP := fs.Bool("no-http", false, "try names and addresses over https only")
 	noHTTPS := fs.Bool("no-https", false, "try names and addresses over http only")
@@ -1585,11 +1587,43 @@ func cmdShots(args []string) error {
 	if err != nil {
 		return err
 	}
+	var csvw *csv.Writer
+	var csvf *os.File
+	var csvMu sync.Mutex
+	if *csvOut != "" {
+		if csvf, err = os.Create(*csvOut); err != nil {
+			return err
+		}
+		defer csvf.Close()
+		csvw = csv.NewWriter(csvf)
+		_ = csvw.Write([]string{"url", "final_url", "response_code", "title", "technologies", "file", "format", "bytes", "phash", "partial"})
+	}
 	see := func(_ types.Entity, o types.Observation) {
 		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
 			return // what Chrome refused, and the writes it mapped, are the summary's
 		}
 		p := payloadOf(o)
+		if csvw != nil {
+			var tech []string
+			if ts, ok := p["technologies"].([]any); ok {
+				for _, t := range ts {
+					if m, ok := t.(map[string]any); ok {
+						tech = append(tech, fmt.Sprint(m["value"]))
+					}
+				}
+			}
+			cell := func(k string) string {
+				if v, ok := p[k]; ok && v != nil {
+					return fmt.Sprint(v)
+				}
+				return ""
+			}
+			csvMu.Lock()
+			_ = csvw.Write([]string{cell("url"), cell("final_url"), cell("response_code"), cell("title"),
+				strings.Join(tech, ";"), cell("file"), cell("format"), cell("bytes"), cell("phash"), fmt.Sprint(p["partial"] == true)})
+			csvw.Flush()
+			csvMu.Unlock()
+		}
 		if w.json {
 			w.obj(p)
 		} else {

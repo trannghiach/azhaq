@@ -83,13 +83,14 @@ type ConsoleLn struct {
 
 // pageLog collects a Record from the events of one tab.
 type pageLog struct {
-	mu   sync.Mutex
-	main cdp.FrameID
-	rec  Record
-	cur  map[network.RequestID]*NetEntry
-	all  []*NetEntry
-	doc  bool // the document's answer is kept: the last one of the main frame
-	prog *progress
+	mu    sync.Mutex
+	main  cdp.FrameID
+	rec   Record
+	cur   map[network.RequestID]*NetEntry
+	all   []*NetEntry
+	doc   bool // the document's answer is kept: the last one of the main frame
+	docID network.RequestID
+	prog  *progress
 }
 
 func newPageLog(main cdp.FrameID, p *progress) *pageLog {
@@ -156,7 +157,7 @@ func (r *pageLog) responded(ev *network.EventResponseReceived) {
 			SigAlg: d.ServerSignatureAlgorithm, ECH: d.EncryptedClientHello,
 		}
 	}
-	r.doc = true
+	r.doc, r.docID = true, ev.RequestID
 }
 
 func stamp(t cdp.TimeSinceEpoch) string {
@@ -192,6 +193,9 @@ func (r *pageLog) finished(ev *network.EventLoadingFinished) {
 	if e := r.cur[ev.RequestID]; e != nil {
 		e.done = true
 		e.Bytes = int64(ev.EncodedDataLength)
+		if r.doc && ev.RequestID == r.docID {
+			r.rec.ContentLength = e.Bytes
+		}
 		e.Millis = ms(e.start, float64(ev.Timestamp))
 	}
 }

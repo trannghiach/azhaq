@@ -8,6 +8,11 @@
 - A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
 - Look-alike screenshots are grouped by a DCT perceptual hash (`p:` and 16 hex digits). A login form, the nginx default page and an admin page were one group of the old 9×8 brightness hash; they are three now, and thirty copies of one portal are still one.
 - `export -format html` embeds each screenshot (scaled to 560 pixels wide), so the report opens from any directory and after the screenshot folder is gone; it was `<img src="DIR/file.png">` relative to the run's `-dir`. A picture marked `partial` says so in the report.
+- `shots` takes more targets: a URL with a path or query is shot (it used to give 0 results and exit 0), `-u 192.0.2.0/28`, `-p` port lists (numbers, ranges, `small`, `medium`, `large`), `-no-http`, `-no-https`, `-random`, `-nmap FILE` and `-nessus FILE`.
+- `shots` and `run -screenshots` have flags for the picture and Chrome: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-shot-html`, `-chrome`, `-chrome-proxy`, `-chrome-profile`. Chrome's restricted ports (6000, 10080, …) are allowed (`-unsafe-ports=false` keeps its refusal).
+- A page's row in `shots -json` has what Chrome saw: response code, headers, TLS session, the technologies of the rendered page, console messages and the network log, at no extra request. `shots -csv FILE` writes the scalar columns.
+- A page's own request waits for the pace when Chrome sends it, not when it is counted, so four tabs no longer send four pages' documents together.
+- `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
 - A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
 
 ## v0.9.1
