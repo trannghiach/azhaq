@@ -18,6 +18,7 @@ var (
 	sent   atomic.Int64
 	paceMu sync.Mutex
 	pace   *rate.Limiter
+	paceR  float64
 )
 
 // SetRate paces the requests to targets: perSecond over all hosts (-rate);
@@ -25,10 +26,17 @@ var (
 func SetRate(perSecond float64) {
 	paceMu.Lock()
 	defer paceMu.Unlock()
-	pace = nil
+	pace, paceR = nil, 0
 	if perSecond > 0 {
-		pace = rate.NewLimiter(rate.Limit(perSecond), max(1, int(perSecond/5)))
+		pace, paceR = rate.NewLimiter(rate.Limit(perSecond), max(1, int(perSecond/5))), perSecond
 	}
+}
+
+// Rate is the pace in requests per second (-rate), or 0 without one.
+func Rate() float64 {
+	paceMu.Lock()
+	defer paceMu.Unlock()
+	return paceR
 }
 
 // Spend accounts for one request to a target before it is sent: it waits

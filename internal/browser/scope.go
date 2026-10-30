@@ -14,6 +14,7 @@ import (
 	cdpfetch "github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
@@ -66,6 +67,8 @@ type tab struct {
 	signin  bool // the sign-in's: its writes are sent, and not kept
 	lean    bool // read, not shot: its images, fonts and media are not fetched
 	writes  []Write
+	prog    *progress // when the page last moved (with a pace), or nil
+	log     *pageLog  // what Chrome saw of the page, or nil
 }
 
 // decoration: a request that draws the page and names no route: an
@@ -88,6 +91,12 @@ func chatter(raw string) bool {
 		return false
 	}
 	return webextract.SocketPath(u.Path) || strings.HasSuffix(strings.ToLower(u.Path), "/favicon.ico")
+}
+
+// icon: the tab's icon, which no screenshot shows.
+func icon(raw string) bool {
+	u, err := url.Parse(raw)
+	return err == nil && strings.HasSuffix(strings.ToLower(u.Path), "/favicon.ico")
 }
 
 func (t *tab) add(r refusal) {
@@ -253,9 +262,10 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		return
 	case !b.allowed(raw):
 		r.url, r.host = listable(raw) // an image on a third party's host is listed: its query may carry the page's data
-	case t != nil && t.lean && !write && (decoration(ev.ResourceType) || chatter(raw)):
+	case t != nil && !write && (t.lean && (decoration(ev.ResourceType) || chatter(raw)) || !t.lean && icon(raw)):
 		// Not sent, not counted, not listed: the page is read without
-		// what only draws it, and without the socket's polling.
+		// what only draws it, and without the socket's polling; a
+		// screenshot is taken without the tab's icon, which it never shows.
 		b.done(t)
 		b.fail(root, ev.RequestID)
 		return
@@ -302,6 +312,9 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 			return
 		}
 	}
+	if t != nil {
+		t.prog.touch()
+	}
 	rctx := root
 	if t != nil {
 		rctx = t.ctx
@@ -328,7 +341,57 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 			if also != nil {
 				also(&ev)
 			}
+			if t.log != nil {
+				t.log.requestSent(&ev)
+			}
 			b.addFrame(t, ev.FrameID)
+		}
+	})
+	if t.log != nil {
+		wg.Go(func() {
+			for ev, err := range chromedp.Events(ctx, network.LoadingFinished) {
+				if err != nil {
+					return
+				}
+				t.log.finished(&ev)
+			}
+		})
+		wg.Go(func() {
+			for ev, err := range chromedp.Events(ctx, network.LoadingFailed) {
+				if err != nil {
+					return
+				}
+				t.log.failed(&ev)
+			}
+		})
+		wg.Go(func() {
+			for ev, err := range chromedp.Events(ctx, runtime.ConsoleAPICalled) {
+				if err != nil {
+					return
+				}
+				t.log.logged(&ev)
+			}
+		})
+		wg.Go(func() {
+			for ev, err := range chromedp.Events(ctx, runtime.ExceptionThrown) {
+				if err != nil {
+					return
+				}
+				t.log.thrown(&ev)
+			}
+		})
+	}
+	// A page that calls alert() on load would keep its tab until its time
+	// is up: the dialog is accepted, as a visitor would, by a goroutine of
+	// its own because the event loop must not wait on Chrome.
+	wg.Go(func() {
+		for _, err := range chromedp.Events(ctx, page.JavascriptDialogOpening) {
+			if err != nil {
+				return
+			}
+			go func() {
+				_, _ = chromedp.Call(ctx, page.HandleJavaScriptDialog, page.HandleJavaScriptDialogParams{Accept: true})
+			}()
 		}
 	})
 	attached := chromedp.Events(ctx, page.FrameAttached)
@@ -365,6 +428,9 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 		for ev, err := range answered {
 			if err != nil {
 				return
+			}
+			if t.log != nil {
+				t.log.responded(&ev)
 			}
 			if r := ev.Response; r != nil && (r.FromDiskCache || r.FromPrefetchCache || r.FromServiceWorker) {
 				b.fromCache(ev.RequestID)
@@ -472,7 +538,13 @@ func (b *Browser) closePopups(ctx context.Context, main cdp.FrameID) {
 // makes it the sign-in's, whose writes are sent; lean one read without
 // its images, fonts and media.
 func (b *Browser) open(ctx context.Context, main cdp.FrameID, signin, lean bool) *tab {
-	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}, signin: signin, lean: lean}
+	return b.openTab(ctx, main, signin, lean, nil, nil)
+}
+
+// openTab is open for a page that is followed: its progress under a pace,
+// and its record.
+func (b *Browser) openTab(ctx context.Context, main cdp.FrameID, signin, lean bool, prog *progress, log *pageLog) *tab {
+	t := &tab{main: main, ctx: ctx, rs: map[refusal]bool{}, signin: signin, lean: lean, prog: prog, log: log}
 	b.addFrame(t, main)
 	return t
 }

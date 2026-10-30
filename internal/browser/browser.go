@@ -65,7 +65,7 @@ type Browser struct {
 	alloc  context.Context
 	cancel context.CancelFunc
 	root   context.Context
-	sem    chan struct{}
+	gate   gate
 
 	guard *guard
 	lost  atomic.Bool // Chrome's paused requests are no longer heard of
@@ -111,7 +111,6 @@ func (b *Browser) start() error {
 		if b.Timeout <= 0 {
 			b.Timeout = 30 * time.Second
 		}
-		b.sem = make(chan struct{}, b.Tabs)
 		// The scope this Chrome is held to, as the run set it when Chrome
 		// started: a later fetch.Reset (a run ending, a test) does not move
 		// it under requests still being decided.
@@ -201,6 +200,12 @@ type Page struct {
 	Writes    []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
 	Left      string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
 	Capped    bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
+	// Unloaded is how many of the images, styles, scripts, fonts and media
+	// the page asked for (of Resources) had not come back, or failed, when
+	// the picture was taken: the screenshot is then Partial.
+	Unloaded, Resources int
+	Partial             bool
+	Record              Record // what Chrome saw: answer, headers, TLS, requests, console
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -226,12 +231,11 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		return Page{}, err
 	}
 	b.visit(rawURL)
-	select {
-	case b.sem <- struct{}{}:
-	case <-ctx.Done():
-		return Page{}, ctx.Err()
+	if err := b.gate.enter(ctx, b.Tabs, b.Timeout); err != nil {
+		return Page{}, err
 	}
-	defer func() { <-b.sem }()
+	weight := 0 // what the page asked for, once it is known, for the next page's admission
+	defer func() { b.gate.leave(weight) }()
 	if b.lost.Load() {
 		return Page{}, errLost
 	}
@@ -239,7 +243,12 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	defer func() { watched() }() // once the tab is closed
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
-	tab, cancelT := context.WithTimeout(tab, b.Timeout)
+	// With a pace the page's deadlines run from when it last moved.
+	var prog *progress
+	if fetch.Rate() > 0 {
+		prog = newProgress()
+	}
+	tab, cancelT := deadline(tab, prog, b.Timeout, 10*b.Timeout)
 	defer cancelT()
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
@@ -251,7 +260,8 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	// The page's requests, from the moment the tab opens, and the frames
 	// they came from: what Chrome refuses those is this page's.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main, false, !shot)
+	log := newPageLog(main, prog)
+	t := b.openTab(tab, main, false, !shot, prog, log)
 	defer func() { // a page not read: its refusals listed with none
 		b.leave(b.claim(t))
 		b.leaveWrites(b.writesOf(t))
@@ -289,10 +299,12 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}
 	// A page whose load event never fires (a stalled tracker, a long poll)
 	// is still captured as far as it got.
-	nav, cancelNav := context.WithTimeout(tab, min(b.Timeout/2, 15*time.Second))
+	prog.touch()
+	nav, cancelNav := deadline(tab, prog, min(b.Timeout/2, 15*time.Second), 10*b.Timeout)
 	err := chromedp.Do(nav, chromedp.Navigate(rawURL))
+	navLate := nav.Err() != nil && tab.Err() == nil
 	cancelNav()
-	if errors.Is(err, context.DeadlineExceeded) && tab.Err() == nil {
+	if (navLate || errors.Is(err, context.DeadlineExceeded)) && tab.Err() == nil {
 		err = nil
 	}
 	if err == nil {
@@ -306,11 +318,19 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 			p.PNG, err = chromedp.Run(tab, chromedp.CaptureScreenshot())
 		}
 	}
+	p.Record, p.Unloaded, p.Resources = log.snapshot()
+	p.Partial = p.Unloaded > 0
 	b.settle(t)
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)
 	p.Asked = asked
 	mu.Unlock()
+	if shot && !p.Partial {
+		weight = p.Asked
+	}
+	if tab.Err() != nil && errors.Is(context.Cause(tab), context.DeadlineExceeded) && errors.Is(err, context.Canceled) {
+		err = context.DeadlineExceeded // the page stopped moving: a timeout
+	}
 	mine := b.claim(t)
 	writes := b.writesOf(t)
 	for _, r := range mine {

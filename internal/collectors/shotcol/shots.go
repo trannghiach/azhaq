@@ -179,6 +179,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
 	row := map[string]any{"url": raw, "file": file, "title": p.Title, "final_url": p.URL, "bytes": len(p.PNG)}
+	if p.Partial {
+		// Taken, and saved, but short of what the page draws: said in the
+		// summary, which then exits 3.
+		row["partial"], row["unloaded"], row["resources"] = true, p.Unloaded, p.Resources
+		row["note"] = fmt.Sprintf("screenshot of %s is partial: %d of %d images, styles and scripts were not loaded when it was taken (the pace, -max-requests or a slow server)", raw, p.Unloaded, p.Resources)
+	}
 	if h, ok := DHash(p.PNG); ok {
 		row["phash"] = h
 	}

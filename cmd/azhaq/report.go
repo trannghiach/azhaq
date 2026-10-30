@@ -272,6 +272,9 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Notes = append(rep.Notes, engine.GraphQLNotes(obs)...)
 	rep.Notes = append(rep.Notes, pathscol.Notes(obs)...)
 	rep.Notes = append(rep.Notes, fetch.Notes()...)
+	if partialShots(obs) {
+		rep.warned = true // a picture short of its page is not a result to take as whole
+	}
 	rep.Takeover = takeovers(ents, obs)
 	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
 		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
@@ -471,4 +474,18 @@ func pageWords(f takeover.Finding) string {
 		}
 	}
 	return ""
+}
+
+// partialShots says a screenshot was taken before its page was loaded.
+func partialShots(obs []types.StoredObservation) bool {
+	for _, o := range obs {
+		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
+			continue
+		}
+		var p struct{ Partial bool }
+		if json.Unmarshal(o.Payload, &p) == nil && p.Partial {
+			return true
+		}
+	}
+	return false
 }

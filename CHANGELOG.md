@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.10.0
+
+### Screenshots
+
+- A screenshot at a polite `-rate` is no longer silently blank. Four pages of 42 requests at `-rate 2` gave four pictures with no images, exit 0 and no note. A page's deadlines now run from when it last moved, not from when it started, tabs open as the pace can fund them, and the tab's icon, which no screenshot shows, is not fetched. The same run gives four complete pictures (0.000% of pixels differ from the `-rate 0` ones), at most 3 requests in any second at the server, and the summary, the ledger and the server count the same requests.
+- A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
+- A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.
