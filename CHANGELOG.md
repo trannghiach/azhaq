@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A port scan that `-max-requests` or the kill file stops keeps the open ports it found and the ports it asked; `azhaq resume` asks only the others and its row holds every open port. Before, the stopped scan's results were dropped and `resume` asked every port again, so a scan larger than the budget never finished.
 - `roles` sends every request through `-proxy`: the role runs, the history reads and the replay. The replay went direct (a proxy saw 93 requests of 144); `roles -proxy URL` sets it for all of them, and `params -proxy` is accepted.
 - `probe` asks what it is given and nothing more, as httpx does: a URL or a `host:port` is one request. The name in it was also asked on ports 443 and 80 (two more GETs per input, a second GET to a public host whose one request timed out, and a second row that contradicted the first). A bare name is still asked over https, then http.
 - A `-header` that names a host (`Host`, `X-Forwarded-Host`, `X-Host`, `X-Original-Host`) outside the scope is refused before anything is sent: `-allow 127.0.0.1 -deny secret.lab -header 'Host: secret.lab'` sent 35 requests that a front end routing by Host would serve as the denied host. The MCP server refuses those headers outright, and the ledger records the Host sent (`vhost`) when it is not the URL's.

@@ -183,6 +183,15 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		// waiting on it is dropped, and azhaq resume runs it again.
 		meta.Status, meta.Error, meta.Drop = types.StatusCapped, neterr.ErrBudget.Error(), false
 		meta.Requests, meta.EmitCount = used(), 0
+		var keep []types.Observation
+		for _, o := range held {
+			if o.Keep {
+				keep = append(keep, o)
+			}
+		}
+		if err := writeMany(keep); err != nil {
+			return meta, err
+		}
 		e.markCapped()
 		return meta, neterr.ErrBudget
 	}

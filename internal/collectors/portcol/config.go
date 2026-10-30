@@ -27,10 +27,12 @@ type Config struct {
 	Discover                   Discovery
 	IPv4Only, IPv6Only, AllIPs bool
 	PortsFor                   map[string][]int
+	Prior                      map[string]Prior // azhaq resume: scans a limit stopped
 }
 
 // Apply sets c's knobs from cfg.
 func (c *Collector) Apply(cfg Config) {
+	c.Prior = cfg.Prior
 	s := c.Scanner
 	s.Timeout, s.Retries, s.Workers = cfg.Timeout, cfg.Retries, cfg.Workers
 	s.Order, s.Seed, s.Threshold, s.Detect, s.Unnamed = cfg.Order, cfg.Seed, cfg.Threshold, cfg.Detect, cfg.Unnamed

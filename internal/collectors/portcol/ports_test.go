@@ -14,6 +14,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -158,3 +159,79 @@ func TestNotesSayWhatWasNotProbed(t *testing.T) {
 		t.Errorf("notes %q", n)
 	}
 }
+
+// A scan the request budget stops keeps what it found and the ports it
+// asked; the scan run again with that prior asks only the others, and its
+// row holds every open port.
+func TestStoppedScanResumes(t *testing.T) {
+	var open []int
+	for i := 0; i < 2; i++ {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		go func() {
+			for {
+				c, err := l.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+		_, p, _ := net.SplitHostPort(l.Addr().String())
+		n, _ := strconv.Atoi(p)
+		open = append(open, n)
+	}
+	// The listeners and the 40 ports after the first.
+	ports := append([]int{}, open...)
+	for p := open[0] + 1; len(ports) < 42; p++ {
+		if p != open[1] {
+			ports = append(ports, p)
+		}
+	}
+	seed := types.Seed{Type: types.TypeIPAddress, Keys: map[string]string{"ip": "127.0.0.1"}}
+	var asked []int
+	scan := func(c *Collector, budget int) []types.StoredObservation {
+		c.Scanner.Banner = -1
+		n := 0
+		c.Scanner.Take = func() error {
+			if budget > 0 && n >= budget {
+				return neterrBudget
+			}
+			n++
+			return nil
+		}
+		var obs []types.StoredObservation
+		_, _ = c.Run(context.Background(), seed, func(o types.Observation) error {
+			obs = append(obs, types.StoredObservation{Observation: o})
+			return nil
+		})
+		asked = append(asked, n)
+		return obs
+	}
+	first := scan(New(nil, ports, 1000), 10)
+	prior := Priors(first)["127.0.0.1"]
+	if len(prior.Asked) != 10 || len(first) != 1 {
+		t.Fatalf("first: %d asked, %d rows", len(prior.Asked), len(first))
+	}
+	c := New(nil, ports, 1000)
+	c.Prior = map[string]Prior{"127.0.0.1": prior}
+	second := scan(c, 0)
+	if asked[1] != len(ports)-10 {
+		t.Errorf("the second scan asked %d ports, want %d", asked[1], len(ports)-10)
+	}
+	var row struct {
+		Open    []int `json:"open"`
+		Partial bool  `json:"partial"`
+	}
+	if len(second) != 1 || json.Unmarshal(second[0].Payload, &row) != nil || row.Partial || len(row.Open) != 2 {
+		t.Errorf("second: %s", second[0].Payload)
+	}
+	if _, ok := Priors(append(first, second...))["127.0.0.1"]; ok {
+		t.Error("a whole scan after the stopped one still reads as stopped")
+	}
+}
+
+var neterrBudget = neterr.ErrBudget

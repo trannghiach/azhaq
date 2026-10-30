@@ -3,7 +3,6 @@ package portcol
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/netip"
@@ -14,7 +13,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
-	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -115,7 +113,8 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			return
 		}
 		raw, _ := json.Marshal(res.row)
-		if err := emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC()}); err != nil && emitErr == nil {
+		_, partial := res.row[PartialKey]
+		if err := emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC(), Keep: partial}); err != nil && emitErr == nil {
 			emitErr = err
 			return
 		}
@@ -155,6 +154,11 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 					ports = cdnPorts
 				}
 			}
+			all := ports
+			prior, resumed := c.Prior[ip]
+			if resumed {
+				ports = without(ports, prior.Asked)
+			}
 			s := &scan{up: true}
 			var uerr error
 			switch {
@@ -166,8 +170,18 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 				s = c.scanRange(ctx, ip, ports)
 			}
 			if s.err != nil {
-				record(result{err: s.err})
+				res := result{err: s.err}
+				if stopped(s.err) {
+					// What it found is kept; azhaq resume asks the rest.
+					if res.row = c.partialRow(ip, ip, all, ports, s, prior, resumed, edgeName, edge); res.row != nil {
+						res.row["prefix"] = pf.String()
+					}
+				}
+				record(res)
 				return
+			}
+			if resumed {
+				s, ports = withPrior(s, prior), all
 			}
 			var udp portscan.UDPReport
 			if len(c.UDPPorts) > 0 && !edge && s.up && c.Discover != DiscoverOnly {
@@ -218,8 +232,8 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 	if emitErr != nil {
 		return meta, emitErr
 	}
-	if errors.Is(first, neterr.ErrBudget) {
-		return types.RunMeta{Status: types.StatusCapped}, first
+	if stopped(first) {
+		return types.RunMeta{Status: types.StatusCapped, EmitCount: meta.EmitCount}, first
 	}
 	if first != nil {
 		return types.RunMeta{Status: types.StatusError, Error: first.Error()}, nil
@@ -239,7 +253,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 // scanRange asks one address of a range its ports.
 func (c *Collector) scanRange(ctx context.Context, ip string, ports []int) *scan {
 	r, err := c.Scanner.ScanEach(ctx, ip, ip, ports)
-	return &scan{open: r.Open, silent: r.Silent, up: true, capped: r.Threshold, err: err}
+	return &scan{open: r.Open, silent: r.Silent, up: true, capped: r.Threshold, asked: r.Asked, err: err}
 }
 
 // remember keeps the scan of an address that answered, so the seed that

@@ -111,6 +111,9 @@ type Observation struct {
 	Payload    json.RawMessage `json:"payload"`
 	Confidence float64         `json:"confidence"`
 	ObservedAt time.Time       `json:"observed_at"`
+	// Keep: written even when the request budget stops its task, which
+	// azhaq resume runs again (what a port scan found before it stopped).
+	Keep bool `json:"-"`
 }
 
 type WorkItem struct {

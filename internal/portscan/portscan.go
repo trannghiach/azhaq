@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,30 @@ const (
 // Ports parses a comma-separated list whose parts are each a name
 // (top-100, top-1000, full), a port or a range: "top-100,8888-8890". "none"
 // alone is no ports; an empty spec is top-100.
+// Compact writes ports as Ports reads them, runs as ranges: 1-1000,8080.
+func Compact(ports []int) string {
+	ps := slices.Clone(ports)
+	slices.Sort(ps)
+	ps = slices.Compact(ps)
+	var b strings.Builder
+	for i := 0; i < len(ps); {
+		j := i
+		for j+1 < len(ps) && ps[j+1] == ps[j]+1 {
+			j++
+		}
+		if b.Len() > 0 {
+			b.WriteByte(',')
+		}
+		if j > i {
+			fmt.Fprintf(&b, "%d-%d", ps[i], ps[j])
+		} else {
+			fmt.Fprintf(&b, "%d", ps[i])
+		}
+		i = j + 1
+	}
+	return b.String()
+}
+
 func Ports(spec string) ([]int, error) {
 	return parseList(spec, top100, func(w string) (string, bool) {
 		switch w {

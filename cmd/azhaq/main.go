@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/trannghiach/azhaq/internal/collectors/portcol"
 	"io"
 	"log"
 	"maps"
@@ -793,6 +794,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	opts.PortConfig = portCfg
+	if len(opts.Ports) > 0 || len(opts.UDPPorts) > 0 {
+		if obs, err := st.Observations(); err == nil {
+			opts.PortConfig.Prior = portcol.Priors(obs) // scans a limit stopped: resume asks the rest
+		}
+	}
 	if *paramsFile != "" {
 		words, ok := paramcol.Builtin(*paramsFile)
 		if !ok {

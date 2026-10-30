@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +48,8 @@ const (
 )
 
 type Collector struct {
+	// Prior holds, by address, what a scan a limit stopped found and asked.
+	Prior   map[string]Prior
 	Pool    *dnsr.Pool
 	Scanner *portscan.Scanner
 	Ports   []int
@@ -83,6 +86,7 @@ type scan struct {
 	unprobed int  // open ports left without the protocol probes
 	up       bool // answered discovery, or discovery was off
 	capped   bool // the threshold of open ports stopped it
+	asked    int  // ports asked, in the scanner's order, before it stopped
 	err      error
 }
 
@@ -201,6 +205,12 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if edge && !c.CDNFull {
 			ports = cdnPorts
 		}
+		// A scan an earlier run stopped asks only the ports it had not.
+		all := ports
+		prior, resumed := c.Prior[ip]
+		if resumed {
+			ports = without(ports, prior.Asked)
+		}
 		var s *scan
 		var err error
 		if c.Discover == DiscoverOff {
@@ -211,11 +221,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if err != nil && ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, err
 		}
-		if errors.Is(err, neterr.ErrBudget) {
-			// Each connect counts against -max-requests: azhaq resume
-			// scans the address again.
+		if stopped(err) {
+			// Stopped by -max-requests or the kill file: what it found is
+			// kept, with the ports it asked, and azhaq resume asks the rest.
 			c.forget(ip)
+			if row := c.partialRow(host, ip, all, ports, s, prior, resumed, name, edge); row != nil {
+				raw, _ := json.Marshal(row)
+				_ = emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC(), Keep: true})
+			}
 			return types.RunMeta{Status: types.StatusCapped}, err
+		}
+		if resumed {
+			s, ports = withPrior(s, prior), all
 		}
 		var udp portscan.UDPReport
 		if len(c.UDPPorts) > 0 && !edge && s.up && c.Discover != DiscoverOnly {
@@ -466,7 +483,7 @@ const maxListed = 64
 func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) (*scan, error) {
 	return c.once(ctx, host, ip, func() *scan {
 		r, err := c.Scanner.ScanEach(ctx, host, ip, ports)
-		return &scan{open: r.Open, silent: r.Silent, unprobed: r.Unprobed, up: true, capped: r.Threshold, err: err}
+		return &scan{open: r.Open, silent: r.Silent, unprobed: r.Unprobed, up: true, capped: r.Threshold, asked: r.Asked, err: err}
 	}, func(s *scan) (*scan, error) {
 		open, err := c.askAgain(ctx, host, ip, s.open)
 		return &scan{open: open, silent: s.silent, unprobed: s.unprobed, up: s.up, capped: s.capped}, err
@@ -515,7 +532,7 @@ func (c *Collector) once(ctx context.Context, host, ip string, run func() *scan,
 		return again(s)
 	}
 	r := run()
-	s.open, s.silent, s.unprobed, s.up, s.capped, s.err = r.open, r.silent, r.unprobed, r.up, r.capped, r.err
+	s.open, s.silent, s.unprobed, s.up, s.capped, s.asked, s.err = r.open, r.silent, r.unprobed, r.up, r.capped, r.asked, r.err
 	close(s.done)
 	return s, s.err
 }
@@ -563,4 +580,93 @@ func portsOf(open []portscan.Open) []int {
 		out = append(out, o.Port)
 	}
 	return out
+}
+
+// PartialKey marks the row of a scan a limit stopped; AskedKey lists the
+// ports it asked (1-1000,8080), which azhaq resume does not ask again.
+const (
+	PartialKey = "partial"
+	AskedKey   = "asked_ports"
+)
+
+// Prior is what a stopped scan of an address found and asked.
+type Prior struct {
+	Asked []int
+	Open  []portscan.Open
+}
+
+// Priors reads the rows of scans a limit stopped from a workspace: the
+// newest for each address.
+func Priors(obs []types.StoredObservation) map[string]Prior {
+	out := map[string]Prior{}
+	for _, o := range obs {
+		if o.Collector != Name || o.Kind != "ports" {
+			continue
+		}
+		var row struct {
+			IP       string          `json:"ip"`
+			Partial  bool            `json:"partial"`
+			Asked    string          `json:"asked_ports"`
+			Services []portscan.Open `json:"services"`
+		}
+		if json.Unmarshal(o.Payload, &row) != nil || row.IP == "" {
+			continue
+		}
+		if !row.Partial {
+			delete(out, row.IP) // a whole scan came after it
+			continue
+		}
+		asked, err := portscan.Ports(row.Asked)
+		if err != nil {
+			continue
+		}
+		out[row.IP] = Prior{Asked: asked, Open: row.Services}
+	}
+	return out
+}
+
+func without(ports, asked []int) []int {
+	done := map[int]bool{}
+	for _, p := range asked {
+		done[p] = true
+	}
+	var out []int
+	for _, p := range ports {
+		if !done[p] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// stopped: a limit ended the scan, not a failure.
+func stopped(err error) bool {
+	return errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrKilled)
+}
+
+// partialRow is the row of a scan a limit stopped: the ports it found and
+// the ones it asked, with what an earlier stopped run of it had.
+func (c *Collector) partialRow(host, ip string, all, ports []int, s *scan, prior Prior, resumed bool, name string, edge bool) map[string]any {
+	if s == nil || (s.asked == 0 && !resumed) {
+		return nil
+	}
+	asked := c.Scanner.Ordered(ip, ports)[:min(s.asked, len(ports))]
+	part := s
+	if resumed {
+		part = withPrior(s, prior)
+		asked = append(slices.Clone(prior.Asked), asked...)
+	}
+	row := c.row(host, ip, all, part, name, edge)
+	row["scanned"] = len(asked)
+	row[PartialKey] = true
+	row[AskedKey] = portscan.Compact(asked)
+	return row
+}
+
+// withPrior is s with the open ports an earlier stopped scan found.
+func withPrior(s *scan, prior Prior) *scan {
+	m := *s
+	m.open = append(slices.Clone(prior.Open), s.open...)
+	sort.Slice(m.open, func(i, j int) bool { return m.open[i].Port < m.open[j].Port })
+	return &m
 }

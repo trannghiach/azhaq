@@ -3,6 +3,7 @@ package portscan
 import (
 	"hash/fnv"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,6 +65,13 @@ var tiers = sync.OnceValue(func() (t struct{ top100, top1000 map[int]bool }) {
 // ordered is ports in the order the scanner asks them. A tiered order is
 // the same for an address whenever the seed is: repeatable, and different
 // from one address to the next.
+// Ordered is the order ScanEach asks ports of ip in: its first Report.Asked
+// are the ones asked when a scan stopped early.
+func (s *Scanner) Ordered(ip string, ports []int) []int {
+	s.init()
+	return s.ordered(ip, slices.Clone(ports))
+}
+
 func (s *Scanner) ordered(ip string, ports []int) []int {
 	if s.Order != OrderTiered || len(ports) < 2 {
 		return ports
