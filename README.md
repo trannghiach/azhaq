@@ -324,30 +324,55 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. The subdomain comparison is on **live** names — the ones that resolve — not the raw count: most of what a passive collector returns does not resolve (stale certificate logs, wildcard noise), so a bigger raw number is not a better result. Latest run (2026-10-30, v0.9.0; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop and VAmPI in Docker, the services lab (fifteen daemons), a DNS lab, servers and a zone the bench serves itself, and, at 5 requests per second, ginandjuice.shop, testphp.vulnweb.com and demo.testfire.net; passive lookups only on hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included.
 
-| Job | Replaces | Azhaq | Reference |
-| --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 561 live, in 116 s (fewer raw names; the dead majority is dropped — `subs -live` shows the split) | 457 live, in 93 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 18 s | 3 in 69 s |
-| Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 575 live hosts | httpx | 409 answered; status, title and technologies agree on 399 of 401 shared (redirects out of the site compared by their own status); 107 s | 402 answered, 138 s |
-| Server routes Juice Shop's frontend calls (77) | katana `-jc -jsl` + jsluice | 70, with methods and body fields | 1 (37 by grepping the scripts katana fetched for quoted paths) |
-| VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 12 s, 32/40 in 17 s | 6/77 in 6 s, 0/40 in 44 s |
-| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,115, including 2,346 of gau's 2,354 | 2,354 |
-| Paths, 4,750 words on Juice Shop and VAmPI | ffuf `-ac` | 22 hits, 2 false positives, 32 s | 22 hits, 2 false positives, 38 s |
-| Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
-| Screenshots, 4 front pages | gowitness | 4 in 11 s | 3 in 34 s |
-| Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
-| Reverse DNS of a /25 | dnsx `-ptr` | 36 | 35, all among Azhaq's |
-| Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | each maps everything one run maps; 153 requests over the capped run and its resume, one run 148 | |
-| Memory, Juice Shop | katana `-jc -jsl` | 87 MB | 1.4 GB |
+Every comparison runs **twice**, as a reviewer runs it: with the default flags of both tools, and politely (`-rate 5` for HTTP, `-dns-rate 10` with dnsx `-rl 10` and the same two resolvers, `-rate 100` for ports, the reference at the same rate). `go run ./bench -profile default|polite|both` picks. A row is a win only when Azhaq has at least the reference tool's results, counting only results that something other than Azhaq confirms (a server's own log, a second resolver, `ss`, the app's source), in at most 1.05 times its time (the median of three runs below 20 s, one run above). The record keeps the old shares and ratios too.
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md); katana runs as `katana -u URL -d 3 -jc -jsl -silent -nc -timeout 10 -c 10`. Where azhaq loses, the table says so: passive subdomains take longer than subfinder because azhaq asks subdomain.center several times for its random samples and checks the names only such sources give with DNS.
+<!-- bench:begin -->
+Latest run (2026-10-30, v0.10.0, commit 191822a; profile: both; 144 of 193 checks pass). **Default** is the default flags of both tools; **polite** is `-rate 5` (HTTP), `-dns-rate 10` (DNS) and `-rate 100` (ports), with the reference tool at the same rate. A result counts only when something other than azhaq confirms it, and a row is a win only when azhaq has at least the reference's results in at most 1.05 times its time. The record, with every check and the commands, is `bench/history/*.json`.
 
-[bench/README.md](bench/README.md) has what is measured and the caveats.
+| Job | Replaces | Profile | Azhaq | Reference |
+| --- | --- | --- | --- | --- |
+| Live subdomains, 3 domains, no keys (names that resolve at a third resolver) | subfinder + dnsx | default | 553 live in 80 s | 530 live in 213 s (37 only it found) |
+| Historical URLs, vulnweb.com | gau | default | 140, including 58 of gau's 64, in 18 s | 64 in 3.7 s |
+| DNS brute force, 5000 words, the DNS lab | dnsx | default | 10 confirmed in 0.2 s | 9 in 1.0 s |
+| Wildcard zone, 3 real names of 50 | dnsx | default | 3 found, 0 fake | 50 without `-wd` |
+| Record types (9) of 32 names on a zone the bench serves | dnsx | default | 0 answers right in 0.0 s, 0 queries | 12 in 0.8 s, 523 queries |
+| Probing 107 hosts (the local apps and 100 local servers) | httpx | default | 107 answered, 107 confirmed; status, title and tech agree on 95 of 107 shared; 1.1 s | 107 answered, 107 confirmed; 1.8 s |
+| Known routes of juice-shop | katana `-jc -jsl` | default | 54/77 in 4.5 s | 1/77 in 14 s |
+| Known routes of vampi | katana `-jc -jsl` | default | 9/12 in 0.4 s | 1/12 in 11 s |
+| Known routes of ginandjuice.shop | katana `-jc -jsl` | default | 2/3 in 15 s | 2/3 in 21 s |
+| Paths, 4750 words, Juice Shop and VAmPI (an app went down 2 times during the sweep: not a measure) | ffuf `-ac` | default | 22 hits, 2 false positives, 24 s | 2 hits, 0 false positives, 6.9 s |
+| Fuzzing, 4750 words, Juice Shop and VAmPI, 4 runs (an app went down 2 times during the sweeps: not a measure) | ffuf | default | 44 hits (22 confirmed), 72 s; JSON report equal on 0 of 2 | 24 hits (5 confirmed), 60 s |
+| Parameters, 8 planted, 7 pages | arjun | default | 8 right, 0 wrong, 2.2 s | 8 right, 0 wrong, 5.3 s |
+| Open ports, scanme.nmap.org top-1000 | `naabu -scan-type c` | default | 2 confirmed in 6.4 s | 2 confirmed in 8.5 s |
+| Open ports, 127.0.0.1 1-65535 | `naabu -scan-type c` | default | 80 confirmed in 7.7 s | 80 confirmed in 133 s |
+| Open ports, 127.0.0.0/28 (the bench's own listeners) | `naabu -scan-type c` | default | 0 confirmed in 0.0 s | 4 confirmed in 2.8 s |
+| Services named right on 15 lab ports | nmap `-sV` | default | 6, 3 with a product, 7.6 s | 9, 9 with a product, 144 s |
+| Screenshots, 8 targets (not blank) | gowitness | default | 5 in 5.1 s | 6 in 65 s |
+| Notifications, 6 messages to 2 providers, as the stub received them | notify | default | 0 in 0.0 s | 6 in 5.0 s |
+| Live subdomains, 2 domains, no keys (names that resolve at a third resolver) | subfinder + dnsx | polite | 22 live in 443 s | 18 live in 171 s (0 only it found) |
+| Historical URLs, vulnweb.com | gau | polite | 140, including 58 of gau's 64, in 19 s | 64 in 8.6 s |
+| DNS brute force, 310 words, the DNS lab | dnsx | polite | 9 confirmed in 30 s | 9 in 31 s |
+| Record types (9) of 32 names on a zone the bench serves | dnsx | polite | 0 answers right in 0.0 s, 0 queries | 12 in 4.0 s, 523 queries |
+| Probing 107 hosts (the local apps and 100 local servers) | httpx | polite | 107 answered, 107 confirmed; status, title and tech agree on 95 of 107 shared; 66 s | 107 answered, 107 confirmed; 22 s |
+| Known routes of juice-shop | katana `-jc -jsl` | polite | 54/77 in 29 s | 1/77 in 17 s |
+| Known routes of vampi | katana `-jc -jsl` | polite | 9/12 in 6.1 s | 1/12 in 11 s |
+| Known routes of ginandjuice.shop | katana `-jc -jsl` | polite | 2/3 in 15 s | 2/3 in 22 s |
+| Paths, 257 words, Juice Shop and VAmPI | ffuf `-ac` | polite | 13 hits, 0 false positives, 103 s | 13 hits, 0 false positives, 103 s |
+| Fuzzing, 257 words, Juice Shop and VAmPI, 2 runs | ffuf | polite | 13 hits (13 confirmed), 105 s | 13 hits (13 confirmed), 103 s |
+| Parameters, 8 planted, 3 pages | arjun | polite | 8 right, 0 wrong, 47 s | 8 right, 0 wrong, 44 s |
+| Open ports, scanme.nmap.org top-1000 | `naabu -scan-type c` | polite | 2 confirmed in 17 s | 2 confirmed in 63 s |
+| Open ports, 127.0.0.1 top-1000 | `naabu -scan-type c` | polite | 9 confirmed in 10 s | 10 confirmed in 32 s |
+| Open ports, 127.0.0.0/28 (the bench's own listeners) | `naabu -scan-type c` | polite | 0 confirmed in 0.0 s | 4 confirmed in 4.9 s |
+| Services named right on 15 lab ports | nmap `-sV` | polite | 6, 3 with a product, 7.6 s | 8, 8 with a product, 147 s |
+| Screenshots, 4 targets (not blank) | gowitness | polite | 1 in 12 s | 4 in 4.2 s |
+| Notifications, 6 messages to 2 providers, as the stub received them | notify | polite | 0 in 0.0 s | 6 in 1.0 s |
+<!-- bench:end -->
+
+The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. katana runs as `katana -u URL -d 3 -jc -jsl -silent -nc -timeout 10 -c 10`.
+
+The table above is written from the newest record in `bench/history` by `go run ./bench -readme`, so its numbers cannot drift from a run. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md), which also has what is measured, the checks, and the caveats (the polite path and fuzz sweeps send a short list, not 4,750 words, because at 5 requests per second that is 16 minutes a tool and app).
 
 ## Documentation
 

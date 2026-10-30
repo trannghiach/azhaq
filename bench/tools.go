@@ -135,7 +135,7 @@ func installTools(dir string) error {
 	}
 	for _, t := range tools {
 		marker := filepath.Join(dir, "."+t.Name+"-"+t.Version)
-		if installed(dir, t.Name, marker) {
+		if installed(dir, t.Name, marker) || (refBin != "" && fileExists(filepath.Join(refBin, t.Name))) {
 			continue
 		}
 		logf("installing %s %s", t.Name, t.Version)

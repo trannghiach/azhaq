@@ -1,0 +1,382 @@
+{
+  "date": "2026-10-29T23:38:59Z",
+  "commit": "ff5a5ee",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "dropin": {
+    "crawl_known": 70,
+    "crawl_of": 77,
+    "probe_rows": 2,
+    "probe_fields": true,
+    "openapi_vampi": 12,
+    "openapi_crapi": 0,
+    "subs_live": 8,
+    "subfinder_live": 5,
+    "subs_shared": 5,
+    "urls": 191,
+    "targets": 2,
+    "html_ok": true,
+    "html_bytes": 7388
+  },
+  "ports": {
+    "hosts": [
+      "scanme.nmap.org",
+      "127.0.0.1"
+    ],
+    "azhaq_open": 10,
+    "naabu_open": 0,
+    "shared": 0,
+    "azhaq_seconds": 7.620160115999999,
+    "naabu_seconds": 0.000757668,
+    "azhaq_only": [
+      "scanme.nmap.org:22",
+      "127.0.0.1:631",
+      "127.0.0.1:5002",
+      "127.0.0.1:5030",
+      "scanme.nmap.org:80",
+      "scanme.nmap.org:9929",
+      "127.0.0.1:22",
+      "127.0.0.1:3001",
+      "127.0.0.1:5102",
+      "127.0.0.1:8800"
+    ]
+  },
+  "dirs": {
+    "words": 4750,
+    "apps": [
+      "http://127.0.0.1:3101/",
+      "http://127.0.0.1:5102/"
+    ],
+    "azhaq_hits": 22,
+    "ffuf_hits": 22,
+    "shared": 22,
+    "azhaq_false": 2,
+    "ffuf_false": 2,
+    "azhaq_seconds": 31.859397465999997,
+    "ffuf_seconds": 37.080550089
+  },
+  "scope": {
+    "trap_requests": 0,
+    "in_scope_found": 5,
+    "watch_runs": 3
+  },
+  "shots": {
+    "targets": 4,
+    "azhaq": 4,
+    "gowitness": 3,
+    "azhaq_seconds": 11.504725395,
+    "gowitness_seconds": 33.896938375
+  },
+  "scale": {
+    "urls": 181,
+    "one_received": 148,
+    "budget": 100,
+    "processes": 2,
+    "most_received": 100,
+    "all_received": 154,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 1.8346435159999999,
+    "killed_same": true,
+    "worker_tasks": 37,
+    "workers_same": true,
+    "workers_seconds": 6.103569341,
+    "one_seconds": 5.503930548
+  },
+  "checks": [
+    {
+      "name": "drop-in: azhaq crawl finds Juice Shop's known routes",
+      "pass": true,
+      "detail": "70/77"
+    },
+    {
+      "name": "drop-in: azhaq probe reads stdin and writes httpx's JSON fields",
+      "pass": true,
+      "detail": "2 of 2 local apps, fields true"
+    },
+    {
+      "name": "export: OpenAPI of VAmPI holds every path of its own description",
+      "pass": true,
+      "detail": "12/12"
+    },
+    {
+      "name": "drop-in: azhaq subs -live ≥ 95% of subfinder | dnsx",
+      "pass": true,
+      "detail": "azhaq 8, subfinder|dnsx 5, shared 5 (vulnweb.com)"
+    },
+    {
+      "name": "export: targets and HTML report",
+      "pass": true,
+      "detail": "targets 2 of 2, HTML 7388 bytes with its sections true, urls 191"
+    },
+    {
+      "name": "dirs: ≥ 95% of ffuf -ac's hits, same wordlist and rate",
+      "pass": true,
+      "detail": "azhaq 22, ffuf 22, shared 22 (4750 words, 2 apps)"
+    },
+    {
+      "name": "dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 2, ffuf 2"
+    },
+    {
+      "name": "scope: no request leaves the program's scope",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped"
+    },
+    {
+      "name": "watch: an unchanged app reports no change",
+      "pass": true,
+      "detail": "3 runs, 0 reported changes []"
+    },
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "2 processes of at most 100 requests (Juice Shop received at most 100 from one); 183 URLs, one run 181, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "154 requests over 2 processes, one run 148"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "killed after 1.8s; 181 URLs, one run 181"
+    },
+    {
+      "name": "scale: a run shared with two workers maps everything one run maps",
+      "pass": true,
+      "detail": "181 URLs, one run 181; the workers ran 37 tasks"
+    },
+    {
+      "name": "screenshots: ≥ 95% of gowitness's",
+      "pass": true,
+      "detail": "azhaq 4 in 12s, gowitness 3 in 34s, 4 targets, 4 tabs each"
+    },
+    {
+      "name": "ports: ≥ 95% of naabu's open ports (connect scan, top 1000)",
+      "pass": false,
+      "detail": "azhaq 10, naabu 0, shared 0 (scanme.nmap.org, 127.0.0.1)"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 5.823588467,
+      "rss_mb": 76.06640625
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.432561508,
+      "rss_mb": 1.49609375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.491723261,
+      "rss_mb": 62.8828125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.013578774,
+      "rss_mb": 0.66015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 32.771074333,
+      "rss_mb": 53.0546875
+    },
+    {
+      "tool": "subfinder",
+      "target": "dropin",
+      "seconds": 31.043124142,
+      "rss_mb": 37.89453125,
+      "cached": true
+    },
+    {
+      "tool": "dnsx",
+      "target": "dropin",
+      "seconds": 14.0362259,
+      "rss_mb": 39.9453125,
+      "cached": true
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 18.461409831,
+      "rss_mb": 31.8046875,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.372213156,
+      "rss_mb": 1.48828125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.007915768,
+      "rss_mb": 0.4140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.01283188,
+      "rss_mb": 0.078125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.08239943,
+      "rss_mb": 36.3671875
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 21.13664604,
+      "rss_mb": 20.73046875,
+      "cached": true
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 15.776998036,
+      "rss_mb": 30.63671875
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 15.943904049,
+      "rss_mb": 12.7578125,
+      "cached": true
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 1.6317966400000001,
+      "rss_mb": 70.45703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 14.531655829,
+      "rss_mb": 79.91015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 6.55671355,
+      "rss_mb": 82.19921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 5.444589832,
+      "rss_mb": 80.4765625
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 5.503930548,
+      "rss_mb": 85.47265625
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 5.125673806,
+      "rss_mb": 77.34765625,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.95624596,
+      "rss_mb": 78.0703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 11.504725395,
+      "rss_mb": 81.765625
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 33.896938375,
+      "rss_mb": 239.73046875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scanme.nmap.org",
+      "seconds": 4.495367632,
+      "rss_mb": 43.11328125
+    },
+    {
+      "tool": "naabu",
+      "target": "scanme.nmap.org",
+      "seconds": 0.000420871,
+      "rss_mb": 0,
+      "error": "fork/exec bench/.work/bin/naabu: no such file or directory"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 3.124792484,
+      "rss_mb": 41.6640625
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.1",
+      "seconds": 0.000336797,
+      "rss_mb": 0,
+      "error": "fork/exec bench/.work/bin/naabu: no such file or directory"
+    }
+  ]
+}

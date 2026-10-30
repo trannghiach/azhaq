@@ -1,0 +1,778 @@
+{
+  "date": "2026-10-29T12:56:26Z",
+  "commit": "7cc5c09-dirty",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "apps": [
+    {
+      "name": "juice-shop",
+      "url": "http://127.0.0.1:3101/",
+      "azhaq": {
+        "routes": 110,
+        "truth": 70,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 7.392667571,
+        "rss_mb": 103.62109375
+      },
+      "katana": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 14.417613933,
+        "rss_mb": 1747.1328125
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 1.153530366,
+        "rss_mb": 147.046875
+      },
+      "katana_jsluice": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 15.571144299,
+        "rss_mb": 1747.1328125
+      },
+      "bundle_grep": {
+        "routes": 101,
+        "truth": 37,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "ffuf": {
+        "words": 32,
+        "azhaq_hits": 3,
+        "ffuf_hits": 3,
+        "shared": 3,
+        "azhaq_shell": 0,
+        "ffuf_shell": 0,
+        "seconds": 0.189386333
+      },
+      "roles": {
+        "rows": 38,
+        "expected": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "seconds": 12.844421931,
+        "chrome_rows": 40,
+        "chrome_found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "chrome_seconds": 17.793648282
+      },
+      "browser": {
+        "azhaq": {
+          "routes": 111,
+          "truth": 70,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 12.831205489,
+          "rss_mb": 104.10546875
+        },
+        "katana": {
+          "routes": 30,
+          "truth": 6,
+          "truth_of": 77,
+          "shell": 4,
+          "seconds": 6.993186697,
+          "rss_mb": 56.41015625
+        },
+        "limit_seconds": 300
+      }
+    },
+    {
+      "name": "vampi",
+      "url": "http://127.0.0.1:5102/",
+      "azhaq": {
+        "routes": 14,
+        "truth": 12,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0.690635294,
+        "rss_mb": 74.21484375
+      },
+      "katana": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.910733999,
+        "rss_mb": 35.640625
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "katana_jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.910733999,
+        "rss_mb": 35.640625
+      },
+      "bundle_grep": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      }
+    },
+    {
+      "name": "ginandjuice.shop",
+      "url": "https://ginandjuice.shop/",
+      "azhaq": {
+        "routes": 16,
+        "truth": 3,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 15.458358817,
+        "rss_mb": 101.3515625
+      },
+      "katana": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 17.400346964,
+        "rss_mb": 723.640625
+      },
+      "jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0.288495652,
+        "rss_mb": 46.78515625
+      },
+      "katana_jsluice": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 17.688842616000002,
+        "rss_mb": 723.640625
+      },
+      "bundle_grep": {
+        "routes": 3,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      }
+    }
+  ],
+  "dropin": {
+    "crawl_known": 70,
+    "crawl_of": 77,
+    "probe_rows": 2,
+    "probe_fields": true,
+    "openapi_vampi": 12,
+    "openapi_crapi": 0,
+    "subs_live": 8,
+    "subfinder_live": 6,
+    "subs_shared": 6,
+    "urls": 191,
+    "targets": 2,
+    "html_ok": true,
+    "html_bytes": 7204
+  },
+  "dirs": {
+    "words": 4750,
+    "apps": [
+      "http://127.0.0.1:3101/",
+      "http://127.0.0.1:5102/"
+    ],
+    "azhaq_hits": 22,
+    "ffuf_hits": 22,
+    "shared": 22,
+    "azhaq_false": 2,
+    "ffuf_false": 2,
+    "azhaq_seconds": 35.365052236,
+    "ffuf_seconds": 42.410939724
+  },
+  "params": {
+    "pages": [
+      "http://127.0.0.1:3101/rest/products/search",
+      "http://127.0.0.1:3101/rest/user/whoami",
+      "http://127.0.0.1:5102/users/v1",
+      "https://ginandjuice.shop/catalog",
+      "https://ginandjuice.shop/blog/"
+    ],
+    "words": 6453,
+    "azhaq": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback",
+      "https://ginandjuice.shop/blog search",
+      "https://ginandjuice.shop/catalog category",
+      "https://ginandjuice.shop/catalog searchTerm"
+    ],
+    "arjun": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback"
+    ],
+    "shared": 2,
+    "azhaq_seconds": 142.018575478,
+    "arjun_seconds": 51.411506059000004
+  },
+  "scope": {
+    "trap_requests": 0,
+    "in_scope_found": 5,
+    "watch_runs": 3
+  },
+  "shots": {
+    "targets": 4,
+    "azhaq": 4,
+    "gowitness": 3,
+    "azhaq_seconds": 19.076090682,
+    "gowitness_seconds": 33.985447895
+  },
+  "secrets": {
+    "azhaq": 12,
+    "jsluice": 4,
+    "shared": 4
+  },
+  "tenants": {
+    "expected": 6,
+    "matched": 6,
+    "signed_in_logouts": 0,
+    "seconds": 7.5668107540000005
+  },
+  "scale": {
+    "urls": 181,
+    "one_received": 191,
+    "budget": 100,
+    "processes": 2,
+    "most_received": 100,
+    "all_received": 197,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 8.605022588333332,
+    "killed_same": true,
+    "worker_tasks": 164,
+    "workers_same": true,
+    "workers_seconds": 7.912880903,
+    "one_seconds": 25.815067765
+  },
+  "checks": [
+    {
+      "name": "juice-shop: ≥ 90% of the server routes its frontend calls",
+      "pass": true,
+      "detail": "azhaq 70/77, katana 1/77, jsluice 0/77"
+    },
+    {
+      "name": "juice-shop: no catch-all page reported as visited",
+      "pass": true,
+      "detail": "0 visited URLs return the SPA index"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user",
+      "pass": true,
+      "detail": "38 endpoints differ; 401 → 200 on 2/2 of /api/Users, /rest/user/authentication-details"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user, signed in with Chrome",
+      "pass": true,
+      "detail": "40 endpoints differ; 401 → 200 on 2/2 (with a token: 38 endpoints) "
+    },
+    {
+      "name": "juice-shop: -browser finds the known routes katana -headless finds",
+      "pass": true,
+      "detail": "azhaq -browser 70/77 in 13s, katana -headless 6/77 in 7s"
+    },
+    {
+      "name": "identical runs diff empty",
+      "pass": true,
+      "detail": "added=0 removed=0 observations=0"
+    },
+    {
+      "name": "vampi: paths from /openapi.json",
+      "pass": true,
+      "detail": "azhaq 12/12, katana 1/12"
+    },
+    {
+      "name": "diff across different seeds is labelled",
+      "pass": true,
+      "detail": "seeds_differ=true"
+    },
+    {
+      "name": "ginandjuice: page scripts parsed",
+      "pass": true,
+      "detail": "4/4 page scripts, 3/3 routes only in page scripts or script-driven forms"
+    },
+    {
+      "name": "ginandjuice: product and blog pages are one template each",
+      "pass": true,
+      "detail": "map lines: product 1, blog post 1"
+    },
+    {
+      "name": "known routes ≥ katana ∪ jsluice on every app",
+      "pass": true,
+      "detail": "juice-shop 70/77 vs 1, vampi 12/12 vs 1, ginandjuice.shop 3/3 vs 2"
+    },
+    {
+      "name": "no catch-all page reported as visited on any app",
+      "pass": true,
+      "detail": "3 apps"
+    },
+    {
+      "name": "drop-in: azhaq crawl finds Juice Shop's known routes",
+      "pass": true,
+      "detail": "70/77"
+    },
+    {
+      "name": "drop-in: azhaq probe reads stdin and writes httpx's JSON fields",
+      "pass": true,
+      "detail": "2 of 2 local apps, fields true"
+    },
+    {
+      "name": "export: OpenAPI of VAmPI holds every path of its own description",
+      "pass": true,
+      "detail": "12/12"
+    },
+    {
+      "name": "drop-in: azhaq subs -live ≥ 95% of subfinder | dnsx",
+      "pass": true,
+      "detail": "azhaq 8, subfinder|dnsx 6, shared 6 (vulnweb.com)"
+    },
+    {
+      "name": "export: targets and HTML report",
+      "pass": true,
+      "detail": "targets 2 of 2, HTML 7204 bytes with its sections true, urls 191"
+    },
+    {
+      "name": "dirs: ≥ 95% of ffuf -ac's hits, same wordlist and rate",
+      "pass": true,
+      "detail": "azhaq 22, ffuf 22, shared 22 (4750 words, 2 apps)"
+    },
+    {
+      "name": "dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 2, ffuf 2"
+    },
+    {
+      "name": "scope: no request leaves the program's scope",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped"
+    },
+    {
+      "name": "watch: an unchanged app reports no change",
+      "pass": true,
+      "detail": "3 runs, 0 reported changes []"
+    },
+    {
+      "name": "secrets: everything jsluice finds in the planted script, and more",
+      "pass": true,
+      "detail": "azhaq 12 values, jsluice 4, shared 4"
+    },
+    {
+      "name": "roles: anon → member → owner on a multi-tenant app, signed in with Chrome",
+      "pass": true,
+      "detail": "6/6 rows as expected; wrong []; extra []; signed-in logouts 0 "
+    },
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "2 processes of at most 100 requests (Juice Shop received at most 100 from one); 183 URLs, one run 181, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "197 requests over 2 processes, one run 191"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "killed after 8.6s; 181 URLs, one run 181"
+    },
+    {
+      "name": "scale: a run shared with two workers maps everything one run maps",
+      "pass": true,
+      "detail": "181 URLs, one run 181; the workers ran 164 tasks"
+    },
+    {
+      "name": "screenshots: ≥ 95% of gowitness's",
+      "pass": true,
+      "detail": "azhaq 4 in 19s, gowitness 3 in 34s, 4 targets, 4 tabs each"
+    },
+    {
+      "name": "params: ≥ 95% of arjun's parameters on the bench pages",
+      "pass": true,
+      "detail": "azhaq 5, arjun 2, shared 2 (5 pages, 6453 names)"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 7.392667571,
+      "rss_mb": 103.62109375
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 14.417613933,
+      "rss_mb": 1747.1328125
+    },
+    {
+      "tool": "jsluice",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 1.153530366,
+      "rss_mb": 147.046875
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 0.189386333,
+      "rss_mb": 13.9765625
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles",
+      "seconds": 12.844421931,
+      "rss_mb": 105.1796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles-login",
+      "seconds": 17.793648282,
+      "rss_mb": 103.10546875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 12.831205489,
+      "rss_mb": 104.10546875
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 6.993186697,
+      "rss_mb": 56.41015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 5.285329713,
+      "rss_mb": 101.921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.690635294,
+      "rss_mb": 74.21484375
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.910733999,
+      "rss_mb": 35.640625
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 15.458358817,
+      "rss_mb": 101.3515625
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 17.400346964,
+      "rss_mb": 723.640625
+    },
+    {
+      "tool": "jsluice",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 0.288495652,
+      "rss_mb": 46.78515625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 5.27736242,
+      "rss_mb": 90.98046875
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.527099143,
+      "rss_mb": 1.37109375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.714101911,
+      "rss_mb": 78.44140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.055645616,
+      "rss_mb": 36.0546875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 27.745994257,
+      "rss_mb": 70.9765625
+    },
+    {
+      "tool": "subfinder",
+      "target": "dropin",
+      "seconds": 30.938430728,
+      "rss_mb": 36.98046875
+    },
+    {
+      "tool": "dnsx",
+      "target": "dropin",
+      "seconds": 13.572134089,
+      "rss_mb": 40.72265625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 18.632632701,
+      "rss_mb": 45.9375,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.445304517,
+      "rss_mb": 1.37109375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.041207903,
+      "rss_mb": 29.66796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.051897939,
+      "rss_mb": 36.6171875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.105564842,
+      "rss_mb": 81.0234375
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 26.471808861,
+      "rss_mb": 22.421875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 16.259487394,
+      "rss_mb": 80.06640625
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 15.939130863,
+      "rss_mb": 12.7890625
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 1.6339406090000002,
+      "rss_mb": 80.69921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 15.313054309,
+      "rss_mb": 92.97265625,
+      "error": "exit status 4 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.8.1-0.20261029123542-7cc5c099a0f5+dirty\",\"complete\":false,\"exit\":4,\"results\":182,\"counts\":{\"URLs\":113,\"api\":79,\"auth\":4,\"client routes\":43,\"forbidden\":6,\"websockets\":1},\"seconds\":15.248,\"requests\":120,\"db\":\"bench/.work/scope/watch-200223.db\",\"run_id\":\"d184100c-bc9c-4799-9bae-28aaab4a30b1\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":10,\"targets\":[\"http://127.0.0.1:3101/api/Quantitys\",\"http://127.0.0.1:3101/api/Feedbacks\",\"http://127.0.0.1:3101/api/Deliverys\",\"http://127.0.0.1:3101/api/Hints\",\"http://127.0.0.1:3101/api/Challenges\",\"http://127.0.0.1:3101/api/Products\",\"http://127.0.0.1:3101/rest/captcha\",\"http://127.0.0.1:3101/api/SecurityQuestions\",\"http://127.0.0.1:3101/rest/continue-code-findIt\",\"http://127.0.0.1:3101/rest/continue-code-fixIt\"]}],\"skipped\":[{\"target\":\"http://127.0.0.1:3101/rest/saveLoginIp\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/change-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/reset-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/deluxe-membership\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/image-captcha\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history/orders\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/languages\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/memories\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/repeat-notification\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/whoami\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products/search\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/authentication-details\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftMintListen\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/security-question\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/wallet/balance\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftUnlocked\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-findIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/login\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/admin\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/BasketItems\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-fixIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Users\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/SecurityAnswers\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/track-order\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Complaints\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/chat\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/dataerasure\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/profile\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/file-upload\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/redirect\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/assets/i18n\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/fixes\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/verdict\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/ws/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/.well-known/csaf/provider-metadata.json\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"}],\"stopped\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts, 313 tasks known and not done\",\"resume\":\"azhaq resume -db bench/.work/scope/watch-200223.db\",\"next\":[\"azhaq query -db bench/.work/scope/watch-200223.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role auth,forbidden   (what needs a session)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/scope/watch-200223.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\",\"azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)\"]}"
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 15.32814334,
+      "rss_mb": 91.65625,
+      "error": "exit status 4 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.8.1-0.20261029123542-7cc5c099a0f5+dirty\",\"complete\":false,\"exit\":4,\"results\":182,\"counts\":{\"URLs\":113,\"api\":79,\"auth\":4,\"client routes\":43,\"forbidden\":6,\"websockets\":1},\"seconds\":15.209,\"requests\":120,\"db\":\"bench/.work/scope/watch-200223.db\",\"run_id\":\"e3db46b9-b67f-4ef0-9e92-1887533e8241\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":10,\"targets\":[\"http://127.0.0.1:3101/api/Challenges\",\"http://127.0.0.1:3101/api/Deliverys\",\"http://127.0.0.1:3101/api/Feedbacks\",\"http://127.0.0.1:3101/api/SecurityQuestions\",\"http://127.0.0.1:3101/api/Hints\",\"http://127.0.0.1:3101/api/Quantitys\",\"http://127.0.0.1:3101/api/Products\",\"http://127.0.0.1:3101/rest/captcha\",\"http://127.0.0.1:3101/rest/continue-code-findIt\",\"http://127.0.0.1:3101/rest/continue-code-fixIt\"]}],\"skipped\":[{\"target\":\"http://127.0.0.1:3101/rest/saveLoginIp\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/change-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/reset-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/deluxe-membership\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/image-captcha\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/languages\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/security-question\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history/orders\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/whoami\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/repeat-notification\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products/search\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/memories\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/wallet/balance\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/authentication-details\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftUnlocked\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftMintListen\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-fixIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/track-order\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Users\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/login\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-findIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/admin\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/BasketItems\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Complaints\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/chat\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/SecurityAnswers\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/dataerasure\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/assets/i18n\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/file-upload\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/profile\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/ws/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/verdict\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/fixes\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/redirect\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/.well-known/csaf/provider-metadata.json\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"}],\"stopped\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts, 313 tasks known and not done\",\"resume\":\"azhaq resume -db bench/.work/scope/watch-200223.db\",\"next\":[\"azhaq query -db bench/.work/scope/watch-200223.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role auth,forbidden   (what needs a session)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/scope/watch-200223.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\",\"azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)\"]}"
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 15.055615102,
+      "rss_mb": 91.2890625,
+      "error": "exit status 4 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.8.1-0.20261029123542-7cc5c099a0f5+dirty\",\"complete\":false,\"exit\":4,\"results\":182,\"counts\":{\"URLs\":113,\"api\":79,\"auth\":4,\"client routes\":43,\"forbidden\":6,\"websockets\":1},\"seconds\":14.978,\"requests\":121,\"db\":\"bench/.work/scope/watch-200223.db\",\"run_id\":\"d1306ac9-7815-4b90-97f6-699b6ed127b6\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":10,\"targets\":[\"http://127.0.0.1:3101/api/Quantitys\",\"http://127.0.0.1:3101/api/Challenges\",\"http://127.0.0.1:3101/api/Deliverys\",\"http://127.0.0.1:3101/api/Feedbacks\",\"http://127.0.0.1:3101/api/Hints\",\"http://127.0.0.1:3101/api/Products\",\"http://127.0.0.1:3101/rest/captcha\",\"http://127.0.0.1:3101/rest/continue-code-findIt\",\"http://127.0.0.1:3101/api/SecurityQuestions\",\"http://127.0.0.1:3101/rest/continue-code-fixIt\"]}],\"skipped\":[{\"target\":\"http://127.0.0.1:3101/rest/saveLoginIp\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/change-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/reset-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/image-captcha\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/languages\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/memories\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history/orders\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/order-history\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/authentication-details\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/repeat-notification\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/wallet/balance\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/security-question\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/whoami\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products/search\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftUnlocked\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3/nftMintListen\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-fixIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Users\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user/login\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code-findIt/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/web3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/SecurityAnswers\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/continue-code/apply\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/admin\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/chat\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/BasketItems\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/track-order\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/api/Complaints\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/products\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/rest/user\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/file-upload\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/assets/i18n\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/profile\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/dataerasure\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/redirect\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/ws/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/v3\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/verdict\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/snippets/fixes\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"},{\"target\":\"http://127.0.0.1:3101/.well-known/csaf/provider-metadata.json\",\"reason\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts\"}],\"stopped\":\"http://127.0.0.1:3101 stopped answering after 5 timeouts, 305 tasks known and not done\",\"resume\":\"azhaq resume -db bench/.work/scope/watch-200223.db\",\"next\":[\"azhaq query -db bench/.work/scope/watch-200223.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role auth,forbidden   (what needs a session)\",\"azhaq query -db bench/.work/scope/watch-200223.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/scope/watch-200223.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\",\"azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)\"]}"
+    },
+    {
+      "tool": "azhaq",
+      "target": "secrets",
+      "seconds": 0.466757696,
+      "rss_mb": 66.4375
+    },
+    {
+      "tool": "jsluice",
+      "target": "secrets",
+      "seconds": 0.008157358,
+      "rss_mb": 0.09765625
+    },
+    {
+      "tool": "azhaq",
+      "target": "tenants",
+      "seconds": 7.5668107540000005,
+      "rss_mb": 81.48046875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 25.815067765,
+      "rss_mb": 101.47265625,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 6.688483951,
+      "rss_mb": 88.02734375,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 0.043072014,
+      "rss_mb": 28.703125,
+      "error": "exit status 1 azhaq: nothing to resume in bench/.work/scale/killed.db: every run finished"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 19.076090682,
+      "rss_mb": 97.66015625
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 33.985447895,
+      "rss_mb": 244.33203125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.165001988,
+      "rss_mb": 44.9140625
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.902631581,
+      "rss_mb": 28.41796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.468426262,
+      "rss_mb": 43.9296875
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.457875018,
+      "rss_mb": 27.48046875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 0.796345017,
+      "rss_mb": 65.45703125
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 2.352204069,
+      "rss_mb": 28.04296875
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 70.485889548,
+      "rss_mb": 80.99609375
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 24.467789307,
+      "rss_mb": 34.8515625
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 69.102912663,
+      "rss_mb": 77.28515625
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 22.231006084,
+      "rss_mb": 34.7890625
+    }
+  ]
+}

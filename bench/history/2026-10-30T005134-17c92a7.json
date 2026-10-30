@@ -1,0 +1,145 @@
+{
+  "date": "2026-10-30T00:50:03Z",
+  "commit": "17c92a7",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "claims": {
+    "rows": [
+      {
+        "case": "kill switch run (run)",
+        "pace": "rate 10",
+        "summary": 25,
+        "ledger": 25,
+        "counter": 25,
+        "pass": true,
+        "detail": "run: summary 25, ledger 25 (http 25), counter 25; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 105, ledger 105, counter 105"
+      },
+      {
+        "case": "kill switch run (resume)",
+        "pace": "rate 10",
+        "summary": 80,
+        "ledger": 80,
+        "counter": 80,
+        "pass": true
+      },
+      {
+        "case": "kill switch run (run)",
+        "pace": "rate 2",
+        "summary": 6,
+        "ledger": 6,
+        "counter": 6,
+        "pass": true,
+        "detail": "run: summary 6, ledger 6 (http 6), counter 6; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 86, ledger 86, counter 86"
+      },
+      {
+        "case": "kill switch run (resume)",
+        "pace": "rate 2",
+        "summary": 80,
+        "ledger": 80,
+        "counter": 80,
+        "pass": true
+      },
+      {
+        "case": "kill switch shots (run)",
+        "pace": "rate 5",
+        "summary": 11,
+        "ledger": 11,
+        "counter": 11,
+        "pass": true,
+        "detail": "run: summary 11, ledger 11 (chrome 9, http 2), counter 11; last request 0.00s after the file, exit 4; resume: summary 51, ledger 51 (chrome 51), counter 51; together: summary 62, ledger 62, counter 62"
+      },
+      {
+        "case": "kill switch shots (resume)",
+        "pace": "rate 5",
+        "summary": 51,
+        "ledger": 51,
+        "counter": 51,
+        "pass": true
+      }
+    ],
+    "seconds": 86.025259429
+  },
+  "checks": [
+    {
+      "name": "claims: the counter forwards and logs a WebSocket upgrade (Juice Shop socket.io)",
+      "pass": true,
+      "detail": "answer \"HTTP/1.1 101 Switching Protocols\", logged 1 requests, upgrade flag true "
+    },
+    {
+      "name": "claims: kill switch run rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 25, ledger 25 (http 25), counter 25; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 105, ledger 105, counter 105"
+    },
+    {
+      "name": "claims: kill switch run rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 6, ledger 6 (http 6), counter 6; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 86, ledger 86, counter 86"
+    },
+    {
+      "name": "claims: kill switch shots rate 5: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 11, ledger 11 (chrome 9, http 2), counter 11; last request 0.00s after the file, exit 4; resume: summary 51, ledger 51 (chrome 51), counter 51; together: summary 62, ledger 62, counter 62"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 12.601517453,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 44.093822212,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 10.995465776,
+      "rss_mb": 0
+    }
+  ]
+}

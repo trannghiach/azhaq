@@ -77,7 +77,7 @@ func argPath(dir, a string) string {
 }
 
 func refCacheable(name string) bool {
-	return !fresh && name != azhaq && !slices.Contains(uncached, filepath.Base(name))
+	return !fresh && !noCache && name != azhaq && !slices.Contains(uncached, filepath.Base(name))
 }
 
 func refDir(key string) string { return filepath.Join(work, "refcache", key) }

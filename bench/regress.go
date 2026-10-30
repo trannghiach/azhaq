@@ -46,8 +46,6 @@ func refTool(name string) (string, bool) {
 	return "", false
 }
 
-func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
-
 // record adds one regress check. met is whether the finding's pass
 // condition holds; an open finding's unmet condition does not fail the run.
 func (r *regressRow) record(id string, open, met bool, format string, a ...any) {
@@ -217,8 +215,8 @@ func (r *regressRow) dirsTime(dir string) {
 		"params at default flags on %s: azhaq %.1fs, arjun %.1fs (azhaq <= 2x arjun)", page, am.Seconds, jm.Seconds)
 }
 
-// listening is the TCP ports in the LISTEN state on this machine.
-func listening() map[string]bool {
+// loopbackPorts is the TCP ports listening on loopback or every address.
+func loopbackPorts() map[string]bool {
 	out, _ := exec.Command("ss", "-ltnH").Output()
 	set := map[string]bool{}
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
@@ -241,9 +239,9 @@ func listening() map[string]bool {
 func (r *regressRow) prb07() {
 	met, detail := true, []string{}
 	for i := range 3 {
-		before := listening()
+		before := loopbackPorts()
 		res := azExec(".", 10*time.Minute, "ports", "-host", "127.0.0.1", "-p", "full", "-json")
-		after := listening()
+		after := loopbackPorts()
 		found := map[string]bool{}
 		for _, l := range lines([]byte(res.stdout)) {
 			var row struct {

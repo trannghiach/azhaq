@@ -88,21 +88,7 @@ func benchDropin(crapi bool) *dropinRow {
 		addCheck("export: OpenAPI of crAPI holds ≥ 30 of its 40 paths", row.OpenAPICrapi >= 30, "%d/40", row.OpenAPICrapi)
 	}
 
-	// subs -live, like subfinder | dnsx, on vulnweb.com.
-	out, _ = run("dropin", 10*time.Minute, dir, azhaq, "subs", "-d", bruteDomain, "-live", "-silent")
-	az := hostSet(lines(out))
-	sub, _ := run("dropin", 10*time.Minute, dir, ref("subfinder"), "-d", bruteDomain, "-silent")
-	subFile := filepath.Join(dir, "subfinder-"+stamp+".txt")
-	must(os.WriteFile(subFile, sub, 0o644))
-	live, _ := run("dropin", 10*time.Minute, dir, ref("dnsx"), "-l", subFile, "-silent")
-	want := hostSet(lines(live))
-	row.SubsLive, row.SubfinderLive, row.SubsShared = len(az), len(want), overlap(want, az)
-	addCheck("drop-in: azhaq subs -live ≥ 95% of subfinder | dnsx", row.SubfinderLive > 0 && float64(row.SubsShared) >= 0.95*float64(row.SubfinderLive),
-		"azhaq %d, subfinder|dnsx %d, shared %d (%s)", row.SubsLive, row.SubfinderLive, row.SubsShared, bruteDomain)
-
-	// urls, like gau.
-	out, _ = run("dropin", 10*time.Minute, dir, azhaq, "urls", "-d", bruteDomain, "-silent")
-	row.URLs = len(lines(out))
+	// urls and subs have their own sections (urls, domains).
 
 	// targets and HTML from the probe run's database.
 	pdb := filepath.Join(dir, "probe-"+stamp+".db")
@@ -112,8 +98,8 @@ func benchDropin(crapi bool) *dropinRow {
 	page, _ := run("dropin", time.Minute, dir, azhaq, "export", "-db", vdb, "-format", "html")
 	row.HTMLBytes = len(page)
 	row.HTMLOK = htmlHas(page, "Web services", "API routes", "Map")
-	addCheck("export: targets and HTML report", row.Targets == 2 && row.HTMLOK && row.URLs > 0,
-		"targets %d of 2, HTML %d bytes with its sections %v, urls %d", row.Targets, row.HTMLBytes, row.HTMLOK, row.URLs)
+	addCheck("export: targets and HTML report", row.Targets == 2 && row.HTMLOK,
+		"targets %d of 2, HTML %d bytes with its sections %v", row.Targets, row.HTMLBytes, row.HTMLOK)
 	return row
 }
 

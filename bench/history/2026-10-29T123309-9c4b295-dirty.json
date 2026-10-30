@@ -1,0 +1,775 @@
+{
+  "date": "2026-10-29T12:22:31Z",
+  "commit": "9c4b295-dirty",
+  "go": "go1.27.1",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    }
+  ],
+  "apps": [
+    {
+      "name": "juice-shop",
+      "url": "http://127.0.0.1:3101/",
+      "azhaq": {
+        "routes": 110,
+        "truth": 70,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 5.381952595,
+        "rss_mb": 99.23046875
+      },
+      "katana": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 14.137293314,
+        "rss_mb": 1404.20703125
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 0.999488987,
+        "rss_mb": 170.9765625
+      },
+      "katana_jsluice": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 15.136782301,
+        "rss_mb": 1404.20703125
+      },
+      "bundle_grep": {
+        "routes": 101,
+        "truth": 37,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "ffuf": {
+        "words": 32,
+        "azhaq_hits": 3,
+        "ffuf_hits": 3,
+        "shared": 3,
+        "azhaq_shell": 0,
+        "ffuf_shell": 0,
+        "seconds": 0.171365094
+      },
+      "roles": {
+        "rows": 38,
+        "expected": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "seconds": 11.611782983,
+        "chrome_rows": 40,
+        "chrome_found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "chrome_seconds": 14.996719866
+      },
+      "browser": {
+        "azhaq": {
+          "routes": 111,
+          "truth": 70,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 12.475746808,
+          "rss_mb": 106.30859375
+        },
+        "katana": {
+          "routes": 30,
+          "truth": 6,
+          "truth_of": 77,
+          "shell": 4,
+          "seconds": 6.563632962,
+          "rss_mb": 54.328125
+        },
+        "limit_seconds": 300
+      }
+    },
+    {
+      "name": "vampi",
+      "url": "http://127.0.0.1:5102/",
+      "azhaq": {
+        "routes": 14,
+        "truth": 12,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0.585958605,
+        "rss_mb": 74.625
+      },
+      "katana": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 11.138100417,
+        "rss_mb": 35.53515625
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "katana_jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 11.138100417,
+        "rss_mb": 35.53515625
+      },
+      "bundle_grep": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      }
+    },
+    {
+      "name": "ginandjuice.shop",
+      "url": "https://ginandjuice.shop/",
+      "azhaq": {
+        "routes": 16,
+        "truth": 3,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 15.53076145,
+        "rss_mb": 99.453125
+      },
+      "katana": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 18.472858886,
+        "rss_mb": 812.57421875
+      },
+      "jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0.222713919,
+        "rss_mb": 46.91796875
+      },
+      "katana_jsluice": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 18.695572805,
+        "rss_mb": 812.57421875
+      },
+      "bundle_grep": {
+        "routes": 3,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      }
+    }
+  ],
+  "dropin": {
+    "crawl_known": 70,
+    "crawl_of": 77,
+    "probe_rows": 2,
+    "probe_fields": true,
+    "openapi_vampi": 12,
+    "openapi_crapi": 0,
+    "subs_live": 8,
+    "subfinder_live": 6,
+    "subs_shared": 6,
+    "urls": 191,
+    "targets": 2,
+    "html_ok": true,
+    "html_bytes": 7204
+  },
+  "dirs": {
+    "words": 4750,
+    "apps": [
+      "http://127.0.0.1:3101/",
+      "http://127.0.0.1:5102/"
+    ],
+    "azhaq_hits": 22,
+    "ffuf_hits": 22,
+    "shared": 22,
+    "azhaq_false": 2,
+    "ffuf_false": 2,
+    "azhaq_seconds": 32.430343788,
+    "ffuf_seconds": 37.806823762
+  },
+  "params": {
+    "pages": [
+      "http://127.0.0.1:3101/rest/products/search",
+      "http://127.0.0.1:3101/rest/user/whoami",
+      "http://127.0.0.1:5102/users/v1",
+      "https://ginandjuice.shop/catalog",
+      "https://ginandjuice.shop/blog/"
+    ],
+    "words": 6453,
+    "azhaq": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback",
+      "https://ginandjuice.shop/blog search",
+      "https://ginandjuice.shop/catalog category",
+      "https://ginandjuice.shop/catalog searchTerm"
+    ],
+    "arjun": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback"
+    ],
+    "shared": 2,
+    "azhaq_seconds": 70.52000138700001,
+    "arjun_seconds": 26.206158662
+  },
+  "scope": {
+    "trap_requests": 0,
+    "in_scope_found": 5,
+    "watch_runs": 3
+  },
+  "shots": {
+    "targets": 4,
+    "azhaq": 4,
+    "gowitness": 3,
+    "azhaq_seconds": 12.783324305,
+    "gowitness_seconds": 33.959496727
+  },
+  "secrets": {
+    "azhaq": 12,
+    "jsluice": 4,
+    "shared": 4
+  },
+  "tenants": {
+    "expected": 6,
+    "matched": 6,
+    "signed_in_logouts": 0,
+    "seconds": 7.393978194
+  },
+  "scale": {
+    "urls": 181,
+    "one_received": 191,
+    "budget": 100,
+    "processes": 2,
+    "most_received": 100,
+    "all_received": 197,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 1.5524143856666666,
+    "killed_same": true,
+    "worker_tasks": 126,
+    "workers_same": true,
+    "workers_seconds": 7.325601648,
+    "one_seconds": 4.657243157
+  },
+  "checks": [
+    {
+      "name": "juice-shop: ≥ 90% of the server routes its frontend calls",
+      "pass": true,
+      "detail": "azhaq 70/77, katana 1/77, jsluice 0/77"
+    },
+    {
+      "name": "juice-shop: no catch-all page reported as visited",
+      "pass": true,
+      "detail": "0 visited URLs return the SPA index"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user",
+      "pass": true,
+      "detail": "38 endpoints differ; 401 → 200 on 2/2 of /api/Users, /rest/user/authentication-details"
+    },
+    {
+      "name": "roles: Juice Shop anonymous → user, signed in with Chrome",
+      "pass": true,
+      "detail": "40 endpoints differ; 401 → 200 on 2/2 (with a token: 38 endpoints) "
+    },
+    {
+      "name": "juice-shop: -browser finds the known routes katana -headless finds",
+      "pass": true,
+      "detail": "azhaq -browser 70/77 in 12s, katana -headless 6/77 in 7s"
+    },
+    {
+      "name": "identical runs diff empty",
+      "pass": true,
+      "detail": "added=0 removed=0 observations=0"
+    },
+    {
+      "name": "vampi: paths from /openapi.json",
+      "pass": true,
+      "detail": "azhaq 12/12, katana 1/12"
+    },
+    {
+      "name": "diff across different seeds is labelled",
+      "pass": true,
+      "detail": "seeds_differ=true"
+    },
+    {
+      "name": "ginandjuice: page scripts parsed",
+      "pass": true,
+      "detail": "4/4 page scripts, 3/3 routes only in page scripts or script-driven forms"
+    },
+    {
+      "name": "ginandjuice: product and blog pages are one template each",
+      "pass": true,
+      "detail": "map lines: product 1, blog post 1"
+    },
+    {
+      "name": "known routes ≥ katana ∪ jsluice on every app",
+      "pass": true,
+      "detail": "juice-shop 70/77 vs 1, vampi 12/12 vs 1, ginandjuice.shop 3/3 vs 2"
+    },
+    {
+      "name": "no catch-all page reported as visited on any app",
+      "pass": true,
+      "detail": "3 apps"
+    },
+    {
+      "name": "drop-in: azhaq crawl finds Juice Shop's known routes",
+      "pass": true,
+      "detail": "70/77"
+    },
+    {
+      "name": "drop-in: azhaq probe reads stdin and writes httpx's JSON fields",
+      "pass": true,
+      "detail": "2 of 2 local apps, fields true"
+    },
+    {
+      "name": "export: OpenAPI of VAmPI holds every path of its own description",
+      "pass": true,
+      "detail": "12/12"
+    },
+    {
+      "name": "drop-in: azhaq subs -live ≥ 95% of subfinder | dnsx",
+      "pass": true,
+      "detail": "azhaq 8, subfinder|dnsx 6, shared 6 (vulnweb.com)"
+    },
+    {
+      "name": "export: targets and HTML report",
+      "pass": true,
+      "detail": "targets 2 of 2, HTML 7204 bytes with its sections true, urls 191"
+    },
+    {
+      "name": "dirs: ≥ 95% of ffuf -ac's hits, same wordlist and rate",
+      "pass": true,
+      "detail": "azhaq 22, ffuf 22, shared 22 (4750 words, 2 apps)"
+    },
+    {
+      "name": "dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 2, ffuf 2"
+    },
+    {
+      "name": "scope: no request leaves the program's scope",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); 5 in-scope URLs mapped"
+    },
+    {
+      "name": "watch: an unchanged app reports no change",
+      "pass": true,
+      "detail": "3 runs, 0 reported changes []"
+    },
+    {
+      "name": "secrets: everything jsluice finds in the planted script, and more",
+      "pass": true,
+      "detail": "azhaq 12 values, jsluice 4, shared 4"
+    },
+    {
+      "name": "roles: anon → member → owner on a multi-tenant app, signed in with Chrome",
+      "pass": true,
+      "detail": "6/6 rows as expected; wrong []; extra []; signed-in logouts 0 "
+    },
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "2 processes of at most 100 requests (Juice Shop received at most 100 from one); 183 URLs, one run 181, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "197 requests over 2 processes, one run 191"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "killed after 1.6s; 181 URLs, one run 181"
+    },
+    {
+      "name": "scale: a run shared with two workers maps everything one run maps",
+      "pass": true,
+      "detail": "181 URLs, one run 181; the workers ran 126 tasks"
+    },
+    {
+      "name": "screenshots: ≥ 95% of gowitness's",
+      "pass": true,
+      "detail": "azhaq 4 in 13s, gowitness 3 in 34s, 4 targets, 4 tabs each"
+    },
+    {
+      "name": "params: ≥ 95% of arjun's parameters on the bench pages",
+      "pass": true,
+      "detail": "azhaq 5, arjun 2, shared 2 (5 pages, 6453 names)"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 5.381952595,
+      "rss_mb": 99.23046875
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 14.137293314,
+      "rss_mb": 1404.20703125
+    },
+    {
+      "tool": "jsluice",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 0.999488987,
+      "rss_mb": 170.9765625
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 0.171365094,
+      "rss_mb": 13.19140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles",
+      "seconds": 11.611782983,
+      "rss_mb": 107.58203125
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles-login",
+      "seconds": 14.996719866,
+      "rss_mb": 106.6875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 12.475746808,
+      "rss_mb": 106.30859375
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 6.563632962,
+      "rss_mb": 54.328125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 5.552281806,
+      "rss_mb": 98.5
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.585958605,
+      "rss_mb": 74.625
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 11.138100417,
+      "rss_mb": 35.53515625
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 15.53076145,
+      "rss_mb": 99.453125
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 18.472858886,
+      "rss_mb": 812.57421875
+    },
+    {
+      "tool": "jsluice",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 0.222713919,
+      "rss_mb": 46.91796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 4.742756954,
+      "rss_mb": 90.3671875
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.411019965,
+      "rss_mb": 1.390625
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.500764574,
+      "rss_mb": 75.46875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.038745629,
+      "rss_mb": 29.71875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 60.585890763,
+      "rss_mb": 72.62890625
+    },
+    {
+      "tool": "subfinder",
+      "target": "dropin",
+      "seconds": 31.601830497,
+      "rss_mb": 39.48828125
+    },
+    {
+      "tool": "dnsx",
+      "target": "dropin",
+      "seconds": 13.534676801,
+      "rss_mb": 39.69921875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 18.629018455,
+      "rss_mb": 49.69921875,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable"
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.36754927,
+      "rss_mb": 1.3671875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.033730904,
+      "rss_mb": 29.48046875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.041148391,
+      "rss_mb": 29.203125
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.254634248,
+      "rss_mb": 82.390625
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 21.864272301,
+      "rss_mb": 18.44140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 16.17570954,
+      "rss_mb": 77.09765625
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 15.942551461,
+      "rss_mb": 12.8671875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 1.626794389,
+      "rss_mb": 78.08984375
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 34.785653796,
+      "rss_mb": 89.92578125,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.8.1-0.20261029121923-9c4b295bee30+dirty\",\"complete\":false,\"exit\":3,\"results\":182,\"counts\":{\"URLs\":113,\"api\":71,\"auth\":11,\"client routes\":43,\"forbidden\":7,\"websockets\":1},\"seconds\":34.729,\"requests\":191,\"db\":\"bench/.work/scope/watch-192906.db\",\"run_id\":\"5d51e0fd-a627-4a01-9d7d-2be263c81ffe\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":12,\"targets\":[\"http://127.0.0.1:3101/api/Quantitys\",\"http://127.0.0.1:3101/api/Hints\",\"http://127.0.0.1:3101/api/SecurityQuestions\",\"http://127.0.0.1:3101/api/Deliverys\",\"http://127.0.0.1:3101/api/Feedbacks\",\"http://127.0.0.1:3101/api/Products\",\"http://127.0.0.1:3101/api/Challenges\",\"http://127.0.0.1:3101/rest/captcha\",\"http://127.0.0.1:3101/rest/continue-code-findIt\",\"http://127.0.0.1:3101/rest/continue-code-fixIt\",\"http://127.0.0.1:3101/rest/memories\",\"http://127.0.0.1:3101/rest/products/search\"]}],\"skipped\":[{\"target\":\"http://127.0.0.1:3101/rest/saveLoginIp\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/change-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/reset-password\",\"reason\":\"looks like a GET would change something\"}],\"next\":[\"azhaq query -db bench/.work/scope/watch-192906.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/scope/watch-192906.db -role auth,forbidden   (what needs a session)\",\"azhaq query -db bench/.work/scope/watch-192906.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/scope/watch-192906.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\",\"azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)\"]}"
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 26.502466849,
+      "rss_mb": 97.1171875,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"run\",\"version\":\"0.8.1-0.20261029121923-9c4b295bee30+dirty\",\"complete\":false,\"exit\":3,\"results\":182,\"counts\":{\"URLs\":113,\"api\":71,\"auth\":11,\"client routes\":43,\"forbidden\":7,\"websockets\":1},\"seconds\":26.439,\"requests\":191,\"db\":\"bench/.work/scope/watch-192906.db\",\"run_id\":\"87de9e1e-848b-46d7-b6ee-5b19ffd02537\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":8,\"targets\":[\"http://127.0.0.1:3101/api/Quantitys\",\"http://127.0.0.1:3101/api/Deliverys\",\"http://127.0.0.1:3101/api/Challenges\",\"http://127.0.0.1:3101/api/SecurityQuestions\",\"http://127.0.0.1:3101/api/Products\",\"http://127.0.0.1:3101/api/Hints\",\"http://127.0.0.1:3101/rest/captcha\",\"http://127.0.0.1:3101/api/Feedbacks\"]}],\"skipped\":[{\"target\":\"http://127.0.0.1:3101/rest/saveLoginIp\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/change-password\",\"reason\":\"looks like a GET would change something\"},{\"target\":\"http://127.0.0.1:3101/rest/user/reset-password\",\"reason\":\"looks like a GET would change something\"}],\"next\":[\"azhaq query -db bench/.work/scope/watch-192906.db -failed   (every failed target, the list to retry)\",\"azhaq query -db bench/.work/scope/watch-192906.db -role auth,forbidden   (what needs a session)\",\"azhaq query -db bench/.work/scope/watch-192906.db -role api -fields key,methods,params,body\",\"azhaq export -db bench/.work/scope/watch-192906.db -format openapi \\u003e api.json   (for Burp, Postman, ZAP)\",\"azhaq roles -role anon -role 'user=Authorization: Bearer …' -- RUN FLAGS   (who may read what)\"]}"
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 5.368483127,
+      "rss_mb": 99.875
+    },
+    {
+      "tool": "azhaq",
+      "target": "secrets",
+      "seconds": 0.367816101,
+      "rss_mb": 67.421875
+    },
+    {
+      "tool": "jsluice",
+      "target": "secrets",
+      "seconds": 0.009284524,
+      "rss_mb": 0.29296875
+    },
+    {
+      "tool": "azhaq",
+      "target": "tenants",
+      "seconds": 7.393978194,
+      "rss_mb": 85.37109375
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.657243157,
+      "rss_mb": 103.73828125
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 3.944170401,
+      "rss_mb": 89.30078125,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 4.157376726,
+      "rss_mb": 89.38671875
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 12.783324305,
+      "rss_mb": 96.58984375
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 33.959496727,
+      "rss_mb": 233.12890625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.393534485,
+      "rss_mb": 43.0625
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 2.165044709,
+      "rss_mb": 28.0546875
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.47388062,
+      "rss_mb": 43.93359375
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.530492906,
+      "rss_mb": 27.4765625
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 0.822734663,
+      "rss_mb": 71.078125
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 2.9765892259999998,
+      "rss_mb": 28.0078125
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 34.009591815,
+      "rss_mb": 80.0859375
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 9.928282988,
+      "rss_mb": 34.81640625
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 33.820259804,
+      "rss_mb": 75.51953125
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 10.605748833,
+      "rss_mb": 34.78515625
+    }
+  ]
+}
