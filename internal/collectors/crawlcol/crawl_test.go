@@ -50,7 +50,7 @@ func TestMarkdownLinksAreFollowed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"html /learn", "markdown /app/usersearch", "markdown /app/admin/users"}
+	want := []string{"html /learn", "html /assets/showdown.min.js", "markdown /app/usersearch", "markdown /app/admin/users"}
 	if strings.Join(vias, "|") != strings.Join(want, "|") {
 		t.Errorf("urls %q, want %q", vias, want)
 	}

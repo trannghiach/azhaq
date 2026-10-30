@@ -37,9 +37,10 @@ var UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 // RDAP, RIPEstat, search APIs); the CLI sets the version.
 var ToolAgent = "azhaq (+https://github.com/trannghiach/azhaq)"
 
+// MaxBody caps HTML and other documents (-max-response-size).
+var MaxBody = 2 << 20
+
 const (
-	// MaxBody caps HTML and other documents.
-	MaxBody = 2 << 20
 	// MaxScriptBody caps JavaScript, JSON and source maps: bundles of
 	// several MB are normal and their routes sit anywhere in the file.
 	MaxScriptBody = 16 << 20
@@ -114,6 +115,10 @@ type Keeper interface {
 // Keep, when set, is where answers are kept and looked up before a GET.
 var Keep Keeper
 
+// Tap, when set, sees every answer a target gave (not one served from the
+// cache): crawl -sr writes them out as they come.
+var Tap func(raw string, res Result)
+
 // Memo is a small record kept the same way, for requests that do not go
 // through Do (a path guess keeps only its status and sizes).
 type Memo interface {
@@ -129,6 +134,18 @@ var HostParallel = 10
 
 // Delay is a pause before each uncached GET.
 var Delay time.Duration
+
+// ProxyURL, when set, is the proxy every request to a target goes through
+// (-proxy: http, https or socks5); unset, the environment's.
+var ProxyURL *url.URL
+
+// ProxyFor sends a request through -proxy, else as the environment says.
+func ProxyFor(r *http.Request) (*url.URL, error) {
+	if p := ProxyURL; p != nil {
+		return p, nil
+	}
+	return http.ProxyFromEnvironment(r)
+}
 
 // NoFollow keeps each GET to the URL asked (-no-follow): a redirect is
 // recorded with its Location, as httpx does by default.
@@ -164,6 +181,7 @@ func Reset() {
 	Memos = nil
 	Delay = 0
 	NoFollow = false
+	ProxyURL = nil
 	cacheMu.Unlock()
 	originMu.Lock()
 	origins = map[string]*origin{}
@@ -172,6 +190,9 @@ func Reset() {
 	resetDescribed()
 	resetNotes()
 	resetBudget()
+	resetPolite()
+	Tap = nil
+	MaxBody = 2 << 20
 }
 
 // originOf is the origin raw is requested from: scheme://host:port.
@@ -289,13 +310,17 @@ func Client(c *http.Client) *http.Client {
 	// Headers within 10 s, like httpx: CDN edges and bot managers often
 	// answer slowly. The body gets longer: a 1 MB bundle on a slow link
 	// is not a dead host.
+	total, header := 30*time.Second, 10*time.Second
+	if RequestTimeout > 0 {
+		total, header = RequestTimeout, RequestTimeout
+	}
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: total,
 		Transport: ledger.Wrap(&http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
+			Proxy:                 ProxyFor,
 			DialContext:           dial,
 			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: header,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS12,
@@ -554,6 +579,9 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 	delete(inflight, raw)
 	close(wait)
 	cacheMu.Unlock()
+	if err == nil && Tap != nil {
+		Tap(raw, res)
+	}
 	if err == nil && !res.cut && ctx.Err() == nil && Keep != nil {
 		Keep.Keep(raw, res)
 		for _, hop := range hops {
@@ -637,32 +665,11 @@ func do(ctx context.Context, c *http.Client, raw string) (Result, error) {
 				}
 			}})
 		}
-		req, err := http.NewRequestWithContext(rctx, http.MethodGet, current, nil)
-		if err != nil {
-			return Result{}, err
-		}
-		ApplyHeaders(req)
-		if err := Spend(ctx); err != nil {
-			if i > 0 {
-				cut = true
-				break // the redirect is recorded; its target is not requested
-			}
-			return Result{}, err
-		}
-		resp, err := c.Do(req)
+		resp, body, truncated, err := attempt(ctx, rctx, c, current)
 		if err != nil {
 			if i > 0 {
 				cut = true
 				break // the redirect answered; where it points did not
-			}
-			return Result{}, err
-		}
-		body, truncated, err := readBody(resp.Body, bodyLimit(resp))
-		resp.Body.Close()
-		if err != nil {
-			if i > 0 {
-				cut = true
-				break
 			}
 			return Result{}, err
 		}

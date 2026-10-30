@@ -484,6 +484,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	secretSeen := map[string]bool{}
 	named, called := sites{}, sites{} // route → where scripts name it, and call it
 	views := clientViews{guard: map[string]string{}, at: sites{}}
+	var cands []strCand
 	var socks []socket
 	sockAt := map[string]int{}
 	hash := false
@@ -535,6 +536,22 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			found = append(found, r.URL)
 			named.add(webextract.RouteKey(r.URL), s, loc, r.Start, r.End, false)
+		}
+		if !s.fromMap && !s.inline && strings.Contains(s.body, "<") {
+			// Markup a script carries (an Angular template, a string of
+			// HTML): its links are the app's; one built from an expression
+			// (src="`+_(i[8])+`") is no URL.
+			for _, ref := range webextract.LinkRefs([]byte(s.body), base) {
+				if ref.Method != "" {
+					continue
+				}
+				cands = append(cands, strCand{Cand: markupCand(ref, base), s: s, loc: loc})
+			}
+		}
+		if !s.fromMap {
+			for _, cd := range webextract.Candidates(s.body, base, s.url, !strings.HasSuffix(strings.ToLower(s.url.Path), ".css")) {
+				cands = append(cands, strCand{cd, s, loc})
+			}
 		}
 		// Paths joined from constants are relative to the app's root,
 		// where single-page apps send their requests from.
@@ -613,6 +630,59 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 
 	meta := types.RunMeta{Status: types.StatusOK}
+	// The strings katana's patterns take from the scripts: a page the app
+	// serves under a bare name (users.php, admin/) is a URL; the others are
+	// kept as rejected, with why, and never requested.
+	have := map[string]bool{}
+	for _, l := range found {
+		have[l] = true
+	}
+	for _, cl := range calls {
+		if k, ok := callRoute(cl, origin, raw); ok {
+			have[k] = true
+		}
+	}
+	rejSeen := map[string]bool{}
+	for _, cd := range cands {
+		reason := cd.Reason
+		switch {
+		case cd.Link != "" && have[cd.Link]:
+			continue
+		case reason == "" && vendorScript.MatchString(cd.s.url.Path):
+			reason = webextract.ReasonLibrary
+		case reason == "" && !keepString(raw, cd.Link):
+			reason = webextract.ReasonOtherHost
+		case reason == "" && partial(cd.Link):
+			reason = webextract.ReasonExpression
+		}
+		if reason == "" {
+			have[cd.Link] = true
+			found = append(found, cd.Link)
+			named.add(webextract.RouteKey(cd.Link), cd.s, cd.loc, cd.Start, cd.End, false)
+			continue
+		}
+		if cd.Link != "" || cd.Resolved != "" {
+			if u := cd.Resolved; u != "" && have[u] {
+				continue // the URL is one the page names another way
+			}
+		}
+		if k := cd.Text + "\x00" + reason; !rejSeen[k] {
+			rejSeen[k] = true
+			if err := emit(webextract.RejectedObs(Name, raw, cd.Text, reason, "js", cd.Resolved)); err != nil {
+				return meta, err
+			}
+			meta.EmitCount++
+		}
+		if cd.Alt != "" && !have[cd.Alt] {
+			if k := cd.Alt + "\x00alt"; !rejSeen[k] {
+				rejSeen[k] = true
+				if err := emit(webextract.RejectedObs(Name, raw, cd.Text, webextract.ReasonScriptRel, "js", cd.Alt)); err != nil {
+					return meta, err
+				}
+				meta.EmitCount++
+			}
+		}
+	}
 	emitRow := func(row map[string]any, conf float64) error {
 		payload, _ := json.Marshal(row)
 		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "url", Payload: payload, Confidence: conf, ObservedAt: time.Now().UTC()}); err != nil {
@@ -846,6 +916,28 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 	}
 	return meta, nil
+}
+
+// markupCand judges a URL read from markup inside a script.
+func markupCand(ref webextract.PageRef, page *url.URL) webextract.Cand {
+	c := webextract.Cand{Str: webextract.Str{Text: ref.URL}, Resolved: ref.URL}
+	dec, err := url.PathUnescape(ref.URL)
+	switch {
+	case err != nil || strings.ContainsAny(dec, "`()[]{}|+$\\<>") || webextract.JunkURL(ref.URL):
+		c.Reason = webextract.ReasonExpression
+	case ref.Attr == "handler":
+		c.Reason = webextract.ReasonNotPath
+	default:
+		c.Link = ref.URL
+	}
+	return c
+}
+
+// strCand is a string read from a script, and the script it is in.
+type strCand struct {
+	webextract.Cand
+	s   script
+	loc *webextract.Locator
 }
 
 // vendorScript matches well-known library builds served from the app's own

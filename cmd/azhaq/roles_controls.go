@@ -254,7 +254,7 @@ func askFresh(ctx context.Context, h http.Header, u string, own map[string]bool)
 		return answer{}, nil, err
 	}
 	defer resp.Body.Close()
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, fetch.MaxBody))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, int64(fetch.MaxBody)))
 	ctype := resp.Header.Get("Content-Type")
 	a, _ := readAnswer(resp.StatusCode, body, ctype)
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {

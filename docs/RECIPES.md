@@ -156,3 +156,22 @@ Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for
 `touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
+
+## 16. Crawl an app the way katana does
+
+```
+azhaq crawl -u https://app.example.com/ -d 3 -silent                      # the URLs, one per line
+azhaq crawl -u https://app.example.com/ -d 3 -jsonl > crawl.jsonl         # katana's lines
+azhaq crawl -u https://app.example.com/ -rl 5 -hrl 2 -ct 10m -db app.db   # polite, resumable
+azhaq crawl -u https://app.example.com/ -fs rdn -do                       # follow subdomains, list what was left out of scope
+azhaq crawl -u https://app.example.com/ -f rdn,qpath -em php,html          # katana's fields and extension match
+azhaq crawl -u https://app.example.com/ -json -rejected                    # strings read from scripts and kept out, with the reason
+```
+
+`-d N` is katana's depth. Scripts, forms, routes in JavaScript and API descriptions are read without `-jc`, `-jsl` or `-fx`, which are accepted and ignored. A GET form is asked once with neutral values. A POST form is sent only with `-submit-forms`:
+
+```
+azhaq crawl -u http://127.0.0.1:5030/ -submit-forms -allow 127.0.0.1 -ledger crawl.ledger.jsonl
+```
+
+Catch: `-submit-forms` changes data on the target (a sign-up form creates an account). Use it on a target you may write to; the ledger lists every submission and the summary counts them. A form whose address looks like it would change something (`logout`, `delete`) and a form that uploads a file are left alone, and the summary says so. Without `-sweep`, `crawl` does not ask the built-in paths (`/admin`, `/.git/HEAD`, API description names); `-kf all` asks only `robots.txt` and the sitemaps and reads every entry.

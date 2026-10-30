@@ -51,7 +51,7 @@ func Note(text string) {
 func Notes() []string {
 	notesMu.Lock()
 	defer notesMu.Unlock()
-	return append([]string(nil), runNotes...)
+	return append(append([]string(nil), runNotes...), politeNotes()...)
 }
 
 func resetNotes() {

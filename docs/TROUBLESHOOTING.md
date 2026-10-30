@@ -14,6 +14,10 @@
 
 **Exit 3, but the results look fine.** Exit 3 means the results are usable and something failed: a source, a host that did not answer, a dead session. The summary's `failed` list and notes say what; `azhaq query -db W -failed` lists every failed target.
 
+**`crawl` lists fewer URLs than katana, or a path katana prints is missing.** Look in `crawl -json -rejected`: every string katana's patterns take from a script or a page is either a URL of the crawl or a rejected candidate with its reason (a media type, an expression, a file name, library code, another host, a link outside the scope). A path of katana's that is in neither is a bug. A link to another host is not followed unless `-fs rdn` (a name of the same domain) or `-ns` says so; `-do` lists what was left out.
+
+**`crawl` says a host answered 429 or 503.** It waited (1 s doubling to 30 s, or the host's `Retry-After`) and asked again, up to three times; the summary names the host and how many requests still got it, and those are listed with that status. Lower the pace with `-rl`, `-hrl` or `-c`.
+
 **Exit 4.** A limit stopped the run with work left (`-max-requests`, `-timeout`, Ctrl-C, or the kill file). `azhaq resume -db W` continues it.
 
 **The run stopped at once with exit 4 and a kill file.** The file `W.stop` (or the one `-kill-file` names; `roles.stop` in the `-dir` of `roles`, where it stops the runs of the roles and not the replay after them) exists, from an earlier stop too, and `stopped` says `the kill switch`. Nothing more is sent while it exists. Remove it, then `azhaq resume -db W`.

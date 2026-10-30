@@ -33,25 +33,29 @@ import (
 
 // Options configure the built-in collectors for one run.
 type Options struct {
-	Client     *http.Client // target requests; nil for the shared default
-	Paths      []string     // extra wordlist entries for azhaq-paths
-	DNS        *dnsr.Pool   // resolver pool; nil for the default resolvers
-	Subdomains subcol.Options
-	BruteWords []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
-	URLs       urlcol.Options
-	WebPorts   []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
-	NoTech     bool             // skip technology fingerprints
-	Probe      bool             // azhaq-http answers like httpx: no catch-all check
-	NoFavicon  bool             // azhaq-http does not hash favicons
-	Ports      []int            // azhaq-ports: ports to scan (runs only with -ports)
-	UDPPorts   []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
-	PortRate   float64          // azhaq-ports: connection attempts per second
-	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
-	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
-	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
-	Shots      string           // azhaq-shots: screenshot directory (runs only when set)
-	Browser    *browser.Browser // the run's Chrome, started on first use
-	Render     bool             // azhaq-render: load pages in Chrome (-browser)
+	Client      *http.Client // target requests; nil for the shared default
+	Paths       []string     // extra wordlist entries for azhaq-paths
+	DNS         *dnsr.Pool   // resolver pool; nil for the default resolvers
+	Subdomains  subcol.Options
+	BruteWords  []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
+	URLs        urlcol.Options
+	WebPorts    []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
+	NoTech      bool             // skip technology fingerprints
+	Probe       bool             // azhaq-http answers like httpx: no catch-all check
+	NoFavicon   bool             // azhaq-http does not hash favicons
+	Ports       []int            // azhaq-ports: ports to scan (runs only with -ports)
+	UDPPorts    []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
+	PortRate    float64          // azhaq-ports: connection attempts per second
+	Dirs        dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
+	Params      paramcol.Options // azhaq-params: parameter names (runs only with -params)
+	MaxIPs      int              // azhaq-prefix: addresses expanded from prefixes for the run
+	Shots       string           // azhaq-shots: screenshot directory (runs only when set)
+	Browser     *browser.Browser // the run's Chrome, started on first use
+	Render      bool             // azhaq-render: load pages in Chrome (-browser)
+	FillForms   bool             // azhaq-crawl asks the action of GET forms with neutral values
+	PathClimb   bool             // azhaq-crawl lists the parent directories of its links
+	SubmitForms bool             // azhaq-crawl submits POST forms (changes data)
+	KnownFiles  string           // azhaq-paths: ask only robots.txt and sitemaps (all, robotstxt, sitemapxml)
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -66,12 +70,16 @@ func Register(cat *catalog.Catalog, o Options) {
 	hc.Probe = o.Probe
 	hc.NoFavicon = o.NoFavicon
 	cat.MustRegister(hc)
-	crawlcol.Register(cat, client)
+	cc := crawlcol.New(client)
+	cc.FillForms, cc.SubmitForms, cc.Climb = o.FillForms, o.SubmitForms, o.PathClimb
+	cat.MustRegister(cc)
 	jscol.Register(cat, client)
 	apicol.Register(cat, client)
 	cat.MustRegister(gqlcol.New(client))
 	cat.MustRegister(gqlcol.NewSchema(client))
-	if len(o.Paths) > 0 {
+	if o.KnownFiles != "" {
+		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: pathscol.KnownFiles(o.KnownFiles), Known: true})
+	} else if len(o.Paths) > 0 {
 		list := append(append([]string{}, pathscol.DefaultWordlist...), o.Paths...)
 		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: list})
 	} else {
