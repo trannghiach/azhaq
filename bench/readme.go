@@ -81,6 +81,9 @@ func tableRows(ps *profileSet) []tableRow {
 	}
 	if d := ps.Dirs; d != nil {
 		rows = append(rows, tableRow{fmt.Sprintf("Paths, %d words, Juice Shop and VAmPI", d.Words), "ffuf `-ac`", fmt.Sprintf("%d hits, %d false positives, %s", d.AzhaqHits, d.AzhaqFalse, secs(d.AzhaqSecs)), fmt.Sprintf("%d hits, %d false positives, %s", d.FfufHits, d.FfufFalse, secs(d.FfufSecs))})
+		if d.AppDowns > 0 {
+			rows[len(rows)-1].job += fmt.Sprintf(" (an app went down %d times during the sweep: not a measure)", d.AppDowns)
+		}
 	}
 	if f := ps.Fuzz; f != nil {
 		var aH, fH, aOK, fOK int
@@ -100,13 +103,16 @@ func tableRows(ps *profileSet) []tableRow {
 			rep = fmt.Sprintf("; JSON report equal on %d of %d", eq, n)
 		}
 		rows = append(rows, tableRow{fmt.Sprintf("Fuzzing, %d words, Juice Shop and VAmPI, %d runs", f.Words, len(f.Legs)), "ffuf", fmt.Sprintf("%d hits (%d confirmed), %s%s", aH, aOK, secs(aT), rep), fmt.Sprintf("%d hits (%d confirmed), %s", fH, fOK, secs(fT))})
+		if f.AppDowns > 0 {
+			rows[len(rows)-1].job += fmt.Sprintf(" (an app went down %d times during the sweeps: not a measure)", f.AppDowns)
+		}
 	}
 	if p := ps.Params; p != nil {
 		rows = append(rows, tableRow{fmt.Sprintf("Parameters, %d planted, %d pages", p.PlantedTruth, len(p.Pages)), "arjun", fmt.Sprintf("%d right, %d wrong, %s", p.AzhaqPlanted, p.AzhaqWrong, secs(p.AzhaqSecs)), fmt.Sprintf("%d right, %d wrong, %s", p.ArjunPlanted, p.ArjunWrong, secs(p.ArjunSecs))})
 	}
 	if p := ps.Ports; p != nil {
 		for _, l := range p.Legs {
-			rows = append(rows, tableRow{"Open ports, " + l.Target + " " + l.Ports, "naabu `-scan-type c`", fmt.Sprintf("%d confirmed in %s", l.AzhaqOK, secs(l.AzhaqSecs)), fmt.Sprintf("%d confirmed in %s", l.NaabuOK, secs(l.NaabuSecs))})
+			rows = append(rows, tableRow{"Open ports, " + l.Target + " " + portsLabel(l.Ports), "naabu `-scan-type c`", fmt.Sprintf("%d confirmed in %s", l.AzhaqOK, secs(l.AzhaqSecs)), fmt.Sprintf("%d confirmed in %s", l.NaabuOK, secs(l.NaabuSecs))})
 		}
 	}
 	if s := ps.Services; s != nil {
@@ -175,4 +181,12 @@ func writeReadme(dir string) error {
 	}
 	fmt.Printf("README.md: the benchmark table is from %s (%s)\n", r.Date, r.Commit)
 	return nil
+}
+
+// portsLabel is a port spec without a long list of listener ports.
+func portsLabel(p string) string {
+	if strings.Contains(p, ",") {
+		return "(the bench's own listeners)"
+	}
+	return p
 }

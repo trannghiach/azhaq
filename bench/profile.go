@@ -216,3 +216,12 @@ func azFail(m runMeasure) string {
 	}
 	return azErr(m)
 }
+
+// downNote says that an app went down while a sweep ran: the row is not a
+// measure of the tools (Juice Shop runs out of memory under long sweeps).
+func downNote(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("; THE APP WENT DOWN %d time(s) DURING THIS SWEEP AND WAS STARTED AGAIN: read the row as unreliable", n)
+}

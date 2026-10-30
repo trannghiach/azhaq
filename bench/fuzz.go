@@ -14,9 +14,10 @@ import (
 // fuzzRow compares `azhaq fuzz` with ffuf on the bench apps: the same
 // wordlist, matchers and filters, the hits, and the JSON report.
 type fuzzRow struct {
-	Profile string    `json:"profile,omitempty"`
-	Words   int       `json:"words"`
-	Legs    []fuzzLeg `json:"legs"`
+	Profile  string    `json:"profile,omitempty"`
+	AppDowns int       `json:"app_down_during_sweep,omitempty"` // an app crashed under the sweeps: the rows are not a measure
+	Words    int       `json:"words"`
+	Legs     []fuzzLeg `json:"legs"`
 }
 
 type fuzzLeg struct {
@@ -39,6 +40,8 @@ func benchFuzz(apps []string) *fuzzRow {
 	must(err)
 	words, n := sweepList(src, "fuzz")
 	row := &fuzzRow{Profile: prof, Words: n}
+	downs0 := appRestarts
+	defer func() { row.AppDowns = appRestarts - downs0 }()
 	rate := pick([]string(nil), []string{"-rate", politeHTTP})
 	for _, app := range apps {
 		u := app + "FUZZ"
@@ -93,7 +96,7 @@ func benchFuzz(apps []string) *fuzzRow {
 			name := "fuzz " + filepath.Base(strings.TrimSuffix(strings.TrimPrefix(app, "http://"), "/")) + " " + lg.name
 			barOne(name, leg.AzhaqOK, leg.FfufOK, leg.AzhaqSecs, leg.FfufSecs, "a request that is not the app's catch-all answer",
 				cmds, fmt.Sprintf("%s; hits azhaq %d, ffuf %d, shared %d; %d words; %s; ffuf only %v%s", share(leg.Shared, leg.FfufHits), leg.AzhaqHits,
-					leg.FfufHits, leg.Shared, n, ratio(leg.AzhaqSecs, leg.FfufSecs), clipList(leg.FfufOnly, 5), azErr(am)))
+					leg.FfufHits, leg.Shared, n, ratio(leg.AzhaqSecs, leg.FfufSecs), clipList(leg.FfufOnly, 5), azErr(am))+downNote(appRestarts-downs0))
 			if leg.ReportEqual != nil {
 				addCheck("fuzz "+app+": the JSON report equals ffuf's (duration dropped)", *leg.ReportEqual, "%s", leg.ReportProblem)
 			}

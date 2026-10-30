@@ -136,6 +136,9 @@ func ensureApps() {
 
 // legWithApp runs a leg that must not see its app go away: if the app is
 // down afterwards it is started again and the leg runs once more.
+// appRestarts counts the legs that had to run again because the app went down.
+var appRestarts int
+
 func legWithApp(app string, leg func()) {
 	for i := 0; i < 2; i++ {
 		if strings.Contains(app, "127.0.0.1:3101") || strings.Contains(app, "127.0.0.1:5102") {
@@ -145,6 +148,7 @@ func legWithApp(app string, leg func()) {
 		if appUp(app) {
 			return
 		}
+		appRestarts++
 		logf("%s went down during a leg: started again, and the leg runs once more", app)
 	}
 }

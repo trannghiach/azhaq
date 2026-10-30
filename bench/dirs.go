@@ -20,6 +20,7 @@ import (
 // -rate 5.
 type dirsRow struct {
 	Profile    string   `json:"profile,omitempty"`
+	AppDowns   int      `json:"app_down_during_sweep,omitempty"` // an app crashed under the sweep: the row is not a measure
 	Words      int      `json:"words"`
 	Apps       []string `json:"apps"`
 	AzhaqHits  int      `json:"azhaq_hits"`
@@ -73,6 +74,8 @@ func benchDirs(apps []string) *dirsRow {
 	rate := pick([]string(nil), []string{"-rate", politeHTTP})
 	az, ff := map[string]bool{}, map[string]bool{}
 	var azCmd, ffCmd, azBad string
+	downs0 := appRestarts
+	defer func() { row.AppDowns = appRestarts - downs0 }()
 	for _, app := range apps {
 		var aOut, fOut []byte
 		var aSecs, fSecs float64
@@ -119,7 +122,7 @@ func benchDirs(apps []string) *dirsRow {
 	sort.Strings(row.FfufOnly)
 	sort.Strings(row.AzhaqOnly)
 	note := fmt.Sprintf("%s; hits azhaq %d, ffuf %d, shared %d; %d words, %d apps; %s; ffuf only %v", share(row.Shared, row.FfufHits), row.AzhaqHits, row.FfufHits,
-		row.Shared, row.Words, len(apps), ratio(row.AzhaqSecs, row.FfufSecs), clipList(row.FfufOnly, 6)) + azBad
+		row.Shared, row.Words, len(apps), ratio(row.AzhaqSecs, row.FfufSecs), clipList(row.FfufOnly, 6)) + azBad + downNote(appRestarts-downs0)
 	barOne("dirs", azOK, ffOK, row.AzhaqSecs, row.FfufSecs, "a request that is not the app's catch-all answer", azCmd+" vs "+ffCmd, note)
 	addCheck("dirs: no more false positives than ffuf", row.AzhaqFalse <= row.FfufFalse,
 		"hits that answer like a missing path: azhaq %d, ffuf %d", row.AzhaqFalse, row.FfufFalse)

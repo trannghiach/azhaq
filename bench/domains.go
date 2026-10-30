@@ -151,7 +151,7 @@ func benchDomains() []domainRow {
 		for _, l := range lines(subOut) {
 			var o struct {
 				Host   string   `json:"host"`
-				Source []string `json:"source"`
+				Source []string `json:"sources"` // with -cs
 			}
 			if json.Unmarshal([]byte(l), &o) == nil && o.Host != "" && inDomain(o.Host, d) {
 				n := strings.ToLower(o.Host)
