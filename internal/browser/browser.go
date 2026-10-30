@@ -22,6 +22,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // ErrNoChrome means no Chrome or Chromium was found.
@@ -59,6 +60,10 @@ type Browser struct {
 	// GET, HEAD and OPTIONS, as a user's browser would (-browser-writes):
 	// it changes data on the target. Otherwise only the sign-in does.
 	Writes bool
+	// Interact is how many clicks a loaded page gets (-interact): its
+	// buttons, links and menus, to find what only a click brings. It
+	// sends nothing a load does not (see interact.go).
+	Interact int
 
 	once   sync.Once
 	err    error
@@ -190,17 +195,18 @@ func (b *Browser) Close() {
 
 // Page is what loading a URL gave.
 type Page struct {
-	URL       string // after redirects
-	Title     string
-	PNG       []byte
-	HTML      string
-	Asked     int      // how many requests the page made, images, fonts and media included: what its budget has to cover
-	Requests  []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
-	Blocked   []string // URLs it asked for outside the scope, to list (Reason); not sent
-	Downloads []string // what it would have saved to disk, to list (DownloadReason); refused
-	Writes    []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
-	Left      string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
-	Capped    bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
+	URL         string // after redirects
+	Title       string
+	PNG         []byte
+	HTML        string
+	Asked       int         // how many requests the page made, images, fonts and media included: what its budget has to cover
+	Requests    []string    // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
+	Blocked     []string    // URLs it asked for outside the scope, to list (Reason); not sent
+	Downloads   []string    // what it would have saved to disk, to list (DownloadReason); refused
+	Writes      []Write     // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
+	Left        string      // the page went there, outside the scope, and was stopped: what shows is Chrome's error
+	Interaction Interaction // what clicking it found, with Browser.Interact
+	Capped      bool        // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -239,7 +245,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	defer func() { watched() }() // once the tab is closed
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
-	tab, cancelT := context.WithTimeout(tab, b.Timeout)
+	tab, cancelT := context.WithTimeout(tab, b.Timeout+time.Duration(b.Interact)*2*time.Second)
 	defer cancelT()
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
@@ -305,6 +311,9 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		if shot {
 			p.PNG, err = chromedp.Run(tab, chromedp.CaptureScreenshot())
 		}
+	}
+	if err == nil && b.Interact > 0 {
+		p.Interaction = b.interact(tab, p.URL, b.Interact, webextract.StateChanging)
 	}
 	b.settle(t)
 	mu.Lock()

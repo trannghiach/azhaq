@@ -272,6 +272,7 @@ func fillReport(rep *report, path string, seeds []types.Seed, ents []types.Entit
 	rep.Notes = append(rep.Notes, engine.GraphQLNotes(obs)...)
 	rep.Notes = append(rep.Notes, pathscol.Notes(obs)...)
 	rep.Notes = append(rep.Notes, fetch.Notes()...)
+	rep.Notes = append(rep.Notes, interactNotes(obs)...)
 	rep.Takeover = takeovers(ents, obs)
 	if path != "" && !strings.HasPrefix(path, os.TempDir()) && rep.ownFailures() > 0 {
 		rep.Next = append(rep.Next, "azhaq query -db "+path+" -failed   (every failed target, the list to retry)")
@@ -471,4 +472,31 @@ func pageWords(f takeover.Finding) string {
 		}
 	}
 	return ""
+}
+
+// interactNotes say what -interact did: the clicks made, the candidates
+// left alone, the routes found and the writes the clicks would have sent.
+func interactNotes(obs []types.StoredObservation) []string {
+	var pages, clicks, skipped, routes, writes int
+	for _, o := range obs {
+		if o.Kind != "interact" {
+			continue
+		}
+		var p struct {
+			Clicks, Skipped, Routes int
+			Writes                  int `json:"writes_mapped"`
+		}
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		pages++
+		clicks += p.Clicks
+		skipped += p.Skipped
+		routes += p.Routes
+		writes += p.Writes
+	}
+	if pages == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("-interact: %d clicks on %d pages found %d routes; %d buttons and links left alone for their words (log out, delete, …); the %d writes the clicks tried were mapped, not sent", clicks, pages, routes, skipped, writes)}
 }

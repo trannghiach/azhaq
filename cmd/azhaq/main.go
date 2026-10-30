@@ -169,6 +169,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	browserWrites := fs.Bool("browser-writes", false, "let pages in Chrome send their writes (POST, PUT, DELETE…, beacons, forms posted on load) as a user's browser would: they change data on the target; by default Chrome sends only GET, HEAD and OPTIONS outside signing in, and maps the writes it does not send")
+	interact := fs.Bool("interact", false, "with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made")
+	interactClicks := fs.Int("interact-clicks", 12, "clicks -interact makes on each page")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
 	urlsTimeout := fs.Duration("urls-timeout", 3*time.Minute, "time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes)")
@@ -582,6 +584,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
 	}
+	if *interact && !*render {
+		return usagef("-interact clicks the pages Chrome loads: give it with -browser")
+	}
 	if !out.plan {
 		led, err := startLedger(*ledgerFlag, *killFile, path, out.scratch, rules)
 		if err != nil {
@@ -600,6 +605,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			}
 		}
 		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: browserAgent(), Header: hdr, Writes: *browserWrites}
+		if *interact {
+			opts.Browser.Interact = *interactClicks
+		}
 		defer opts.Browser.Close()
 		if err := opts.Browser.Start(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)

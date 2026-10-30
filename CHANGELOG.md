@@ -13,6 +13,7 @@
 - GET forms are asked once with neutral values; `-submit-forms` sends POST forms (it changes data, each submission is counted and in the ledger).
 - `crawl` waits and asks again on 429 and 503, retries after a timeout, carries cookies the target sets, and takes `-hrl`, `-hrlm`, `-rlm`, `-mdp`, `-mrs`, `-rd`, `-iqp`, `-pc`, `-proxy`, `-r` and `-c`, `-p`, `-rl`, `-ct`, `-dr` as katana's names; a scheme-less `:80` or `:8080` target is asked over http and `-u a,b` is split.
 - `crawl -json` rows carry `tech`.
+- `-browser -interact` clicks the buttons, links and menus of each page and maps the routes and requests they bring; the writes a click would send are mapped and not sent, and a click on log out or delete is not made.
 
 ## v0.9.1
 
