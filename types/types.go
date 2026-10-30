@@ -39,6 +39,11 @@ const DerivedKey = "derived"
 // -depth.
 const SameTargetKey = "same"
 
+// GivenKey marks a URL seed the user named: a page they asked for,
+// whatever its path, where the URLs a run finds are shot only when they
+// are front pages.
+const GivenKey = "given"
+
 // ViaKey on a URL hint says where it was found when that sets what it is
 // worth: ViaArchive for a URL an archive listed, which a run under a
 // budget requests after what the application itself serves and names.

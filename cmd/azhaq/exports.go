@@ -1,15 +1,22 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"html/template"
+	"image"
+	"image/color"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"maps"
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -1256,7 +1263,7 @@ figure img{width:100%;border:1px solid var(--line)}figcaption{font-size:12px;col
 {{range .Hosts}}<tr><td>{{.Name}}</td><td class="wrap">{{join .IPs}}</td><td>{{.CDN}}</td></tr>
 {{end}}</table>{{end}}
 {{if .Shots}}<h2>Screenshots ({{len .Shots}} groups)</h2>
-{{range .Shots}}<div class="group">{{range .}}<figure><a href="{{.File}}"><img src="{{.File}}" alt="{{.URL}}" loading="lazy"></a><figcaption>{{.URL}}{{if .Title}} · {{.Title}}{{end}}</figcaption></figure>{{end}}</div>
+{{range .Shots}}<div class="group">{{range .}}<figure>{{if .Src}}<a href="{{.Src}}"><img src="{{.Src}}" alt="{{.URL}}" loading="lazy"></a>{{else}}<div class="muted">picture not found: {{.File}}</div>{{end}}<figcaption>{{.URL}}{{if .Title}} · {{.Title}}{{end}}{{if .Partial}} · <b>partial</b>{{end}}</figcaption></figure>{{end}}</div>
 {{end}}{{end}}
 {{if .Secrets}}<h2>Secrets in scripts ({{len .Secrets}})</h2>
 <table><tr><th>Severity</th><th>Kind</th><th>Value</th><th>Where</th></tr>
@@ -1305,7 +1312,7 @@ func htmlReport(g *graphView, w io.Writer) error {
 	}
 	return reportTmpl.Execute(w, map[string]any{
 		"Generated": time.Now().UTC().Format("2006-01-02 15:04 UTC"),
-		"Path":      g.path, "Stats": g.stats, "Probe": services, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs), "Secrets": secretRows(g.obs),
+		"Path":      g.path, "Stats": g.stats, "Probe": services, "Hosts": hosts, "API": api, "Shots": shotGroups(g.obs, filepath.Dir(g.path)), "Secrets": secretRows(g.obs),
 		"Map": engine.GroupTemplates(g.rows),
 	})
 }
@@ -1382,20 +1389,28 @@ func isAPI(r engine.MapEntry) bool {
 // pages still look alike.
 const shotNear = 10
 
-type reportShot struct{ URL, File, Title, Hash string }
+type reportShot struct {
+	URL, File, Title, Hash string
+	Partial                bool
+	Src                    template.URL // the picture as a data: URL: the report does not depend on where the files are
+}
 
 // shotGroups puts screenshots that look alike (perceptual hashes at most
 // shotNear bits apart, from any member of a group) together, largest
 // group first: a login portal deployed on thirty hosts is one row.
-func shotGroups(obs []types.StoredObservation) [][]reportShot {
+func shotGroups(obs []types.StoredObservation, dbDir string) [][]reportShot {
 	var shots []reportShot
 	for _, o := range obs {
 		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
 			continue
 		}
-		var p struct{ URL, File, Title, Phash string }
+		var p struct {
+			URL, File, Title, Phash string
+			FilePath                string `json:"file_path"`
+			Partial                 bool
+		}
 		if json.Unmarshal(o.Payload, &p) == nil && p.File != "" {
-			shots = append(shots, reportShot{p.URL, p.File, p.Title, p.Phash})
+			shots = append(shots, reportShot{URL: p.URL, File: p.File, Title: p.Title, Hash: p.Phash, Partial: p.Partial, Src: embedShot(p.File, p.FilePath, dbDir)})
 		}
 	}
 	var groups [][]reportShot
@@ -1443,4 +1458,51 @@ func secretRows(obs []types.StoredObservation) []secretRow {
 	order := map[string]int{"high": 0, "medium": 1, "info": 2}
 	sort.SliceStable(out, func(i, j int) bool { return order[out[i].Severity] < order[out[j].Severity] })
 	return out
+}
+
+// embedShot is a screenshot as a data: URL, scaled to 560 pixels wide as a
+// JPEG, so that the report opens anywhere with its pictures. The file is
+// looked for at its absolute path, where the run named it, then beside the database; "" when it
+// is in neither.
+func embedShot(file, abs, dbDir string) template.URL {
+	var raw []byte
+	for _, f := range []string{abs, file, filepath.Join(dbDir, file), filepath.Join(dbDir, filepath.Base(file))} {
+		if f == "" {
+			continue
+		}
+		if b, err := os.ReadFile(f); err == nil {
+			raw = b
+			break
+		}
+	}
+	if raw == nil {
+		return ""
+	}
+	img, _, err := image.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return ""
+	}
+	b := img.Bounds()
+	w := min(b.Dx(), 560)
+	h := max(b.Dy()*w/max(b.Dx(), 1), 1)
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ { // each pixel is the mean of the source cells it covers
+		y0, y1 := b.Min.Y+y*b.Dy()/h, b.Min.Y+max((y+1)*b.Dy()/h, y*b.Dy()/h+1)
+		for x := 0; x < w; x++ {
+			x0, x1 := b.Min.X+x*b.Dx()/w, b.Min.X+max((x+1)*b.Dx()/w, x*b.Dx()/w+1)
+			var r, g, bl, n uint32
+			for yy := y0; yy < y1; yy++ {
+				for xx := x0; xx < x1; xx++ {
+					cr, cg, cb, _ := img.At(xx, yy).RGBA()
+					r, g, bl, n = r+cr>>8, g+cg>>8, bl+cb>>8, n+1
+				}
+			}
+			dst.SetRGBA(x, y, color.RGBA{uint8(r / n), uint8(g / n), uint8(bl / n), 255})
+		}
+	}
+	var out bytes.Buffer
+	if err := jpeg.Encode(&out, dst, &jpeg.Options{Quality: 72}); err != nil {
+		return ""
+	}
+	return template.URL("data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(out.Bytes()))
 }

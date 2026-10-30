@@ -170,6 +170,20 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	browserWrites := fs.Bool("browser-writes", false, "let pages in Chrome send their writes (POST, PUT, DELETE…, beacons, forms posted on load) as a user's browser would: they change data on the target; by default Chrome sends only GET, HEAD and OPTIONS outside signing in, and maps the writes it does not send")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
+	shotSize := fs.String("shot-size", "1440x900", "screenshot size in pixels, WIDTHxHEIGHT")
+	shotFull := fs.Bool("shot-fullpage", false, "screenshot the whole page, not only the first screen (up to 16384 pixels tall)")
+	shotWait := fs.Duration("shot-wait", 1500*time.Millisecond, "wait after a page's load event for scripts that draw after it, before the screenshot (0: none)")
+	shotTimeout := fs.Duration("shot-timeout", 30*time.Second, "time a page gets: with -rate, how long it may go without a request let go or an answer, not in all")
+	shotFormat := fs.String("shot-format", "png", "screenshot format: png or jpeg")
+	shotQuality := fs.Int("shot-quality", 80, "jpeg quality, 1 to 100")
+	shotJS := fs.String("shot-js", "", "a file of JavaScript to run on each page before its screenshot (it runs on the target's page)")
+	shotCodes := fs.String("shot-codes", "", "take only pages that answer with these statuses, comma-separated (default: any); the others are listed as skipped")
+	shotHTML := fs.Bool("shot-html", false, "keep each page's rendered HTML beside its screenshot")
+	chromePath := fs.String("chrome", "", "the Chrome or Chromium to run (default $AZHAQ_CHROME, else the first found)")
+	chromeProxy := fs.String("chrome-proxy", "", "send Chrome's own connections through this http or socks5 proxy (default: the environment's)")
+	chromeProfile := fs.String("chrome-profile", "", "a Chrome user data directory to use and keep: sessions it holds go with the pages (default: a temporary one)")
+	unsafePorts := fs.Bool("unsafe-ports", true, "let Chrome open the ports it refuses by default (6000, 6666, 10080 and others); -unsafe-ports=false keeps its refusal")
+	webScheme := fs.String("web-scheme", "", "try a name or an address over this scheme only, http or https (default: https, then http)")
 	urlsTimeout := fs.Duration("urls-timeout", 3*time.Minute, "time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes)")
 	login := fs.String("login", "", "sign in on this page with Chrome before the run; its cookies and token go with every request (needs -login-user and -login-pass)")
 	loginUser := fs.String("login-user", "", "user name or email for -login")
@@ -530,7 +544,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		defer func() { _ = st.AddSpent(key, day, fetch.Sent()) }()
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	if *webScheme != "" && *webScheme != "http" && *webScheme != "https" {
+		return usagef("-web-scheme is http or https, got %q", *webScheme)
+	}
+	opts := collectors.Options{Client: client, WebPorts: ports, WebScheme: *webScheme, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	opts.ShotHTML = *shotHTML
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
 	}
@@ -542,7 +560,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		defer led.close(rep)
 	}
 	if (*shots != "" || *render) && !out.plan {
-		if _, err := browser.Find(); err != nil {
+		if *chromePath != "" {
+			if st, err := os.Stat(*chromePath); err != nil || st.IsDir() {
+				return usagef("-chrome %s: not a file", *chromePath)
+			}
+		} else if _, err := browser.Find(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
 		}
 		hdr := map[string]any{}
@@ -551,7 +573,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 				hdr[k] = strings.Join(vs, ", ")
 			}
 		}
-		opts.Browser = &browser.Browser{Tabs: *tabs, UserAgent: browserAgent(), Header: hdr, Writes: *browserWrites}
+		bb, err := shotBrowser(shotOptions{size: *shotSize, full: *shotFull, wait: *shotWait, timeout: *shotTimeout, format: *shotFormat,
+			quality: *shotQuality, js: *shotJS, codes: *shotCodes, chrome: *chromePath, proxy: *chromeProxy, profile: *chromeProfile, ports: *unsafePorts})
+		if err != nil {
+			return err
+		}
+		bb.Tabs, bb.UserAgent, bb.Header, bb.Writes = *tabs, browserAgent(), hdr, *browserWrites
+		opts.Browser = bb
 		defer opts.Browser.Close()
 		if err := opts.Browser.Start(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -1415,7 +1443,7 @@ func loadSeeds(url, org, cloud, path string) ([]types.Seed, error) {
 		if err != nil {
 			return nil, err
 		}
-		seeds = append(seeds, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}})
+		seeds = append(seeds, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u, types.GivenKey: "1"}})
 	}
 	if org != "" {
 		seeds = append(seeds, types.Seed{Type: types.TypeOrganization, Keys: map[string]string{"name": org}})
@@ -1486,7 +1514,7 @@ func listSeed(line string) (types.Seed, error) {
 		if err != nil {
 			return types.Seed{}, err
 		}
-		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u}}, nil
+		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": u, types.GivenKey: "1"}}, nil
 	}
 	if strings.ContainsAny(line, " /?#@") {
 		return types.Seed{}, fmt.Errorf("want a URL, host, host:port or IP, got %q", line)
@@ -1896,4 +1924,59 @@ func markDescribed(st *store.Store) {
 			fetch.MarkDescribed(u.Scheme + "://" + u.Host)
 		}
 	}
+}
+
+// shotOptions are the flags that shape Chrome's pictures.
+type shotOptions struct {
+	size, format, js, codes, chrome, proxy, profile string
+	full, ports                                     bool
+	wait, timeout                                   time.Duration
+	quality                                         int
+}
+
+// shotBrowser is a Browser set from the screenshot flags; a bad value is
+// a usage error, before anything is sent.
+func shotBrowser(o shotOptions) (*browser.Browser, error) {
+	b := &browser.Browser{FullPage: o.full, Quality: o.quality, ChromePath: o.chrome, Proxy: o.proxy, ProfileDir: o.profile, AllowPorts: o.ports}
+	w, h, ok := strings.Cut(strings.ToLower(o.size), "x")
+	wi, e1 := strconv.Atoi(w)
+	hi, e2 := strconv.Atoi(h)
+	if !ok || e1 != nil || e2 != nil || wi < 100 || hi < 100 || wi > 8192 || hi > 8192 {
+		return nil, usagef("-shot-size wants WIDTHxHEIGHT between 100x100 and 8192x8192, such as 1440x900, got %q", o.size)
+	}
+	b.Width, b.Height = wi, hi
+	switch strings.ToLower(o.format) {
+	case "png", "":
+		b.Format = "png"
+	case "jpeg", "jpg":
+		b.Format = "jpeg"
+	default:
+		return nil, usagef("-shot-format is png or jpeg, got %q", o.format)
+	}
+	if o.quality < 1 || o.quality > 100 {
+		return nil, usagef("-shot-quality is 1 to 100, got %d", o.quality)
+	}
+	if o.timeout <= 0 {
+		return nil, usagef("-shot-timeout must be more than 0")
+	}
+	b.Timeout = o.timeout
+	b.Wait = o.wait
+	if o.wait <= 0 {
+		b.Wait = -1
+	}
+	if o.js != "" {
+		raw, err := os.ReadFile(o.js)
+		if err != nil {
+			return nil, usagef("-shot-js: %v", err)
+		}
+		b.Script = string(raw)
+	}
+	for _, c := range splitList(o.codes) {
+		n, err := strconv.Atoi(c)
+		if err != nil || n < 100 || n > 599 {
+			return nil, usagef("-shot-codes wants HTTP statuses such as 200,301, got %q", c)
+		}
+		b.Codes = append(b.Codes, n)
+	}
+	return b, nil
 }

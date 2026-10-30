@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand"
 	"net"
 	"net/url"
 	"os"
@@ -26,6 +27,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/targets"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -1509,25 +1511,72 @@ func cmdShots(args []string) error {
 	fs := newFlags("shots")
 	var c common
 	c.register(fs)
-	var urls stringsFlag
-	fs.Var(&urls, "u", "target: URL, host, host:port or IP (repeatable)")
+	var urls, nmapFiles, nessusFiles stringsFlag
+	fs.Var(&urls, "u", "target: URL (its path and query are kept), host, host:port, IP or address range such as 192.0.2.0/24 (repeatable)")
 	list := fs.String("l", "", "file of targets (- for stdin)")
-	dir := fs.String("dir", "screenshots", "directory for the PNG files")
-	given := inherit(fs, append([]string{"tabs", "browser-writes"}, targetFlags...)...)
+	dir := fs.String("dir", "screenshots", "directory for the picture files")
+	ports := fs.String("p", "", "web ports to try on each host, comma-separated: numbers, ranges, small (80, 443), medium or large (default: 443, then 80)")
+	noHTTP := fs.Bool("no-http", false, "try names and addresses over https only")
+	noHTTPS := fs.Bool("no-https", false, "try names and addresses over http only")
+	random := fs.Bool("random", false, "take the targets in random order")
+	fs.Var(&nmapFiles, "nmap", "an nmap XML file (-oX): the web services it found (repeatable)")
+	fs.Var(&nessusFiles, "nessus", "a Nessus file (.nessus): the web services it found (repeatable)")
+	service := fs.String("service", "", "with -nmap or -nessus: the service names to take, comma-separated, or all (default: http ones; www, http and https for Nessus)")
+	openOnly := fs.Bool("open-only", true, "with -nmap: only ports found open")
+	hostnames := fs.Bool("hostnames", false, "with -nmap or -nessus: the host's name instead of its address, when the file has one")
+	given := inherit(fs, append([]string{"tabs", "browser-writes", "cidr", "max-ips", "shot-size", "shot-fullpage", "shot-wait", "shot-timeout", "shot-format",
+		"shot-quality", "shot-js", "shot-codes", "shot-html", "chrome", "chrome-proxy", "chrome-profile", "unsafe-ports", "no-tech"}, targetFlags...)...)
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	targets, err := inputs(urls, *list)
-	if err != nil {
-		return err
+	if *noHTTP && *noHTTPS {
+		return usagef("-no-http and -no-https together leave no scheme to try")
 	}
-	if len(targets) == 0 {
-		return usagef("give -u TARGET, -l FILE or targets on stdin")
+	portList, err := targets.Ports(*ports)
+	if err != nil {
+		return usagef("-p: %v", err)
+	}
+	var targs []string
+	if len(nmapFiles)+len(nessusFiles) == 0 || len(urls) > 0 || *list != "" {
+		if targs, err = inputs(urls, *list); err != nil {
+			return err
+		}
+	}
+	opt := targets.Options{Ports: portList, Hostnames: *hostnames, OpenOnly: *openOnly}
+	for _, s := range splitList(*service) {
+		opt.Services = append(opt.Services, s)
+	}
+	for _, f := range nmapFiles {
+		more, err := scanFile(f, func(r io.Reader) ([]string, error) { return targets.NmapXML(r, opt) })
+		if err != nil {
+			return err
+		}
+		targs = append(targs, more...)
+	}
+	for _, f := range nessusFiles {
+		more, err := scanFile(f, func(r io.Reader) ([]string, error) { return targets.Nessus(r, opt) })
+		if err != nil {
+			return err
+		}
+		targs = append(targs, more...)
+	}
+	targs, prefixes := targets.SplitPrefixes(targs)
+	if len(portList) > 0 || *noHTTP || *noHTTPS {
+		targs = targets.Expand(targs, portList, *noHTTP, *noHTTPS)
+	}
+	if len(targs) == 0 && len(prefixes) == 0 && len(*fs.Lookup("cidr").Value.(*stringsFlag)) == 0 {
+		if len(nmapFiles)+len(nessusFiles) > 0 {
+			return usagef("the scan files name no web service (-service all takes every open port)")
+		}
+		return usagef("give -u TARGET, -l FILE, -nmap FILE, -nessus FILE or targets on stdin")
+	}
+	if *random {
+		rand.Shuffle(len(targs), func(i, j int) { targs[i], targs[j] = targs[j], targs[i] })
 	}
 	if st, err := os.Stat(c.out); c.out != "" && err == nil && st.IsDir() {
 		return usagef("-o %s is a directory: -o names the file the results are written to, the PNG files go to -dir", c.out)
 	}
-	path, rm, err := tempList(targets)
+	path, rm, err := tempList(targs)
 	if err != nil {
 		return err
 	}
@@ -1549,7 +1598,35 @@ func cmdShots(args []string) error {
 	}
 	rep := newReport("shots")
 	rep.what = "screenshots"
-	run := []string{"-list", path, "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-shots"), "-screenshots", *dir}
+	keep := []string{"azhaq-dns", "azhaq-http", "azhaq-shots"}
+	if len(prefixes) > 0 || len(*fs.Lookup("cidr").Value.(*stringsFlag)) > 0 {
+		keep = append(keep, "azhaq-prefix")
+	}
+	depth := "0"
+	if len(prefixes) > 0 || len(*fs.Lookup("cidr").Value.(*stringsFlag)) > 0 {
+		depth = "2" // a range gives its addresses, and they give their pages
+	}
+	// The favicon is hashed by the HTTP collector for the map; a screenshot run has no use for it.
+	run := []string{"-depth", depth, "-skip", skipAllBut(keep...), "-screenshots", *dir, "-no-favicon"}
+	if len(targs) > 0 {
+		run = append(run, "-list", path)
+	}
+	for _, pf := range prefixes {
+		run = append(run, "-cidr", pf)
+	}
+	if len(portList) > 0 {
+		var ps []string
+		for _, p := range portList {
+			ps = append(ps, strconv.Itoa(p))
+		}
+		run = append(run, "-web-ports", strings.Join(ps, ","))
+	}
+	switch {
+	case *noHTTP:
+		run = append(run, "-web-scheme", "https")
+	case *noHTTPS:
+		run = append(run, "-web-scheme", "http")
+	}
 	_, done, err := runPreset(&c, append(run, given()...), rep, see)
 	if err != nil {
 		return err
@@ -1560,6 +1637,20 @@ func cmdShots(args []string) error {
 	}
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
+}
+
+// scanFile reads a scan file with read.
+func scanFile(path string, read func(io.Reader) ([]string, error)) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	lines, err := read(f)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return lines, nil
 }
 
 // slowSource names the source that set the wall time, when one took far

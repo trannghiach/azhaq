@@ -50,6 +50,8 @@ type Options struct {
 	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
 	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
 	Shots      string           // azhaq-shots: screenshot directory (runs only when set)
+	ShotHTML   bool             // azhaq-shots: keep each rendered page beside its picture
+	WebScheme  string           // "http" or "https": the only scheme tried on a name or an address
 	Browser    *browser.Browser // the run's Chrome, started on first use
 	Render     bool             // azhaq-render: load pages in Chrome (-browser)
 }
@@ -62,6 +64,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	client := o.Client
 	hc := httpcol.New(client)
 	hc.Ports = o.WebPorts
+	hc.Only = o.WebScheme
 	hc.NoTech = o.NoTech
 	hc.Probe = o.Probe
 	hc.NoFavicon = o.NoFavicon
@@ -92,7 +95,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(paramcol.New(client, o.Params))
 	cat.MustRegister(asncol.NewASN(nil))
 	cat.MustRegister(searchcol.New(o.Subdomains.Keys))
-	cat.MustRegister(&shotcol.Collector{Dir: o.Shots, Browser: o.Browser})
+	cat.MustRegister(&shotcol.Collector{Dir: o.Shots, Browser: o.Browser, Only: o.WebScheme, Ports: o.WebPorts, NoTech: o.NoTech, HTML: o.ShotHTML})
 	render := &rendercol.Collector{}
 	if o.Render {
 		render.Browser = o.Browser

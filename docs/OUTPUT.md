@@ -431,7 +431,7 @@ Every run with a workspace writes `DB.ledger.jsonl` next to it (`-ledger FILE` w
 | `graphql` | The introspection result of each GraphQL endpoint read with `-graphql`, as InQL, Burp, Postman, graphql-voyager and clairvoyance read it. A schema recovered from validation errors has `"x-azhaq": {"introspection": false, "recovered": "suggestions", "partial": true}` beside `data` (inside each endpoint's object when several are keyed by URL), with `validation_errors`, `client_operations` and `untyped_fields` when known. |
 | `sdl` | The same schemas in the GraphQL schema language. A schema recovered from validation errors, not read by introspection, starts with `# introspection disabled on URL; recovered from N validation errors and M client operations: partial, may lack types and fields`, then the root types as far as they were recovered; fields whose type was not recovered, and the client operations found in scripts, are listed in comments. |
 | `burp` | Burp Suite project options with the run's target scope. |
-| `html` | One self-contained page: web services, names, screenshots, secrets, API routes (with an Evidence column), the map. |
+| `html` | One self-contained page: web services, names, screenshots (embedded, 560 pixels wide; the page opens from any directory), secrets, API routes (with an Evidence column), the map. A picture file missing from where the run named it and from beside the database is listed as not found. |
 | `graphml` | The graph for Gephi, yEd or Cytoscape. |
 | `secrets` | Credentials found in scripts: severity, kind, value, script, tab-separated. |
 

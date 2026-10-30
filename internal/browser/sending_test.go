@@ -187,8 +187,8 @@ func TestPoliteShotIsWhole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Partial || p.Unloaded != 0 || p.Resources != 22 || len(p.PNG) == 0 {
-		t.Errorf("page not whole: partial %v, %d of %d unloaded, %d bytes", p.Partial, p.Unloaded, p.Resources, len(p.PNG))
+	if p.Partial || p.Unloaded != 0 || p.Resources != 22 || len(p.Image) == 0 {
+		t.Errorf("page not whole: partial %v, %d of %d unloaded, %d bytes", p.Partial, p.Unloaded, p.Resources, len(p.Image))
 	}
 	time.Sleep(500 * time.Millisecond)
 	b.Close()
@@ -247,8 +247,8 @@ func TestShotOfAStalledPageIsPartial(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.Partial || p.Unloaded != 1 || len(p.PNG) == 0 {
-		t.Errorf("want a partial picture, got partial %v, %d unloaded, %d bytes", p.Partial, p.Unloaded, len(p.PNG))
+	if !p.Partial || p.Unloaded != 1 || len(p.Image) == 0 {
+		t.Errorf("want a partial picture, got partial %v, %d unloaded, %d bytes", p.Partial, p.Unloaded, len(p.Image))
 	}
 }
 

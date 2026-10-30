@@ -39,6 +39,10 @@ type Collector struct {
 	// Ports are the web ports tried on each hostname, HTTPS first (HTTP
 	// first on 80). Empty: https://host/, falling back to http://host/.
 	Ports []int
+	// Only restricts the schemes tried on a name, an address or a host:port
+	// to "http" or "https"; empty tries HTTPS, then HTTP. A URL given with
+	// its scheme is fetched as given.
+	Only string
 	// NoFavicon skips the favicon request on root pages.
 	NoFavicon bool
 	// NoTech skips technology fingerprints (about 30 MB of memory).
@@ -152,7 +156,29 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 // HTTPS request fails: input given as host:port or a bare IP.
 const FallbackKey = "fallback"
 
+// targets are the groups of URLs to try for a seed, narrowed to the one
+// scheme asked for.
 func (c *Collector) targets(seed types.Seed) [][]string {
+	groups := c.guess(seed)
+	if c.Only == "" || (seed.Type == types.TypeURL && seed.Keys[FallbackKey] == "") {
+		return groups
+	}
+	var out [][]string
+	for _, g := range groups {
+		var keep []string
+		for _, u := range g {
+			if strings.HasPrefix(u, c.Only+"://") {
+				keep = append(keep, u)
+			}
+		}
+		if len(keep) > 0 {
+			out = append(out, keep)
+		}
+	}
+	return out
+}
+
+func (c *Collector) guess(seed types.Seed) [][]string {
 	switch seed.Type {
 	case types.TypeURL:
 		u, err := normalize.URL(seed.Keys["url"])
