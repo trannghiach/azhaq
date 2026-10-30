@@ -232,3 +232,12 @@ func TestProbeInputs(t *testing.T) {
 		t.Error("a bad range is an error")
 	}
 }
+
+// A raw request's credentials stay out of the workspace, as -header's do.
+func TestKeptArgsRedactsRawRequestSecrets(t *testing.T) {
+	raw := `{"raw":{"method":"GET","path":"/","header":{"Authorization":["Bearer x"],"X-A":["b"]}}}`
+	got := keptArgs([]string{"-probe-opts", raw, "-db", "w.db"})
+	if len(got) != 1 || strings.Contains(got[0], "Bearer") || !strings.Contains(got[0], `"X-A"`) {
+		t.Errorf("kept %v", got)
+	}
+}

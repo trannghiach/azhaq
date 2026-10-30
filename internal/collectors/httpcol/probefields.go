@@ -310,23 +310,6 @@ func misMatched(host string, names []string) bool {
 	return true
 }
 
-// chain is the hops of a followed redirect, as httpx's chain.
-func chain(res fetch.Result) []map[string]any {
-	var out []map[string]any
-	for _, h := range res.Hops {
-		m := map[string]any{"request-url": h.URL, "status_code": h.Status}
-		if h.Location != "" {
-			if u, err := url.Parse(h.URL); err == nil {
-				if l, err := u.Parse(h.Location); err == nil {
-					m["location"] = l.String()
-				}
-			}
-		}
-		out = append(out, m)
-	}
-	return out
-}
-
 // jarmHash is the JARM fingerprint of a TLS server: ten handshakes, each
 // counted and paced as a request.
 func jarmHash(ctx context.Context, raw string) string {
@@ -746,18 +729,15 @@ func intOfRow(v any) int {
 }
 
 var (
-	cpeOnce  sync.Once
-	cpeDet   *cpedetect.CPEDetector
-	wpDet    *cpedetect.WordPressDetector
-	detErrOK bool
+	cpeOnce sync.Once
+	cpeDet  *cpedetect.CPEDetector
+	wpDet   *cpedetect.WordPressDetector
 )
 
 func detectors() {
 	cpeOnce.Do(func() {
-		var e1, e2 error
-		cpeDet, e1 = cpedetect.NewCPEDetector()
-		wpDet, e2 = cpedetect.NewWordPressDetector()
-		detErrOK = e1 == nil && e2 == nil
+		cpeDet, _ = cpedetect.NewCPEDetector() // the data is embedded: no failure to report
+		wpDet, _ = cpedetect.NewWordPressDetector()
 	})
 }
 

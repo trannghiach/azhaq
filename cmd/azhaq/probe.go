@@ -424,13 +424,12 @@ func cmdProbe(args []string) error {
 	var pf probeFlags
 	pf.register(fs)
 	rlm := fs.Float64("rlm", 0, "requests per minute to targets, over all hosts (as -rate, per minute)")
-	nc := fs.Bool("nc", false, "accepted: there is no color")
+	fs.Bool("nc", false, "accepted, as httpx has it: azhaq prints no color")
 	given := inherit(fs, append([]string{"parallel", "t=parallel", "host-parallel", "no-follow", "no-tech", "resolvers", "dns-rate", "max-ips", "rl=rate"}, targetFlags...)...)
 	favicon := fs.Bool("favicon", false, "also hash each front page's favicon (one or two more requests per service)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	_ = nc
 	if pf.lof {
 		for _, f := range probeFields {
 			fmt.Println(f)
@@ -439,6 +438,9 @@ func cmdProbe(args []string) error {
 	}
 	if pf.ss {
 		pf.sr = true
+	}
+	if pf.sameHost {
+		pf.follow = true // httpx: -fhr alone follows the redirects that stay on the host
 	}
 	if pf.csvo != "" {
 		switch strings.ToLower(pf.csvo) {
@@ -552,7 +554,6 @@ func cmdProbe(args []string) error {
 	case pf.md:
 		w.line(mdHeader())
 	}
-	spec.Evidence = spec.Evidence || len(out.extra) > 0 && false
 	run := []string{"-list", path, "-probe", "-probe-opts", specJSON(spec)}
 	if pf.ss {
 		run = append(run, "-screenshots", filepath.Join(probeDir(pf.srd), "screenshot"))
@@ -650,7 +651,7 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 	sort.Strings(found)
 	order = append(order, found...)
 	var gaps []string
-	noAnswer := 0
+	noAnswer, notAsked := 0, 0
 	for _, in := range order {
 		if o.answered[in] {
 			continue
@@ -670,6 +671,10 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 		if why == "" {
 			why = dnsErr[in]
 		}
+		if why == "" && rep.Stopped != "" {
+			notAsked++ // the run stopped before it came to this target: azhaq resume asks it
+			continue
+		}
 		if why == "" {
 			why = "no answer"
 			if !accounted[in] && !accounted[normalize.HostFromURL(in)] {
@@ -684,6 +689,12 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 	}
 	if noAnswer > 0 {
 		rep.Counts = map[string]int{"without an answer": noAnswer}
+	}
+	if notAsked > 0 {
+		if rep.Counts == nil {
+			rep.Counts = map[string]int{}
+		}
+		rep.Counts["not asked yet"] = notAsked
 	}
 	if quiet := silentHosts(st); len(quiet) > 0 {
 		if rep.Counts == nil {

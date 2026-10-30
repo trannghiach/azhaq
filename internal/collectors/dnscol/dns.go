@@ -30,8 +30,9 @@ type Collector struct {
 	// KeepWild keeps a name that resolves only through a wildcard, marked
 	// in its record: the names of a probe are the user's own.
 	KeepWild bool
-	// NoHints leaves a CNAME's target to its own answer: a probe asks the
-	// names it was given, and those its certificates and policies name.
+	// NoHints is a probe's: a CNAME's target is left to its own answer (a probe
+	// asks the names it was given, and those its certificates and policies
+	// name), and an apex is not asked for MX, TXT and NS.
 	NoHints bool
 }
 
@@ -163,8 +164,8 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 			meta.NextHints = nil
 			return
 		}
-		if host == apex {
-			c.extras(ctx, host, payload)
+		if host == apex && !c.NoHints {
+			c.extras(ctx, host, payload) // a probe asks no MX, TXT or NS
 		}
 	}
 }
