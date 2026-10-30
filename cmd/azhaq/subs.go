@@ -10,9 +10,11 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/store"
+	"github.com/trannghiach/azhaq/types"
 )
 
 // subsMode is what subs tells the run it starts.
@@ -138,7 +140,8 @@ func cmdSubs(args []string) error {
 	stats := fs.Bool("stats", false, "after the run, one note per source: requests, names, errors and seconds, as subfinder -stats")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	given := inherit(fs, "sources", "exclude-sources", "all-sources", "no-history", "source-timeout", "providers", "resolvers", "dns-rate", "timeout", "v", "fail-on-errors",
-		"source-rate", "source-rates", "max-results", "max-time", "max-body", "max-names", "proxy=source-proxy", "t=parallel")
+		"source-rate", "source-rates", "max-results", "max-time", "max-body", "proxy=source-proxy", "t=parallel")
+	maxNames := fs.Int("max-names", 0, fmt.Sprintf("most names kept per domain, and looked up with -live (default %d)", subcol.DefaultMaxNames))
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -208,34 +211,24 @@ func cmdSubs(args []string) error {
 		run = append(run, "-depth", "0")
 	}
 	extra := given()
-	if *live && !hasFlag(extra, "max-names") {
+	switch {
+	case *maxNames > 0:
+		extra = append(extra, "-max-names="+fmt.Sprint(*maxNames))
+	case *live:
 		// A big zone is not cut at the run's default of 20,000 names looked up.
 		extra = append(extra, "-max-names="+fmt.Sprint(subcol.DefaultMaxNames))
 	}
 	subsMode.NoCheck, subsMode.Recursive = !*live && !active, *recursive
-	st, done, err := runPreset(&c, append(run, extra...), rep, nil)
-	subsMode.NoCheck, subsMode.Recursive = false, false
-	if err != nil {
-		return err
-	}
-	defer done()
-	var alive map[string]map[string]any
-	if *live {
-		// A name with an address, or one that is a CNAME (dnsx -a -cname
-		// lists those too, dangling or not): it exists in DNS.
-		alive = liveNames(st)
-		for name, p := range cnameNames(st) {
-			if alive[name] == nil {
-				alive[name] = p
-			}
-		}
-	}
+	// The output is opened before anything is sent: a bad -o is not found out
+	// after the run. Without -live a domain's names are printed when its
+	// sources have answered, as subfinder prints a domain when it ends.
 	c.appendOut = true // subfinder's -o appends
 	w, err := newWriter(&c)
 	if err != nil {
 		return err
 	}
 	out := &subsOut{w: w, cs: *cs, oI: *oI, dir: *oD, perInput: map[string]*bytes.Buffer{}, live: *live}
+	var alive map[string]map[string]any
 	seen := map[string]bool{}
 	answered, ran, failedOff := 0, 0, 0
 	verbose := hasFlag(extra, "v")
@@ -243,8 +236,16 @@ func cmdSubs(args []string) error {
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
 	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot int
-	for _, p := range payloads(st, "azhaq-subdomains") {
+	var procMu sync.Mutex
+	processed := map[string]bool{}
+	process := func(p map[string]any) {
+		procMu.Lock()
+		defer procMu.Unlock()
 		input, _ := p["domain"].(string)
+		if processed[input] {
+			return
+		}
+		processed[input] = true
 		foundBy, _ := p["found_by"].(map[string]any)
 		srcs, _ := p["sources"].(map[string]any)
 		union += intOf(p["from_sources"])
@@ -341,6 +342,38 @@ func cmdSubs(args []string) error {
 			out.put(input, name, row, ips, by)
 		}
 	}
+	var observe func(types.Entity, types.Observation)
+	if !*live {
+		observe = func(_ types.Entity, o types.Observation) {
+			if o.Collector != "azhaq-subdomains" || o.Kind != "subdomains" {
+				return
+			}
+			var p map[string]any
+			if json.Unmarshal(o.Payload, &p) == nil {
+				process(p)
+			}
+		}
+	}
+	st, done, err := runPreset(&c, append(run, extra...), rep, observe)
+	subsMode.NoCheck, subsMode.Recursive = false, false
+	if err != nil {
+		w.close()
+		return err
+	}
+	defer done()
+	if *live {
+		// A name with an address, or one that is a CNAME (dnsx -a -cname
+		// lists those too, dangling or not): it exists in DNS.
+		alive = liveNames(st)
+		for name, p := range cnameNames(st) {
+			if alive[name] == nil {
+				alive[name] = p
+			}
+		}
+	}
+	for _, p := range payloads(st, "azhaq-subdomains") {
+		process(p) // the ones not printed yet: every one with -live
+	}
 	// Names the guesses found. A dangling CNAME is found but not live: with
 	// -live it shows as a takeover candidate, not as a name.
 	guessed := 0
@@ -428,7 +461,7 @@ func cmdSubs(args []string) error {
 	set("listed under another domain", dup)
 	set("cut by -max-names", cut)
 	if cut > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names were cut at -max-names %d: raise it to keep them", cut, subcol.DefaultMaxNames))
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names were cut at -max-names: raise it to keep them", cut))
 		rep.warned = true
 	}
 	if unverified > 0 {

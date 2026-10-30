@@ -111,7 +111,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 
 | Command | Fields |
 | --- | --- |
-| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`; `history` for a name an earlier run kept, below); with `-live`, dnsx's `a` and `aaaa` (the addresses), `cname` (the chain) and `cdn` (the CDN or WAF in front). Takeover candidates are in the summary (`takeover`). |
+| `subs` | `host`, `input` (the domain), `source` (the first source that gave the name), `sources` (all of them; `dns-brute` or `permute` for a name found by `-w` or `-permute`; `history` for a name an earlier run kept, below; `cname` for a live name DNS met as another name's CNAME target); `unverified: true` on a name only subdomain.center guessed or the name history held, which no DNS lookup checked (without `-live`; below); `wildcard_certificate: true` on a name a certificate gave as `*.name`; with `-live`, dnsx's `a` and `aaaa` (the addresses; a name that is only a CNAME has none), `cname` (the chain) and `cdn` (the CDN or WAF in front), and with `-oI` an `ip`. Takeover candidates are in the summary (`takeover`). With `-cs` the text form is `host,[source,source]`, with `-live -oI` `host,ip,source`; `-oD DIR` also writes `DIR/DOMAIN.txt` (`.json` with `-json`) for each domain. |
 | `dns` | `host`, `a`, `aaaa`, `cname`, `status_code`, `cdn_name`. With `-d DOMAIN -w FILE` it resolves `WORD.DOMAIN` for each word instead, as dnsx `-d -w` does, with wildcard answers left out; the rows are the same. |
 | `probe` | httpx's: `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `a` and `aaaa` (the addresses the name resolved to; `host_ip` is one of them), `port`, `scheme`, `path`, `method`, `status_code` (the first answer: a redirect stays 302, as httpx prints it), `title`, `webserver`, `content_type`, `tech`, `content_length`, `words`, `lines`, `time`, `favicon` (with `-favicon`), `cdn`, `cdn_name`, `cdn_type`, `final_url` and `final_status_code` (where a redirect inside the scope, or without one inside the site, ended; title and tech describe that page), `chain_status_codes`, `location`, `timestamp`. Empty fields are left out, as httpx does. Every target given ends as a row, a failure or a skip: a name that resolved and got neither an answer nor a recorded failure is listed as failed, `no answer and no failure recorded`. |
 | `crawl` | `url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`, `found_in`, and for a view or a socket `guard`, `protocol`, `namespace`). Views (`client-route`) and sockets (`websocket`) are listed with `-json` only, as routes with a parameter are: no GET gets them. |
@@ -123,7 +123,7 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | `asn` | `as_number`, `as_name`, `prefix`. |
 | `shots` | `url`, `file`, `title`, `final_url`, `phash`. |
 
-`probe`, `dns`, `ports`, `dirs`, `fuzz`, `params` and `shots` print each result as it is found. `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
+`probe`, `dns`, `ports`, `dirs`, `fuzz`, `params` and `shots` print each result as it is found; `subs` without `-live` prints a domain's names when its sources have answered, and with `-live` when the run ends (a name is live only once DNS has answered for the whole run). `run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
 
 **`subs`: sources, names kept, coverage.** `subs` counts the sources it asked, in the summary's `counts`:
 
@@ -134,9 +134,27 @@ Their `-json` output uses the field names of the tool they stand in for, so exis
 | `sources failed` | Failures of sources in the default set, or named with `-sources`. |
 | `off-by-default failed` | Failures of sources that ran only because of `-all-sources`. |
 
-`sources asked` is `sources answered` plus `sources failed` plus `off-by-default failed`. The summary has `degraded` when `sources failed` is above 0. The per-source status in the workspace (`azhaq show`, the `sources` payload of an `azhaq-subdomains` observation) has, for each source, `count`, `seconds`, `calls`, `error`, `skipped` (why it did not run) and `"default": false` on a source that ran only because of `-all-sources`.
+`sources asked` is `sources answered` plus `sources failed` plus `off-by-default failed`. The summary has `degraded` when `sources failed` is above 0. The per-source status in the workspace (`azhaq show`, the `sources` payload of an `azhaq-subdomains` observation) has, for each source, `count`, `seconds`, `calls`, `requests` (sent, retries included), `error`, `skipped` (why it did not run), `partial` (what it says about its own answer: Cert Spotter without a key reads the first page only), `rate_limited` with `retried_429`, `waited_seconds`, `retry_after_seconds` and `gave_up_429` (a source that answered 429 is asked again after its `Retry-After`, up to three times and 30 s each; one that asks for longer, or keeps refusing, is not waited for), `rounds` (for subdomain.center: per call, the names it gave, how many were new, how many were looked up, how many resolved and no other source had, and the seconds that took), and from `-live` runs `kept`, `dropped_unresolved`, `unverified`, `checked_seconds` (for the sources whose names are checked) and `"default": false` on a source that ran only because of `-all-sources`.
 
-Azhaq keeps every name it kept for a domain in `names/DOMAIN.json` under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`: the first and last time seen (`first_seen`, `last_seen`) and the sources that gave it (`sources`), at most 200,000 names per domain (the ones unseen the longest go first). The next run asks this file as a source called `history`: a stored name counts only if it resolves now (not to a wildcard), so stale names drop out and a name a source missed this time comes back. `-no-history` neither reads nor writes the file. A file that cannot be written is a note, `name history not saved: …`.
+The counts also say what became of the names, so a reader can add them up:
+
+| Count | Meaning |
+| --- | --- |
+| `from sources` | The names every source gave for the domains, with the name history and subdomain.center's guesses, before any check. |
+| `did not resolve` | Names dropped because DNS says they do not exist: guesses and history names that did not resolve, and with `-live` every other name that did not. |
+| `collected` | With `-live`: `from sources` less the guesses that did not resolve. |
+| `resolved from sources` | With `-live`: the names from sources that resolved and were printed. |
+| `CNAME only` | With `-live`: printed names that are a CNAME and have no address of their own (dnsx `-a -cname` lists those too, dangling or not). |
+| `found as CNAME targets`, `found by guessing` | Live names no source gave: another name's CNAME target in scope, and the names of `-w` and `-permute`. |
+| `unverified` | Printed names no DNS lookup checked (without `-live`): guesses and history names. |
+| `not checked` | With `-live`: names the resolvers failed on, left out (the run says so and `azhaq resume` checks them). |
+| `left out by -m/-f` | Names a `-m`, `-f`, `-match-regex` or `-filter-regex` removed. |
+| `listed under another domain` | A name under two of the domains given, printed once. |
+| `cut by -max-names` | Names past `-max-names` (default 200,000), left out; the run ends with exit 3. |
+
+`from sources` less `did not resolve`, `not checked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`, plus `found as CNAME targets` and `found by guessing`, is the number of results. The run prints it as a note: `count: 2638 from the sources − 2096 did not resolve − 1 not checked + 10 found as CNAME targets = 551 printed`.
+
+Azhaq keeps every name it kept for a domain in `names/DOMAIN.json` under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`: the first and last time seen (`first_seen`, `last_seen`) and the sources that gave it (`sources`), at most 200,000 names per domain (the ones unseen the longest go first). The next run asks this file as a source called `history`: with `-live` a stored name counts only if it resolves now (not to a wildcard), so stale names drop out and a name a source missed this time comes back; without `-live` no DNS lookup is made and a stored name is listed with `"unverified": true`. `-no-history` neither reads nor writes the file. A file that cannot be written is a note, `name history not saved: …`.
 
 `subs` ends with a note such as
 

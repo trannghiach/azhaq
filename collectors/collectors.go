@@ -114,7 +114,8 @@ func Register(cat *catalog.Catalog, o Options) {
 			switch {
 			case a.Status == dnsr.StatusFailed || ctx.Err() != nil:
 				failed = append(failed, a.Name)
-			case a.Live() && !dnsc.Wild.Match(ctx, a.Name, apex, a):
+			// A name that is only a CNAME exists too (dnsx -a -cname lists it).
+			case (a.Live() || len(a.CNAME) > 0) && !dnsc.Wild.Match(ctx, a.Name, apex, a):
 				live = append(live, a.Name)
 			}
 		}

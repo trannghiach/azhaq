@@ -2,11 +2,13 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 )
@@ -218,8 +220,11 @@ func TestSubsLiveListsCNAMEOnlyNames(t *testing.T) {
 		a:     map[string]string{"www.example.org": "192.0.2.10"},
 		cname: map[string]string{"go.example.org": "www.example.org", "cdn.example.org": "gone.example.net"},
 	})
-	defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true,
-		Names: []string{"go.example.org", "cdn.example.org", "dead.example.org", "www.example.org"}})()
+	// cdn is only guessed (a padding source): the guess check keeps it too.
+	defer subcol.UseTestSources(
+		subcol.TestSource{Name: "s", Default: true, Names: []string{"go.example.org", "dead.example.org", "www.example.org"}},
+		subcol.TestSource{Name: "pad", Default: true, Padding: true, Names: []string{"cdn.example.org", "junk.example.org"}},
+	)()
 	out, rep, code := runContract(t, "subs", "-d", "example.org", "-live", "-resolvers", resolvers, "-no-history")
 	if code != exitOK {
 		t.Fatalf("exit %d %+v", code, rep)
@@ -236,5 +241,98 @@ func TestSubsLiveListsCNAMEOnlyNames(t *testing.T) {
 	}
 	if rep.Counts["CNAME only"] != 1 {
 		t.Errorf("counts %v", rep.Counts)
+	}
+}
+
+// Without -live a domain's names are printed when its sources have
+// answered, not when the last domain does.
+func TestSubsPrintsADomainWhenItsSourcesAnswered(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("AZHAQ_DATA_DIR", t.TempDir())
+	defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true, Delay: 1500 * time.Millisecond, DelayDomain: "example.net",
+		Names: []string{"www.example.org", "www.example.net"}})()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	start := time.Now()
+	firstAt := make(chan time.Duration, 1)
+	got := make(chan string, 1)
+	go func() {
+		var all strings.Builder
+		buf := make([]byte, 4096)
+		sent := false
+		for {
+			n, err := r.Read(buf)
+			if n > 0 && !sent {
+				firstAt <- time.Since(start)
+				sent = true
+			}
+			all.Write(buf[:n])
+			if err != nil {
+				got <- all.String()
+				return
+			}
+		}
+	}()
+	done := make(chan error, 1)
+	go func() {
+		done <- run([]string{"subs", "-d", "example.org", "-d", "example.net", "-silent", "-no-history"})
+	}()
+	err = <-done
+	end := time.Since(start)
+	w.Close()
+	os.Stdout = old
+	out := <-got
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first := <-firstAt; first > time.Second || end < 1400*time.Millisecond {
+		t.Errorf("first line after %s, run took %s: the fast domain should not wait for the slow one", first, end)
+	}
+	if !strings.Contains(out, "www.example.org\n") || !strings.Contains(out, "www.example.net\n") {
+		t.Errorf("output %q", out)
+	}
+}
+
+// A domain keeps 200,000 names, not 20,000; a smaller -max-names cuts, says
+// how many, and the exit is 3.
+func TestSubsMaxNamesCutIsSaid(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var names []string
+	for i := range 30 {
+		names = append(names, fmt.Sprintf("n%02d.example.org", i))
+	}
+	defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true, Names: names})()
+	out, rep, code := runContract(t, "subs", "-d", "example.org", "-no-history")
+	if code != exitOK || len(hosts(t, out)) != 30 {
+		t.Fatalf("uncut: exit %d, %d names", code, len(hosts(t, out)))
+	}
+	out, rep, code = runContract(t, "subs", "-d", "example.org", "-no-history", "-max-names", "10")
+	if code != exitPartial || len(hosts(t, out)) != 10 || rep.Counts["cut by -max-names"] != 20 || rep.Counts["from sources"] != 10 {
+		t.Errorf("cut: exit %d, %d names, counts %v", code, len(hosts(t, out)), rep.Counts)
+	}
+}
+
+func TestNameSumAndRateLimitNote(t *testing.T) {
+	c := map[string]int{"from sources": 2638, "did not resolve": 2096, "not checked": 1, "found as CNAME targets": 10}
+	if got, want := nameSum(c, 551, false), "count: 2638 from the sources − 2096 did not resolve − 1 not checked + 10 found as CNAME targets = 551 printed"; got != want {
+		t.Errorf("%q", got)
+	}
+	if nameSum(map[string]int{}, 0, false) != "" {
+		t.Error("a sum with no names")
+	}
+	row := map[string]any{"rate_limited": true, "retried_429": 2.0, "waited_seconds": 6.0}
+	if got := rateLimitNote("a.com", "crtname", row); !strings.Contains(got, "asked again 2 times after 6 s") {
+		t.Errorf("%q", got)
+	}
+	row["gave_up_429"] = true
+	if got := rateLimitNote("a.com", "crtname", row); !strings.Contains(got, "kept answering 429 after 2 retries") {
+		t.Errorf("%q", got)
+	}
+	if got := rateLimitNote("a.com", "x", map[string]any{"gave_up_429": true, "retry_after_seconds": 120.0}); !strings.Contains(got, "asked for 120 s") {
+		t.Errorf("%q", got)
 	}
 }

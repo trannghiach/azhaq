@@ -68,14 +68,15 @@ func (k *checker) close() {
 
 // check resolves the names it has not checked, bar the ones a real source
 // gave, and returns how many of them are new live names.
-func (k *checker) check(names []string) int { return k.checkWith(k.ctx, names) }
+func (k *checker) check(names []string) int { return k.checkWith(k.ctx, names, false) }
 
-// checkWith is check on ctx.
-func (k *checker) checkWith(ctx context.Context, names []string) int {
+// checkWith is check on ctx; after close it asks nothing unless final, the
+// last pass Run makes over the names the rounds left.
+func (k *checker) checkWith(ctx context.Context, names []string, final bool) int {
 	k.mu.Lock()
 	var ask []string
 	for _, n := range names {
-		if _, done := k.state[n]; !done && !k.known[n] && !k.closed {
+		if _, done := k.state[n]; !done && !k.known[n] && (!k.closed || final) {
 			k.state[n] = nameUnchecked // taken: no one else asks it
 			ask = append(ask, n)
 		}

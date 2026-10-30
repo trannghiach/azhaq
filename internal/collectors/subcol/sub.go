@@ -617,10 +617,9 @@ func (c *Collector) settle(ctx context.Context, domain string, run []source, nam
 			for _, n := range more {
 				delete(chk.state, n)
 			}
-			chk.closed = false
 			chk.mu.Unlock()
 			start := time.Now()
-			chk.checkWith(vctx, more)
+			chk.checkWith(vctx, more, true)
 			took += time.Since(start)
 			st.asked = chk.asked
 		} else if len(more) > 0 {
