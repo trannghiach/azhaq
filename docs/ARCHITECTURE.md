@@ -150,7 +150,7 @@ A run started with `-serve ADDR` lends its work to `azhaq worker` processes, on 
 
 Items on the seed's own host or IP run before fan-out items, but part of the item budget is reserved for fan-out: one eighth, at least 24 items once the budget is 48 or more, and never more than half. Without it, a large application would spend the entire budget before any domain-level collector ran.
 
-The run's policy is applied when items are planned: `-passive` keeps only `Passive` collectors; an `Active` collector needs its flag, an `-allow` scope and a seed inside it; `-skip` removes collectors by name.
+The run's policy is applied when items are planned: `-passive` keeps only `Passive` collectors; an `Active` collector needs its flag and a seed inside the scope, which is the `-allow` or `-scope` given or, when there is none, the targets given; `-skip` removes collectors by name.
 
 A seen-set prevents running the same seed twice, and `-allow` / `-deny` / `-scope` filter hints before they are queued. A scope entry is a domain with its subdomains (`example.com`, `*.example.com`), one host (`=api.example.com`), or an address range (`10.0.0.0/8`). When a scope is set, the shared HTTP client also refuses any request to a host outside it, and stops following a redirect at the first hop that leaves it (the hop is recorded with its `Location`); the path, parameter and GraphQL modules use their own clients without redirects, on seeds the scope already admitted. Chrome is held to the same scope (see [Chrome and the scope](#chrome-and-the-scope)).
 

@@ -34,6 +34,8 @@ Rows like `401 → 200 → 200  …/rest/basket/8  [bob reads alice's object] pr
 
 `azhaq report -dir DIR` writes each finding up as a report to submit (recipe 14).
 
+Catch: a role given as headers carries only those headers. Where the app keeps the session in a cookie the headers do not hold (Juice Shop's `/rest/user/whoami` answers `{"user":{}}` to a Bearer token alone), that behaviour does not show; give such a role its cookie too (`-role 'alice=Authorization: Bearer …' -role 'alice=Cookie: …'` is one role with both) or sign in with `-role-login`.
+
 Catch: copied tokens expire. Roles says so (`its token expired at …`, exit 3); see recipe 4.
 
 **From what you browsed.** Sign in as each account in a browser (or through Burp or Caido), use the app as that account would, save each history (HAR, or Burp "Save items"), and run `azhaq roles -har alice=alice.har -har bob=bob.har`. No headers to copy, no crawl. Add `-replay-writes put,patch` to replay each account's writes with the other sessions (they change data: use accounts of your own).

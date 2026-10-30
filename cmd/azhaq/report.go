@@ -129,6 +129,11 @@ func (r *report) print(w io.Writer) {
 		}
 		head[0] += " (" + strings.Join(parts, ", ") + ")"
 	}
+	if r.Degraded {
+		// Exit 0 and "complete" say the run finished, not that every source
+		// answered: the first line of the summary says it too.
+		head = append(head, fmt.Sprintf("DEGRADED: %d of %d sources failed, the names may be incomplete", r.Counts["sources failed"], r.Counts["sources asked"]))
+	}
 	if r.Requests > 0 {
 		head = append(head, fmt.Sprintf("%d requests", r.Requests))
 	}

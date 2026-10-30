@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"maps"
 	"math"
 	"net"
@@ -59,6 +60,9 @@ const lastDBFile = ".azhaq-last"
 var version = "dev"
 
 func init() {
+	// The standard library logs a host's stray bytes on an idle connection
+	// ("Unsolicited response received"): noise on a quiet command's stderr.
+	log.SetOutput(io.Discard)
 	if version == "dev" {
 		if bi, ok := debug.ReadBuildInfo(); ok && strings.HasPrefix(bi.Main.Version, "v") {
 			version = strings.TrimPrefix(bi.Main.Version, "v")
@@ -144,6 +148,21 @@ func cmdRun(args []string) error {
 		return err
 	}
 	return rep.finish(out.json, false)
+}
+
+// resumeHint is the command that continues a stopped run. The sign-in is
+// not stored (no password on disk): resume signs in again, so the hint
+// carries the credential flags. A cut task runs again whole, so the same
+// -timeout would cut it again.
+func resumeHint(db string, cut, signedIn bool, user string) string {
+	hint := "azhaq resume -db " + db
+	if cut {
+		hint += " -timeout 0"
+	}
+	if signedIn {
+		hint += " -login-user " + user + " -login-pass PASS"
+	}
+	return hint
 }
 
 // runOut is how a run prints its map: text, JSON lines, or not at all.
@@ -401,7 +420,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	if fi, err := os.Stat(*shots); *shots != "" && err == nil && !fi.IsDir() {
-		return usagef("the screenshot directory %s is a file", *shots)
+		return usagef("the screenshot directory %s is a file: -dir (shots) or -screenshots (run) names a directory", *shots)
 	}
 	if active && len(allow) == 0 {
 		return usagef("-dns-brute, -permute, -graphql, -ports, -dirs and -params need a target that names a host, domain or address (an ASN or organisation does not), or -allow / -scope")
@@ -906,15 +925,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		default:
 			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}
-		rep.Resume = "azhaq resume -db " + path
-		if cut > 0 {
-			rep.Resume += " -timeout 0" // a cut task runs again whole: the same bound cuts it again
-		}
-		if *login != "" {
-			// The sign-in is not stored (no password on disk); resume signs
-			// in again, so the hint carries the credential flags.
-			rep.Resume += " -login-user " + *loginUser + " -login-pass PASS"
-		}
+		rep.Resume = resumeHint(path, cut > 0, *login != "", *loginUser)
 		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() && fetch.Killed() == nil {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
 		}
