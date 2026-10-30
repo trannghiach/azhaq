@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -384,6 +385,52 @@ func Distance(a, b string) int {
 		return 64
 	}
 	return bits.OnesCount64(x ^ y)
+}
+
+// NearBits is how many bits two perceptual hashes may differ and the
+// pages still look alike.
+const NearBits = 10
+
+// Hash is the 64 bits of a hash DHash gave, false for an empty one, an
+// earlier run's, or one that does not read.
+func Hash(h string) (uint64, bool) {
+	if !strings.HasPrefix(h, HashPrefix) {
+		return 0, false
+	}
+	x, err := strconv.ParseUint(h[len(HashPrefix):], 16, 64)
+	return x, err == nil
+}
+
+// Cluster puts hashes into groups of look-alikes: each joins the first
+// group with a member at most near bits from it, or starts one. It gives
+// each hash its group's number, in the order the groups began. A hash that
+// does not read (ok false) is a group of its own.
+func Cluster(hashes []uint64, ok []bool, near int) []int {
+	out := make([]int, len(hashes))
+	var groups [][]uint64 // the different hashes of each group
+	for i, h := range hashes {
+		g := -1
+		if ok[i] {
+			for gi, members := range groups {
+				if slices.ContainsFunc(members, func(m uint64) bool { return bits.OnesCount64(h^m) <= near }) {
+					g = gi
+					break
+				}
+			}
+		}
+		switch {
+		case g < 0 && ok[i]:
+			g = len(groups)
+			groups = append(groups, []uint64{h})
+		case g < 0:
+			g = len(groups)
+			groups = append(groups, nil)
+		case !slices.Contains(groups[g], h):
+			groups[g] = append(groups[g], h)
+		}
+		out[i] = g
+	}
+	return out
 }
 
 // absPath is file as an absolute path, for a report written from another directory.

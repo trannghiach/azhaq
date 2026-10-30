@@ -5,7 +5,10 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"math/bits"
+	"math/rand"
 	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/browser"
@@ -126,5 +129,46 @@ func TestBaseNameKeepsPagesApart(t *testing.T) {
 	na, nb, nc := baseName(a, a.String()), baseName(b, b.String()), baseName(c, c.String())
 	if na != "http_h_3000" || nb == na || nb == nc {
 		t.Errorf("names %q %q %q", na, nb, nc)
+	}
+}
+
+// Cluster gives what the plain loop gives: each hash joins the first group
+// that has a member within near bits.
+func TestClusterIsTheFirstNearGroup(t *testing.T) {
+	r := rand.New(rand.NewSource(3))
+	var hashes []uint64
+	var ok []bool
+	for i := 0; i < 400; i++ {
+		h := uint64(r.Int63())
+		if i > 0 && r.Intn(3) > 0 {
+			h = hashes[r.Intn(i)] ^ (1<<r.Intn(64) | 1<<r.Intn(64))
+		}
+		hashes, ok = append(hashes, h), append(ok, r.Intn(20) != 0)
+	}
+	var groups [][]int
+	want := make([]int, len(hashes))
+	for i := range hashes {
+		g := -1
+		for gi, members := range groups {
+			if ok[i] && slices.ContainsFunc(members, func(m int) bool { return ok[m] && bits.OnesCount64(hashes[i]^hashes[m]) <= NearBits }) {
+				g = gi
+				break
+			}
+		}
+		if g < 0 {
+			g = len(groups)
+			groups = append(groups, nil)
+		}
+		groups[g] = append(groups[g], i)
+		want[i] = g
+	}
+	if got := Cluster(hashes, ok, NearBits); !slices.Equal(got, want) {
+		t.Errorf("Cluster differs from the loop")
+	}
+	if h, good := Hash("p:00000000000000ff"); !good || h != 255 {
+		t.Errorf("Hash: %d %v", h, good)
+	}
+	if _, good := Hash("1234"); good {
+		t.Errorf("a hash of an earlier run read")
 	}
 }

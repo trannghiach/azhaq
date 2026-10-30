@@ -1387,7 +1387,7 @@ func isAPI(r engine.MapEntry) bool {
 
 // shotNear is how many bits two perceptual hashes may differ and the
 // pages still look alike.
-const shotNear = 10
+const shotNear = shotcol.NearBits
 
 type reportShot struct {
 	URL, File, Title, Hash string
@@ -1413,19 +1413,16 @@ func shotGroups(obs []types.StoredObservation, dbDir string) [][]reportShot {
 			shots = append(shots, reportShot{URL: p.URL, File: p.File, Title: p.Title, Hash: p.Phash, Partial: p.Partial, Src: embedShot(p.File, p.FilePath, dbDir)})
 		}
 	}
+	hashes, ok := make([]uint64, len(shots)), make([]bool, len(shots))
+	for i, s := range shots {
+		hashes[i], ok[i] = shotcol.Hash(s.Hash)
+	}
 	var groups [][]reportShot
-	for _, s := range shots {
-		placed := false
-		for i, g := range groups {
-			if s.Hash != "" && slices.ContainsFunc(g, func(m reportShot) bool { return shotcol.Distance(s.Hash, m.Hash) <= shotNear }) {
-				groups[i] = append(groups[i], s)
-				placed = true
-				break
-			}
+	for i, g := range shotcol.Cluster(hashes, ok, shotNear) {
+		if g == len(groups) {
+			groups = append(groups, nil)
 		}
-		if !placed {
-			groups = append(groups, []reportShot{s})
-		}
+		groups[g] = append(groups[g], shots[i])
 	}
 	sort.SliceStable(groups, func(i, j int) bool { return len(groups[i]) > len(groups[j]) })
 	return groups
