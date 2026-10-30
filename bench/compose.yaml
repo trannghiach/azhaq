@@ -6,6 +6,10 @@ services:
     image: bkimminich/juice-shop:v20.3.0@sha256:cea5a4af4aacee498c491491af0408934ec81d004035c0a02ef3e54395e3bf27
     ports:
       - "127.0.0.1:3101:3000"
+    environment:
+      # It keeps memory for every path it is asked: a 4,750-word sweep
+      # outgrows node's default heap and kills it.
+      NODE_OPTIONS: "--max-old-space-size=4096"
 
   vampi:
     image: erev0s/vampi:latest@sha256:0a5a224b6e14ae7da6a6ea265178ff71286ff903aec74adee98f660bb0e4ca12
