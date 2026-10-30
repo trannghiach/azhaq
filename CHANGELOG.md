@@ -9,9 +9,14 @@
 - A request Chrome answers from its cache is neither listed in the ledger nor counted. Before, a signed-in run of a multi-page app listed every page's shared scripts and styles.
 - A `-timeout` reached while requests wait for `-rate` stops the run: exit 4, and `resume` continues. Before, it failed them with exit 3. `-H 'Host: x'` now sets the Host the request goes with.
 - A bad port list is a usage error, caught before anything is sent.
+- The text summary of a `subs` run in which sources failed says `DEGRADED: N of M sources failed` on its first line; the exit code is unchanged, as documented.
+- `probe -silent` and the other quiet commands no longer print the standard library's "Unsolicited response received on idle HTTP channel" lines on stderr.
+- A screenshot directory that is a file is a usage error that names `-dir`.
+- The docs no longer say an active collector needs an `-allow` scope (the targets given are its scope), and the roles recipe says a role of headers does not show behaviour that needs a cookie.
 
 ### Bench
 
+- Every finding of the reviews that was fixed without a test now has one, in Go next to the code or, where it needs the local apps or this machine, in a `regress` section (`go run ./bench -only regress`; `$AZHAQ_REFBIN` names the reference tools). Findings still open have a skipped test that says so.
 - A `claims` section checks every safety claim on every path a request takes, unpaced and at `-rate 10` and `-rate 2`. Each run's summary count, its ledger and an independent logging proxy (or the listeners, for TCP and UDP) must agree exactly. The paths: HTTP, Chrome, sign-in, roles, write replay, path and parameter sweeps, fuzz, ports, MCP, budgets and the kill switch.
 
 ## v0.9.1
