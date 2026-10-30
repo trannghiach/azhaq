@@ -152,6 +152,14 @@
 - `probe -x`, `-body` and `-rr` send the methods, body or raw request you give to the targets in scope, counted, paced and in the ledger; the summary says non-GET requests were sent. They can change data on the target.
 - A page in Shift-JIS, GBK, Big5 or another declared charset has its title read in UTF-8; httpx reads only GBK, Big5 and EUC-KR.
 
+### Docs
+
+- `docs/MIGRATING.md` (and `azhaq docs migrating`) puts the flags of subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap (`-sV`, `-sU`), gowitness and notify next to azhaq's, with what differs on purpose, three command lines and what azhaq adds for each.
+- `azhaq docs` without a topic prints an overview: what azhaq is, six commands to start with, where to find the rest, then the list of topics.
+- The README starts with what azhaq replaces and adds, links MIGRATING, and no longer carries numbers that no benchmark row measures (start-up memory, a request count for Juice Shop, per-page request counts of the parameter comparison).
+- Sentences the code did not support are fixed: `-detect` says an open port costs at most 24 more connects, not 3 (help and OUTPUT.md); `-udp` says 25 ports, not about 20; `params` is not paced at 20 requests a second per host; the resume request counts and the worker overhead are no longer quoted; `probe`'s `a`, `aaaa`, `cname` and `resolvers` are listed as present when the name resolved, not always; duplicate troubleshooting entries are gone.
+- A test fails when a document names a flag its command does not have: in a command line, in a MIGRATING table, or in a sentence about a command.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.
