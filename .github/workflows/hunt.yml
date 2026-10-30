@@ -62,6 +62,7 @@ jobs:
           ls "$HOME/ref/bin"
       - name: codex
         env:
+          CODEX_AUTH_KEY: ${{ secrets.CODEX_AUTH_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: .github/ci/codex.sh
@@ -83,5 +84,11 @@ jobs:
           tail -n 200 "$a.stream.jsonl" > "$a.stream-tail.jsonl" 2>/dev/null || true
           tar czf "$a.tgz" --ignore-failed-read "$a/FINDINGS.md" "$a.stream-tail.jsonl" "$a.stderr.txt"
           age -r "$AGE_RECIPIENT" -o "$a.tgz.age" "$a.tgz"
-          "$GITHUB_WORKSPACE/.github/ci/publish.sh" "hunt/$GITHUB_REF_NAME" "$a.tgz.age"
+          files=("$a.tgz.age")
+          # A session Codex refreshed here goes back, or the author's is revoked.
+          if [ -s "$HOME/.codex/auth.json" ] && [ "$(sha256sum "$HOME/.codex/auth.json" | cut -d' ' -f1)" != "$(cat "$RUNNER_TEMP/auth.sum" 2>/dev/null)" ]; then
+            age -r "$AGE_RECIPIENT" -o "$a.codex-auth.json.age" "$HOME/.codex/auth.json"
+            files+=("$a.codex-auth.json.age")
+          fi
+          "$GITHUB_WORKSPACE/.github/ci/publish.sh" "hunt/$GITHUB_REF_NAME" "${files[@]}"
           [ -s "$a/FINDINGS.md" ] && echo "::notice title=$a::FINDINGS.md written ($(wc -l < "$a/FINDINGS.md") lines)" || echo "::warning title=$a::no FINDINGS.md"

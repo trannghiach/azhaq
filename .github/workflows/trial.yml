@@ -31,6 +31,7 @@ jobs:
         run: .github/ci/labs.sh
       - name: codex
         env:
+          CODEX_AUTH_KEY: ${{ secrets.CODEX_AUTH_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: .github/ci/codex.sh
@@ -60,5 +61,11 @@ jobs:
           tail -n 300 "$HOME/ci/stream.jsonl" > "$HOME/ci/stream-tail.jsonl" 2>/dev/null || true
           tar czf "$HOME/ci/trial.tgz" -T "$HOME/ci/list" -C "$HOME/ci" stream-tail.jsonl stderr.txt
           age -r "$AGE_RECIPIENT" -o "$HOME/ci/trial.tgz.age" "$HOME/ci/trial.tgz"
-          "$HOME/ci/publish.sh" "trial/$GITHUB_REF_NAME" "$HOME/ci/trial.tgz.age"
+          files=("$HOME/ci/trial.tgz.age")
+          # A session Codex refreshed here goes back, or the author's is revoked.
+          if [ -s "$HOME/.codex/auth.json" ] && [ "$(sha256sum "$HOME/.codex/auth.json" | cut -d' ' -f1)" != "$(cat "$RUNNER_TEMP/auth.sum" 2>/dev/null)" ]; then
+            age -r "$AGE_RECIPIENT" -o "$HOME/ci/codex-auth.json.age" "$HOME/.codex/auth.json"
+            files+=("$HOME/ci/codex-auth.json.age")
+          fi
+          "$HOME/ci/publish.sh" "trial/$GITHUB_REF_NAME" "${files[@]}"
           [ -s REPORT.md ] && echo "::notice title=trial::REPORT.md written" || echo "::warning title=trial::no REPORT.md"
