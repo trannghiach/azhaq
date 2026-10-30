@@ -93,6 +93,15 @@ httpx -l hosts.txt -json | azhaq ingest -in - -db acme.db
 
 `ingest` reads subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines and ffuf output. Lines it cannot read are skipped and counted.
 
+Content discovery in the ffuf way, from a directory, with ffuf's filters:
+
+```
+azhaq dirs -u https://app.example.com/api/                 # built-in common.txt, swept under /api/
+azhaq dirs -u https://app.example.com/ -w big.txt -fs 4242 -fc 404 -e .php,.bak
+```
+
+`dirs` calibrates like `ffuf -ac`; with `-fs`/`-fw`/`-fl` the sizes, word and line counts are ffuf's, so a filter value moves over from a ffuf run.
+
 ## 10. Read a GraphQL schema
 
 ```

@@ -7,13 +7,13 @@ package dirscol
 import (
 	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -21,6 +21,8 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/fuzz"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -30,6 +32,29 @@ import (
 
 const Name = "azhaq-dirs"
 
+// common is SecLists' Discovery/Web-Content/common.txt (MIT, Daniel
+// Miessler; commit 61060549893d61b428d2184bb719abf23b4b3f13), the list a
+// sweep uses when the user gives none. It is read at build time: nothing
+// is downloaded when azhaq runs.
+//
+//go:embed common.txt
+var common string
+
+// Builtin names the built-in list where a wordlist file is asked for
+// (-dirs @common), so a run that used it can be resumed.
+const Builtin = "@common"
+
+// DefaultWords is the built-in wordlist, one word per element.
+func DefaultWords() []string {
+	var out []string
+	for _, l := range strings.Split(common, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // Options shape a sweep.
 type Options struct {
 	Words      []string
@@ -37,22 +62,35 @@ type Options struct {
 	Depth      int      // directory levels to descend; 1 is the start only
 	Threads    int      // requests in flight per service
 	Rate       float64  // requests per second per host; 0: no limit
-	Match      []int    // statuses reported; default ffuf's
+	// Set holds the matchers and filters (-mc -ms … -fr). Nil: the default
+	// -mc. A Set with filters but no matcher reports nothing: give it the
+	// default status matcher (DefaultStatus) first.
+	Set *fuzz.Set
 	// AllGets also sends, with a session, the words that read like an
 	// action (delete, reset, logout…); by default they are listed, not
 	// requested.
 	AllGets bool
 }
 
-// DefaultMatch is ffuf's default -mc.
-var DefaultMatch = []int{200, 201, 202, 203, 204, 205, 206, 207, 208, 226, 301, 302, 307, 401, 403, 405, 500}
+// DefaultStatus is ffuf's default -mc.
+const DefaultStatus = "200-299,301,302,307,401,403,405,500"
+
+// NewSet is a Set with the default status matcher, for the caller to add
+// the user's filters to; when the user gave a matcher of their own, use a
+// fresh fuzz.NewSet(nil) instead, as ffuf does.
+func NewSet() *fuzz.Set {
+	set := fuzz.NewSet(nil)
+	_ = set.AddMatcher("status", DefaultStatus)
+	return set
+}
 
 type Collector struct {
 	Client *http.Client
 	Opts   Options
 
-	limiter *limit.Limiter
-	swept   sync.Map // directory URL → true
+	limiter  *limit.Limiter
+	swept    sync.Map // directory URL → true
+	needBody bool     // a pattern reads the body
 }
 
 func New(client *http.Client, o Options) *Collector {
@@ -65,14 +103,33 @@ func New(client *http.Client, o Options) *Collector {
 	if o.Rate <= 0 {
 		o.Rate = 1e6 // no pace but the threads', as ffuf
 	}
-	if len(o.Match) == 0 {
-		o.Match = DefaultMatch
+	if o.Set == nil {
+		o.Set = NewSet()
 	}
+	base := fetch.Client(client)
+	c := *base
 	// Redirects are answers here: a directory is the path that redirects
 	// to itself with a slash.
-	c := *fetch.Client(client)
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	return &Collector{Client: &c, Opts: o, limiter: limit.New(o.Rate, max(1, int(o.Rate/10)))}
+	// One connection kept per thread, as ffuf does: the default keeps two,
+	// and a sweep would open a connection (on https, a handshake) for
+	// about every third request.
+	if tr, ok := ledger.Unwrap(base.Transport).(*http.Transport); ok {
+		tr = tr.Clone()
+		tr.MaxIdleConnsPerHost = max(o.Threads, 2)
+		tr.MaxIdleConns = 2 * max(o.Threads, 2)
+		c.Transport = ledger.Wrap(tr)
+	}
+	return &Collector{Client: &c, Opts: o, limiter: limit.New(o.Rate, max(1, int(o.Rate/10))), needBody: o.Set.NeedBody()}
+}
+
+// dirPath is the directory a URL path sweeps: the path with a slash at
+// the end.
+func dirPath(p string) string {
+	if !strings.HasSuffix(p, "/") {
+		p += "/"
+	}
+	return p
 }
 
 func (c *Collector) Name() string { return Name }
@@ -91,11 +148,25 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
-// Skip: a sweep starts at a service's front page; deeper directories are
-// reached by recursion inside the sweep.
+// Skip: a sweep starts at a URL the user gave, from its path, or at a
+// service's front page; deeper directories are reached by recursion
+// inside the sweep.
 func (c *Collector) Skip(seed types.Seed) bool {
-	u, err := url.Parse(seed.Keys["url"])
-	return err != nil || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || len(c.Opts.Words) == 0
+	if len(c.Opts.Words) == 0 {
+		return true
+	}
+	raw, err := normalize.URL(seed.Keys["url"])
+	if err != nil {
+		return true
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	if seed.Keys[types.StartKey] != "" {
+		return false
+	}
+	return (u.Path != "" && u.Path != "/") || u.RawQuery != ""
 }
 
 // hit is one guessed path that answered.
@@ -114,37 +185,56 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
 	u, _ := url.Parse(start)
-	base := u.Scheme + "://" + u.Host + "/"
+	base := u.Scheme + "://" + u.Host + dirPath(u.Path)
 	meta := types.RunMeta{Status: types.StatusOK}
 	queue := []dirLevel{{url: base, depth: 1}}
 	var all []hit
 	var skipped []string // guesses not sent: nobody saw them exist, so they are no URLs of the map
-	requests, filtered, failed := 0, 0, 0
+	requests, filtered, failed, limited := 0, 0, 0, 0
 	// Each hit is kept as it is found, as ffuf prints it: a run stopped by
-	// Ctrl-C or the budget keeps what it found so far.
-	var emitErr error
-	found := func(h hit) {
-		row := map[string]any{"url": h.URL, "via": "dirs", "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines}
-		if h.Location != "" {
-			row["location"] = h.Location
-		}
-		raw, _ := json.Marshal(row)
-		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "url", Payload: raw, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
-			if emitErr == nil {
-				emitErr = err
+	// Ctrl-C or the budget keeps what it found so far. Hits are handed over
+	// in batches; the engine writes a batch in one transaction.
+	batch := types.BatchEmitFrom(ctx)
+	found := func(hs []hit) error {
+		obs := make([]types.Observation, 0, len(hs))
+		for _, h := range hs {
+			row := map[string]any{"url": h.URL, "via": "dirs", "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines}
+			if h.Location != "" {
+				row["location"] = h.Location
 			}
-			return
+			raw, _ := json.Marshal(row)
+			obs = append(obs, types.Observation{Collector: Name, Source: base, Kind: "url", Payload: raw, Confidence: 0.8, ObservedAt: time.Now().UTC()})
 		}
-		meta.EmitCount++
-		meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": h.URL}})
+		var err error
+		if batch != nil {
+			err = batch(obs)
+		} else {
+			for _, o := range obs {
+				if err = emit(o); err != nil {
+					break
+				}
+			}
+		}
+		if err != nil {
+			return err
+		}
+		meta.EmitCount += len(hs)
+		for _, h := range hs {
+			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": h.URL}})
+		}
+		return nil
 	}
+	var emitErr error
 	for len(queue) > 0 && ctx.Err() == nil && emitErr == nil {
 		d := queue[0]
 		queue = queue[1:]
 		if _, done := c.swept.LoadOrStore(d.url, true); done {
 			continue
 		}
-		hits, n, f, x, held, spent := c.sweep(ctx, d.url, found)
+		hits, n, f, x, lim, held, spent, err := c.sweep(ctx, d.url, found)
+		if err != nil {
+			emitErr = err
+		}
 		if spent {
 			// The sweep is redone whole by azhaq resume; what it found is
 			// kept, and found again.
@@ -154,6 +244,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		requests += n
 		filtered += f
 		failed += x
+		limited += lim
 		all = append(all, hits...)
 		skipped = append(skipped, held...)
 		for _, h := range hits {
@@ -170,7 +261,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	summary, _ := json.Marshal(map[string]any{
 		"base": base, "words": len(c.Opts.Words), "extensions": c.Opts.Extensions, "requests": requests,
-		"hits": len(all), "filtered": filtered, "failed": failed, "depth": c.Opts.Depth,
+		"hits": len(all), "filtered": filtered, "failed": failed, "rate_limited": limited, "depth": c.Opts.Depth,
 	})
 	if err := emit(types.Observation{Collector: Name, Source: base, Kind: "dirs", Payload: summary, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 		return meta, err
@@ -208,12 +299,24 @@ func schemeHost(raw string) string {
 	return u.Scheme + "://" + u.Host
 }
 
-// sweep guesses every word (and word.ext) under dir, handing each hit to
-// found as it comes (one at a time); held lists the URLs not sent
-// because, with a session, a GET there could change something; spent
-// says the request budget ran out before it was through.
-func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ []hit, _ int, _ int, failed int, held []string, spent bool) {
-	cal := c.calibrate(ctx, dir)
+// maxPending is how many hits wait for the writer before the requests
+// slow down to its pace; the writer takes up to maxBatch of them, or a
+// batchEvery's worth, at a time.
+const (
+	maxPending = 4096
+	maxBatch   = 2048
+	batchEvery = 100 * time.Millisecond
+)
+
+// sweep guesses every word (and word.ext) under dir, handing the hits to
+// found in batches from one goroutine, so no request waits for a write;
+// held lists the URLs not sent because, with a session, a GET there could
+// change something; spent says the request budget ran out before it was
+// through; limited counts the answers that were 429, which no default
+// matcher keeps; err is what found returned.
+func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) error) (_ []hit, _ int, _ int, failed, limited int, held []string, spent bool, err error) {
+	host := schemeHost(dir)
+	cal := c.calibrate(ctx, dir, host)
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
 	for _, w := range c.Opts.Words {
@@ -233,15 +336,43 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ [
 			targets = append(targets, t)
 		}
 	}
-	var mu sync.Mutex
 	var hits []hit
-	filtered := 0
+	var filtered, nfailed, nlimited atomic.Int64
+	var out, halt atomic.Bool
+	pending := make(chan hit, maxPending)
+	written := make(chan struct{})
+	go func() {
+		defer close(written)
+		for h := range pending {
+			batch := []hit{h}
+			// A moment's hits go to the store together: a commit costs more
+			// than the hit.
+			wait := time.NewTimer(batchEvery)
+		fill:
+			for len(batch) < maxBatch {
+				select {
+				case h, ok := <-pending:
+					if !ok {
+						break fill
+					}
+					batch = append(batch, h)
+				case <-wait.C:
+					break fill
+				}
+			}
+			wait.Stop()
+			hits = append(hits, batch...)
+			if err == nil {
+				if err = found(batch); err != nil {
+					halt.Store(true)
+				}
+			}
+		}
+	}()
 	sem := make(chan struct{}, c.Opts.Threads)
 	var wg sync.WaitGroup
-	host := schemeHost(dir)
-	var out atomic.Bool
 	for _, t := range targets {
-		if ctx.Err() != nil || out.Load() {
+		if ctx.Err() != nil || out.Load() || halt.Load() {
 			break
 		}
 		if err := c.limiter.Wait(ctx, host); err != nil {
@@ -253,66 +384,81 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func(hit)) (_ [
 			defer wg.Done()
 			defer func() { <-sem }()
 			target := dir + escapeWord(word)
-			r, err := c.get(ctx, target)
+			r, err := c.get(ctx, target, "")
 			if errors.Is(err, neterr.ErrBudget) {
 				out.Store(true)
 			}
-			mu.Lock()
-			defer mu.Unlock()
 			if err != nil {
 				if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrEndsSession) {
-					failed++
+					nfailed.Add(1)
 				}
 				return
 			}
-			if !c.matches(r.Status) {
+			if r.Status == http.StatusTooManyRequests {
+				nlimited.Add(1)
+			}
+			if !c.matches(r) {
 				return
 			}
 			if cal.explains(r, word) {
-				filtered++
+				filtered.Add(1)
 				return
 			}
-			h := hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location}
-			hits = append(hits, h)
-			found(h)
+			pending <- hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location}
 		}(t)
 	}
 	wg.Wait()
-	return hits, len(targets), filtered, failed, held, out.Load()
+	close(pending)
+	<-written
+	return hits, len(targets), int(filtered.Load()), int(nfailed.Load()), int(nlimited.Load()), held, out.Load(), err
 }
 
+// escapeWord puts a word in a URL as ffuf does: a "?" starts the query
+// (common.txt has render?url=…), the path is escaped by segment.
 func escapeWord(w string) string {
-	parts := strings.Split(w, "/")
+	path, query, hasQuery := strings.Cut(w, "?")
+	parts := strings.Split(path, "/")
 	for i, p := range parts {
 		parts[i] = url.PathEscape(p)
 	}
-	return strings.Join(parts, "/")
+	out := strings.Join(parts, "/")
+	if hasQuery {
+		out += "?" + strings.NewReplacer(" ", "%20", "#", "%23").Replace(query)
+	}
+	return out
 }
 
-func (c *Collector) matches(status int) bool {
-	for _, m := range c.Opts.Match {
-		if m == status {
-			return true
-		}
-	}
-	return false
+// matches says whether the user's matchers and filters keep r.
+func (c *Collector) matches(r response) bool {
+	return c.Opts.Set.Matches(&fuzz.Response{
+		Status: r.Status, Header: r.Header, Body: r.Body,
+		Length: int64(r.Length), Words: int64(r.Words), Lines: int64(r.Lines),
+	})
 }
 
 // errCutOff: the connection ended before the body did.
 var errCutOff = errors.New("answer cut off")
 
-// response is what the sweep compares: never the body itself.
+// response is what the sweep compares: the body only for a pattern, and
+// never kept past the answer.
 type response struct {
 	Status, Length, Words, Lines int
 	Location                     string
+	Echo                         bool        `json:",omitempty"` // calibration: the body names the path asked
+	Header                       http.Header `json:"-"`
+	Body                         []byte      `json:"-"`
 }
 
-func (c *Collector) get(ctx context.Context, target string) (response, error) {
+// get asks for target. probe, set for calibration, is the name asked: the
+// answer says whether its body repeats it.
+func (c *Collector) get(ctx context.Context, target, probe string) (response, error) {
 	if fetch.EndsSession(target) {
 		return response{}, neterr.ErrEndsSession
 	}
-	// A guess the run made before it was stopped is not sent again.
-	if fetch.Memos != nil {
+	// A guess the run made before it was stopped is not sent again (not
+	// with a pattern: the memo holds no body).
+	memo := fetch.Memos != nil && !c.needBody
+	if memo {
 		if raw, ok := fetch.Memos.Recall("dirs " + target); ok {
 			var r response
 			if json.Unmarshal(raw, &r) == nil {
@@ -320,11 +466,11 @@ func (c *Collector) get(ctx context.Context, target string) (response, error) {
 			}
 		}
 	}
-	r, err := c.send(ctx, target)
+	r, err := c.send(ctx, target, probe)
 	if errors.Is(err, errCutOff) && ctx.Err() == nil {
-		r, err = c.send(ctx, target)
+		r, err = c.send(ctx, target, probe)
 	}
-	if err == nil && fetch.Memos != nil {
+	if err == nil && memo {
 		if raw, err := json.Marshal(r); err == nil {
 			fetch.Memos.Remember("dirs "+target, raw)
 		}
@@ -332,7 +478,16 @@ func (c *Collector) get(ctx context.Context, target string) (response, error) {
 	return r, err
 }
 
-func (c *Collector) send(ctx context.Context, target string) (response, error) {
+// maxBody is the most of an answer that is read: its length is the whole
+// body's up to here.
+const maxBody = 64 << 20
+
+// keepBody is the most of a body kept, for a pattern or an echo check.
+const keepBody = 1 << 20
+
+var chunks = sync.Pool{New: func() any { b := make([]byte, 32<<10); return &b }}
+
+func (c *Collector) send(ctx context.Context, target, probe string) (response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return response{}, err
@@ -346,49 +501,77 @@ func (c *Collector) send(ctx context.Context, target string) (response, error) {
 		return response{}, err
 	}
 	defer resp.Body.Close()
-	// Words and lines from the first MB; the length is the whole body's,
-	// as ffuf reports it (read up to 64 MB).
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var rest int64
-	if err == nil {
-		rest, err = io.Copy(io.Discard, io.LimitReader(resp.Body, 63<<20))
+	// Counted as it streams, as ffuf counts the body: words are spaces+1
+	// and lines newlines+1 of the whole of it.
+	r := response{Status: resp.StatusCode, Location: resp.Header.Get("Location"), Words: 1, Lines: 1}
+	keep := c.needBody || probe != ""
+	var kept []byte
+	buf := chunks.Get().(*[]byte)
+	defer chunks.Put(buf)
+	for r.Length < maxBody {
+		n, err := resp.Body.Read(*buf)
+		if n > 0 {
+			chunk := (*buf)[:n]
+			r.Words += bytes.Count(chunk, []byte{' '})
+			r.Lines += bytes.Count(chunk, []byte{'\n'})
+			r.Length += n
+			if keep && len(kept) < keepBody {
+				kept = append(kept, chunk[:min(n, keepBody-len(kept))]...)
+			}
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// A body cut off is not an answer: its length would be a size
+			// calibration never saw, and the page would pass as a hit.
+			return response{}, fmt.Errorf("%w: %v", errCutOff, err)
+		}
 	}
-	if err != nil {
-		// A body cut off is not an answer: its length would be a size
-		// calibration never saw, and the page would pass as a hit.
-		return response{}, fmt.Errorf("%w: %v", errCutOff, err)
+	if c.needBody {
+		r.Header, r.Body = resp.Header, kept
 	}
-	return response{
-		Status:   resp.StatusCode,
-		Length:   len(body) + int(rest),
-		Words:    bytes.Count(body, []byte{' '}) + 1,
-		Lines:    bytes.Count(bytes.TrimSpace(body), []byte{'\n'}) + 1,
-		Location: resp.Header.Get("Location"),
-	}, nil
+	if probe != "" {
+		r.Echo = bytes.Contains(kept, []byte(probe))
+	}
+	return r, nil
 }
 
 // calibration holds what a directory answers for paths that cannot exist.
 type calibration struct {
 	base []response
 	echo map[int]bool // statuses whose body or redirect echoes the path
+	vary map[int]bool // statuses whose answers differ in size
 }
 
 // calibrate asks for random names of the shapes ffuf's -ac uses (a word,
-// admin…, .htaccess…, a directory) and one per extension. A file that
-// exists keeps its place even when its content equals the catch-all page.
-func (c *Collector) calibrate(ctx context.Context, dir string) calibration {
-	cal := calibration{echo: map[int]bool{}}
-	shapes := []string{randWord(), "admin" + randWord(), ".htaccess" + randWord(), randWord() + "/"}
+// admin…, .htaccess…, a directory) and one per extension, at the sweep's
+// pace. A file that exists keeps its place even when its content equals
+// the catch-all page.
+func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration {
+	cal := calibration{echo: map[int]bool{}, vary: map[int]bool{}}
+	probes := []string{randWord(), randWord(), randWord(), randWord()}
+	shapes := []string{probes[0], "admin" + probes[1], ".htaccess" + probes[2], probes[3] + "/"}
 	for _, ext := range c.Opts.Extensions {
-		shapes = append(shapes, randWord()+"."+strings.TrimPrefix(ext, "."))
+		p := randWord()
+		probes = append(probes, p)
+		shapes = append(shapes, p+"."+strings.TrimPrefix(ext, "."))
 	}
-	for _, s := range shapes {
-		r, err := c.get(ctx, dir+s)
+	for i, s := range shapes {
+		if c.limiter.Wait(ctx, host) != nil {
+			break
+		}
+		r, err := c.get(ctx, dir+s, probes[i])
 		if err != nil {
 			continue
 		}
+		for _, b := range cal.base {
+			if b.Status == r.Status && b.Length != r.Length {
+				cal.vary[r.Status] = true
+			}
+		}
 		cal.base = append(cal.base, r)
-		if strings.Contains(r.Location, strings.TrimSuffix(s, "/")) {
+		if r.Echo || strings.Contains(r.Location, strings.TrimSuffix(probes[i], "/")) {
 			cal.echo[r.Status] = true
 		}
 	}
@@ -396,18 +579,26 @@ func (c *Collector) calibrate(ctx context.Context, dir string) calibration {
 }
 
 // explains is true when r looks like an answer to a path that does not
-// exist: same status as a calibration answer and the same size, word and
-// line counts, or a redirect that echoes the path the way calibration did.
+// exist: same status as a calibration answer and the same size, as ffuf
+// takes it. Where the calibration answers differ in size among themselves
+// (a page that names the path, a counter) the size cannot tell, and the
+// same word and line counts do, and, where the body repeats the path, a
+// size that differs by what the path's length adds. A redirect is
+// explained when it echoes the path the way calibration did, or goes where
+// they went.
 func (cal calibration) explains(r response, word string) bool {
 	for _, b := range cal.base {
 		if r.Status != b.Status {
 			continue
 		}
-		if r.Length == b.Length || (r.Words == b.Words && r.Lines == b.Lines) {
+		if r.Length == b.Length {
+			return true
+		}
+		if cal.vary[b.Status] && r.Words == b.Words && r.Lines == b.Lines {
 			return true
 		}
 		// Bodies that echo the path differ by the path's length.
-		if r.Words == b.Words && abs(r.Length-b.Length) <= 2*len(word)+32 && r.Lines == b.Lines {
+		if cal.echo[b.Status] && r.Words == b.Words && r.Lines == b.Lines && abs(r.Length-b.Length) <= 2*len(word)+32 {
 			return true
 		}
 		if r.Location != "" && b.Location != "" && cal.echo[r.Status] && strings.Contains(r.Location, word) {
@@ -428,29 +619,3 @@ func abs(x int) int {
 }
 
 func randWord() string { return fetch.RandomName() }
-
-// ParseStatuses reads "200,301-302" into a list.
-func ParseStatuses(spec string) ([]int, error) {
-	var out []int
-	for _, part := range strings.Split(spec, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		lo, hi, isRange := strings.Cut(part, "-")
-		a, err := strconv.Atoi(lo)
-		if err != nil {
-			return nil, err
-		}
-		b := a
-		if isRange {
-			if b, err = strconv.Atoi(hi); err != nil {
-				return nil, err
-			}
-		}
-		for s := a; s <= b; s++ {
-			out = append(out, s)
-		}
-	}
-	return out, nil
-}

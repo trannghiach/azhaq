@@ -127,7 +127,9 @@ func (s *Store) Batch(fn func()) {
 	defer func() {
 		s.mu.Lock()
 		if s.tx != nil {
-			_ = s.tx.commit()
+			if err := s.tx.commit(); err != nil {
+				fmt.Fprintf(os.Stderr, "azhaq: the workspace could not keep a batch of writes: %v\n", err)
+			}
 			s.tx = nil
 		}
 		s.mu.Unlock()

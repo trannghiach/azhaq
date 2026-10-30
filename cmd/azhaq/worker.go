@@ -24,6 +24,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -77,6 +78,8 @@ func forWorkers(fs *flag.FlagSet, args, allow, deny []string) (workerConfig, err
 		}
 		switch {
 		case coordinatorOnly[name]:
+		case name == "dirs" && val == dirscol.Builtin:
+			cfg.Files[name] = []byte(strings.Join(dirscol.DefaultWords(), "\n") + "\n")
 		case fileOptions[name]:
 			raw, err := os.ReadFile(val)
 			if err != nil {

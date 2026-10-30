@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -41,6 +42,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/connector"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -227,7 +229,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888 (active; the targets given are the scope unless -allow)")
 	portsUDP := fs.String("ports-udp", "", "ask UDP ports (active): top (about 20 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open|filtered (-ports none: UDP only)")
 	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1000, as naabu, and 127.0.0.1 unpaced)")
-	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active; the targets given are the scope unless -allow)")
+	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist, or @common for the built-in one (active; the targets given are the scope unless -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
 	dirsThreads := fs.Int("dirs-threads", 40, "path guesses in flight per service (as ffuf)")
@@ -235,7 +237,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active; the targets given are the scope unless -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
 	paramsRate := fs.Float64("params-rate", 0, "parameter requests per second per host (0: no limit, as arjun)")
-	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
+	dirsMatch := map[string]*string{}
+	for _, m := range dirsMatchers {
+		dirsMatch[m.flag] = fs.String("dirs-"+m.flag, "", m.help)
+	}
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
@@ -383,6 +388,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return usageErr{err}
 	}
 
+	// A URL the user gave with a path is swept from that path (-dirs).
+	for _, sd := range seeds {
+		if sd.Type == types.TypeURL && sd.Keys != nil {
+			sd.Keys[types.StartKey] = "1"
+		}
+	}
 	input := store.SeedsKey(normalizeSeeds(seeds))
 	var path string
 	var remember bool
@@ -587,15 +598,20 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate, AllGets: *allGets}
 	}
 	if *dirsFile != "" {
-		words, err := loadLines(*dirsFile)
-		if err != nil {
-			return err
+		words := dirscol.DefaultWords()
+		if *dirsFile != dirscol.Builtin {
+			var err error
+			if words, err = loadLines(*dirsFile); err != nil {
+				return err
+			}
 		}
 		opts.Dirs = dirscol.Options{Words: words, Extensions: splitList(*dirsExt), Depth: *dirsDepth, Threads: *dirsThreads, Rate: *dirsRate, AllGets: *allGets}
-		if *dirsMatch != "" {
-			if opts.Dirs.Match, err = dirscol.ParseStatuses(*dirsMatch); err != nil {
-				return fmt.Errorf("-dirs-mc: %w", err)
-			}
+		given := map[string]string{}
+		for k, v := range dirsMatch {
+			given[k] = *v
+		}
+		if opts.Dirs.Set, err = dirsSet(given, "-dirs-"); err != nil {
+			return err
 		}
 	}
 	if *pathsFile != "" {
@@ -1896,4 +1912,54 @@ func markDescribed(st *store.Store) {
 			fetch.MarkDescribed(u.Scheme + "://" + u.Host)
 		}
 	}
+}
+
+// dirsMatchers are the matcher and filter flags of a path sweep, as ffuf
+// names them (run's carry the prefix -dirs-): the Set kind each is, and
+// whether it filters.
+var dirsMatchers = []struct {
+	flag, kind, help string
+	filter           bool
+}{
+	{"mc", "status", "report only these statuses (comma-separated, ranges, or all; default ffuf's: 200-299,301,302,307,401,403,405,500)", false},
+	{"ms", "size", "report only these response sizes (values and ranges, 100-200)", false},
+	{"mw", "word", "report only these word counts", false},
+	{"ml", "line", "report only these line counts", false},
+	{"mr", "regexp", "report only answers whose headers or body match this regular expression", false},
+	{"fc", "status", "hide these statuses", true},
+	{"fs", "size", "hide these response sizes", true},
+	{"fw", "word", "hide these word counts", true},
+	{"fl", "line", "hide these line counts", true},
+	{"fr", "regexp", "hide answers whose headers or body match this regular expression", true},
+}
+
+// dirsSet is the matchers and filters the flags given (by name, without
+// the dash) make, as ffuf does: the default -mc applies when no matcher
+// is given. prefix says what to put before a flag's name in an error.
+func dirsSet(given map[string]string, prefix string) (*fuzz.Set, error) {
+	matcher := false
+	for _, m := range dirsMatchers {
+		if !m.filter && given[m.flag] != "" {
+			matcher = true
+		}
+	}
+	set := fuzz.NewSet(nil)
+	if !matcher {
+		given = maps.Clone(given)
+		given["mc"] = dirscol.DefaultStatus
+	}
+	for _, m := range dirsMatchers {
+		v := given[m.flag]
+		if v == "" {
+			continue
+		}
+		add := set.AddMatcher
+		if m.filter {
+			add = set.AddFilter
+		}
+		if err := add(m.kind, v); err != nil {
+			return nil, usagef("%s", strings.Replace(err.Error(), "-"+m.flag, prefix+m.flag, 1))
+		}
+	}
+	return set, nil
 }

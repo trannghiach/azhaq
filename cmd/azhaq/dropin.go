@@ -23,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -234,14 +235,21 @@ func runPreset(c *common, args []string, rep *report, see func(types.Entity, typ
 }
 
 // writer prints results to stdout and, with -o, to a file, a line at a
-// time: commands print from the goroutines that find the results.
+// time: commands print from the goroutines that find the results. Output
+// is written out at most every flushEvery, and at the end: a result seen
+// by the next reader within that is as live as one written at once, and a
+// write per line of a list of thousands costs as much as finding them.
 type writer struct {
-	mu   sync.Mutex
-	w    *bufio.Writer
-	f    *os.File
-	json bool
-	n    int
+	mu    sync.Mutex
+	w     *bufio.Writer
+	f     *os.File
+	json  bool
+	n     int
+	last  time.Time
+	timer *time.Timer
 }
+
+const flushEvery = 20 * time.Millisecond
 
 func newWriter(c *common) (*writer, error) {
 	var dst io.Writer = os.Stdout
@@ -263,7 +271,7 @@ func (w *writer) line(s string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.w.WriteString(s + "\n")
-	w.w.Flush()
+	w.flushSoon()
 	w.n++
 }
 
@@ -272,8 +280,27 @@ func (w *writer) obj(v any) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.w.Write(append(raw, '\n'))
-	w.w.Flush()
+	w.flushSoon()
 	w.n++
+}
+
+// flushSoon writes the output out now if the last write was long ago,
+// else leaves it to a timer; call it with mu held.
+func (w *writer) flushSoon() {
+	if time.Since(w.last) >= flushEvery {
+		w.w.Flush()
+		w.last = time.Now()
+		return
+	}
+	if w.timer == nil {
+		w.timer = time.AfterFunc(flushEvery, func() {
+			w.mu.Lock()
+			defer w.mu.Unlock()
+			w.w.Flush()
+			w.last = time.Now()
+			w.timer = nil
+		})
+	}
 }
 
 func (w *writer) count() int {
@@ -285,6 +312,10 @@ func (w *writer) count() int {
 func (w *writer) close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.timer != nil {
+		w.timer.Stop()
+		w.timer = nil
+	}
 	err := w.w.Flush()
 	if w.f != nil {
 		if cerr := w.f.Close(); err == nil {
@@ -1297,14 +1328,22 @@ func cmdDirs(args []string) error {
 	var urls stringsFlag
 	fs.Var(&urls, "u", "web service, such as https://app.example.com/ (repeatable)")
 	list := fs.String("l", "", "file of services (- for stdin)")
-	words := fs.String("w", "", "wordlist (required)")
-	given := inherit(fs, "e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate", "mc=dirs-mc",
-		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
+	words := fs.String("w", "", "wordlist (default: SecLists' common.txt, built in: "+strconv.Itoa(len(dirscol.DefaultWords()))+" words)")
+	specs := []string{"e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate",
+		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file"}
+	for _, m := range dirsMatchers {
+		specs = append(specs, m.flag+"=dirs-"+m.flag)
+	}
+	given := inherit(fs, specs...)
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	if *words == "" {
-		return usagef("give a wordlist with -w")
+	matchGiven := map[string]string{}
+	for _, m := range dirsMatchers {
+		matchGiven[m.flag] = fs.Lookup(m.flag).Value.String()
+	}
+	if _, err := dirsSet(matchGiven, "-"); err != nil {
+		return err
 	}
 	targets, err := inputs(urls, *list)
 	if err != nil {
@@ -1313,24 +1352,45 @@ func cmdDirs(args []string) error {
 	if len(targets) == 0 {
 		return usagef("give -u URL, -l FILE or URLs on stdin")
 	}
+	var notes []string
 	for i, t := range targets {
 		if !strings.Contains(t, "://") {
-			targets[i] = "https://" + t + "/"
+			t = "https://" + t
 		}
+		// The path is where the sweep starts; a query or fragment is not
+		// part of a directory.
+		if u, err := url.Parse(t); err == nil && u.Host != "" {
+			if u.RawQuery != "" || u.Fragment != "" {
+				notes = append(notes, fmt.Sprintf("%s: the sweep goes under its path; the query or fragment is not sent", targets[i]))
+				u.RawQuery, u.Fragment, u.ForceQuery = "", "", false
+			}
+			if u.Path == "" {
+				u.Path = "/"
+			}
+			t = u.String()
+		}
+		targets[i] = t
 	}
 	path, rm, err := tempList(targets)
 	if err != nil {
 		return err
 	}
 	defer rm()
+	wordsFile := *words
+	if wordsFile == "" {
+		wordsFile = dirscol.Builtin
+	}
 	w, err := newWriter(&c)
 	if err != nil {
 		return err
 	}
-	failed := 0
+	failed, limited, requests := 0, 0, 0
 	see := func(_ types.Entity, o types.Observation) {
 		if o.Collector == "azhaq-dirs" && o.Kind == "dirs" {
-			failed += intOf(payloadOf(o)["failed"])
+			p := payloadOf(o)
+			failed += intOf(p["failed"])
+			limited += intOf(p["rate_limited"])
+			requests += intOf(p["requests"])
 			return
 		}
 		if o.Collector != "azhaq-dirs" || o.Kind != "url" {
@@ -1354,8 +1414,9 @@ func cmdDirs(args []string) error {
 	}
 	rep := newReport("dirs")
 	rep.what = "paths"
+	rep.Notes = append(rep.Notes, notes...)
 	// Paths, not technologies: probe names those (the fingerprints are 40 MB to load).
-	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", *words}
+	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", wordsFile}
 	extra := given()
 	if !hasFlag(extra, "allow", "scope") {
 		// The services given are the scope.
@@ -1376,6 +1437,11 @@ func cmdDirs(args []string) error {
 	rep.Results = w.count()
 	if failed > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d paths got no whole answer, after one retry: they were not judged (a service under load cuts answers off; run again or lower -t)", failed))
+		rep.warned = true
+	}
+	if limited > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d of %d guesses were answered 429 (too many requests) and not judged: the service is limiting the sweep; lower -rate or -t, and run again", limited, requests))
+		rep.warned = true
 	}
 	return rep.finish(c.json, c.silent)
 }

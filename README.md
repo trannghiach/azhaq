@@ -231,13 +231,13 @@ azhaq crawl  -u https://app.example.com/ -json                                 #
 azhaq urls   -d example.com -silent                                            # gau
 azhaq ports  -host scanme.nmap.org -p top-1000 -json                           # naabu (connect scan)
 azhaq ports  -host 192.0.2.7 -p none -pu top -json                             # the common UDP ports, no root
-azhaq dirs   -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac
+azhaq dirs   -u https://app.example.com/ -e php,bak                          # ffuf -ac, with SecLists' common.txt built in (-w FILE for your own)
 azhaq fuzz   -u https://app.example.com/FUZZ -w common.txt -e .php,.bak -recursion   # ffuf
 azhaq fuzz   -u https://10.0.0.5/ -H 'Host: FUZZ.example.com' -w subdomains.txt -fs 4242   # ffuf, virtual hosts
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt     # arjun
 ```
 
-Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` run as fast as ffuf and arjun (40 guesses in flight, no pace); `-rate N` holds them to N requests a second. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
+Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` run as fast as ffuf and arjun (40 guesses in flight, no pace); `-rate N` holds them to N requests a second. `dirs` takes ffuf's matchers and filters (`-ms -mw -ml -mr`, `-fc -fs -fw -fl -fr`), counts sizes, words and lines as ffuf does, starts from the path of the URL given (`-u https://h/api/` sweeps `/api/WORD`), and carries SecLists' `common.txt` (MIT, 4,750 words) for when `-w` is left out. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
 
 **`fuzz`** puts words from a wordlist into a request, anywhere in it: the path, a query value, a header (`Host: FUZZ.example.com` for virtual hosts), the method, a JSON or form body. It takes ffuf's flags (`-w FILE[:KEYWORD]`, `-mode clusterbomb|pitchfork`, the matchers `-mc -ms -mw -ml -mr`, the filters `-fc -fs -fw -fl -fr`, `-recursion`, `-e`, `-t`, `-json`) and counts as ffuf 2.3 does (words are spaces plus one, lines newlines plus one, the same match and filter rules, the same calibration), so a command line moved from ffuf gives the same results. It differs from ffuf in these ways:
 

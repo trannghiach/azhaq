@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/scopefile"
 	"github.com/trannghiach/azhaq/store"
 )
@@ -152,7 +153,7 @@ func keptArgs(args []string) []string {
 				val = args[i+1]
 				i++
 			}
-			if val != "-" && val != "" && !(name == "ledger" && val == "off") {
+			if val != "-" && val != "" && !(name == "ledger" && val == "off") && !(name == "dirs" && val == dirscol.Builtin) {
 				if abs, err := filepath.Abs(val); err == nil {
 					val = abs
 				}

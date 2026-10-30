@@ -131,7 +131,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		// page that exists.
 		if u, err := normalize.URL(seed.Keys["url"]); err == nil && answeredURL != "" && answeredURL != u {
 			meta.Drop = true
-			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": answeredURL, types.SameTargetKey: "1"}})
+			hint := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": answeredURL, types.SameTargetKey: "1"}}
+			if seed.Keys[types.StartKey] != "" {
+				hint.Keys[types.StartKey] = "1" // a sweep goes on from the path the user gave
+			}
+			meta.NextHints = append(meta.NextHints, hint)
 		}
 	}
 	if seed.Type == types.TypeURL && !answered {
