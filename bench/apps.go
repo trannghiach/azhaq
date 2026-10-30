@@ -153,6 +153,19 @@ func legWithApp(app string, leg func()) {
 	}
 }
 
+// freshApp restarts the bench's Juice Shop before a long sweep: it keeps
+// memory for every path it is asked (176 MB to 2.7 GB in one 4,750-word
+// ffuf sweep) and dies during the next, so each tool gets one just started.
+func freshApp(app string) {
+	if !strings.Contains(app, "127.0.0.1:3101") {
+		return
+	}
+	_ = exec.Command("docker", "compose", "-f", "bench/compose.yaml", "restart", "juice-shop").Run()
+	if err := waitUp(app, 3*time.Minute); err != nil {
+		logf("%v", err)
+	}
+}
+
 func waitUp(u string, max time.Duration) error {
 	deadline := time.Now().Add(max)
 	for time.Now().Before(deadline) {
