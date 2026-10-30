@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -182,9 +183,11 @@ func (c *Client) once(ctx context.Context, req *http.Request, accept func(int) b
 	if accept(resp.StatusCode) {
 		return res, nil, 0
 	}
-	msg := strings.TrimSpace(string(body[:min(len(body), 512)]))
+	// Only a short error code of the answer is kept (Slack's
+	// channel_not_found): a server may echo anything, secrets included.
+	msg := strings.TrimSpace(string(body[:min(len(body), 64)]))
 	text := fmt.Sprintf("%s %s: %s", req.Method, hostOf(req.URL), resp.Status)
-	if msg != "" {
+	if errorCode.MatchString(msg) {
 		text += " " + msg
 	}
 	return res, errors.New(c.scrub(text, req)), parseRetryAfter(resp.Header.Get("Retry-After"))
@@ -263,3 +266,6 @@ func (c *Client) scrub(text string, req *http.Request) string {
 
 // commonSegment: path words that are not secrets and help a reader.
 var commonSegment = map[string]bool{"services": true, "sendMessage": true, "webhooks": true, "messages": true, "workflows": true, "webhookb2": true}
+
+// errorCode is an answer that is only a service's error code.
+var errorCode = regexp.MustCompile(`^[a-z][a-z0-9_]{2,40}$`)

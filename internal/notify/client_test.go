@@ -227,3 +227,16 @@ func TestHookShapesForTeamsAndGoogleChat(t *testing.T) {
 		t.Errorf("connector %+v", g[2])
 	}
 }
+
+// What a server answers a failed send with is not printed, an error code
+// aside: it may echo anything, secrets included.
+func TestFailedAnswerKeepsOnlyACode(t *testing.T) {
+	for body, want := range map[string]string{"channel_not_found": "channel_not_found", "echoed SECRET_ECHO_TOKEN": ""} {
+		s := newStub(t)
+		s.reply = func(int, *seen) (int, map[string]string, string) { return 404, nil, body }
+		err := s.client().Send(context.Background(), "https://example.test/hook", "hi", nil)
+		if err == nil || strings.Contains(err.Error(), "SECRET") || (want != "" && !strings.Contains(err.Error(), want)) {
+			t.Errorf("%q: %v", body, err)
+		}
+	}
+}

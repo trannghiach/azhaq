@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- A webhook that fails a send no longer has its answer printed: only a bare error code is kept (`channel_not_found`), since a server may echo anything (`500 Internal Server Error echoed SECRET_ECHO_TOKEN` was printed whole).
 - A port scan that `-max-requests` or the kill file stops keeps the open ports it found and the ports it asked; `azhaq resume` asks only the others and its row holds every open port. Before, the stopped scan's results were dropped and `resume` asked every port again, so a scan larger than the budget never finished.
 - `roles` sends every request through `-proxy`: the role runs, the history reads and the replay. The replay went direct (a proxy saw 93 requests of 144); `roles -proxy URL` sets it for all of them, and `params -proxy` is accepted.
 - `probe` asks what it is given and nothing more, as httpx does: a URL or a `host:port` is one request. The name in it was also asked on ports 443 and 80 (two more GETs per input, a second GET to a public host whose one request timed out, and a second row that contradicted the first). A bare name is still asked over https, then http.
@@ -158,7 +159,7 @@
 
 ### Notifications
 
-- A webhook URL no longer leaks. A transport error printed the whole URL, token included; errors now name the host and the cause, and no error holds a URL's path or query or a token, even where a server echoed them back. The first 512 bytes of a failed answer are kept in the error (Slack's `channel_not_found`), with the URL's path and query and every key and header value of the provider file cut out of them.
+- A webhook URL no longer leaks. A transport error printed the whole URL, token included; errors now name the host and the cause, and no error holds a URL's path or query or a token, even where a server echoed them back. Of a failed answer only a bare error code is kept (Slack's `channel_not_found`): a server may echo anything.
 - `watch -notify @FILE` reads webhook URLs from a file and `AZHAQ_NOTIFY` holds more, so a URL need not stand on the command line where `ps` shows it.
 - `notify -v` names, on one line, the settings `config.yaml` changed; the file notify writes holds every flag at its default, and those are not listed.
 - Notifications are tried again on a 429 or a 5xx, honouring `Retry-After`, and a text longer than a service takes is sent in labelled parts, not cut (Discord's cut lost the rest of a change set).
