@@ -152,7 +152,7 @@ func keptArgs(args []string) []string {
 				val = args[i+1]
 				i++
 			}
-			if val != "-" && val != "" && !(name == "ledger" && val == "off") {
+			if val != "-" && val != "" && !(name == "ledger" && val == "off") && (name != "resolvers" || isFile(val)) {
 				if abs, err := filepath.Abs(val); err == nil {
 					val = abs
 				}
