@@ -2,26 +2,134 @@
 
 ## v0.10.0
 
+### `subs`
+
+- `subs -live` is no slower than `subfinder | dnsx` at the same DNS rate, and lists live names it did not. subdomain.center is asked again only while a round gave a name that resolves and no other source had; each round's new names are looked up before the next round is asked, and no name is looked up twice. With `-dns-rate`, the guesses cost at most half what the real names did.
+- A name that is only a CNAME is a live name with `-live`, as dnsx `-a -cname` lists it (tesla.com: 25 such names that `subs -live` left out).
+- A DNS answer too big for 512 bytes (a long CNAME chain) is asked for with EDNS0 and read over TCP when truncated; before, names such as `autodiscover.tesla.com` failed with `buffer size too small`.
+- A resolver whose NXDOMAIN answers a second resolver has confirmed 64 times in a row is checked on one in 16 (and every time again after one it gets wrong), so a dead name costs one query instead of two.
+- A source that answers 429 is asked again after its `Retry-After` (2, 4, 8 s when it gives none), up to three times; the summary says what the waiting cost, and a source that keeps refusing is listed as having given up.
+- Without `-live`, `subs` looks nothing up: a name only subdomain.center guessed, or only the name history held, is listed with `"unverified": true` and counted, and a guess is not added to the name history until a run has seen it resolve.
+- The summary's counts add up: `from sources`, `did not resolve`, `unverified`, `not checked`, `CNAME only`, and a `count:` note that writes the sum.
+- crt.sh is asked again after 1, 2 and 4 s and not past 12 s (it was 2, 4 and 8 s): a down crt.sh set the time of every run.
+- Cert Spotter pages with `after=` when a key is given, and says it read the first page only when it is not.
+- subfinder is v2.14.1-0.20261026103132-98ef8711acb9 (main), with its archive and windvane fixes.
+- subfinder's input and flags: `-d` takes comma lists, URLs and trailing dots (IP addresses are left out with a note); `-m`, `-f`, `-match-regex`, `-filter-regex`; `-ls` (`-json`); `-cs`, `-oI`, `-oD`; `-o` appends; `-recursive`; `-stats`; `-version`; `-nW` and `-oJ`; `-source-rate`, `-source-rates`, `-max-results`, `-max-time`, `-max-body`, `-source-proxy`; `$SOURCE_API_KEY` and `$VAR` in provider files; `-t` is `-parallel`. An unknown name in `-sources` is said, and alone is a usage error.
+- `-max-names` on `subs` (default 200,000 per domain, not 20,000); names cut are counted and the run exits 3. `wildcard_certificate` marks a name a certificate gave as `*.name`.
+- Without `-live`, a domain's names are printed when its sources have answered, not when the last domain has.
+
+### `dns`
+
+- `dns` asks any record type: `-a -aaaa -cname -ns -txt -srv -ptr -mx -soa -caa -any`, `-all` (every type, with `-e` to leave some out) and `-axfr`, and prints dnsx's rows: `-json` has dnsx's fields (`ttl`, `resolver`, `mx`, `soa`, `all`, `status_code_raw`, `cdn-name`, ...) and leaves empty ones out; `-resp`, `-resp-only`, `-output-template`, `-omit-raw` and `-raw` are dnsx's forms.
+- `dns -json` gives a row for every name a resolver answered, one that does not exist too, with its `status_code`; `-rcode` and `-response-type-filter` select by code and by missing record.
+- `dns` takes a CIDR range, an AS number, a comma list and `-d`/`-w` as a file, a list or stdin, and looks addresses up with `-ptr`; there is no cap of 20,000 names and names are read as they come (`-stream`). A 100,000-name list is asked in 2 s against dnsx's 7.7 s.
+- `-resolvers` (and `-r` in `dns`) takes a file or a comma list with `udp:`, `tcp:`, `dot:` and `doh:` prefixes, in every command; every question carries EDNS0 (4,096 bytes), and `dns -proxy socks5://` sends DNS through a proxy.
+- `dns -t`, `-rl`, `-retry` and `-timeout` mean what they do in dnsx (names in flight, names a second over all resolvers, attempts per question, wait for one answer); `-timeout` is no longer the run's time (`-maxtime` is, and exits 4 with the `-start` to go on from). `-dns-rate` stays per resolver.
+- `dns` no longer asks MX, TXT and NS for every apex name it never printed; `-w` accepts labels with an underscore (`_dmarc`) and prints hits as they come; `-o` appends; `-hf` reads the hosts file; `-trace` follows delegations from the roots; `-asn` names the autonomous system; `-no-wildcard` and `-wd` control the wildcard filter.
+- `run -dns-brute` guesses labels with an underscore too (`_dmarc`, `_domainkey`); `dns -hc` asks each resolver a known name and says how it answered. `-all` does not include AXFR (`-axfr` asks it, held to the scope); `dns -r` resolvers are asked for every name, `localhost` and `.test` included, as dnsx does.
+- The DNS lab answers MX, TXT, NS, SRV, CAA, SOA and AAAA, has a reverse zone for 127.0.0.0/24 and a zone transfer, truncates long UDP answers, and counts what it was asked (`-stats`).
+
+### `probe`
+
+- `probe` follows no redirect unless given `-fr` (with `-maxr`, `-fhr`, `-rhsts`), as httpx does. A row's status, title, length and content type all come from one answer; with `-fr` they are the last answer's and the chain is in `chain_status_codes` and `final_url`. `run` keeps following.
+- `probe` takes httpx's matchers and filters over the response as sent: `-mc/-fc`, `-ml/-fl`, `-mlc/-flc`, `-mwc/-fwc`, `-mfc/-ffc`, `-ms/-fs`, `-mr/-fe`, `-mcdn/-fcdn`, `-mrt/-frt`, `-mdc/-fdc`, `-fd`, `-fpt/-fep`. The summary says how many rows they left out and which conditions could not be judged.
+- A target that is dropped for a wildcard answer, or that gets no answer, is a row with `failed: true` and an `error` (`-probe` prints `[FAILED]`), and the summary counts it. A name that resolves only through a wildcard is probed, not dropped.
+- `probe` stores and prints responses: `-sr`, `-srd`, `-ob`, `-store-chain`, `-rstr`, `-rsts`, `-irh`, `-irr`, `-irrb`, `-include-chain`, `-debug`, `-debug-req`, `-debug-resp`, `-ss` (screenshots).
+- `probe` reports `tls` (`-tls-grab`, read from the handshake the request made: no extra connection), `cname`, `resolvers`, `asn`, `hash` (`-hash`), `jarm_hash`, `body_preview`, `extracts` (`-er`, `-ep`), `favicon_md5`, `favicon_path`, `favicon_url`, `websocket`, `http2`, `pipeline`, `vhost`, `sni`, `cpe`, `wordpress`, `knowledgebase`, `csp`, `body_fqdn` and `body_domains`.
+- `probe` takes httpx's input flags: `-p` ports and ranges with `http:` and `https:` (also for addresses), `-path`, `-nf`, `-pa`, `-e`, `-sni`, `-no-decode`, `-tls-probe`, `-csp-probe`, `-im burp`, `-vi`, JSON target lines, address ranges, AS numbers, comma lists, globs, `*.example.com`; its display and output flags: `-sc -cl -ct -title -td -server -ip -rt -lc -wc -location -method -cdn -cname -asn -ldp`, `-csv`, `-csvo`, `-md`, `-oa`, `-eof`, `-lof`; and its request flags: `-rlm`, `-delay`, `-retries`, `-req-timeout`, `-maxhr`, `-proxy`, `-auto-referer`, `-random-agent`, `-cff`.
+- A bare `host:port` is asked over plain HTTP first on port 8080 and on ports above 1024, as httpx does, and asked again over TLS when plain HTTP is answered 400. `probe` accepts TLS 1.0 and 1.1 servers and sends no `Accept` header.
+- `probe -x`, `-body` and `-rr` send the methods, body or raw request you give to the targets in scope, counted, paced and in the ledger; the summary says non-GET requests were sent. They can change data on the target.
+- A page in Shift-JIS, GBK, Big5 or another declared charset has its title read in UTF-8; httpx reads only GBK, Big5 and EUC-KR.
+
+### `crawl`
+
+- `crawl` prints katana's JSON lines with `-jsonl`, its fields with `-f`, `-ot` and `-sf`, filters the printed URLs with `-em`, `-ef`, `-ndef`, `-mr` and `-fr`, and stores answers with `-sr`.
+- A page's links are no longer cut at 64: every link is listed and asked, bounded by templates and `-max-items`.
+- `crawl` follows links to the start host's subdomains with `-fs rdn|fqdn|dn|REGEX`, `-cs`, `-cos` and `-ns`, and `-do` lists the links it left out of scope; the summary counts them.
+- `crawl` sends only what a crawler sends: no built-in path sweep, no favicon request and no source-map guesses; `-kf all|robotstxt|sitemapxml` asks the known files and reads every entry, `-sweep` brings the 32 paths back.
+- Pages are read at every markup sink katana reads (`img`, `srcset`, `area`, `video`, `button formaction`, `object`, `hx-*`, `meta refresh`, the `Link`, `Content-Location` and `Refresh` headers) and redirect hops are listed.
+- Strings in scripts and pages that katana's patterns take (`users.php`, `admin/`) are URLs when they name a page of the app; every other one is kept as a rejected candidate with its reason, listed by `-rejected` and counted in the summary.
+- GET forms are asked once with neutral values; `-submit-forms` sends POST forms (it changes data, each submission is counted and in the ledger).
+- `crawl` waits and asks again on 429 and 503, retries after a timeout, carries cookies the target sets, and takes `-hrl`, `-hrlm`, `-rlm`, `-mdp`, `-mrs`, `-rd`, `-iqp`, `-pc`, `-proxy`, `-r` and `-c`, `-p`, `-rl`, `-ct`, `-dr` as katana's names; a scheme-less `:80` or `:8080` target is asked over http and `-u a,b` is split.
+- `crawl -json` rows carry `tech`.
+- `-browser -interact` clicks the buttons, links and menus of each page and maps the routes and requests they bring; the writes a click would send are mapped and not sent, and a click on log out or delete is not made.
+
+### Screenshots and `gallery`
+
+- A screenshot at a polite `-rate` is no longer silently blank. Four pages of 42 requests at `-rate 2` gave four pictures with no images, exit 0 and no note. A page's deadlines now run from when it last moved, not from when it started, tabs open as the pace can fund them, and the tab's icon, which no screenshot shows, is not fetched. The same run gives four complete pictures (0.000% of pixels differ from the `-rate 0` ones), at most 3 requests in any second at the server, and the summary, the ledger and the server count the same requests.
+- A screenshot is taken once the page has stopped asking for what it shows: a single-page app (Juice Shop) asks for its product images only after a script's request is answered, which at `-rate 5` came after the picture was taken. A screenshot of Juice Shop at `-rate 2`, 5 and 10 is the one an unpaced run takes with `-shot-wait 5s` (0.000% of pixels differ); at the default wait the unpaced one lacks the last row of images (2.4%).
+- A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
+- Look-alike screenshots are grouped by a DCT perceptual hash (`p:` and 16 hex digits). A login form, the nginx default page and an admin page were one group of the old 9×8 brightness hash; they are three now, and thirty copies of one portal are still one.
+- `export -format html` embeds each screenshot (scaled to 560 pixels wide), so the report opens from any directory and after the screenshot folder is gone; it was `<img src="DIR/file.png">` relative to the run's `-dir`. A picture marked `partial` says so in the report.
+- `shots` takes more targets: a URL with a path or query is shot (it used to give 0 results and exit 0), `-u 192.0.2.0/28`, `-p` port lists (numbers, ranges, `small`, `medium`, `large`), `-no-http`, `-no-https`, `-random`, `-nmap FILE` and `-nessus FILE`.
+- `shots` and `run -screenshots` have flags for the picture and Chrome: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-shot-html`, `-chrome`, `-chrome-proxy`, `-chrome-profile`. Chrome's restricted ports (6000, 10080, …) are allowed (`-unsafe-ports=false` keeps its refusal).
+- A page's row in `shots -json` has what Chrome saw: response code, headers, TLS session, the technologies of the rendered page, console messages and the network log, at no extra request. `shots -csv FILE` writes the scalar columns.
+- A page's own request waits for the pace when Chrome sends it, not when it is counted, so four tabs no longer send four pages' documents together.
+- `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
+- A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
+- `azhaq gallery -db FILE` serves a workspace's screenshots to a browser on this machine: a grid of thumbnails with URL, title, status and technologies, filters (status, technology, host, title, partial, look-alike group), one tile per group of look-alikes, search of URL, title and kept page text (`title:`, `body:`, `tech:`, `header:`, `status:`, `p:`, `-term`), a page per shot (picture, headers, cookies, TLS, network, console, the `azhaq show` command) and the pages that gave no picture. It is embedded, works offline, reads the workspace read-only and sends nothing to any target (a test asserts it). 5,000 pages page and filter in under 10 ms, and `/api/` gives the same data as JSON.
+- `gallery -workspace DIR` merges the workspaces of a directory in one view; a database that is not a workspace is skipped with a note, one that cannot be read is skipped and exits 3, as do pictures missing from disk.
+
+### `ports`
+
 - `ports -unnamed N` (`run -port-unnamed N`) sets how many open ports of an address may go unnamed before its other silent ports get their banner only; the default 6 guards against a host that accepts every connect, `-1` lifts it.
+- `ports` names a service by what it answers, not by its port number. A port that says nothing and does not answer the HTTP probe is asked one harmless request of each of about 30 protocols until one answers: Redis (with `redis_version`), PostgreSQL, MongoDB (with `buildInfo`), MQTT (Mosquitto's version), AMQP (RabbitMQ's), memcached, LDAP (anonymous root DSE), SMB2, DNS over TCP, Kafka, ZooKeeper, SQL Server, Oracle TNS, Cassandra, Kerberos, RDP, X11, SOCKS5, STOMP, XMPP, RTSP, SIP, AFP, Minecraft and others. An open port costs at most 24 connects after the first, every one paced, counted and in the ledger; after six open ports of one address that nothing could name, the rest are not run down the list, and the row's `unprobed` and the summary say how many.
+- Greetings are read without a request: Telnet, IRC, NNTP, RTSP, SIP, ManageSieve, VNC (protocol version in `version`), `ICY`. A greeting inside TLS (IMAPS, POP3S, SMTPS, LDAPS) is read before the HEAD. A binary answer to the HEAD is kept as a banner, a connection closed without a word is `tcpwrapped`, and a web port whose HEAD was refused (405, 501) is asked `GET /` for its title and product (Mailpit, Tomcat, etcd, Kubernetes, Docker).
+- UDP: TFTP, rpcbind, the SQL Server Browser, SIP, NAT-PMP, Ubiquiti discovery and IPMI/ASF-RMCP are asked on their ports, the default list is 25 ports, and a port with no known protocol is asked DNS, then SNMP (v1; v3 engine id on 161), then memcached's version, then an empty datagram. A sysDescr names Linux, Cisco IOS, JUNOS or Windows as `product`.
+- A host that refuses some UDP ports but leaves others silent may be rate-limiting its ICMP replies: up to 80 such ports are asked again one at a time at its pace, and more are left `open|filtered` and counted in `udp_limited` and the summary. Only an ICMP unreachable for the port makes it `closed`.
+- `ports` scans a range or an AS number without a cap: `ports 10.0.0.0/16 -p 22,443` takes CIDR (IPv4, IPv6 down to /104) and `AS13335`, asks the addresses in blocks, and sends no reverse DNS query per address. Before, `-l` over 2,048 addresses stopped, and CIDR and ASN were refused.
+- `-host a,b` takes several targets, `host:port` asks that port when `-p` is not given, bare arguments and `-no-stdin` work, `-p -` is every port, and `-tp`, `-pf`, `-ep`, `-eh`, `-ef`, `-iv`, `-sa` and `-r 1.1.1.1,8.8.8.8` are as naabu's. `-host a,b` used to scan nothing and exit 0.
+- Output: `-csv`, `-oX`, `-oG`, `-oA`, `-lof`, `-eof`, and `cdn` and `cdn-name` in `-json`, whose timestamp is now UTC.
+- Timing: `-connect-timeout`, `-retries` (`-max-retries`), `-c` (`-workers`), `-min-rate`, `-T0` to `-T5`, `-pts`; `-timeout` stays the run's limit, and `-timeout 500` says to use `-connect-timeout`. The default rate is 1500, and as many connects are in flight as the rate allows.
+- `-cdn-full` scans a CDN or WAF address in full; the default still asks 80, 443, 8080 and 8443, and now says so in the summary.
+- `-sn` lists the addresses that are up and `-wn` scans only those (a connect to 80 or 443 accepted or refused).
+- Ports are asked in random order, the likeliest first; `-order asc` and `-seed N`.
+- `-detect none|banner|all` sets how much an open port is asked (naabu's one connect per port with `none`); `-proxy` (SOCKS5), `-source-ip` and `-cp PAYLOAD`.
+- `top-1000` has 5985 and 5986 (WinRM), not 3007 and 3013, as naabu's list.
+- A name costs 2 DNS queries (A, AAAA), not 5 for an apex name; a name that does not resolve is listed in the summary.
+- `run -cidr/-asn` with `-ports` scans the prefix itself and no longer stops at `-max-ips`.
 
-### Fixed
+### `dirs`
 
-- The kill file stops sending within a tenth of a second, also for requests that were already waiting for `-rate`. Before, at `-rate 2`, requests counted before the file appeared still went out for up to 2.7 s (Chrome's included). A bench check now measures this on every path.
-- MCP calls that send requests run one at a time. Before, calls made at once each spent the whole budget and each kept the pace on its own.
-- A request Chrome answers from its cache is neither listed in the ledger nor counted. Before, a signed-in run of a multi-page app listed every page's shared scripts and styles.
-- A `-timeout` reached while requests wait for `-rate` stops the run: exit 4, and `resume` continues. Before, it failed them with exit 3. `-H 'Host: x'` now sets the Host the request goes with.
-- A bad port list is a usage error, caught before anything is sent.
-- The text summary of a `subs` run in which sources failed says `DEGRADED: N of M sources failed` on its first line; the exit code is unchanged, as documented.
-- `probe -silent` and the other quiet commands no longer print the standard library's "Unsolicited response received on idle HTTP channel" lines on stderr.
-- A screenshot directory that is a file is a usage error that names `-dir`.
-- The docs no longer say an active collector needs an `-allow` scope (the targets given are its scope), and the roles recipe says a role of headers does not show behaviour that needs a cookie.
+- `dirs -u https://host/api/` sweeps `https://host/api/WORD`. It used to sweep nothing and print `0 paths` with exit 0 for any URL with a path. A query or fragment on the URL is dropped, and a note says so.
+- `dirs` has a built-in wordlist, SecLists' `common.txt` (4,750 words, MIT): `azhaq dirs -u URL` works without `-w`, and `-dirs @common` names it for `run`.
+- `dirs` takes ffuf's matchers and filters: `-ms -mw -ml -mr` and `-fc -fs -fw -fl -fr`, with the values and rules of `fuzz`, and `run` has them as `-dirs-ms` and the rest. A bad value is a usage error.
+- `dirs -mc` accepts `all`, and the default is ffuf's whole `200-299` range, so a 250 is reported.
+- `dirs` counts words and lines as ffuf does, over the whole body (newlines + 1): the body `a b c` and two blank lines is `Lines: 4`, where it said 1. A `-fl` value from a ffuf run carries over.
+- `dirs` keeps one connection per thread. Before, about every third request opened a new one: 45,000 words left 13,500 sockets in TIME-WAIT on loopback (now 45, ffuf 40), and each new connection to an https target cost a handshake.
+- `dirs` against a target that answers every guess (5,000 hits in 50,000 words) took 6.9 s against 1.5 s for the same list with no hits. Hits are now written to the workspace in batches, and the same run takes about 1.3 to 1.9 s.
+- The catch-all check hides a guess whose size differs from the not-found answers only where those answers differ in size among themselves, or repeat the path they were asked for. A real page close in size to a static not-found page is no longer hidden.
+- The calibration requests are paced by `-rate`, as the guesses are; they were not.
+- A word with a `?` starts the query, as in ffuf (`render?url=…`, `dns-query?name=…`); it was sent as part of the path.
+- A sweep whose guesses were answered 429, and one with paths that got no whole answer, say so in the summary and exit 3. Before, a rate-limited target gave 0 paths and exit 0.
 
-### Bench
+### `fuzz`
 
-- Every finding of the reviews that was fixed without a test now has one, in Go next to the code or, where it needs the local apps or this machine, in a `regress` section (`go run ./bench -only regress`; `$AZHAQ_REFBIN` names the reference tools). Findings still open have a skipped test that says so.
-- A `claims` section checks every safety claim on every path a request takes, unpaced and at `-rate 10` and `-rate 2`. Each run's summary count, its ledger and an independent logging proxy (or the listeners, for TCP and UDP) must agree exactly. The paths: HTTP, Chrome, sign-in, roles, write replay, path and parameter sweeps, fuzz, ports, MCP, budgets and the kill switch.
+- `fuzz -o FILE -of json|ejson|csv|ecsv|html|md|all` writes ffuf's report files, and `-od DIR` the raw request and answer of each match; a report that cannot be written is a failure in the summary.
+- `fuzz -request FILE -request-proto` reads a raw request as Burp saves it.
+- `fuzz -x` sends through an http, https or socks5 proxy; `-replay-proxy` sends each match once more through one, outside the ledger, budget and pace.
+- `fuzz` decodes gzip, deflate and brotli bodies, so `-fs` counts match ffuf's when `Accept-Encoding` is given.
+- `fuzz -mt` and `-ft` match and filter on milliseconds to the first byte.
+- `fuzz -p`, `-maxtime-job`, `-recursion-strategy greedy`, `-sf`, `-sa`, `-se` (and `-se-after`), `-acs`, `-acc`, `-ach` and `-config` (ffuf's TOML file) work as in ffuf.
+- A `fuzz` line that gives its own `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft` no longer calibrates, as in ffuf; `-ac` turns it on.
+- `fuzz -enc` with all of ffuf's encoders, `-input-cmd`/`-input-num`/`-input-shell`, `-mode sniper`, `-D`, `-w a,b`, `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`, `-data*` and `-cookie` aliases, `-V`, `-c` colours, `-debug-log`.
+- `fuzz` reaches servers that speak TLS 1.0 and 1.1.
+- `fuzz -preflight`/`-postflight` with `-…-var`, `-…-var-auto`, `-preflight-mode` and `-preflight-error`: a token or session read from an answer goes into the next request; the flight requests are scoped, paced, counted and in the ledger, and a captured value can never change the host.
+- `fuzz -control FILE` steers a run (rate, pause, filters, queue, save); stderr on a terminal shows one status line a second.
+- `fuzz` with two long wordlists in clusterbomb no longer allocates a byte for each combination.
+- `fuzz -json` and the reports carry `scraper`, `resultfile` and ffuf's `FFUFHASH` input.
 
-### `urls` as gau has it
+### `params`
+
+- `params` no longer says `0 pages` and exits 0 for a server that rate-limits it. A 429, 418 or 503 the page did not give before is waited out (its `Retry-After`, else 1, 2 and 4 s); if it persists the page fails, exit 3, with the names found so far kept and a note. Requests that got no answer fail the page too, and a page left alone (it changes between identical requests, is not text, HTML, JSON or XML, or is past `-params-per-host`) says why in a note.
+- `params` has a built-in list: `azhaq params -u URL` needs no `-w`. `-w small|medium|large` are 1,000, 3,000 and 6,500 names, from SecLists' `burp-parameter-names.txt` (MIT) and names Azhaq's own passes found.
+- `params` takes the names a page's own form fields, scripts and short replies hold first, and asks `debug`, `test`, `admin` and about 70 more with the values `1`, `true`, `yes` and `on`.
+- `params` finds names by a changed header set, a changed `Location`, a changed line count, and a name the page prints back, as well as status, size and a reflected value. The `why` of each name says which.
+- `params` sends 5 groups at once (`-t`), and finds the longest query a server takes (nginx's 8 KB, a 2 KB proxy) instead of failing on it; a group of 500 names or 7.6 KB is the most it sends first. Requests per page are fewer than arjun's on the same list.
+- `params -X POST|JSON|XML` sends names in a form, JSON or XML body. It needs `-allow` or `-scope` to name the targets, or a single page; every request is counted in the budget, paced and in the ledger; the row and the summary say writes were sent.
+- `params` takes `-i` (a Burp XML export or a raw request, with its method, body and headers), `-include`, `-casing`, `-passive`, `-c`, `-d`, `-stable`, `-T`, and writes `-oJ` (arjun's file), `-oT` (`URL?name=1234&…`) and `-oB HOST:PORT` (replay through Burp).
+
+### `urls`
 
 - `urls` prints each URL as its page arrives when stdout is not a terminal, so a pipe starts at once; `-sort` (and a terminal) waits and sorts. A stop by Ctrl-C or `-timeout` keeps what was found: the file is written and the summary says which archives were cut short.
 - `urls` asks for the host alone by default, as gau does; `-subs` asks for `*.DOMAIN` too. `run` keeps the broader default (`-urls-subs`).
@@ -41,134 +149,22 @@
 - Providers: Slack (webhook, threads), Discord (webhook, threads), Telegram (parse mode, threads, preview), Pushover, SMTP, Microsoft Teams (connector and workflow), Google Chat, Gotify and custom webhooks with formats and Sprig templates.
 - `watch -notify-config`, `-notify-provider`, `-notify-id`, `-notify-format`, `-notify-rate`, `-notify-proxy` and `-notify-lines`; `watch` and `notify` exit 3 when a message did not arrive, where it was printed on stderr and exit 0.
 
-### fuzz
+### Fixed
 
-- `fuzz -o FILE -of json|ejson|csv|ecsv|html|md|all` writes ffuf's report files, and `-od DIR` the raw request and answer of each match; a report that cannot be written is a failure in the summary.
-- `fuzz -request FILE -request-proto` reads a raw request as Burp saves it.
-- `fuzz -x` sends through an http, https or socks5 proxy; `-replay-proxy` sends each match once more through one, outside the ledger, budget and pace.
-- `fuzz` decodes gzip, deflate and brotli bodies, so `-fs` counts match ffuf's when `Accept-Encoding` is given.
-- `fuzz -mt` and `-ft` match and filter on milliseconds to the first byte.
-- `fuzz -p`, `-maxtime-job`, `-recursion-strategy greedy`, `-sf`, `-sa`, `-se` (and `-se-after`), `-acs`, `-acc`, `-ach` and `-config` (ffuf's TOML file) work as in ffuf.
-- A `fuzz` line that gives its own `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft` no longer calibrates, as in ffuf; `-ac` turns it on.
-- `fuzz -enc` with all of ffuf's encoders, `-input-cmd`/`-input-num`/`-input-shell`, `-mode sniper`, `-D`, `-w a,b`, `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`, `-data*` and `-cookie` aliases, `-V`, `-c` colours, `-debug-log`.
-- `fuzz` reaches servers that speak TLS 1.0 and 1.1.
-- `fuzz -preflight`/`-postflight` with `-…-var`, `-…-var-auto`, `-preflight-mode` and `-preflight-error`: a token or session read from an answer goes into the next request; the flight requests are scoped, paced, counted and in the ledger, and a captured value can never change the host.
-- `fuzz -control FILE` steers a run (rate, pause, filters, queue, save); stderr on a terminal shows one status line a second.
-- `fuzz` with two long wordlists in clusterbomb no longer allocates a byte for each combination.
-- `fuzz -json` and the reports carry `scraper`, `resultfile` and ffuf's `FFUFHASH` input.
+- The kill file stops sending within a tenth of a second, also for requests that were already waiting for `-rate`. Before, at `-rate 2`, requests counted before the file appeared still went out for up to 2.7 s (Chrome's included). A bench check now measures this on every path.
+- MCP calls that send requests run one at a time. Before, calls made at once each spent the whole budget and each kept the pace on its own.
+- A request Chrome answers from its cache is neither listed in the ledger nor counted. Before, a signed-in run of a multi-page app listed every page's shared scripts and styles.
+- A `-timeout` reached while requests wait for `-rate` stops the run: exit 4, and `resume` continues. Before, it failed them with exit 3. `-H 'Host: x'` now sets the Host the request goes with.
+- A bad port list is a usage error, caught before anything is sent.
+- The text summary of a `subs` run in which sources failed says `DEGRADED: N of M sources failed` on its first line; the exit code is unchanged, as documented.
+- `probe -silent` and the other quiet commands no longer print the standard library's "Unsolicited response received on idle HTTP channel" lines on stderr.
+- A screenshot directory that is a file is a usage error that names `-dir`.
+- The docs no longer say an active collector needs an `-allow` scope (the targets given are its scope), and the roles recipe says a role of headers does not show behaviour that needs a cookie.
 
-### DNS
+### Bench
 
-- `dns` asks any record type: `-a -aaaa -cname -ns -txt -srv -ptr -mx -soa -caa -any`, `-all` (every type, with `-e` to leave some out) and `-axfr`, and prints dnsx's rows: `-json` has dnsx's fields (`ttl`, `resolver`, `mx`, `soa`, `all`, `status_code_raw`, `cdn-name`, ...) and leaves empty ones out; `-resp`, `-resp-only`, `-output-template`, `-omit-raw` and `-raw` are dnsx's forms.
-- `dns -json` gives a row for every name a resolver answered, one that does not exist too, with its `status_code`; `-rcode` and `-response-type-filter` select by code and by missing record.
-- `dns` takes a CIDR range, an AS number, a comma list and `-d`/`-w` as a file, a list or stdin, and looks addresses up with `-ptr`; there is no cap of 20,000 names and names are read as they come (`-stream`). A 100,000-name list is asked in 2 s against dnsx's 7.7 s.
-- `-resolvers` (and `-r` in `dns`) takes a file or a comma list with `udp:`, `tcp:`, `dot:` and `doh:` prefixes, in every command; every question carries EDNS0 (4,096 bytes), and `dns -proxy socks5://` sends DNS through a proxy.
-- `dns -t`, `-rl`, `-retry` and `-timeout` mean what they do in dnsx (names in flight, names a second over all resolvers, attempts per question, wait for one answer); `-timeout` is no longer the run's time (`-maxtime` is, and exits 4 with the `-start` to go on from). `-dns-rate` stays per resolver.
-- `dns` no longer asks MX, TXT and NS for every apex name it never printed; `-w` accepts labels with an underscore (`_dmarc`) and prints hits as they come; `-o` appends; `-hf` reads the hosts file; `-trace` follows delegations from the roots; `-asn` names the autonomous system; `-no-wildcard` and `-wd` control the wildcard filter.
-- `run -dns-brute` guesses labels with an underscore too (`_dmarc`, `_domainkey`); `dns -hc` asks each resolver a known name and says how it answered. `-all` does not include AXFR (`-axfr` asks it, held to the scope); `dns -r` resolvers are asked for every name, `localhost` and `.test` included, as dnsx does.
-- The DNS lab answers MX, TXT, NS, SRV, CAA, SOA and AAAA, has a reverse zone for 127.0.0.0/24 and a zone transfer, truncates long UDP answers, and counts what it was asked (`-stats`).
-
-### Ports
-
-- `ports` names a service by what it answers, not by its port number. A port that says nothing and does not answer the HTTP probe is asked one harmless request of each of about 30 protocols until one answers: Redis (with `redis_version`), PostgreSQL, MongoDB (with `buildInfo`), MQTT (Mosquitto's version), AMQP (RabbitMQ's), memcached, LDAP (anonymous root DSE), SMB2, DNS over TCP, Kafka, ZooKeeper, SQL Server, Oracle TNS, Cassandra, Kerberos, RDP, X11, SOCKS5, STOMP, XMPP, RTSP, SIP, AFP, Minecraft and others. An open port costs at most 24 connects after the first, every one paced, counted and in the ledger; after six open ports of one address that nothing could name, the rest are not run down the list, and the row's `unprobed` and the summary say how many.
-- Greetings are read without a request: Telnet, IRC, NNTP, RTSP, SIP, ManageSieve, VNC (protocol version in `version`), `ICY`. A greeting inside TLS (IMAPS, POP3S, SMTPS, LDAPS) is read before the HEAD. A binary answer to the HEAD is kept as a banner, a connection closed without a word is `tcpwrapped`, and a web port whose HEAD was refused (405, 501) is asked `GET /` for its title and product (Mailpit, Tomcat, etcd, Kubernetes, Docker).
-- UDP: TFTP, rpcbind, the SQL Server Browser, SIP, NAT-PMP, Ubiquiti discovery and IPMI/ASF-RMCP are asked on their ports, the default list is 25 ports, and a port with no known protocol is asked DNS, then SNMP (v1; v3 engine id on 161), then memcached's version, then an empty datagram. A sysDescr names Linux, Cisco IOS, JUNOS or Windows as `product`.
-- A host that refuses some UDP ports but leaves others silent may be rate-limiting its ICMP replies: up to 80 such ports are asked again one at a time at its pace, and more are left `open|filtered` and counted in `udp_limited` and the summary. Only an ICMP unreachable for the port makes it `closed`.
-
-### Parameters
-
-- `params` no longer says `0 pages` and exits 0 for a server that rate-limits it. A 429, 418 or 503 the page did not give before is waited out (its `Retry-After`, else 1, 2 and 4 s); if it persists the page fails, exit 3, with the names found so far kept and a note. Requests that got no answer fail the page too, and a page left alone (it changes between identical requests, is not text, HTML, JSON or XML, or is past `-params-per-host`) says why in a note.
-- `params` has a built-in list: `azhaq params -u URL` needs no `-w`. `-w small|medium|large` are 1,000, 3,000 and 6,500 names, from SecLists' `burp-parameter-names.txt` (MIT) and names Azhaq's own passes found.
-- `params` takes the names a page's own form fields, scripts and short replies hold first, and asks `debug`, `test`, `admin` and about 70 more with the values `1`, `true`, `yes` and `on`.
-- `params` finds names by a changed header set, a changed `Location`, a changed line count, and a name the page prints back, as well as status, size and a reflected value. The `why` of each name says which.
-- `params` sends 5 groups at once (`-t`), and finds the longest query a server takes (nginx's 8 KB, a 2 KB proxy) instead of failing on it; a group of 500 names or 7.6 KB is the most it sends first. Requests per page are fewer than arjun's on the same list.
-- `params -X POST|JSON|XML` sends names in a form, JSON or XML body. It needs `-allow` or `-scope` to name the targets, or a single page; every request is counted in the budget, paced and in the ledger; the row and the summary say writes were sent.
-- `params` takes `-i` (a Burp XML export or a raw request, with its method, body and headers), `-include`, `-casing`, `-passive`, `-c`, `-d`, `-stable`, `-T`, and writes `-oJ` (arjun's file), `-oT` (`URL?name=1234&…`) and `-oB HOST:PORT` (replay through Burp).
-
-### `dirs`
-
-- `dirs -u https://host/api/` sweeps `https://host/api/WORD`. It used to sweep nothing and print `0 paths` with exit 0 for any URL with a path. A query or fragment on the URL is dropped, and a note says so.
-- `dirs` has a built-in wordlist, SecLists' `common.txt` (4,750 words, MIT): `azhaq dirs -u URL` works without `-w`, and `-dirs @common` names it for `run`.
-- `dirs` takes ffuf's matchers and filters: `-ms -mw -ml -mr` and `-fc -fs -fw -fl -fr`, with the values and rules of `fuzz`, and `run` has them as `-dirs-ms` and the rest. A bad value is a usage error.
-- `dirs -mc` accepts `all`, and the default is ffuf's whole `200-299` range, so a 250 is reported.
-- `dirs` counts words and lines as ffuf does, over the whole body (newlines + 1): the body `a b c` and two blank lines is `Lines: 4`, where it said 1. A `-fl` value from a ffuf run carries over.
-- `dirs` keeps one connection per thread. Before, about every third request opened a new one: 45,000 words left 13,500 sockets in TIME-WAIT on loopback (now 45, ffuf 40), and each new connection to an https target cost a handshake.
-- `dirs` against a target that answers every guess (5,000 hits in 50,000 words) took 6.9 s against 1.5 s for the same list with no hits. Hits are now written to the workspace in batches, and the same run takes about 1.3 to 1.9 s.
-- The catch-all check hides a guess whose size differs from the not-found answers only where those answers differ in size among themselves, or repeat the path they were asked for. A real page close in size to a static not-found page is no longer hidden.
-- The calibration requests are paced by `-rate`, as the guesses are; they were not.
-- A word with a `?` starts the query, as in ffuf (`render?url=…`, `dns-query?name=…`); it was sent as part of the path.
-- A sweep whose guesses were answered 429, and one with paths that got no whole answer, say so in the summary and exit 3. Before, a rate-limited target gave 0 paths and exit 0.
-
-### Ports
-
-- `ports` scans a range or an AS number without a cap: `ports 10.0.0.0/16 -p 22,443` takes CIDR (IPv4, IPv6 down to /104) and `AS13335`, asks the addresses in blocks, and sends no reverse DNS query per address. Before, `-l` over 2,048 addresses stopped, and CIDR and ASN were refused.
-- `-host a,b` takes several targets, `host:port` asks that port when `-p` is not given, bare arguments and `-no-stdin` work, `-p -` is every port, and `-tp`, `-pf`, `-ep`, `-eh`, `-ef`, `-iv`, `-sa` and `-r 1.1.1.1,8.8.8.8` are as naabu's. `-host a,b` used to scan nothing and exit 0.
-- Output: `-csv`, `-oX`, `-oG`, `-oA`, `-lof`, `-eof`, and `cdn` and `cdn-name` in `-json`, whose timestamp is now UTC.
-- Timing: `-connect-timeout`, `-retries` (`-max-retries`), `-c` (`-workers`), `-min-rate`, `-T0` to `-T5`, `-pts`; `-timeout` stays the run's limit, and `-timeout 500` says to use `-connect-timeout`. The default rate is 1500, and as many connects are in flight as the rate allows.
-- `-cdn-full` scans a CDN or WAF address in full; the default still asks 80, 443, 8080 and 8443, and now says so in the summary.
-- `-sn` lists the addresses that are up and `-wn` scans only those (a connect to 80 or 443 accepted or refused).
-- Ports are asked in random order, the likeliest first; `-order asc` and `-seed N`.
-- `-detect none|banner|all` sets how much an open port is asked (naabu's one connect per port with `none`); `-proxy` (SOCKS5), `-source-ip` and `-cp PAYLOAD`.
-- `top-1000` has 5985 and 5986 (WinRM), not 3007 and 3013, as naabu's list.
-- A name costs 2 DNS queries (A, AAAA), not 5 for an apex name; a name that does not resolve is listed in the summary.
-- `run -cidr/-asn` with `-ports` scans the prefix itself and no longer stops at `-max-ips`.
-
-### Screenshots
-
-- A screenshot at a polite `-rate` is no longer silently blank. Four pages of 42 requests at `-rate 2` gave four pictures with no images, exit 0 and no note. A page's deadlines now run from when it last moved, not from when it started, tabs open as the pace can fund them, and the tab's icon, which no screenshot shows, is not fetched. The same run gives four complete pictures (0.000% of pixels differ from the `-rate 0` ones), at most 3 requests in any second at the server, and the summary, the ledger and the server count the same requests.
-- A screenshot is taken once the page has stopped asking for what it shows: a single-page app (Juice Shop) asks for its product images only after a script's request is answered, which at `-rate 5` came after the picture was taken. A screenshot of Juice Shop at `-rate 2`, 5 and 10 is the one an unpaced run takes with `-shot-wait 5s` (0.000% of pixels differ); at the default wait the unpaced one lacks the last row of images (2.4%).
-- A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
-- Look-alike screenshots are grouped by a DCT perceptual hash (`p:` and 16 hex digits). A login form, the nginx default page and an admin page were one group of the old 9×8 brightness hash; they are three now, and thirty copies of one portal are still one.
-- `export -format html` embeds each screenshot (scaled to 560 pixels wide), so the report opens from any directory and after the screenshot folder is gone; it was `<img src="DIR/file.png">` relative to the run's `-dir`. A picture marked `partial` says so in the report.
-- `shots` takes more targets: a URL with a path or query is shot (it used to give 0 results and exit 0), `-u 192.0.2.0/28`, `-p` port lists (numbers, ranges, `small`, `medium`, `large`), `-no-http`, `-no-https`, `-random`, `-nmap FILE` and `-nessus FILE`.
-- `shots` and `run -screenshots` have flags for the picture and Chrome: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-shot-html`, `-chrome`, `-chrome-proxy`, `-chrome-profile`. Chrome's restricted ports (6000, 10080, …) are allowed (`-unsafe-ports=false` keeps its refusal).
-- A page's row in `shots -json` has what Chrome saw: response code, headers, TLS session, the technologies of the rendered page, console messages and the network log, at no extra request. `shots -csv FILE` writes the scalar columns.
-- A page's own request waits for the pace when Chrome sends it, not when it is counted, so four tabs no longer send four pages' documents together.
-- `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
-- A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
-- `azhaq gallery -db FILE` serves a workspace's screenshots to a browser on this machine: a grid of thumbnails with URL, title, status and technologies, filters (status, technology, host, title, partial, look-alike group), one tile per group of look-alikes, search of URL, title and kept page text (`title:`, `body:`, `tech:`, `header:`, `status:`, `p:`, `-term`), a page per shot (picture, headers, cookies, TLS, network, console, the `azhaq show` command) and the pages that gave no picture. It is embedded, works offline, reads the workspace read-only and sends nothing to any target (a test asserts it). 5,000 pages page and filter in under 10 ms, and `/api/` gives the same data as JSON.
-- `gallery -workspace DIR` merges the workspaces of a directory in one view; a database that is not a workspace is skipped with a note, one that cannot be read is skipped and exits 3, as do pictures missing from disk.
-
-### Crawl
-
-- `crawl` prints katana's JSON lines with `-jsonl`, its fields with `-f`, `-ot` and `-sf`, filters the printed URLs with `-em`, `-ef`, `-ndef`, `-mr` and `-fr`, and stores answers with `-sr`.
-- A page's links are no longer cut at 64: every link is listed and asked, bounded by templates and `-max-items`.
-- `crawl` follows links to the start host's subdomains with `-fs rdn|fqdn|dn|REGEX`, `-cs`, `-cos` and `-ns`, and `-do` lists the links it left out of scope; the summary counts them.
-- `crawl` sends only what a crawler sends: no built-in path sweep, no favicon request and no source-map guesses; `-kf all|robotstxt|sitemapxml` asks the known files and reads every entry, `-sweep` brings the 32 paths back.
-- Pages are read at every markup sink katana reads (`img`, `srcset`, `area`, `video`, `button formaction`, `object`, `hx-*`, `meta refresh`, the `Link`, `Content-Location` and `Refresh` headers) and redirect hops are listed.
-- Strings in scripts and pages that katana's patterns take (`users.php`, `admin/`) are URLs when they name a page of the app; every other one is kept as a rejected candidate with its reason, listed by `-rejected` and counted in the summary.
-- GET forms are asked once with neutral values; `-submit-forms` sends POST forms (it changes data, each submission is counted and in the ledger).
-- `crawl` waits and asks again on 429 and 503, retries after a timeout, carries cookies the target sets, and takes `-hrl`, `-hrlm`, `-rlm`, `-mdp`, `-mrs`, `-rd`, `-iqp`, `-pc`, `-proxy`, `-r` and `-c`, `-p`, `-rl`, `-ct`, `-dr` as katana's names; a scheme-less `:80` or `:8080` target is asked over http and `-u a,b` is split.
-- `crawl -json` rows carry `tech`.
-- `-browser -interact` clicks the buttons, links and menus of each page and maps the routes and requests they bring; the writes a click would send are mapped and not sent, and a click on log out or delete is not made.
-
-### probe (httpx)
-
-- `probe` follows no redirect unless given `-fr` (with `-maxr`, `-fhr`, `-rhsts`), as httpx does. A row's status, title, length and content type all come from one answer; with `-fr` they are the last answer's and the chain is in `chain_status_codes` and `final_url`. `run` keeps following.
-- `probe` takes httpx's matchers and filters over the response as sent: `-mc/-fc`, `-ml/-fl`, `-mlc/-flc`, `-mwc/-fwc`, `-mfc/-ffc`, `-ms/-fs`, `-mr/-fe`, `-mcdn/-fcdn`, `-mrt/-frt`, `-mdc/-fdc`, `-fd`, `-fpt/-fep`. The summary says how many rows they left out and which conditions could not be judged.
-- A target that is dropped for a wildcard answer, or that gets no answer, is a row with `failed: true` and an `error` (`-probe` prints `[FAILED]`), and the summary counts it. A name that resolves only through a wildcard is probed, not dropped.
-- `probe` stores and prints responses: `-sr`, `-srd`, `-ob`, `-store-chain`, `-rstr`, `-rsts`, `-irh`, `-irr`, `-irrb`, `-include-chain`, `-debug`, `-debug-req`, `-debug-resp`, `-ss` (screenshots).
-- `probe` reports `tls` (`-tls-grab`, read from the handshake the request made: no extra connection), `cname`, `resolvers`, `asn`, `hash` (`-hash`), `jarm_hash`, `body_preview`, `extracts` (`-er`, `-ep`), `favicon_md5`, `favicon_path`, `favicon_url`, `websocket`, `http2`, `pipeline`, `vhost`, `sni`, `cpe`, `wordpress`, `knowledgebase`, `csp`, `body_fqdn` and `body_domains`.
-- `probe` takes httpx's input flags: `-p` ports and ranges with `http:` and `https:` (also for addresses), `-path`, `-nf`, `-pa`, `-e`, `-sni`, `-no-decode`, `-tls-probe`, `-csp-probe`, `-im burp`, `-vi`, JSON target lines, address ranges, AS numbers, comma lists, globs, `*.example.com`; its display and output flags: `-sc -cl -ct -title -td -server -ip -rt -lc -wc -location -method -cdn -cname -asn -ldp`, `-csv`, `-csvo`, `-md`, `-oa`, `-eof`, `-lof`; and its request flags: `-rlm`, `-delay`, `-retries`, `-req-timeout`, `-maxhr`, `-proxy`, `-auto-referer`, `-random-agent`, `-cff`.
-- A bare `host:port` is asked over plain HTTP first on port 8080 and on ports above 1024, as httpx does, and asked again over TLS when plain HTTP is answered 400. `probe` accepts TLS 1.0 and 1.1 servers and sends no `Accept` header.
-- `probe -x`, `-body` and `-rr` send the methods, body or raw request you give to the targets in scope, counted, paced and in the ledger; the summary says non-GET requests were sent. They can change data on the target.
-- A page in Shift-JIS, GBK, Big5 or another declared charset has its title read in UTF-8; httpx reads only GBK, Big5 and EUC-KR.
-
-### `subs`
-
-- `subs -live` is no slower than `subfinder | dnsx` at the same DNS rate, and lists live names it did not. subdomain.center is asked again only while a round gave a name that resolves and no other source had; each round's new names are looked up before the next round is asked, and no name is looked up twice. With `-dns-rate`, the guesses cost at most half what the real names did.
-- A name that is only a CNAME is a live name with `-live`, as dnsx `-a -cname` lists it (tesla.com: 25 such names that `subs -live` left out).
-- A DNS answer too big for 512 bytes (a long CNAME chain) is asked for with EDNS0 and read over TCP when truncated; before, names such as `autodiscover.tesla.com` failed with `buffer size too small`.
-- A resolver whose NXDOMAIN answers a second resolver has confirmed 64 times in a row is checked on one in 16 (and every time again after one it gets wrong), so a dead name costs one query instead of two.
-- A source that answers 429 is asked again after its `Retry-After` (2, 4, 8 s when it gives none), up to three times; the summary says what the waiting cost, and a source that keeps refusing is listed as having given up.
-- Without `-live`, `subs` looks nothing up: a name only subdomain.center guessed, or only the name history held, is listed with `"unverified": true` and counted, and a guess is not added to the name history until a run has seen it resolve.
-- The summary's counts add up: `from sources`, `did not resolve`, `unverified`, `not checked`, `CNAME only`, and a `count:` note that writes the sum.
-- crt.sh is asked again after 1, 2 and 4 s and not past 12 s (it was 2, 4 and 8 s): a down crt.sh set the time of every run.
-- Cert Spotter pages with `after=` when a key is given, and says it read the first page only when it is not.
-- subfinder is v2.14.1-0.20261026103132-98ef8711acb9 (main), with its archive and windvane fixes.
-- subfinder's input and flags: `-d` takes comma lists, URLs and trailing dots (IP addresses are left out with a note); `-m`, `-f`, `-match-regex`, `-filter-regex`; `-ls` (`-json`); `-cs`, `-oI`, `-oD`; `-o` appends; `-recursive`; `-stats`; `-version`; `-nW` and `-oJ`; `-source-rate`, `-source-rates`, `-max-results`, `-max-time`, `-max-body`, `-source-proxy`; `$SOURCE_API_KEY` and `$VAR` in provider files; `-t` is `-parallel`. An unknown name in `-sources` is said, and alone is a usage error.
-- `-max-names` on `subs` (default 200,000 per domain, not 20,000); names cut are counted and the run exits 3. `wildcard_certificate` marks a name a certificate gave as `*.name`.
-- Without `-live`, a domain's names are printed when its sources have answered, not when the last domain has.
+- Every finding of the reviews that was fixed without a test now has one, in Go next to the code or, where it needs the local apps or this machine, in a `regress` section (`go run ./bench -only regress`; `$AZHAQ_REFBIN` names the reference tools). Findings still open have a skipped test that says so.
+- A `claims` section checks every safety claim on every path a request takes, unpaced and at `-rate 10` and `-rate 2`. Each run's summary count, its ledger and an independent logging proxy (or the listeners, for TCP and UDP) must agree exactly. The paths: HTTP, Chrome, sign-in, roles, write replay, path and parameter sweeps, fuzz, ports, MCP, budgets and the kill switch.
 
 ### Docs
 
