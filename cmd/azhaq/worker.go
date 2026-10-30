@@ -52,6 +52,12 @@ var coordinatorOnly = map[string]bool{
 	"allow": true, "deny": true, "parallel": true, "fail-on-errors": true, "fail-on-capped": true,
 }
 
+// isFile says whether s names a file that exists.
+func isFile(s string) bool {
+	fi, err := os.Stat(s)
+	return err == nil && !fi.IsDir()
+}
+
 // File options: the worker gets the file's contents.
 var fileOptions = map[string]bool{"dirs": true, "params": true, "paths": true, "dns-brute": true, "resolvers": true}
 
@@ -79,6 +85,8 @@ func forWorkers(fs *flag.FlagSet, args, allow, deny []string) (workerConfig, err
 		}
 		switch {
 		case coordinatorOnly[name]:
+		case name == "resolvers" && !isFile(val):
+			cfg.Args = append(cfg.Args, "-"+name+"="+val) // a list of resolvers, not a file of them
 		case fileOptions[name]:
 			raw, err := os.ReadFile(val)
 			if err != nil {

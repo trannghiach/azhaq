@@ -53,3 +53,13 @@
 **`fuzz -x` or `-replay-proxy` shows nothing in the proxy.** Go sends traffic for loopback addresses through a proxy only when it is named with `-x`; the environment's `HTTP_PROXY` is not read. A proxy URL needs its scheme (`http://127.0.0.1:8080`). The summary counts the matches sent through `-replay-proxy` and the ones that failed.
 
 **`fuzz` says `preflight/postflight failed … cannot choose where requests go`.** The value read from the answer ended up in the host, scheme or port of a request (a `Host: TOKEN` line, a `TOKEN/path`). Values come from the target and the request carries your cookies and headers, so azhaq does not allow it, and has no `-preflight-anyhost`. Put the host in the file. `… is outside the scope` means the file names a host the run may not touch: `-allow HOST` adds it.
+
+**`dns -json` prints rows for names that do not exist.** As dnsx does, `-json` gives a row for every name a resolver answered, with its `status_code` (`NXDOMAIN`, `SERVFAIL`, ...). Ask for a type (`-a -json`) to get only the names that have such a record, or select with `jq 'select(.status_code=="NOERROR")'`.
+
+**`dns -timeout 5s` did not stop the run after 5 seconds.** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx (3 s by default); `run` and the other commands use it as the time of the whole run. `dns -maxtime SECONDS` bounds the run: it exits 4 and says which `-start` to go on from.
+
+**`dns -dns-rate 5` still sent more than 5 queries a second.** `-dns-rate` paces each resolver (a second's worth of queries may go out at once after a pause), so the total is the rate times the resolvers (six by default). `-rl N` paces names over all resolvers, as dnsx's `-rl`; with one resolver, or with `-rl`, the total is the rate you gave (a name asked for several types sends one query per type). `-t N` bounds the names in flight.
+
+**`dns -d 192.0.2.0/24` printed nothing.** Addresses and ranges are looked up only with `-ptr` (reverse names) and are otherwise left out; the summary says so under `left out`. An AS number (`AS13335`) expands to the prefixes RIPEstat lists for it.
+
+**`dns -axfr` found no zone.** A name server that refuses a transfer is common. The summary's notes say, per server, whether it refused, did not answer, or was left alone because the scope does not allow it (`-allow` the server's name or address to ask it). Only the name servers of the name and the `-resolvers` you gave are asked.

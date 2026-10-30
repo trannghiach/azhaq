@@ -104,6 +104,16 @@ httpx -l hosts.txt -json | azhaq ingest -in - -db acme.db
 
 `ingest` reads subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines and ffuf output. Lines it cannot read are skipped and counted.
 
+The names of a program, as dnsx reads them, with the records that matter and at a rate you set:
+
+```
+azhaq dns -l names.txt -mx -txt -json -r 1.1.1.1,tcp:9.9.9.9 -rl 5 -t 5 -o records.jsonl
+azhaq dns -l 192.0.2.0/28 -ptr -resp                  # reverse names of a range
+azhaq dns -d example.com -axfr -allow example.com     # ask the name servers for the zone
+```
+
+`-r` takes a file or a comma list, over UDP, `tcp:`, `dot:` or `doh:`; `-rl` is names a second over all resolvers, and `-timeout` is one answer's wait, as in dnsx.
+
 ## 10. Read a GraphQL schema
 
 ```

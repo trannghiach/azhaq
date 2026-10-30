@@ -248,7 +248,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	noHistory := fs.Bool("no-history", false, "do not read or write the name history (names earlier runs found, kept under $AZHAQ_DATA_DIR, else ~/.local/share/azhaq, and checked by DNS in each run)")
 	sourceTimeout := fs.Duration("source-timeout", subcol.DefaultSourceTimeout, "give each subdomain source this long; a slower one (crt.sh) is abandoned, listed as failed, and the names the others gave are kept (not -timeout, the run's bound)")
 	providersFile := fs.String("providers", "", "API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml)")
-	resolversFile := fs.String("resolvers", "", "DNS resolvers, one per line (default: public resolvers)")
+	resolversFile := fs.String("resolvers", "", "DNS resolvers: a file with one per line, or a comma list; each is ADDR, ADDR:PORT or udp:, tcp:, dot:, doh:URL[:get] and then the address (default: public resolvers)")
 	dnsRate := fs.Float64("dns-rate", 0, "DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx)")
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active; the targets given are the scope unless -allow)")
@@ -631,11 +631,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return err
 		}
 	}
-	var resolvers []string
-	if *resolversFile != "" {
-		if resolvers, err = loadLines(*resolversFile); err != nil {
-			return err
-		}
+	resolvers, err := dnsr.ParseResolvers(*resolversFile)
+	if err != nil {
+		return usagef("-resolvers: %v", err)
 	}
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
 	// HTTP connects to the addresses azhaq-dns found: one answer per name.

@@ -4,16 +4,22 @@
 package dnsr
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
+	"golang.org/x/net/proxy"
 
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -46,6 +52,10 @@ const (
 // more.
 var errBroken = errors.New("SERVFAIL from every resolver asked")
 
+// IsBroken says whether err is the SERVFAIL of every attempt, by two
+// resolvers or more: the name's own DNS is broken, for everyone.
+func IsBroken(err error) bool { return errors.Is(err, errBroken) }
+
 // Answer is what a name resolved to.
 type Answer struct {
 	Name   string
@@ -72,7 +82,17 @@ type Pool struct {
 	retries int
 	udp     *dns.Client
 	tcp     *dns.Client
+	dot     *dns.Client
+	doh     *http.Client
+	proto   map[string]Server   // by key
+	named   bool                // the resolvers were given, not the defaults
+	dial    proxy.ContextDialer // DNS goes through this (-proxy), over TCP; nil: direct
 	next    atomic.Uint64
+
+	// TraceRoots and TracePort replace RootServers and port 53 for Trace
+	// (tests, a lab).
+	TraceRoots []string
+	TracePort  string
 
 	mu    sync.Mutex
 	cache map[string]*entry
@@ -129,28 +149,41 @@ type entry struct {
 
 // Options configure a Pool. Zero values take the defaults.
 type Options struct {
-	Resolvers []string      // host or host:port; default DefaultResolvers
+	Resolvers []string      // as ParseResolvers gives them; default DefaultResolvers
 	PerSecond float64       // queries per second per resolver; 0 is no pace but the callers' workers
+	Burst     int           // queries a resolver may be sent at once after a pause; default a fifth of PerSecond, at least 1
 	Timeout   time.Duration // per query; default 2s
 	Retries   int           // extra attempts on other resolvers; default 2
+	Attempts  int           // when set, attempts in all per query (Retries+1), as dnsx -retry
+	Proxy     string        // socks5://host:port: every query goes through it, over TCP
 }
 
 // New returns a Pool.
 func New(o Options) *Pool {
 	servers := o.Resolvers
-	if len(servers) == 0 {
+	named := len(servers) > 0
+	if !named {
 		servers = DefaultResolvers
 	}
 	var norm []string
+	proto := map[string]Server{}
 	for _, s := range servers {
 		s = strings.TrimSpace(s)
 		if s == "" {
 			continue
 		}
-		if _, _, err := net.SplitHostPort(s); err != nil {
-			s = net.JoinHostPort(s, "53")
+		srv, err := ParseResolver(s)
+		if err != nil {
+			// Not a form ParseResolvers gives: a plain address, as before.
+			if _, _, err := net.SplitHostPort(s); err != nil {
+				s = net.JoinHostPort(s, "53")
+			}
+			srv = Server{Key: s, Net: NetUDP, Addr: s}
 		}
-		norm = append(norm, s)
+		if _, dup := proto[srv.Key]; !dup {
+			norm = append(norm, srv.Key)
+			proto[srv.Key] = srv
+		}
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 2 * time.Second
@@ -158,22 +191,74 @@ func New(o Options) *Pool {
 	if o.Retries == 0 {
 		o.Retries = 2
 	}
+	if o.Attempts > 0 {
+		o.Retries = o.Attempts - 1
+	}
 	hs := map[string]*health{}
 	for _, s := range norm {
 		hs[s] = &health{}
 	}
-	return &Pool{
+	p := &Pool{
 		servers: norm,
 		health:  hs,
-		limit:   limit.New(o.PerSecond, max(1, int(o.PerSecond/5))),
+		proto:   proto,
+		named:   named,
+		limit:   limit.New(o.PerSecond, cmpBurst(o)),
 		timeout: o.Timeout,
 		retries: o.Retries,
 		udp:     &dns.Client{Net: "udp", Timeout: o.Timeout},
 		tcp:     &dns.Client{Net: "tcp", Timeout: o.Timeout},
+		dot:     &dns.Client{Net: "tcp-tls", Timeout: o.Timeout},
+		doh:     &http.Client{Timeout: o.Timeout},
 		cache:   map[string]*entry{},
 		six:     map[string]*entry{},
 		wild:    map[string]bool{},
 	}
+	if u, err := url.Parse(o.Proxy); err == nil && o.Proxy != "" {
+		if d, err := proxy.FromURL(u, &net.Dialer{Timeout: o.Timeout}); err == nil {
+			if cd, ok := d.(proxy.ContextDialer); ok {
+				p.dial = cd
+			}
+		}
+	}
+	return p
+}
+
+func cmpBurst(o Options) int {
+	if o.Burst > 0 {
+		return o.Burst
+	}
+	return max(1, int(o.PerSecond/5))
+}
+
+// ProxyError says whether proxy is a URL New can use for DNS.
+func ProxyError(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return err
+	}
+	if u.Scheme != "socks5" && u.Scheme != "socks5h" {
+		return fmt.Errorf("%q: DNS goes through a socks5 proxy only (socks5://host:port)", raw)
+	}
+	_, err = proxy.FromURL(u, proxy.Direct)
+	return err
+}
+
+// Reserved says whether name is one the pool does not send to its resolvers:
+// a special-use name (localhost, *.test, *.local) or a single label, when the
+// resolvers are the default public ones. The system's resolver answers
+// those, so /etc/hosts and local DNS work and nothing local is asked of a
+// public resolver. Resolvers the user named are asked for everything, as
+// dnsx does.
+func (p *Pool) Reserved(name string) bool {
+	name = normalize.Hostname(name)
+	return !p.named && net.ParseIP(name) == nil && (normalize.SpecialUse(name) || !strings.Contains(name, "."))
+}
+
+// System asks the system's resolver for the addresses of name.
+func (p *Pool) System(ctx context.Context, name string) (a, aaaa []string) {
+	r := p.system(ctx, normalize.Hostname(name))
+	return r.A, r.AAAA
 }
 
 // Resolvers lists the servers in use.
@@ -382,10 +467,14 @@ func (p *Pool) Query(ctx context.Context, name string, qtype uint16) (*dns.Msg, 
 	return m, err
 }
 
+// question asks for qtype with EDNS0 and a 4,096-byte buffer, so an answer
+// over 512 bytes (a long TXT, many records) arrives over UDP, not after a
+// truncation and a second query over TCP.
 func question(name string, qtype uint16) *dns.Msg {
 	q := new(dns.Msg)
 	q.SetQuestion(dns.Fqdn(name), qtype)
 	q.RecursionDesired = true
+	q.SetEdns0(4096, false)
 	return q
 }
 
@@ -396,6 +485,7 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 		return nil, "", errors.New("no resolvers")
 	}
 	var last error
+	var lastMsg *dns.Msg         // the last SERVFAIL or REFUSED, returned with the error
 	servfail := map[string]int{} // resolver → attempts it answered SERVFAIL
 	for attempt := 0; attempt <= p.retries; attempt++ {
 		server := p.pick(attempt, avoid)
@@ -414,7 +504,7 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 			if in.Rcode == dns.RcodeServerFailure {
 				servfail[server]++
 			}
-			last = errors.New(server + ": " + dns.RcodeToString[in.Rcode])
+			last, lastMsg = errors.New(server+": "+dns.RcodeToString[in.Rcode]), in
 			continue
 		}
 		return in, server, nil
@@ -424,9 +514,9 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 		n += c
 	}
 	if n == p.retries+1 && len(servfail) >= 2 {
-		return nil, "", fmt.Errorf("%w (last %v)", errBroken, last)
+		return lastMsg, "", fmt.Errorf("%w (last %v)", errBroken, last)
 	}
-	return nil, "", last
+	return lastMsg, "", last
 }
 
 // pick is the resolver for an attempt: round robin, or, first, for a
@@ -483,7 +573,7 @@ func bulk(ctx context.Context) bool {
 // resolver's opinion: the pool has one, and the name is neither a
 // wildcard probe nor under a zone known to answer for any label.
 func (p *Pool) confirms(name string) bool {
-	if len(p.servers) < 2 || strings.HasPrefix(name, probePrefix) {
+	if len(p.servers) < 2 || p.retries < 1 || strings.HasPrefix(name, probePrefix) {
 		return false
 	}
 	p.mu.Lock()
@@ -509,11 +599,103 @@ func (p *Pool) exchange(ctx context.Context, q *dns.Msg, server string) (*dns.Ms
 	}
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
-	in, _, err := p.udp.ExchangeContext(ctx, q, server)
+	srv, ok := p.proto[server]
+	if !ok {
+		srv = Server{Key: server, Net: NetUDP, Addr: server}
+	}
+	switch {
+	case srv.Net == NetDoH:
+		return p.exchangeDoH(ctx, q, srv)
+	case p.dial != nil:
+		// Through a proxy everything is TCP: a SOCKS5 proxy carries no UDP
+		// here. DoT keeps its TLS inside the tunnel.
+		return p.viaProxy(ctx, q, srv)
+	case srv.Net == NetTCP:
+		in, _, err := p.tcp.ExchangeContext(ctx, q, srv.Addr)
+		return in, err
+	case srv.Net == NetDoT:
+		in, _, err := p.dot.ExchangeContext(ctx, q, srv.Addr)
+		return in, err
+	}
+	in, _, err := p.udp.ExchangeContext(ctx, q, srv.Addr)
 	if err == nil && in.Truncated {
-		in, _, err = p.tcp.ExchangeContext(ctx, q, server)
+		in, _, err = p.tcp.ExchangeContext(ctx, q, srv.Addr)
 	}
 	return in, err
+}
+
+// viaProxy asks one resolver over TCP through the proxy.
+func (p *Pool) viaProxy(ctx context.Context, q *dns.Msg, srv Server) (*dns.Msg, error) {
+	c, err := p.dial.DialContext(ctx, "tcp", srv.Addr)
+	if err != nil {
+		return nil, err
+	}
+	conn := &dns.Conn{Conn: c}
+	defer conn.Close()
+	client := p.tcp
+	if srv.Net == NetDoT {
+		client = p.dot
+		tc, err := dotConn(ctx, c, srv.Addr, p.dot.TLSConfig)
+		if err != nil {
+			return nil, err
+		}
+		conn = &dns.Conn{Conn: tc}
+	}
+	in, _, err := client.ExchangeWithConnContext(ctx, q, conn)
+	return in, err
+}
+
+// exchangeDoH asks over HTTPS as RFC 8484 says: the wire message in a
+// POST body, or base64url in the dns parameter of a GET.
+func (p *Pool) exchangeDoH(ctx context.Context, q *dns.Msg, srv Server) (*dns.Msg, error) {
+	wire := q.Copy()
+	wire.Id = 0 // RFC 8484: a cache-friendly id
+	raw, err := wire.Pack()
+	if err != nil {
+		return nil, err
+	}
+	var req *http.Request
+	if srv.GET {
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, srv.Addr+queryJoin(srv.Addr)+"dns="+base64.RawURLEncoding.EncodeToString(raw), nil)
+	} else {
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, srv.Addr, bytes.NewReader(raw))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/dns-message")
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/dns-message")
+	client := p.doh
+	if p.dial != nil {
+		client = &http.Client{Timeout: p.timeout, Transport: &http.Transport{DialContext: p.dial.DialContext}}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s: HTTP %d", srv.Addr, resp.StatusCode)
+	}
+	in := new(dns.Msg)
+	if err := in.Unpack(body); err != nil {
+		return nil, err
+	}
+	in.Id = q.Id
+	return in, nil
+}
+
+func queryJoin(u string) string {
+	if strings.Contains(u, "?") {
+		return "&"
+	}
+	return "?"
 }
 
 // records returns the addresses of type qtype and the CNAME chain in m.
