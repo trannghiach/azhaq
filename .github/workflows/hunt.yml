@@ -3,7 +3,8 @@ name: hunt
 # Hunters before a release: one Codex agent per area uses the build of this
 # commit against the labs (.github/ci/labs.sh) and writes FINDINGS.md, which
 # is encrypted to the maintainer's age key and goes to the ci-results branch
-# under hunt/NAME/. Push a tag hunt-NAME.
+# under hunt/NAME/. Push an annotated tag hunt-NAME; its message may name
+# the areas and the model: "areas=web,net model=gpt-5.6-luna".
 on:
   push:
     tags: ["hunt-*"]
@@ -16,13 +17,33 @@ env:
   MODEL: gpt-5.6-luna
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      areas: ${{ steps.p.outputs.areas }}
+      model: ${{ steps.p.outputs.model }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: p
+        run: |
+          m=""
+          [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ] && m=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
+          a=$(echo "$m" | sed -n 's/.*areas=\([a-z,]*\).*/\1/p')
+          md=$(echo "$m" | sed -n 's/.*model=\([A-Za-z0-9._-]*\).*/\1/p')
+          echo "areas=$(echo "${a:-web,fuzz,net,controls}" | jq -Rc 'split(",")')" >> "$GITHUB_OUTPUT"
+          echo "model=${md:-$MODEL}" >> "$GITHUB_OUTPUT"
   hunt:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
-        area: [web, fuzz, net, controls]
+        area: ${{ fromJSON(needs.plan.outputs.areas) }}
+    env:
+      MODEL: ${{ needs.plan.outputs.model }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
