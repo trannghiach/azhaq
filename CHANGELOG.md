@@ -155,6 +155,7 @@
 
 ### Fixed
 
+- `-sources none` (no passive source, for a run that only resolves the names `-dns-brute` guesses) is accepted again; the check for unknown source names had made it a usage error.
 - The kill file stops sending within a tenth of a second, also for requests that were already waiting for `-rate`. Before, at `-rate 2`, requests counted before the file appeared still went out for up to 2.7 s (Chrome's included). A bench check now measures this on every path.
 - MCP calls that send requests run one at a time. Before, calls made at once each spent the whole budget and each kept the pace on its own.
 - A request Chrome answers from its cache is neither listed in the ledger nor counted. Before, a signed-in run of a multi-page app listed every page's shared scripts and styles.

@@ -291,7 +291,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fillForms := fs.Bool("fill-forms", false, "ask the action of each GET form with neutral values in its fields (a search box gets a word): one request per form, GET only")
 	pathClimb := fs.Bool("path-climb", false, "also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/)")
 	submitForms := fs.Bool("submit-forms", false, "also submit POST forms with neutral values (crawl): CHANGES DATA on the target, each submission counts as a request and is in the ledger, the summary says how many; held to -allow, -deny and the crawl's scope")
-	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
+	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set; none: no source, for a DNS-only run)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
 	noHistory := fs.Bool("no-history", false, "do not read or write the name history (names earlier runs found, kept under $AZHAQ_DATA_DIR, else ~/.local/share/azhaq; with -live each is checked by DNS in the run)")
@@ -861,7 +861,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if err != nil {
 		return fmt.Errorf("provider keys: %w", err)
 	}
-	if unknown := subcol.Unknown(splitList(*sourcesList)); len(unknown) > 0 {
+	if unknown := subcol.Unknown(splitList(*sourcesList)); len(unknown) > 0 && *sourcesList != "none" { // none: no passive source
 		msg := "no source named " + strings.Join(unknown, ", ") + " (azhaq subs -ls lists them)"
 		if len(unknown) == len(splitList(*sourcesList)) {
 			return usagef("-sources: %s", msg)

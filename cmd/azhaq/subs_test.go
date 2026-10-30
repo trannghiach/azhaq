@@ -177,6 +177,11 @@ func TestSubsUnknownSource(t *testing.T) {
 	if code != exitUsage {
 		t.Errorf("alone: exit %d", code)
 	}
+	// none asks no source (a DNS-only run), as before sources were checked.
+	out, _, code = runContract(t, "subs", "-d", "example.org", "-no-history", "-sources", "none")
+	if code == exitUsage || len(hosts(t, out)) != 0 {
+		t.Errorf("none: exit %d, %s", code, out)
+	}
 }
 
 func TestSubsListSources(t *testing.T) {
