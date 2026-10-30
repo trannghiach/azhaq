@@ -20,7 +20,11 @@
 
 **Chrome does not start.** Azhaq looks for Chrome or Chromium on the usual paths; `AZHAQ_CHROME=/path/to/chrome` names it. Where Chrome cannot start its sandbox (some containers), the error says so; `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one. Do this only where you accept that the pages Chrome loads are untrusted.
 
-**The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. The summary lists them as failures; the other archives still count. Run again later, or from another network.
+**The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. The summary lists them as failures; the other archives still count. Run again later, or from another network. `urls -retries N` sets how often a refused request is asked again, `-urls-pause` the wait between an archive's requests, `-proxy` sends them through another address.
+
+**`urls` printed fewer URLs than I expected.** The host alone is asked unless `-subs` is given. A `note` in the summary says when an archive stopped at its page cap (`-urls-pages 0` removes the cap, `-fail-on-capped` exits 4 on it), when URLs went past `-urls-max`, and when an archive was left out because it cannot apply a `-mc`, `-fc`, `-mt`, `-ft`, `-from` or `-to` filter. An archive that failed is listed as failed and the exit code is 3.
+
+**`urls -providers` says a name is not an archive.** `-providers` takes archive names (`wayback,commoncrawl,otx,urlscan,arquivo`). The API-key file is `-provider-config FILE`; a value with a `/` or naming a file that exists is still read as that file.
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 

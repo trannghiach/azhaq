@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/normalize"
 )
 
 // source lists the archived URLs of a domain and its subdomains, page by
@@ -21,16 +22,17 @@ import (
 type source struct {
 	name  string
 	needs string // provider key name; "" when none is needed
+	can   int    // the filters it applies (by*); a source that cannot apply one is not asked
 	fetch func(ctx context.Context, g *getter, domain string, key string, add func([]string)) (pages int, err error)
 }
 
 func allSources() []source {
 	return []source{
-		{name: "wayback", fetch: wayback},
-		{name: "commoncrawl", fetch: commonCrawl},
+		{name: "wayback", can: byStatus | byMime | byDate, fetch: wayback},
+		{name: "commoncrawl", can: byStatus | byMime | byDate, fetch: commonCrawl},
 		{name: "otx", fetch: otx},
-		{name: "urlscan", fetch: urlscan},
-		{name: "arquivo", fetch: arquivo},
+		{name: "urlscan", can: byDate, fetch: urlscan},
+		{name: "arquivo", can: byStatus | byMime | byDate, fetch: arquivo},
 	}
 }
 
@@ -43,6 +45,27 @@ type getter struct {
 	retries  int
 	last     time.Time
 	header   http.Header
+	apex     bool    // the domain's own host only, not its subdomains
+	filters  Filters // sent to the archive
+	base     string  // replaces the source's address
+	capped   bool    // the source stopped at its page cap with more to read
+	raw      bool    // only what gau would print: urlscan's page URLs, not its task URLs
+}
+
+// at is the source's address: the override, or def.
+func (g *getter) at(def string) string {
+	if g.base != "" {
+		return g.base
+	}
+	return def
+}
+
+// pattern is the CDX url parameter: the host alone, or with its subdomains.
+func (g *getter) pattern(domain string) string {
+	if g.apex {
+		return domain + "/*"
+	}
+	return "*." + domain + "/*"
 }
 
 // errStatus is an answer other than 200, 429 or 503.
@@ -66,6 +89,10 @@ func (e errLimited) Error() string {
 var backoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
 
 const maxRetryAfter = 20 * time.Second
+
+// waitFor is the wait before retry number attempt; past the table the
+// last wait repeats.
+func waitFor(attempt int) time.Duration { return backoff[min(attempt, len(backoff)-1)] }
 
 func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
 	body, err := g.open(ctx, raw)
@@ -99,10 +126,10 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		if err != nil {
 			// An archive that refuses or drops connections for a while
 			// (after a large query) is asked again, as a 503 would be.
-			if ctx.Err() != nil || attempt >= g.retries || attempt >= len(backoff) {
+			if ctx.Err() != nil || attempt >= g.retries {
 				return nil, err
 			}
-			if err := sleep(ctx, backoff[attempt]); err != nil {
+			if err := sleep(ctx, waitFor(attempt)); err != nil {
 				return nil, err
 			}
 			continue
@@ -114,10 +141,10 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		resp.Body.Close()
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
-			if attempt >= g.retries || attempt >= len(backoff) {
+			if attempt >= g.retries {
 				return nil, errLimited{status: resp.StatusCode}
 			}
-			wait := backoff[attempt]
+			wait := waitFor(attempt)
 			if n, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && n > 0 {
 				wait = min(time.Duration(n)*time.Second, maxRetryAfter)
 			}
@@ -165,10 +192,11 @@ func limited(err error, pages int) error {
 var waybackBase = "https://web.archive.org/cdx/search/cdx"
 
 func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
-	q := url.Values{"url": {"*." + domain + "/*"}, "output": {"json"}, "collapse": {"urlkey"}, "fl": {"original"}, "pageSize": {"100"}}
+	q := url.Values{"url": {g.pattern(domain)}, "output": {"json"}, "collapse": {"urlkey"}, "fl": {"original"}, "pageSize": {"100"}}
+	g.filters.params(q, cdxWayback)
 	for page := 0; page < g.maxPages; page++ {
 		q.Set("page", strconv.Itoa(page))
-		body, err := g.open(ctx, waybackBase+"?"+q.Encode())
+		body, err := g.open(ctx, g.at(waybackBase)+"?"+q.Encode())
 		if err != nil {
 			var st errStatus
 			if page > 0 && errors.As(err, &st) && st.code == http.StatusBadRequest {
@@ -185,6 +213,7 @@ func wayback(ctx context.Context, g *getter, domain, _ string, add func([]string
 			return page, nil
 		}
 	}
+	g.capped = true
 	return g.maxPages, nil
 }
 
@@ -228,7 +257,7 @@ func cdxRows(body io.Reader, add func([]string)) (int, error) {
 var commonCrawlInfo = "https://index.commoncrawl.org/collinfo.json"
 
 func commonCrawl(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
-	body, err := g.get(ctx, commonCrawlInfo)
+	body, err := g.get(ctx, g.at(commonCrawlInfo))
 	if err != nil {
 		return 0, limited(err, 0)
 	}
@@ -239,7 +268,8 @@ func commonCrawl(ctx context.Context, g *getter, domain, _ string, add func([]st
 		return 0, fmt.Errorf("no Common Crawl index listed")
 	}
 	api := indexes[0].CDXAPI
-	q := url.Values{"url": {"*." + domain}, "output": {"json"}, "fl": {"url"}}
+	q := url.Values{"url": {g.pattern(domain)}, "output": {"json"}, "fl": {"url"}}
+	g.filters.params(q, cdxPywb)
 	n := 1
 	if body, err := g.get(ctx, api+"?"+q.Encode()+"&showNumPages=true"); err == nil {
 		var p struct {
@@ -248,12 +278,17 @@ func commonCrawl(ctx context.Context, g *getter, domain, _ string, add func([]st
 		if json.Unmarshal(body, &p) == nil && p.Pages > 0 {
 			n = p.Pages
 		}
+	} else if noCaptures(err) {
+		return 0, nil
 	} else {
 		return 0, limited(err, 0)
 	}
 	for page := 0; page < n && page < g.maxPages; page++ {
 		q.Set("page", strconv.Itoa(page))
 		body, err := g.get(ctx, api+"?"+q.Encode())
+		if noCaptures(err) {
+			return page, nil
+		}
 		if err != nil {
 			return page, limited(err, page)
 		}
@@ -268,15 +303,37 @@ func commonCrawl(ctx context.Context, g *getter, domain, _ string, add func([]st
 		}
 		add(urls)
 	}
+	g.capped = n > g.maxPages
 	return min(n, g.maxPages), nil
 }
 
-// AlienVault OTX URL list: 500 per page until has_next is false.
+// noCaptures: Common Crawl answers 404 for a name its index holds nothing
+// under, which is an empty answer, not a failure.
+func noCaptures(err error) bool {
+	var st errStatus
+	return errors.As(err, &st) && st.code == http.StatusNotFound
+}
+
+// AlienVault OTX URL list: 500 per page until has_next is false. A name
+// with a subdomain is asked as a hostname (that host alone), or, when its
+// subdomains are wanted, as its registered domain, as gau does.
 var otxBase = "https://otx.alienvault.com/api/v1/indicators"
 
+func otxTarget(domain string, apex bool) (category, name string) {
+	reg := normalize.RegistrableDomain(domain)
+	switch {
+	case reg == "" || reg == domain:
+		return "domain", domain
+	case apex:
+		return "hostname", domain
+	}
+	return "domain", reg
+}
+
 func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
+	category, name := otxTarget(domain, g.apex)
 	for page := 1; page <= g.maxPages; page++ {
-		body, err := g.get(ctx, fmt.Sprintf("%s/domain/%s/url_list?limit=500&page=%d", otxBase, url.PathEscape(domain), page))
+		body, err := g.get(ctx, fmt.Sprintf("%s/%s/%s/url_list?limit=500&page=%d", g.at(otxBase), category, url.PathEscape(name), page))
 		if err != nil {
 			return page - 1, limited(err, page-1)
 		}
@@ -300,6 +357,7 @@ func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (
 			return page, nil
 		}
 	}
+	g.capped = true
 	return g.maxPages, nil
 }
 
@@ -313,11 +371,11 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 	}
 	after := ""
 	for page := 1; page <= g.maxPages; page++ {
-		q := url.Values{"q": {"domain:" + domain}, "size": {"100"}}
+		q := url.Values{"q": {urlscanQuery(domain, g.filters)}, "size": {"100"}}
 		if after != "" {
 			q.Set("search_after", after)
 		}
-		body, err := g.get(ctx, urlscanBase+"?"+q.Encode())
+		body, err := g.get(ctx, g.at(urlscanBase)+"?"+q.Encode())
 		if err != nil {
 			return page - 1, limited(err, page-1)
 		}
@@ -338,7 +396,10 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 		}
 		var urls []string
 		for _, x := range r.Results {
-			urls = append(urls, x.Page.URL, x.Task.URL)
+			urls = append(urls, x.Page.URL)
+			if !g.raw {
+				urls = append(urls, x.Task.URL)
+			}
 		}
 		add(urls)
 		if !r.HasMore || len(r.Results) == 0 {
@@ -350,7 +411,42 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 		}
 		after = strings.Join(parts, ",")
 	}
+	g.capped = true
 	return g.maxPages, nil
+}
+
+// urlscanQuery is the search for a domain, within the dates when given.
+func urlscanQuery(domain string, f Filters) string {
+	q := "domain:" + domain
+	if f.From != "" {
+		q += " AND date:>=" + dateBound(f.From, false)
+	}
+	if f.To != "" {
+		q += " AND date:<=" + dateBound(f.To, true)
+	}
+	return q
+}
+
+// dateBound is the first (or last) day a YYYY, YYYYMM, YYYYMMDD or
+// YYYYMMDDhhmmss value stands for, as 2006-01-02.
+func dateBound(d string, last bool) string {
+	d = d[:min(len(d), 8)]
+	for len(d) < 8 {
+		switch len(d) {
+		case 4:
+			d += "01"
+			if last {
+				d = d[:4] + "12"
+			}
+		case 6:
+			d += "01"
+			if last {
+				t, _ := time.Parse("200601", d[:6])
+				d = t.AddDate(0, 1, -1).Format("20060102")
+			}
+		}
+	}
+	return d[:4] + "-" + d[4:6] + "-" + d[6:8]
 }
 
 // arquivo.pt (Portuguese web archive, pywb): one request, one JSON object
@@ -358,8 +454,9 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 var arquivoBase = "https://arquivo.pt/wayback/cdx"
 
 func arquivo(ctx context.Context, g *getter, domain, _ string, add func([]string)) (int, error) {
-	q := url.Values{"url": {"*." + domain + "/*"}, "output": {"json"}, "collapse": {"urlkey"}, "limit": {"10000"}}
-	body, err := g.get(ctx, arquivoBase+"?"+q.Encode())
+	q := url.Values{"url": {g.pattern(domain)}, "output": {"json"}, "collapse": {"urlkey"}, "limit": {strconv.Itoa(arquivoLimit)}}
+	g.filters.params(q, cdxPywb)
+	body, err := g.get(ctx, g.at(arquivoBase)+"?"+q.Encode())
 	if err != nil {
 		return 0, limited(err, 0)
 	}
@@ -373,5 +470,9 @@ func arquivo(ctx context.Context, g *getter, domain, _ string, add func([]string
 		}
 	}
 	add(urls)
+	g.capped = len(urls) >= arquivoLimit
 	return 1, nil
 }
+
+// arquivoLimit is how many rows the one request asks for.
+const arquivoLimit = 10000

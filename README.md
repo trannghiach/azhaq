@@ -228,7 +228,8 @@ Without `-url`, it writes a report for each listed row whose verdict is `reads a
 azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json      # subfinder | dnsx | httpx
 azhaq dns    -d example.com -w subdomains.txt -resp                            # dnsx -d -w (brute force)
 azhaq crawl  -u https://app.example.com/ -json                                 # katana + jsluice
-azhaq urls   -d example.com -silent                                            # gau
+azhaq urls   -d example.com -silent                                            # gau (the host alone; -subs adds its subdomains)
+azhaq urls   example.com -subs -mc 200 -blacklist png,jpg,css -fp | httpx      # gau --subs --mc 200 --blacklist … --fp
 azhaq ports  -host scanme.nmap.org -p top-1000 -json                           # naabu (connect scan)
 azhaq ports  -host 192.0.2.7 -p none -pu top -json                             # the common UDP ports, no root
 azhaq dirs   -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac

@@ -8,6 +8,8 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
+	"math"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -154,6 +156,14 @@ type runOut struct{ json, quiet, embedded, plan, scratch bool }
 // stored: the drop-in commands print their results as they come.
 var observer func(types.Entity, types.Observation)
 
+// urlSink and urlscanKey are what the urls command hands the archive
+// collector in this process: a function that gets each URL as it
+// arrives, and a urlscan.io key from a config file.
+var (
+	urlSink    func(url, source string)
+	urlscanKey string
+)
+
 // mapTarget runs the engine as azhaq run does and fills rep; run and the
 // commands built on it print rep.
 func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
@@ -182,6 +192,24 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	noFavicon := fs.Bool("no-favicon", false, "do not hash the favicon of front pages (one or two requests less per web service)")
 	urlsOut := fs.String("urls", "", "write every archived URL of the run's domains to this file, one per line")
 	urlsFrom := fs.Bool("urls-source", false, "with -urls: each line is the URL, a tab, and the archive that gave it")
+	urlsSubs := fs.Bool("urls-subs", true, "ask the archives for the subdomains of each domain too (false: only the name itself, as gau does without --subs)")
+	urlsSources := fs.String("urls-sources", "", "ask only these archives, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all)")
+	urlsMC := fs.String("urls-mc", "", "keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); the archives that keep no status (OTX, urlscan.io) are not asked")
+	urlsFC := fs.String("urls-fc", "", "leave out URLs the archive recorded with these HTTP status codes, comma-separated; the archives that keep no status (OTX, urlscan.io) are not asked")
+	urlsMT := fs.String("urls-mt", "", "keep only URLs the archive recorded with these MIME types, comma-separated (text/html); the archives that keep no type (OTX, urlscan.io) are not asked")
+	urlsFT := fs.String("urls-ft", "", "leave out URLs the archive recorded with these MIME types, comma-separated; the archives that keep no type (OTX, urlscan.io) are not asked")
+	urlsFrom2 := fs.String("urls-from", "", "only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is not asked")
+	urlsTo := fs.String("urls-to", "", "only captures up to this time, in the same form")
+	urlsBlacklist := fs.String("urls-blacklist", "", "leave out URLs whose path ends in these extensions, comma-separated (png,jpg,svg)")
+	urlsFP := fs.Bool("urls-fp", false, "keep one URL for each host and path, dropping the variants that differ by parameters")
+	urlsRetries := fs.Int("urls-retries", 3, "times an archive request is asked again after a 429, 503 or network error (waits of 2, 5, then 10 s, or the Retry-After); 0 makes the first refusal final")
+	urlsPages := fs.Int("urls-pages", 50, "pages read from each archive for a domain (0: no cap); an archive that stops at the cap says so in the summary")
+	urlsPause := fs.Duration("urls-pause", 0, "pause between the requests of one archive (default: 1 s for the Wayback Machine and Common Crawl, 0.5 s for OTX, 2 s for urlscan.io; 0 for none)")
+	urlsProxy := fs.String("urls-proxy", "", "send the archive requests through this proxy: http://HOST:PORT, https:// or socks5://")
+	urlsMax := fs.Int("urls-max", 500000, "URLs kept for each domain (0: no cap); the summary counts the ones past it")
+	var urlsArchive stringsFlag
+	fs.Var(&urlsArchive, "urls-archive", "ask NAME's archive at this address instead of its own, as NAME=URL (a mirror or a test server; repeatable)")
+	urlsRaw := fs.Bool("urls-raw", false, "print the archived URLs exactly as the archives gave them: no normalising, junk filter or deduplication")
 	webPorts := fs.String("web-ports", "", "ports to probe on each hostname, comma-separated (default: 443, falling back to 80)")
 	factsPath := fs.String("facts", "", "JSONL connector facts to ingest before native collectors")
 	execCmd := fs.String("exec", "", "connector command (seeds on stdin, facts on stdout)")
@@ -626,7 +654,45 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return fmt.Errorf("provider keys: %w", err)
 	}
 	opts.Subdomains = subcol.Options{Keys: keys, Only: splitList(*sourcesList), Exclude: splitList(*excludeSources), All: *allSources, NoHistory: *noHistory, SourceTimeout: *sourceTimeout}
-	opts.URLs = urlcol.Options{Keys: keys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout}
+	urlKeys := maps.Clone(keys)
+	if urlKeys == nil {
+		urlKeys = map[string][]string{}
+	}
+	if urlscanKey != "" {
+		urlKeys["urlscan"] = []string{urlscanKey}
+	}
+	opts.URLs = urlcol.Options{Keys: urlKeys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout,
+		Apex: !*urlsSubs, Only: splitList(*urlsSources), FirstPath: *urlsFP, Blacklist: splitList(*urlsBlacklist), Proxy: *urlsProxy,
+		MaxPages: *urlsPages, MaxURLs: *urlsMax, Raw: *urlsRaw, OnURL: urlSink, Retries: urlsRetries}
+	if *urlsPages == 0 {
+		opts.URLs.MaxPages = math.MaxInt32
+	}
+	if *urlsMax == 0 {
+		opts.URLs.MaxURLs = math.MaxInt32
+	}
+	if *urlsRetries < 0 {
+		return usagef("-urls-retries %d: give 0 or more", *urlsRetries)
+	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "urls-pause" {
+			opts.URLs.Pause = urlsPause
+		}
+	})
+	opts.URLs.Filters = urlcol.Filters{MatchStatus: splitList(*urlsMC), DropStatus: splitList(*urlsFC), MatchMime: splitList(*urlsMT), DropMime: splitList(*urlsFT), From: *urlsFrom2, To: *urlsTo}
+	if err := opts.URLs.Filters.Validate(); err != nil {
+		return usagef("-urls-*: %v", err)
+	}
+	if err := urlcol.CheckSources(opts.URLs.Only); err != nil {
+		return usagef("-urls-sources: %v", err)
+	}
+	if *urlsProxy != "" {
+		if _, err := urlcol.ParseProxy(*urlsProxy); err != nil {
+			return usagef("-urls-proxy: %v", err)
+		}
+	}
+	if opts.URLs.Bases, err = archiveBases(urlsArchive); err != nil {
+		return usagef("-urls-archive: %v", err)
+	}
 	if *urlsOut != "" && *resumeRun == "" {
 		if err := os.WriteFile(*urlsOut, nil, 0o644); err != nil { // start empty; each domain appends
 			return err
