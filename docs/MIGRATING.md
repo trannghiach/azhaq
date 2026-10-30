@@ -196,6 +196,7 @@ What differs on purpose:
 - Not asked: a URL whose name says a GET would change something (`/logout`, `/delete?id=1`) is listed, not requested (`azhaq run -all-gets` asks them). A URL with a scanner's payload in it never enters the map. Chrome sends only GET, HEAD and OPTIONS unless `-browser-writes`.
 - Redirects are followed inside the site, not to any host. A page with many query variants (`/item?id=N`) is asked 3 times (`-per-template`), the rest are listed.
 - `crawl` asks only what a crawler asks. `-sweep` adds the 32 built-in path checks (`robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `admin`, …) and the source map next to each script, as `run` does.
+- At a low `-rate` the time is set by the number of requests. On Juice Shop at `-rate 5`, azhaq sends 91 requests in 21 s and katana `-jc -jsl -d 3 -rl 5` about 80 in 17 s. The extra requests are the API routes katana does not find (`/rest/…`, `/api/…`, about 60 more endpoints) and one check per directory that tells a real answer from the page the app gives every unknown path. Unpaced, azhaq is faster (8.5 s against 14.3 s).
 - `-json` is azhaq's, not katana's. The map keeps how each URL is known (`called`, `described`, `linked`, `archived`, `guessed`), and `azhaq show -db FILE URL` prints the line of the script that names it.
 
 Three command lines:
