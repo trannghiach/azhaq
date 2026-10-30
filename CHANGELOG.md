@@ -125,6 +125,19 @@
 - `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
 - A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
 
+### Crawl
+
+- `crawl` prints katana's JSON lines with `-jsonl`, its fields with `-f`, `-ot` and `-sf`, filters the printed URLs with `-em`, `-ef`, `-ndef`, `-mr` and `-fr`, and stores answers with `-sr`.
+- A page's links are no longer cut at 64: every link is listed and asked, bounded by templates and `-max-items`.
+- `crawl` follows links to the start host's subdomains with `-fs rdn|fqdn|dn|REGEX`, `-cs`, `-cos` and `-ns`, and `-do` lists the links it left out of scope; the summary counts them.
+- `crawl` sends only what a crawler sends: no built-in path sweep, no favicon request and no source-map guesses; `-kf all|robotstxt|sitemapxml` asks the known files and reads every entry, `-sweep` brings the 32 paths back.
+- Pages are read at every markup sink katana reads (`img`, `srcset`, `area`, `video`, `button formaction`, `object`, `hx-*`, `meta refresh`, the `Link`, `Content-Location` and `Refresh` headers) and redirect hops are listed.
+- Strings in scripts and pages that katana's patterns take (`users.php`, `admin/`) are URLs when they name a page of the app; every other one is kept as a rejected candidate with its reason, listed by `-rejected` and counted in the summary.
+- GET forms are asked once with neutral values; `-submit-forms` sends POST forms (it changes data, each submission is counted and in the ledger).
+- `crawl` waits and asks again on 429 and 503, retries after a timeout, carries cookies the target sets, and takes `-hrl`, `-hrlm`, `-rlm`, `-mdp`, `-mrs`, `-rd`, `-iqp`, `-pc`, `-proxy`, `-r` and `-c`, `-p`, `-rl`, `-ct`, `-dr` as katana's names; a scheme-less `:80` or `:8080` target is asked over http and `-u a,b` is split.
+- `crawl -json` rows carry `tech`.
+- `-browser -interact` clicks the buttons, links and menus of each page and maps the routes and requests they bring; the writes a click would send are mapped and not sent, and a click on log out or delete is not made.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

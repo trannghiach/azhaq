@@ -354,12 +354,12 @@ func closeWrite(c net.Conn) {
 }
 
 // dialOut connects to addr as the run's own requests to a scheme://addr
-// URL would: through the proxy the environment names for it, if any (Burp,
+// URL would: through the proxy -proxy or the environment names for it, if any (Burp,
 // a SOCKS tunnel), or directly, a name through the run's resolver.
 func dialOut(ctx context.Context, scheme, addr string, via *url.URL) (net.Conn, error) {
 	p, err := via, error(nil)
 	if p == nil {
-		p, err = http.ProxyFromEnvironment(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+		p, err = fetch.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
 	}
 	if err != nil {
 		return nil, err

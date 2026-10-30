@@ -25,6 +25,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // ErrNoChrome means no Chrome or Chromium was found.
@@ -86,6 +87,10 @@ type Browser struct {
 	// GET, HEAD and OPTIONS, as a user's browser would (-browser-writes):
 	// it changes data on the target. Otherwise only the sign-in does.
 	Writes bool
+	// Interact is how many clicks a loaded page gets (-interact): its
+	// buttons, links and menus, to find what only a click brings. It
+	// sends nothing a load does not (see interact.go).
+	Interact int
 
 	once   sync.Once
 	err    error
@@ -231,19 +236,20 @@ func (b *Browser) Close() {
 
 // Page is what loading a URL gave.
 type Page struct {
-	URL       string // after redirects
-	Title     string
-	Image     []byte // the screenshot, in Format
-	Format    string // "png" or "jpeg"
-	Skipped   string // why no screenshot was taken of a page that answered
-	HTML      string
-	Asked     int      // how many requests the page made, images, fonts and media included: what its budget has to cover
-	Requests  []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
-	Blocked   []string // URLs it asked for outside the scope, to list (Reason); not sent
-	Downloads []string // what it would have saved to disk, to list (DownloadReason); refused
-	Writes    []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
-	Left      string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
-	Capped    bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
+	URL         string // after redirects
+	Title       string
+	Image       []byte // the screenshot, in Format
+	Format      string // "png" or "jpeg"
+	Skipped     string // why no screenshot was taken of a page that answered
+	HTML        string
+	Asked       int         // how many requests the page made, images, fonts and media included: what its budget has to cover
+	Requests    []string    // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
+	Blocked     []string    // URLs it asked for outside the scope, to list (Reason); not sent
+	Downloads   []string    // what it would have saved to disk, to list (DownloadReason); refused
+	Writes      []Write     // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
+	Left        string      // the page went there, outside the scope, and was stopped: what shows is Chrome's error
+	Interaction Interaction // what clicking it found, with Browser.Interact
+	Capped      bool        // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
 	// Unloaded is how many of the images, styles, scripts, fonts and media
 	// the page asked for (of Resources) had not come back, or failed, when
 	// the picture was taken: the screenshot is then Partial.
@@ -292,7 +298,8 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	if fetch.Rate() > 0 {
 		prog = newProgress()
 	}
-	tab, cancelT := deadline(tab, prog, b.Timeout, 10*b.Timeout)
+	extra := time.Duration(b.Interact) * 2 * time.Second // the clicks of -interact
+	tab, cancelT := deadline(tab, prog, b.Timeout+extra, 10*b.Timeout+extra)
 	defer cancelT()
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
@@ -382,6 +389,9 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Record, p.Unloaded, p.Resources = log.snapshot()
 	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
 	p.Partial = p.Unloaded > 0
+	if err == nil && b.Interact > 0 {
+		p.Interaction = b.interact(tab, p.URL, b.Interact, webextract.StateChanging)
+	}
 	b.settle(t)
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)

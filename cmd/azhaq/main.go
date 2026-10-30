@@ -42,6 +42,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/crawlscope"
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
@@ -198,6 +199,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	browserWrites := fs.Bool("browser-writes", false, "let pages in Chrome send their writes (POST, PUT, DELETE…, beacons, forms posted on load) as a user's browser would: they change data on the target; by default Chrome sends only GET, HEAD and OPTIONS outside signing in, and maps the writes it does not send")
+	interact := fs.Bool("interact", false, "with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made")
+	interactClicks := fs.Int("interact-clicks", 12, "clicks -interact makes on each page")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
 	shotSize := fs.String("shot-size", "1440x900", "screenshot size in pixels, WIDTHxHEIGHT")
@@ -276,6 +279,17 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	delay := fs.Duration("delay", 0, "pause before each uncached fetch")
 	noFollow := fs.Bool("no-follow", false, "do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default)")
 	hostParallel := fs.Int("host-parallel", 0, "requests in flight per host (default 10, as katana)")
+	retryFlag := fs.Int("retry", 0, "ask again this many times when a host that answered before gives no answer (a timeout, a reset)")
+	backoff := fs.Bool("backoff", false, "when a host answers 429 or 503, wait (1 s doubling to 30 s, or its Retry-After) and ask again, up to 3 times; the summary says which hosts did")
+	cookieJar := fs.Bool("cookie-jar", false, "carry the cookies targets set (Set-Cookie) on the requests that follow, as a browser does; -cookie and -header values go first")
+	hostRate := fs.Float64("host-rate", 0, "requests per second to each host, besides -rate over all (0: none)")
+	maxHostReq := fs.Int64("max-host-requests", 0, "requests one host may be sent (0: no cap); the rest of its work is left for azhaq resume")
+	reqTimeout := fs.Duration("request-timeout", 0, "time one request gets, headers and body (default: 10 s for headers, 30 s in all; not -timeout, the run's bound)")
+	maxResp := fs.Int("max-response-size", 0, "bytes read of a page or document (default 2097152; scripts and JSON get 16 MiB)")
+	noMapGuess := fs.Bool("no-map-guess", false, "do not ask for main.js.map next to a script that names no source map (a map a script or a header names is still read)")
+	fillForms := fs.Bool("fill-forms", false, "ask the action of each GET form with neutral values in its fields (a search box gets a word): one request per form, GET only")
+	pathClimb := fs.Bool("path-climb", false, "also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/)")
+	submitForms := fs.Bool("submit-forms", false, "also submit POST forms with neutral values (crawl): CHANGES DATA on the target, each submission counts as a request and is in the ledger, the summary says how many; held to -allow, -deny and the crawl's scope")
 	sourcesList := fs.String("sources", "", "subdomain sources to run, comma-separated (default: the default set)")
 	excludeSources := fs.String("exclude-sources", "", "subdomain sources never to run, comma-separated")
 	allSources := fs.Bool("all-sources", false, "also run slower subdomain sources outside the default set")
@@ -333,7 +347,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
 	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
 	getWords := fs.String("get-words", "", "request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets")
-	var cookies, headers, allow, deny, domains stringsFlag
+	knownFiles := fs.String("known-files", "", "ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths")
+	proxyFlag := fs.String("proxy", "", "send requests to targets through this proxy (http://, https:// or socks5://); Chrome too (default: $HTTP_PROXY, $HTTPS_PROXY)")
+	crawlScope := fs.String("crawl-scope", "", "the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: the page's own origin)")
+	crawlAny := fs.Bool("crawl-any-host", false, "follow links to any host, within -allow and -deny (katana's -ns)")
+	var cookies, headers, allow, deny, domains, crawlIn, crawlOut stringsFlag
+	fs.Var(&crawlIn, "crawl-in", "follow only URLs that match this regex (repeatable)")
+	fs.Var(&crawlOut, "crawl-out", "never follow URLs that match this regex (repeatable)")
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
 	fs.Var(&cookies, "cookie", "Cookie name=value (repeatable; sent as one Cookie header)")
 	fs.Var(&headers, "header", "extra request header K: V (repeatable)")
@@ -360,6 +380,26 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fetch.Reset()
 	fetch.Delay = *delay
 	fetch.NoFollow = *noFollow
+	crawlscope.Reset()
+	fetch.Tap = answerTap
+	fetch.Retry, fetch.Backoff = *retryFlag, *backoff
+	fetch.UseJar(*cookieJar)
+	fetch.SetHostRate(*hostRate)
+	fetch.MaxPerHost = *maxHostReq
+	fetch.RequestTimeout = *reqTimeout
+	if *maxResp > 0 {
+		fetch.MaxBody = *maxResp
+	}
+	if k := strings.ToLower(*knownFiles); !slices.Contains([]string{"", "all", "robotstxt", "robots", "sitemapxml", "sitemap"}, k) {
+		return usagef("-known-files is all, robotstxt or sitemapxml, got %q", *knownFiles)
+	}
+	if *proxyFlag != "" {
+		pu, err := parseProxy(*proxyFlag)
+		if err != nil {
+			return err
+		}
+		fetch.ProxyURL = pu
+	}
 	if *hostParallel > 0 {
 		fetch.HostParallel = *hostParallel
 	}
@@ -598,6 +638,17 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if !budgets.Scope.Empty() {
 		fetch.Allow = budgets.Scope.Allows
 	}
+	if *crawlScope != "" || *crawlAny || len(crawlIn) > 0 || len(crawlOut) > 0 {
+		var roots []string
+		for _, sd := range seeds {
+			if sd.Type == types.TypeURL {
+				roots = append(roots, sd.Key())
+			}
+		}
+		if err := crawlscope.Set(crawlscope.Config{Field: *crawlScope, Any: *crawlAny, In: crawlIn, Out: crawlOut, Roots: roots}); err != nil {
+			return usagef("%v", err)
+		}
+	}
 	doneBefore := 0
 	if *resumeRun != "" {
 		st.UseRun(*resumeRun)
@@ -652,10 +703,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *webScheme != "" && *webScheme != "http" && *webScheme != "https" {
 		return usagef("-web-scheme is http or https, got %q", *webScheme)
 	}
-	opts := collectors.Options{Client: client, WebPorts: ports, WebScheme: *webScheme, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render}
+	opts := collectors.Options{Client: client, WebPorts: ports, WebScheme: *webScheme, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render, KnownFiles: *knownFiles, FillForms: *fillForms, NoMapGuess: *noMapGuess, SubmitForms: *submitForms, PathClimb: *pathClimb}
 	opts.ShotHTML = *shotHTML
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
+	}
+	if *interact && !*render {
+		return usagef("-interact clicks the pages Chrome loads: give it with -browser")
 	}
 	if !out.plan {
 		led, err := startLedger(*ledgerFlag, *killFile, path, out.scratch, rules)
@@ -685,6 +739,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 		bb.Tabs, bb.UserAgent, bb.Header, bb.Writes = *tabs, browserAgent(), hdr, *browserWrites
 		opts.Browser = bb
+		if *interact {
+			opts.Browser.Interact = *interactClicks
+		}
 		defer opts.Browser.Close()
 		if err := opts.Browser.Start(); err != nil {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
@@ -2197,4 +2254,13 @@ func shotBrowser(o shotOptions) (*browser.Browser, error) {
 		b.Codes = append(b.Codes, n)
 	}
 	return b, nil
+}
+
+// parseProxy reads -proxy.
+func parseProxy(s string) (*url.URL, error) {
+	pu, err := url.Parse(s)
+	if err != nil || pu.Host == "" || !slices.Contains([]string{"http", "https", "socks5", "socks5h"}, pu.Scheme) {
+		return nil, usagef("-proxy wants http://host:port, https://host:port or socks5://host:port, got %q", s)
+	}
+	return pu, nil
 }

@@ -246,7 +246,7 @@ azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json      #
 azhaq dns    -d example.com -w subdomains.txt -resp                            # dnsx -d -w (brute force)
 azhaq dns    -l names.txt -mx -txt -json -r 1.1.1.1,tcp:9.9.9.9 -rl 50 -t 20   # dnsx -mx -txt -j -r ... -rl -t
 azhaq dns    -l 192.0.2.0/24 -ptr -resp                                         # dnsx -ptr (reverse names of a range)
-azhaq crawl  -u https://app.example.com/ -json                                 # katana + jsluice
+azhaq crawl  -u https://app.example.com/ -d 3 -jsonl                            # katana + jsluice (katana's flags and lines)
 azhaq urls   -d example.com -silent                                            # gau (the host alone; -subs adds its subdomains)
 azhaq urls   example.com -subs -mc 200 -blacklist png,jpg,css -fp | httpx      # gau --subs --mc 200 --blacklist … --fp
 azhaq ports  -host scanme.nmap.org -p top-1000 -json                           # naabu (connect scan)

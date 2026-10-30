@@ -2,7 +2,6 @@ package webextract
 
 import (
 	"bytes"
-	"io"
 	"net/url"
 	"strings"
 
@@ -34,6 +33,16 @@ type Form struct {
 	Name    string
 	Fields  []string
 	Files   []string // the fields that are file inputs
+	// Inputs are the fields with what a browser would send for them
+	// untouched, for filling a form in.
+	Inputs []Input
+}
+
+// Input is a form field: its name, kind (text, hidden, checkbox, select,
+// textarea, …) and the value the page gives it.
+type Input struct {
+	Name, Type, Value string
+	Checked           bool // a checkbox or radio the page ticks
 }
 
 // Forms returns <form> elements and script-driven forms: any element with a
@@ -49,6 +58,7 @@ func Forms(body []byte, page *url.URL) []Form {
 	z := html.NewTokenizer(bytes.NewReader(body))
 	var cur *Form
 	curTag, depth := "", 0
+	inSelect := 0 // 1-based index of the select whose options are read
 	open := func(tok html.Token, method, action string) {
 		if cur != nil {
 			out = append(out, *cur)
@@ -105,8 +115,26 @@ func Forms(body []byte, page *url.URL) []Form {
 				continue
 			}
 			cur.Fields = append(cur.Fields, name)
-			if tag == "input" && strings.EqualFold(attr(tok.Attr, "type"), "file") {
+			typ := strings.ToLower(attr(tok.Attr, "type"))
+			if tag != "input" {
+				typ = tag
+			} else if typ == "" {
+				typ = "text"
+			}
+			if typ == "file" {
 				cur.Files = append(cur.Files, name)
+			}
+			_, checked := tokAttr(tok.Attr, "checked")
+			cur.Inputs = append(cur.Inputs, Input{Name: name, Type: typ, Value: attr(tok.Attr, "value"), Checked: checked})
+			if tag == "select" {
+				inSelect = len(cur.Inputs)
+			}
+		case "option":
+			if cur != nil && inSelect > 0 {
+				in := &cur.Inputs[inSelect-1]
+				if _, sel := tokAttr(tok.Attr, "selected"); sel || in.Value == "" {
+					in.Value = attr(tok.Attr, "value")
+				}
 			}
 		}
 	}
@@ -189,6 +217,16 @@ func enctype(v string) string {
 	return "application/x-www-form-urlencoded"
 }
 
+// tokAttr is an attribute's value and whether the tag has it at all.
+func tokAttr(attrs []html.Attribute, key string) (string, bool) {
+	for _, a := range attrs {
+		if strings.EqualFold(a.Key, key) {
+			return a.Val, true
+		}
+	}
+	return "", false
+}
+
 func nameIn(xs []string, n string) bool {
 	for _, x := range xs {
 		if x == n {
@@ -217,46 +255,6 @@ func Generator(body []byte) string {
 		}
 		return strings.TrimSpace(attr(tok.Attr, "content"))
 	}
-}
-
-// Links are a page's links, iframes and GET form actions, resolved
-// against its <base href> when it has one, else against base, its URL.
-func Links(body []byte, base *url.URL) []string {
-	if base == nil {
-		return nil
-	}
-	base = docBase(body, base)
-	var out []string
-	seen := map[string]bool{}
-	z := html.NewTokenizer(bytes.NewReader(body))
-	for {
-		tt := z.Next()
-		if tt == html.ErrorToken {
-			if z.Err() != io.EOF {
-				break
-			}
-			break
-		}
-		if tt != html.StartTagToken && tt != html.SelfClosingTagToken {
-			continue
-		}
-		tok := z.Token()
-		if attr := hrefAttr(tok.Data, tok.Attr); attr != "" {
-			if u, ok := resolve(base, attr); ok && !seen[u] {
-				seen[u] = true
-				out = append(out, u)
-			}
-		}
-		// What the tag's scripts would open: the page's own only, as
-		// a handler opening another site is not a link of the page.
-		for _, ref := range handlerRefs(tok.Attr) {
-			if u, ok := resolve(base, ref); ok && !seen[u] && SameOrigin(base.String(), u) {
-				seen[u] = true
-				out = append(out, u)
-			}
-		}
-	}
-	return out
 }
 
 var (
@@ -380,23 +378,6 @@ func InlineScriptsAt(body []byte) []Inline {
 		off += n
 	}
 	return out
-}
-
-func hrefAttr(tag string, attrs []html.Attribute) string {
-	switch strings.ToLower(tag) {
-	case "a", "link":
-		return attr(attrs, "href")
-	case "form":
-		method := strings.ToUpper(attr(attrs, "method"))
-		if method != "" && method != "GET" {
-			return ""
-		}
-		return attr(attrs, "action")
-	case "iframe", "frame", "embed":
-		return attr(attrs, "src")
-	default:
-		return ""
-	}
 }
 
 func attr(attrs []html.Attribute, key string) string {

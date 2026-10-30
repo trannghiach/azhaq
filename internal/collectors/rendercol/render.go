@@ -170,6 +170,43 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 	}
+	if in := p.Interaction; in.Clicks > 0 || in.Skipped > 0 {
+		for _, h := range in.Snapshots {
+			for _, l := range webextract.Links([]byte(h), base) {
+				if webextract.SameOrigin(raw, l) {
+					if _, ok := seen[l]; !ok {
+						seen[l] = "click"
+					}
+				}
+			}
+		}
+		for _, r := range in.Routes {
+			ru, err := url.Parse(r)
+			if err != nil || !webextract.SameOrigin(raw, r) {
+				continue
+			}
+			if strings.HasPrefix(ru.Fragment, "/") {
+				// A route after the hash: a view of the app, never requested.
+				row := map[string]any{"url": r, "via": "browser", "seen": "click", "role": "client-route"}
+				payload, _ := json.Marshal(row)
+				if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "url", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
+					return meta, err
+				}
+				meta.EmitCount++
+				continue
+			}
+			if n, err := normalize.URL(r); err == nil {
+				if _, ok := seen[n]; !ok {
+					seen[n] = "click"
+				}
+			}
+		}
+		payload, _ := json.Marshal(map[string]any{"url": raw, "clicks": in.Clicks, "skipped": in.Skipped, "routes": len(in.Routes), "writes_mapped": len(p.Writes)})
+		if err := emit(types.Observation{Collector: Name, Source: raw, Kind: "interact", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
 	for link, how := range seen {
 		role := webextract.ClassifyURL(link)
 		if role == "asset" || link == raw {

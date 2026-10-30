@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/crawlscope"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -60,8 +61,12 @@ var DefaultWordlist = []string{
 }
 
 type Collector struct {
-	Client    *http.Client
-	Wordlist  []string
+	Client   *http.Client
+	Wordlist []string
+	// Known, set by -known-files, makes the sweep ask only the files it
+	// names (robots.txt, sitemaps), read every entry of them, and not sweep
+	// under API bases.
+	Known     bool
 	probed    sync.Map // scheme://host (or scheme://host/api/v2/) → the URL whose task sweeps it; one sweep each
 	baseCount sync.Map // scheme://host → API bases swept
 }
@@ -100,6 +105,9 @@ func (c *Collector) Skip(seed types.Seed) bool {
 	origin := u.Scheme + "://" + u.Host
 	if c.owner(origin, raw) == raw {
 		return false
+	}
+	if c.Known {
+		return true
 	}
 	b := apiBase(u.Path)
 	// The root sweep asks /api/swagger.json and /api/openapi.json.
@@ -175,7 +183,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if len(list) == 0 {
 			list = DefaultWordlist
 		}
-	case b != "" && b != "/api/" && c.owner(origin+b, raw) == raw && c.bases(origin) <= maxBases:
+	case !c.Known && b != "" && b != "/api/" && c.owner(origin+b, raw) == raw && c.bases(origin) <= maxBases:
 		// The root sweep asks /api/swagger.json and /api/openapi.json.
 		prefix, list = b, specWords
 	default:
@@ -223,13 +231,19 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		meta.EmitCount++
 		if res.Status == 200 && (strings.HasSuffix(path, "sitemap.xml") || path == "sitemap_index.xml") {
-			for _, loc := range sitemapLocs(res.Body) {
-				hintURL(raw, loc, &meta)
+			for _, loc := range sitemapLocs(res.Body, c.Known) {
+				c.hintURL(raw, loc, &meta, emit)
 			}
 		}
 		if path == "robots.txt" && res.Status == 200 {
-			for _, loc := range robotsRefs(res.Body, base) {
-				hintURL(raw, loc, &meta)
+			refs, skipped := robotsRefs(res.Body, base, c.Known)
+			for _, loc := range refs {
+				c.hintURL(raw, loc, &meta, emit)
+			}
+			for _, x := range skipped {
+				if emit(webextract.RejectedObs(Name, target, x, webextract.ReasonWildcard, "robots", "")) == nil {
+					meta.EmitCount++
+				}
 			}
 		}
 		for _, u := range []string{reqURL, final} {
@@ -327,9 +341,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 
 var locRE = regexp.MustCompile(`(?i)<loc>\s*([^<\s]+)\s*</loc>`)
 
-func sitemapLocs(body []byte) []string {
+func sitemapLocs(body []byte, all bool) []string {
 	var out []string
-	for _, m := range locRE.FindAllSubmatch(body, 64) {
+	n := 64
+	if all {
+		n = -1
+	}
+	for _, m := range locRE.FindAllSubmatch(body, n) {
 		if len(m) != 2 {
 			continue
 		}
@@ -342,8 +360,17 @@ func sitemapLocs(body []byte) []string {
 	return out
 }
 
-func hintURL(raw, loc string, meta *types.RunMeta) {
-	if !webextract.SameOrigin(raw, loc) || !webextract.Hintable(loc) {
+func (c *Collector) hintURL(raw, loc string, meta *types.RunMeta, emit func(types.Observation) error) {
+	if !crawlscope.Within(raw, loc) {
+		if c.Known && crawlscope.Wide() {
+			p, _ := json.Marshal(map[string]string{"url": loc, "via": "paths"})
+			if emit(types.Observation{Collector: Name, Source: raw, Kind: "offsite", Payload: p, Confidence: 0.75, ObservedAt: time.Now().UTC()}) == nil {
+				meta.EmitCount++
+			}
+		}
+		return
+	}
+	if !webextract.Hintable(loc) {
 		return
 	}
 	meta.NextHints = append(meta.NextHints, types.Seed{
@@ -351,15 +378,20 @@ func hintURL(raw, loc string, meta *types.RunMeta) {
 	})
 }
 
-func robotsRefs(body []byte, base *url.URL) []string {
+// robotsRefs are the paths a robots.txt names, and the entries that are
+// patterns, not paths. all lifts the 32 it stops at otherwise.
+func robotsRefs(body []byte, base *url.URL, all bool) (out, patterns []string) {
 	if base == nil {
-		return nil
+		return nil, nil
 	}
-	var out []string
 	seen := map[string]bool{}
 	add := func(ref string) {
 		ref = strings.TrimSpace(ref)
-		if ref == "" || ref == "/" || strings.Contains(ref, "*") {
+		if ref == "" || ref == "/" {
+			return
+		}
+		if strings.Contains(ref, "*") || strings.HasSuffix(ref, "$") {
+			patterns = append(patterns, ref)
 			return
 		}
 		u, err := base.Parse(ref)
@@ -388,11 +420,11 @@ func robotsRefs(body []byte, base *url.URL) []string {
 		case "allow", "disallow":
 			add(strings.TrimSpace(val))
 		}
-		if len(out) >= 32 {
+		if len(out) >= 32 && !all {
 			break
 		}
 	}
-	return out
+	return out, patterns
 }
 
 // probePrefix is the directory under which the wordlist is joined.
@@ -425,4 +457,15 @@ func interesting(status int) bool {
 	default:
 		return false
 	}
+}
+
+// KnownFiles is the sweep -known-files asks for: robots.txt, sitemaps, or both.
+func KnownFiles(which string) []string {
+	switch strings.ToLower(which) {
+	case "robotstxt", "robots":
+		return []string{"robots.txt"}
+	case "sitemapxml", "sitemap":
+		return []string{"sitemap.xml", "sitemap_index.xml"}
+	}
+	return []string{"robots.txt", "sitemap.xml", "sitemap_index.xml"}
 }
