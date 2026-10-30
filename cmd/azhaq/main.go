@@ -202,7 +202,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	interact := fs.Bool("interact", false, "with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made")
 	interactClicks := fs.Int("interact-clicks", 12, "clicks -interact makes on each page")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
-	tabs := fs.Int("tabs", 4, "Chrome tabs open at once for screenshots and -browser")
+	tabs := fs.Int("tabs", 6, "Chrome tabs open at once for screenshots and -browser (gowitness -t)")
 	shotSize := fs.String("shot-size", "1440x900", "screenshot size in pixels, WIDTHxHEIGHT")
 	shotFull := fs.Bool("shot-fullpage", false, "screenshot the whole page, not only the first screen (up to 16384 pixels tall)")
 	shotWait := fs.Duration("shot-wait", 1500*time.Millisecond, "wait after a page's load event for scripts that draw after it, before the screenshot (0: none)")
