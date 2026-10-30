@@ -1,0 +1,29 @@
+bench: building azhaq
+bench: installing katana 1.8.0
+bench: installing subfinder 2.17.0
+bench: installing httpx 1.12.0
+bench: installing dnsx 1.3.1
+bench: installing naabu 2.6.1
+bench: installing gau 2.2.4
+bench: installing ffuf 2.3.0
+bench: installing alterx 0.1.0
+bench: installing gowitness 3.2.2
+bench: building jsluice v0.0.0-20240110145140-0ddfab153e06
+bench: default: dns
+bench: default: dns took 3s
+
+default flags: dns record types  azhaq  dnsx  azhaq time  dnsx time  queries azhaq/dnsx
+32 names                         12     12    0.0s        0.5s       290 / 523
+
+checks
+  PASS  [default] dns record types: results ≥ the reference's, confirmed by the zone the bench serves (a name and type it holds)  (azhaq 12, reference 12; 32 names, 9 types; queries received azhaq 290, dnsx 523; time ×0.05 of the reference | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:51186 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa)
+  PASS  [default] dns record types: time ≤ 1.05× the reference's  (azhaq 0.0s, reference 0.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:51186 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa)
+  PASS  [default] dns record types: azhaq's JSON values equal dnsx's  (0 differences [])
+  PASS  [default] dns -ptr: results ≥ the reference's, confirmed by the zone's PTR records  (azhaq 2, reference 2; azhaq [app.bench.lan www.bench.lan], dnsx [app.bench.lan www.bench.lan] | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:51186 -ptr -json -silent)
+  PASS  [default] dns -ptr: time ≤ 1.05× the reference's  (azhaq 0.0s, reference 0.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:51186 -ptr -json -silent)
+  PASS  docs: no public doc says an active option needs -allow or a scope, or that requests are GETs only without HEAD  (0 lines: [])
+  PASS  docs: README's 'Latest run (date, vX)' names the newest release (CHANGELOG) and is not older than the tag  (README "0.10.0" on 2026-10-30, CHANGELOG newest "0.10.0", latest tag "bench-ci-smoke1", newest bench record 2026-10-30)
+
+7 of 7 checks pass
+
+record bench/history/2026-10-30T224842-999c655.json
