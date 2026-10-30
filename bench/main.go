@@ -46,6 +46,7 @@ type record struct {
 	Tenants *tenantsRow  `json:"tenants,omitempty"`
 	Scale   *scaleRow    `json:"scale,omitempty"`
 	Claims  *claimsRow   `json:"claims,omitempty"`
+	Regress *regressRow  `json:"regress,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -69,7 +70,7 @@ type runMeasure struct {
 
 // sections are what -only picks from; dockerParts need the docker apps.
 var (
-	sections    = []string{"apps", "dropin", "dirs", "scope", "secrets", "tenants", "scale", "claims", "shots", "params", "domains", "brute", "ports", "network", "probe"}
+	sections    = []string{"apps", "dropin", "dirs", "scope", "secrets", "tenants", "scale", "claims", "regress", "shots", "params", "domains", "brute", "ports", "network", "probe"}
 	dockerParts = []string{"dropin", "dirs", "scope", "scale", "shots", "params"}
 )
 
@@ -138,8 +139,10 @@ func main() {
 	if _, err := exec.Command("go", "build", "-o", azhaq, "./cmd/azhaq").CombinedOutput(); err != nil {
 		fatal("go build: %v", err)
 	}
-	must(installTools(binDir))
-	must(installBuilt(binDir))
+	if !(len(sel) == 1 && sel["regress"]) { // regress uses what $AZHAQ_REFBIN holds
+		must(installTools(binDir))
+		must(installBuilt(binDir))
+	}
 
 	docker := on("apps", *apps)
 	for _, s := range dockerParts {
@@ -188,6 +191,9 @@ func main() {
 	}
 	if on("claims", *apps) {
 		rec.Claims = benchClaims()
+	}
+	if on("regress", false) {
+		rec.Regress = benchRegress()
 	}
 	if on("shots", *apps) {
 		rec.Shots = benchShots([]string{juiceURL, vampiURL, ginURL, "http://rest.vulnweb.com/"})
