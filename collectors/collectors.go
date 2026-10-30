@@ -60,6 +60,7 @@ type Options struct {
 	PathClimb   bool             // azhaq-crawl lists the parent directories of its links
 	SubmitForms bool             // azhaq-crawl submits POST forms (changes data)
 	KnownFiles  string           // azhaq-paths: ask only robots.txt and sitemaps (all, robotstxt, sitemapxml)
+	HTTP        *httpcol.Spec    // azhaq probe's httpx flags; nil outside probe
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -74,6 +75,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	hc.NoTech = o.NoTech
 	hc.Probe = o.Probe
 	hc.NoFavicon = o.NoFavicon
+	hc.Spec = o.HTTP
 	cat.MustRegister(hc)
 	cc := crawlcol.New(client)
 	cc.FillForms, cc.SubmitForms, cc.Climb = o.FillForms, o.SubmitForms, o.PathClimb
@@ -97,6 +99,7 @@ func Register(cat *catalog.Catalog, o Options) {
 		pool = dnsr.New(dnsr.Options{})
 	}
 	dnsc := dnscol.New(pool)
+	dnsc.KeepWild, dnsc.NoHints = o.HTTP != nil, o.HTTP != nil
 	cat.MustRegister(dnsc)
 	cat.MustRegister(&brutecol.Brute{Pool: pool, Wild: dnsc.Wild, Words: o.BruteWords})
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})

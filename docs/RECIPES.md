@@ -282,3 +282,15 @@ azhaq crawl -u http://127.0.0.1:5030/ -submit-forms -allow 127.0.0.1 -ledger cra
 ```
 
 Catch: `-submit-forms` changes data on the target (a sign-up form creates an account). Use it on a target you may write to; the ledger lists every submission and the summary counts them. A form whose address looks like it would change something (`logout`, `delete`) and a form that uploads a file are left alone, and the summary says so. Without `-sweep`, `crawl` does not ask the built-in paths (`/admin`, `/.git/HEAD`, API description names); `-kf all` asks only `robots.txt` and the sitemaps and reads every entry.
+
+## 20. Probe web services like httpx
+
+```
+azhaq probe -l hosts.txt -p 80,443,8000-8100 -mc 200,401 -ms admin -title -td -sc
+azhaq probe -l hosts.txt -fr -tls-grab -hash md5 -jarm -json -o web.jsonl
+azhaq probe -l hosts.txt -sr -srd out -irh -irr -json     # every request and response, kept
+azhaq probe -l hosts.txt -mdc 'status_code == 200 && contains(body, "login")' -json
+azhaq probe -u https://app.example.com -x GET,OPTIONS -path /api,/admin -rate 5
+```
+
+Each target given ends as a row, a failure or a skip; with `-json`, a target with no answer is a row with `failed: true`. Matchers and filters read the response as sent (headers and body); the summary says how many rows they left out. `-x POST -body …` and `-rr FILE` send writes: they can change data on the target, count against `-max-requests` and `-rate`, and are in the ledger.

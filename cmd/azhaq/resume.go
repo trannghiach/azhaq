@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"os"
 	"path/filepath"
 	"strings"
@@ -160,6 +161,15 @@ func keptArgs(args []string) []string {
 			}
 			out = append(out, "-"+name+"="+val)
 			continue
+		case "probe-opts":
+			// probe's options hold a raw request whose credential headers are
+			// kept as little as -header's are.
+			if !inline && takesValue {
+				val = args[i+1]
+				i++
+			}
+			out = append(out, "-probe-opts="+redactProbeOpts(val))
+			continue
 		case "scope":
 			if !inline && takesValue {
 				val = args[i+1]
@@ -187,4 +197,23 @@ func secretHeader(h string) bool {
 		}
 	}
 	return false
+}
+
+// redactProbeOpts drops the credential headers of the raw request in
+// probe's options, as keptArgs drops them from -header.
+func redactProbeOpts(raw string) string {
+	var spec httpcol.Spec
+	if json.Unmarshal([]byte(raw), &spec) != nil || spec.Raw == nil {
+		return raw
+	}
+	for k := range spec.Raw.Header {
+		if secretHeader(k + ":") {
+			delete(spec.Raw.Header, k)
+		}
+	}
+	out, err := json.Marshal(&spec)
+	if err != nil {
+		return raw
+	}
+	return string(out)
 }

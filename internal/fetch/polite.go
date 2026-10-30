@@ -1,8 +1,10 @@
 package fetch
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net/http"
 	"net/http/cookiejar"
@@ -270,35 +272,46 @@ func keepCookies(resp *http.Response) {
 // run's budget for each try, waits when the host asked it to, and asks
 // again after a 429 or 503 (and once after a hiccup of a host that had
 // answered). rctx carries the connection trace of the first hop.
-func attempt(ctx, rctx context.Context, c *http.Client, raw string) (*http.Response, []byte, bool, error) {
+func attempt(ctx, rctx context.Context, c *http.Client, method, raw string, sent []byte, prep func(*http.Request), dump bool) (resp *http.Response, body []byte, trunc bool, reqDump []byte, err error) {
 	var lastErr error
 	for try := 0; ; try++ {
 		if err := beforeSend(ctx, raw); err != nil {
-			return nil, nil, false, err
+			return nil, nil, false, nil, err
 		}
-		req, err := http.NewRequestWithContext(rctx, http.MethodGet, raw, nil)
+		var rd io.Reader
+		if len(sent) > 0 {
+			rd = bytes.NewReader(sent)
+		}
+		req, err := http.NewRequestWithContext(rctx, method, raw, rd)
 		if err != nil {
-			return nil, nil, false, err
+			return nil, nil, false, nil, err
 		}
 		ApplyHeaders(req)
-		withJar(req)
-		if err := Spend(ctx); err != nil {
-			return nil, nil, false, err
+		if prep != nil {
+			prep(req)
 		}
-		resp, err := c.Do(req)
-		var body []byte
-		var trunc bool
+		withJar(req)
+		if dump {
+			reqDump = dumpRequest(req, sent)
+		}
+		if err := Spend(ctx); err != nil {
+			return nil, nil, false, reqDump, err
+		}
+		resp, err = c.Do(req)
+		body, trunc = nil, false
 		if err == nil {
 			body, trunc, err = readBody(resp.Body, bodyLimit(resp))
 			resp.Body.Close()
 		}
 		if err != nil {
 			lastErr = err
-			if try < Retry && hostAnswered(raw) && ctx.Err() == nil && retryable(err) {
+			// -retry (crawl) asks again a host that has answered before;
+			// -retries (probe) asks again one that did not answer at all.
+			if ctx.Err() == nil && (try < Retry && hostAnswered(raw) && retryable(err) || try < Retries && neterr.Unanswered(err)) {
 				retriedAll.Add(1)
 				continue
 			}
-			return nil, nil, false, err
+			return nil, nil, false, reqDump, err
 		}
 		if try > 0 && lastErr != nil {
 			retriedOK.Add(1)
@@ -309,14 +322,14 @@ func attempt(ctx, rctx context.Context, c *http.Client, raw string) (*http.Respo
 			if try < backoffTries {
 				select {
 				case <-ctx.Done():
-					return resp, body, trunc, nil
+					return resp, body, trunc, reqDump, nil
 				case <-time.After(wait):
 				}
 				continue
 			}
 			gaveUp(raw)
 		}
-		return resp, body, trunc, nil
+		return resp, body, trunc, reqDump, nil
 	}
 }
 

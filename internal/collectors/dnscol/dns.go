@@ -27,6 +27,13 @@ type Collector struct {
 	Pool    *dnsr.Pool
 	Wild    *dnsr.Wildcards
 	Workers int
+	// KeepWild keeps a name that resolves only through a wildcard, marked
+	// in its record: the names of a probe are the user's own.
+	KeepWild bool
+	// NoHints is a probe's: a CNAME's target is left to its own answer (a probe
+	// asks the names it was given, and those its certificates and policies
+	// name), and an apex is not asked for MX, TXT and NS.
+	NoHints bool
 }
 
 // New returns a collector on pool, or on the default resolvers when nil.
@@ -110,7 +117,7 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 	if len(a.CNAME) > 0 {
 		payload["cname"] = a.CNAME[0]
 		payload["cnames"] = a.CNAME
-		if cn := a.CNAME[0]; cn != host && normalize.SameSite(host, cn) {
+		if cn := a.CNAME[0]; cn != host && normalize.SameSite(host, cn) && !c.NoHints {
 			meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": cn}})
 		}
 	}
@@ -150,12 +157,15 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 		apex := normalize.RegistrableDomain(host)
 		if apex != "" && host != apex && c.Wild.Match(ctx, host, apex, a) {
 			payload["wildcard"] = true
+			if c.KeepWild {
+				return
+			}
 			meta.Drop = true
 			meta.NextHints = nil
 			return
 		}
-		if host == apex {
-			c.extras(ctx, host, payload)
+		if host == apex && !c.NoHints {
+			c.extras(ctx, host, payload) // a probe asks no MX, TXT or NS
 		}
 	}
 }

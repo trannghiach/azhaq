@@ -270,6 +270,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	ledgerFlag := fs.String("ledger", "", ledgerHelp)
 	killFile := fs.String("kill-file", "", killFileHelp)
 	resumeRun := fs.String("resume-run", "", "internal: continue this run of -db (azhaq resume sets it)")
+	probeOpts := fs.String("probe-opts", "", "internal: azhaq probe's httpx options, as JSON")
 	serve := fs.String("serve", "", "let azhaq worker processes take this run's work, at this address (127.0.0.1:7777)")
 	workerToken := fs.String("worker-token", os.Getenv("AZHAQ_WORKER_TOKEN"), "the token workers give (default $AZHAQ_WORKER_TOKEN, else a new one)")
 	workerOf := fs.String("worker-of", "", "internal: run as a worker of the run at this address (azhaq worker sets it)")
@@ -399,6 +400,18 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return err
 		}
 		fetch.ProxyURL = pu
+	}
+	var spec *httpcol.Spec
+	if *probeOpts != "" {
+		spec = new(httpcol.Spec)
+		if err := json.Unmarshal([]byte(*probeOpts), spec); err != nil {
+			return usagef("-probe-opts: %v", err)
+		}
+		if err := spec.Apply(); err != nil {
+			return usageErr{err}
+		}
+		probeSeeding = true
+		defer func() { probeSeeding = false }()
 	}
 	if *hostParallel > 0 {
 		fetch.HostParallel = *hostParallel
@@ -703,7 +716,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *webScheme != "" && *webScheme != "http" && *webScheme != "https" {
 		return usagef("-web-scheme is http or https, got %q", *webScheme)
 	}
-	opts := collectors.Options{Client: client, WebPorts: ports, WebScheme: *webScheme, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render, KnownFiles: *knownFiles, FillForms: *fillForms, NoMapGuess: *noMapGuess, SubmitForms: *submitForms, PathClimb: *pathClimb}
+	opts := collectors.Options{Client: client, HTTP: spec, WebPorts: ports, WebScheme: *webScheme, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render, KnownFiles: *knownFiles, FillForms: *fillForms, NoMapGuess: *noMapGuess, SubmitForms: *submitForms, PathClimb: *pathClimb}
 	opts.ShotHTML = *shotHTML
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
@@ -825,6 +838,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return usagef("-resolvers: %v", err)
 	}
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
+	probePool = opts.DNS
 	// HTTP connects to the addresses azhaq-dns found: one answer per name.
 	fetch.SetResolver(func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() })
 	if *bruteFile != "" {
@@ -888,8 +902,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	collectors.Register(cat, opts)
 	if *probe {
 		budgets.MaxDepth = 1 // the listed targets only: no CNAME or redirect targets
+		if spec != nil && (spec.TLSProbe || spec.CSPProbe) {
+			budgets.MaxDepth = 4 // and the names their certificates or policies give
+		}
 		for _, n := range cat.Names() {
-			if n != "azhaq-dns" && n != "azhaq-http" {
+			if n != "azhaq-dns" && n != "azhaq-http" && !(n == "azhaq-shots" && *shots != "" && spec != nil) {
 				budgets.Skip[n] = true
 			}
 		}
@@ -1725,6 +1742,13 @@ func loadList(path string) ([]types.Seed, []string, error) {
 // storedList is the target list azhaq resume took from the workspace.
 var storedList []string
 
+// probeSeeding says the list is probe's: a host:port is asked over plain
+// HTTP first where httpx does.
+var probeSeeding bool
+
+// probePool is the run's resolver pool, for the resolvers a probe row names.
+var probePool *dnsr.Pool
+
 func listSeed(line string) (types.Seed, error) {
 	if !strings.Contains(line, "://") {
 		if pf, err := netip.ParsePrefix(line); err == nil {
@@ -1756,10 +1780,17 @@ func listSeed(line string) (types.Seed, error) {
 		hp = "[" + host + "]"
 	}
 	if port == "80" {
+		if probeSeeding {
+			return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://" + hp + "/", httpcol.FallbackKey: "https"}}, nil
+		}
 		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://" + hp + "/"}}, nil
 	}
 	if port != "" {
 		hp = net.JoinHostPort(host, port)
+	}
+	if n, err := strconv.Atoi(port); probeSeeding && err == nil && port != "443" && httpcol.HTTPFirst(n) {
+		// As httpx: plain HTTP first on 8080 and the ports above 1024.
+		return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://" + hp + "/", httpcol.FallbackKey: "https"}}, nil
 	}
 	return types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "https://" + hp + "/", httpcol.FallbackKey: "http"}}, nil
 }

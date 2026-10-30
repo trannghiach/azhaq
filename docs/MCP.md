@@ -42,7 +42,7 @@ Any client that takes a JSON configuration:
 | `azhaq_map` | map a URL, a domain or a list into a workspace; returns the summary and the highlights (auth-gated, forbidden, API routes). `browser` loads pages in Chrome too; `graphql` asks each GraphQL endpoint for its schema (an introspection POST, counted; recovered from validation errors where introspection is off) |
 | `azhaq_resume` | continue the run of a workspace that the budget, `timeout_seconds` or a cancellation stopped, where it stopped, with the server's scope, pace and what is left of its budget; returns what `azhaq_map` returns. A workspace keeps no session: give `headers` or `login` again. A run started with a scope wider than the server's is not resumed |
 | `azhaq_subdomains` | subdomains from passive sources, with the sources of each name; `live` for names that resolve |
-| `azhaq_probe` | web services of targets, like httpx |
+| `azhaq_probe` | web services of targets, like httpx: each answer as the target gave it (a redirect is not followed; `final_url` is not set), a target with no answer as a row with `failed: true` |
 | `azhaq_ports` | open TCP ports (locked servers only) and what serves them, with `product` and `version` where the port names one (a port that waits is asked up to 24 more connects, each counted); each connect counts against the budget and follows the pace. UDP ports are not scanned over MCP |
 | `azhaq_query` | rows of a workspace's map by type, role, coverage, status, method, host, text, newness; chosen fields (by default key, type, role, coverage, status, title, methods, params, count) |
 | `azhaq_show` | everything about one URL, host or name, with the evidence (fields over 2 KB are left out when the answer would pass 24 KB; the export has them) |

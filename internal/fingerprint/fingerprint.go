@@ -36,6 +36,19 @@ func tech() *wappalyzer.Wappalyze {
 	return techDB
 }
 
+// UseFile adds the fingerprints of a wappalyzer JSON file to the built-in
+// ones, the file's winning where an app is in both (probe -cff). It reads
+// the file whole, so a bad one is an error before anything is sent.
+func UseFile(path string) error {
+	db, err := wappalyzer.NewFromFile(path, true, true)
+	if err != nil {
+		return err
+	}
+	techOnce.Do(func() {}) // the file's database is the run's
+	techDB = db
+	return nil
+}
+
 // Tech lists the technologies a response shows, sorted, each as "Name" or
 // "Name:version" the way wappalyzer reports them.
 func Tech(h http.Header, body []byte) []string {
@@ -110,4 +123,20 @@ func Stats(body []byte) (words, lines int) {
 		return 0, 0
 	}
 	return bytes.Count(body, []byte{' '}) + 1, bytes.Count(bytes.TrimSpace(body), []byte{'\n'}) + 1
+}
+
+// Mmh3 is MurmurHash3 (32-bit, seed 0) of the base64 encoding of data with
+// a newline every 76 characters, as httpx's -hash mmh3 and Shodan's
+// favicon hash: of any data, not only an image.
+func Mmh3(data []byte) string {
+	enc := base64.StdEncoding.EncodeToString(data)
+	var b bytes.Buffer
+	for len(enc) > 76 {
+		b.WriteString(enc[:76])
+		b.WriteByte('\n')
+		enc = enc[76:]
+	}
+	b.WriteString(enc)
+	b.WriteByte('\n')
+	return strconv.Itoa(int(int32(murmur3hash(b.Bytes()))))
 }
