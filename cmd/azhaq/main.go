@@ -236,7 +236,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
 	paramsRate := fs.Float64("params-rate", 0, "parameter requests per second per host (0: no limit, as arjun)")
 	paramsThreads := fs.Int("params-threads", 5, "parameter requests in flight per page (as arjun -t); 1 with -params-delay and -params-stable")
-	paramsChunk := fs.Int("params-chunk", 0, "names per parameter request (0: 250 in a query, 500 in a body, fewer where the server refuses a long query)")
+	paramsChunk := fs.Int("params-chunk", 0, "names per parameter request at most (0: 500, and about 7.6 KB in a query; fewer where the server refuses a long query)")
 	paramsMethod := fs.String("params-method", "GET", "how names are sent: GET (query), POST (form body), JSON or XML. A body sends requests that may change data on the target: -params-writes must say it is wanted")
 	paramsWrites := fs.Bool("params-writes", false, "let -params-method POST, JSON or XML send bodies (they may change data on the target); needs -allow or -scope, or a single target")
 	paramsInclude := fs.String("params-include", "", "sent with every parameter request: a query for GET; for a body a form, a JSON object or XML, or a template with $arjun$ where the names go")

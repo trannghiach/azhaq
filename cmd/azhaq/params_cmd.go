@@ -50,7 +50,7 @@ func cmdParams(args []string) error {
 	words := fs.String("w", "large", "parameter names: a file, one per line, or small (1,000 names), medium (3,000) or large (6,500, the default)")
 	method := fs.String("X", "GET", "how names are sent: GET (query), POST (form body), JSON or XML. A body sends requests that may change data on the target, and needs -allow or -scope, or a single page")
 	threads := fs.Int("t", 5, "requests in flight per page (arjun -t)")
-	chunk := fs.Int("c", 0, "names per request (0: 250 in a query, 500 in a body; fewer where the server refuses a long query)")
+	chunk := fs.Int("c", 0, "names per request at most (0: 500, and about 7.6 KB in a query; fewer where the server refuses a long query)")
 	delay := fs.Float64("d", 0, "seconds to wait before each request, one at a time (arjun -d)")
 	stable := fs.Bool("stable", false, "one request at a time, 3 to 9 s apart, and 30 s wait after a refused connection (arjun --stable)")
 	timeout := fs.Float64("T", 15, "seconds to wait for each request; one that times out is asked again with 5 s more, up to 20 s (arjun -T)")
