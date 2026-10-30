@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
+	github.com/corona10/goimagehash v1.1.0
 	github.com/gaissmai/bart v0.29.1
 	github.com/miekg/dns v1.1.73
 	github.com/projectdiscovery/cdncheck v1.3.2
@@ -21,7 +22,6 @@ require (
 require (
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
-	github.com/corona10/goimagehash v1.1.0 // indirect
 	github.com/corpix/uarand v0.2.0 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
