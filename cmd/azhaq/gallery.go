@@ -19,7 +19,7 @@ func cmdGallery(args []string) error {
 	fs := newFlags("gallery")
 	var dbs stringsFlag
 	fs.Var(&dbs, "db", "a workspace to show (repeatable; default: the last run's)")
-	dir := fs.String("workspace", "", "show every workspace (*.db) of this directory and its subdirectories, merged in one view")
+	dir := fs.String("workspace", "", "show every workspace (*.db) of this directory and of the directories directly in it, merged in one view")
 	listen := fs.String("listen", "127.0.0.1:7180", "address to serve on; a loopback address answers only this machine (127.0.0.1:0 takes any free port)")
 	if err := parse(fs, args); err != nil {
 		return err
