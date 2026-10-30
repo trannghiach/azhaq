@@ -24,10 +24,11 @@ jobs:
         # The failing tests are annotations too: they read without a login.
         run: |
           set -o pipefail
+          # bash -e: a grep that finds nothing must not end the step before the lines are shown.
           go test -race ./... 2>&1 | tee test.log || {
             # A step shows ten annotations: a race's own frames first.
-            { awk '/WARNING: DATA RACE/{p=1} p&&n<40{print; n++}' test.log | grep -E '(Write|Read) at|azhaq/[a-z]' | head -6
-              grep -E -- '--- FAIL|panic:|_test.go:[0-9]+:|^FAIL|signal: |\[build failed\]|^# ' test.log | head -20; } | while IFS= read -r l; do echo "::error::$l"; done
+            { awk '/WARNING: DATA RACE/{p=1} p&&n<40{print; n++}' test.log | grep -E '(Write|Read) at|azhaq/[a-z]' | head -6 || true
+              grep -E -- '--- FAIL|panic:|_test.go:[0-9]+:|^FAIL|signal: |\[build failed\]|^# ' test.log | head -20 || true; } | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
       - name: govulncheck
