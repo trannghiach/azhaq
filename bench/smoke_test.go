@@ -230,3 +230,31 @@ func TestWatchExitCode(t *testing.T) {
 		t.Fatalf("watch of a dead target exits %d, want 3", code)
 	}
 }
+
+// A page whose scripts are more than one page's share is read in part, and
+// the run says so: a note, not a quiet cut.
+func TestJSCapNote(t *testing.T) {
+	const scripts = 300
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			var b strings.Builder
+			b.WriteString("<html><title>many scripts</title>")
+			for i := 0; i < scripts; i++ {
+				fmt.Fprintf(&b, `<script src="/s%d.js"></script>`, i)
+			}
+			fmt.Fprint(w, b.String(), "</html>")
+		case numbered(strings.TrimSuffix(r.URL.Path, ".js"), "/s"):
+			w.Header().Set("Content-Type", "application/javascript")
+			fmt.Fprintf(w, `fetch("/api/v1/item%s");`, strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/s"), ".js"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer s.Close()
+	dir := t.TempDir()
+	out, errs, _ := smoke(t, dir, "run", "-url", s.URL+"/", "-db", "m.db")
+	if !strings.Contains(out+errs, "left unread") {
+		t.Fatalf("no note that scripts were left unread:\n%s\n%s", out, errs)
+	}
+}

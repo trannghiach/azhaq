@@ -92,7 +92,7 @@ func benchBrute() *bruteRow {
 // wildcardCheck serves a zone where every label resolves, plus three real
 // names with their own addresses, and brute forces it with both tools.
 func wildcardCheck(dir, stamp string, row *bruteRow) {
-	const zone = "wild.example.com"
+	const zone = "wild.bench.lan"
 	real := map[string]string{"www": "192.0.2.1", "api": "192.0.2.2", "mail": "192.0.2.3"}
 	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
 	must(err)
@@ -129,7 +129,7 @@ func wildcardCheck(dir, stamp string, row *bruteRow) {
 	must(os.WriteFile(resolver, []byte(pc.LocalAddr().String()+"\n"), 0o644))
 
 	db := filepath.Join(dir, "wildcard-"+stamp+".db")
-	run(zone, 5*time.Minute, dir, azhaq, "run", "-domain", zone, "-passive", "-sources", "none", "-skip", "azhaq-cdx,azhaq-rdap",
+	run(zone, 5*time.Minute, dir, azhaq, "run", "-domain", zone, "-passive", "-sources", "none", "-skip", "azhaq-cdx,azhaq-rdap,azhaq-urls",
 		"-dns-brute", list, "-allow", zone, "-resolvers", resolver, "-db", db, "-json")
 	az := namesFrom(db, "azhaq-dns-brute")
 	fake := 0

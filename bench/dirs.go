@@ -74,21 +74,23 @@ func benchDirs(apps []string) *dirsRow {
 	az, ff := map[string]bool{}, map[string]bool{}
 	var azCmd, ffCmd, azBad string
 	for _, app := range apps {
-		aa := append([]string{"dirs", "-u", app, "-w", words, "-silent"}, rate...)
-		out, m := timed(app, 40*time.Minute, work, azhaq, aa...)
-		row.AzhaqSecs += m.Seconds
-		azCmd = cmdLine(azhaq, aa...)
-		if f := azFail(m); f != "" {
-			azBad += f
-		}
-		for _, l := range lines(out) {
+		var aOut, fOut []byte
+		var aSecs, fSecs float64
+		legWithApp(app, func() {
+			aa := append([]string{"dirs", "-u", app, "-w", words, "-silent"}, rate...)
+			out, m := timed(app, 40*time.Minute, work, azhaq, aa...)
+			aOut, aSecs, azCmd = out, m.Seconds, cmdLine(azhaq, aa...)
+			azBad = azFail(m)
+			fa := append([]string{"-u", app + "FUZZ", "-w", words, "-ac", "-s"}, pick([]string(nil), []string{"-rate", politeHTTP})...)
+			out, m = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
+			fOut, fSecs, ffCmd = out, m.Seconds, cmdLine("ffuf", fa...)
+		})
+		row.AzhaqSecs += aSecs
+		row.FfufSecs += fSecs
+		for _, l := range lines(aOut) {
 			az[firstField(l)] = true
 		}
-		fa := append([]string{"-u", app + "FUZZ", "-w", words, "-ac", "-s"}, pick([]string(nil), []string{"-rate", politeHTTP})...)
-		out, m = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
-		row.FfufSecs += m.Seconds
-		ffCmd = cmdLine("ffuf", fa...)
-		for _, l := range lines(out) {
+		for _, l := range lines(fOut) {
 			ff[app+l] = true
 		}
 	}

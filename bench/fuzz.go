@@ -59,12 +59,16 @@ func benchFuzz(apps []string) *fuzzRow {
 			leg := fuzzLeg{App: app, Variant: lg.name}
 			aa := append(append([]string{"fuzz", "-u", u, "-w", words, "-s"}, lg.az...), rate...)
 			fa := append(append([]string{"-u", u, "-w", words, "-s"}, lg.ff...), rate...)
-			out, am := timed(app, 40*time.Minute, work, azhaq, aa...)
-			leg.AzhaqSecs = am.Seconds
-			az := fuzzHits(out, app)
-			out, fm := timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
-			leg.FfufSecs = fm.Seconds
-			ff := fuzzHits(out, app)
+			var az, ff map[string]bool
+			var am, fm runMeasure
+			legWithApp(app, func() {
+				var out []byte
+				out, am = timed(app, 40*time.Minute, work, azhaq, aa...)
+				az = fuzzHits(out, app)
+				out, fm = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
+				ff = fuzzHits(out, app)
+			})
+			leg.AzhaqSecs, leg.FfufSecs = am.Seconds, fm.Seconds
 			leg.AzhaqHits, leg.FfufHits, leg.Shared = len(az), len(ff), overlap(az, ff)
 			for h := range az {
 				if !softHit(h) {

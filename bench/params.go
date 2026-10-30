@@ -18,6 +18,11 @@ import (
 const arjunVersion = "2.2.7"
 
 func installArjun() (string, error) {
+	if refBin != "" {
+		if p := filepath.Join(refBin, "arjun-venv", "bin", "arjun"); fileExists(p) {
+			return p, nil
+		}
+	}
 	dir := filepath.Join(work, "arjun-"+arjunVersion)
 	bin := filepath.Join(dir, "bin", "arjun")
 	if _, err := os.Stat(bin); err == nil {

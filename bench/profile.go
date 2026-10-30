@@ -168,10 +168,16 @@ func cmdLine(name string, args ...string) string {
 	return filepath.Base(name) + " " + strings.Join(args, " ")
 }
 
-// azErr is the reason azhaq's run failed, for a check's detail.
+// azErr is the reason azhaq's run did not end clean, for a check's detail.
+// A run that finished with failures or stopped (exit 3 or 4) still has results
+// and is only noted; any other error is a failed run, and barOne fails the
+// time check on the "[azhaq: " it carries.
 func azErr(m runMeasure) string {
-	if m.Error == "" {
+	switch {
+	case m.Error == "":
 		return ""
+	case benignExit(m.Error):
+		return " [azhaq finished with failures or was stopped: " + clip(m.Error, 160) + "]"
 	}
 	return " [azhaq: " + clip(m.Error, 200) + "]"
 }

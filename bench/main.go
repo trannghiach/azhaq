@@ -239,6 +239,9 @@ func main() {
 		}
 		for _, c := range cmp {
 			if on(c.name, gate[c.name]) {
+				if docker {
+					ensureApps()
+				}
 				s0 := time.Now()
 				logf("%s: %s", p, c.name)
 				c.fn()
@@ -249,6 +252,9 @@ func main() {
 	prof, cur = "", nil
 
 	// The rest run once.
+	if docker {
+		ensureApps()
+	}
 	if on("dropin", gate["dropin"]) {
 		rec.Dropin = benchDropin(*crapi)
 	}

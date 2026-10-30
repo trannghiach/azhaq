@@ -100,7 +100,11 @@ func liveIndependent(names []string) map[string]bool {
 }
 
 func benchDomains() []domainRow {
-	raw, err := os.ReadFile("bench/domains.txt")
+	listFile := "bench/domains.txt"
+	if f := os.Getenv("AZHAQ_BENCH_DOMAINS"); f != "" { // while developing: one small domain
+		listFile = f
+	}
+	raw, err := os.ReadFile(listFile)
 	must(err)
 	dir, _ := filepath.Abs(filepath.Join(work, "domains"))
 	must(os.MkdirAll(dir, 0o755))
@@ -132,7 +136,9 @@ func benchDomains() []domainRow {
 		if !explained(summary) && !strings.Contains(ar.stderr, "error") && !strings.Contains(ar.stderr, "failed") {
 			silent = false
 		}
-		row.CT = subdomainSummary(summary)
+		if _, ok := summary["sources"]; ok {
+			row.CT = subdomainSummary(summary)
+		}
 
 		// subfinder, then dnsx on its names, as the pipeline a reviewer runs.
 		sa := []string{"-d", d, "-silent", "-json", "-cs"}

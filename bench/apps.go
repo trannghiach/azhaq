@@ -109,6 +109,46 @@ func stopApps() {
 	_ = exec.Command("docker", "compose", "-f", "bench/compose.yaml", "down").Run()
 }
 
+// appUp: the app answers GET / with 200.
+func appUp(u string) bool {
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(u)
+	if err != nil {
+		return false
+	}
+	resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+// ensureApps starts the bench's own two containers when one does not answer
+// (Juice Shop runs out of memory after about a hundred thousand requests). It
+// only ever starts: no container is stopped or restarted.
+func ensureApps() {
+	for _, u := range []string{juiceURL, vampiURL} {
+		if !appUp(u) {
+			logf("%s does not answer: docker compose up -d", u)
+			_ = exec.Command("docker", "compose", "-f", "bench/compose.yaml", "up", "-d").Run()
+			if err := waitUp(u, 3*time.Minute); err != nil {
+				logf("%v", err)
+			}
+		}
+	}
+}
+
+// legWithApp runs a leg that must not see its app go away: if the app is
+// down afterwards it is started again and the leg runs once more.
+func legWithApp(app string, leg func()) {
+	for i := 0; i < 2; i++ {
+		if strings.Contains(app, "127.0.0.1:3101") || strings.Contains(app, "127.0.0.1:5102") {
+			ensureApps()
+		}
+		leg()
+		if appUp(app) {
+			return
+		}
+		logf("%s went down during a leg: started again, and the leg runs once more", app)
+	}
+}
+
 func waitUp(u string, max time.Duration) error {
 	deadline := time.Now().Add(max)
 	for time.Now().Before(deadline) {
