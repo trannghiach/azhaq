@@ -136,7 +136,7 @@
 ### `urls`
 
 - `urls` prints each URL as its page arrives when stdout is not a terminal, so a pipe starts at once; `-sort` (and a terminal) waits and sorts. A stop by Ctrl-C or `-timeout` keeps what was found: the file is written and the summary says which archives were cut short.
-- `urls` asks for the host alone by default, as gau does; `-subs` asks for `*.DOMAIN` too. `run` keeps the broader default (`-urls-subs`).
+- `urls` asks for the host alone by default, as gau does; `-subs` asks for `*.DOMAIN` too. `run` keeps the broader default (`-urls-subs`). otx and urlscan answer for the domain with its subdomains, and those URLs are printed too, as gau prints them (vulnweb.com: 80 URLs against gau's 70, 61 shared; gau's others are cut-off links such as `cart.php.[` and static files).
 - `-mc`, `-fc`, `-mt`, `-ft`, `-from`, `-to` filter on what the archive recorded, sent in the query as gau sends them; an archive that cannot apply one (OTX; urlscan.io keeps dates only) is not asked, and the summary says so. A bad value is a usage error.
 - `-blacklist EXT,…` and `-fp` leave URLs out by extension and by host and path; `-raw` prints every row as the archives gave it.
 - `-providers wayback,otx,…` chooses the archives; the API-key file is `-provider-config` (a path given to `-providers` still works).

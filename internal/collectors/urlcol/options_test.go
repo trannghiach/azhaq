@@ -149,13 +149,16 @@ func TestApexAsksTheHostAlone(t *testing.T) {
 	if q := m.asked("/arquivo")[0]; q.Get("url") != "example.org/*" {
 		t.Errorf("arquivo url=%q", q.Get("url"))
 	}
+	// The mirror's wayback answers www. whatever it is asked: the host alone
+	// is kept from the archives asked for it. otx and urlscan answer for the
+	// domain, and their subdomain URLs are kept, as gau prints them.
 	for _, u := range got {
-		if strings.Contains(u, "www.") || strings.Contains(u, "api.") {
+		if strings.Contains(u, "www.") {
 			t.Errorf("%s is on a subdomain", u)
 		}
 	}
 	slices.Sort(got)
-	want := []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/a?x=3", "http://example.org/arq", "http://example.org/b",
+	want := []string{"http://api.example.org/otx", "http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/a?x=3", "http://example.org/arq", "http://example.org/b",
 		"http://example.org/cc", "http://example.org/img/logo.PNG", "http://example.org/otx", "http://example.org/page", "http://example.org/us", "http://example.org/us-task"}
 	if !slices.Equal(got, want) {
 		t.Errorf("apex URLs %v, want %v", got, want)
