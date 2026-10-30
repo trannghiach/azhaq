@@ -19,11 +19,11 @@ import (
 // a web page's body is counted apart (at most two).
 const maxProbes = 24
 
-// ladderLimit: after this many open ports of one address that no probe
-// could name, the rest of that address's silent ports are not run down the
-// ladder (a firewall or tarpit that accepts every connect would cost
-// thousands of connects for nothing). The report says how many were
-// skipped.
+// ladderLimit: by default, after this many open ports of one address that
+// no probe could name, the rest of that address's silent ports are not run
+// down the ladder (a firewall or tarpit that accepts every connect would
+// cost thousands of connects for nothing). Scanner.Unnamed changes it; the
+// report says how many were skipped.
 const ladderLimit = 6
 
 // target is what a request is built for.
@@ -341,7 +341,14 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 func (s *Scanner) ladderAllowed(ip string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.unnamed[ip] >= ladderLimit {
+	limit := ladderLimit
+	switch {
+	case s.Unnamed < 0:
+		return true
+	case s.Unnamed > 0:
+		limit = s.Unnamed
+	}
+	if s.unnamed[ip] >= limit {
 		s.skipped[ip]++
 		return false
 	}

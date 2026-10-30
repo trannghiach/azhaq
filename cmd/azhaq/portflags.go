@@ -14,7 +14,7 @@ import (
 type portFlags struct {
 	minRate                                      float64
 	timeout                                      time.Duration
-	retries, workers, threshold                  int
+	retries, workers, threshold, unnamed         int
 	seed                                         int64
 	order, detect, discover, ip, source, payload string
 	proxy, proxyAuth                             string
@@ -25,7 +25,7 @@ type portFlags struct {
 // portConfig reads the flags into the collector's knobs; a value it does
 // not know is a usage error, before anything is sent.
 func portConfig(f portFlags) (portcol.Config, error) {
-	cfg := portcol.Config{Timeout: f.timeout, Workers: f.workers, MinRate: f.minRate, Seed: f.seed, Threshold: f.threshold,
+	cfg := portcol.Config{Timeout: f.timeout, Workers: f.workers, MinRate: f.minRate, Seed: f.seed, Threshold: f.threshold, Unnamed: f.unnamed,
 		CDNFull: f.cdnFull, AllIPs: f.allIPs}
 	switch {
 	case f.retries < 0:

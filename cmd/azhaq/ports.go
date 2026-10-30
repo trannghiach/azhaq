@@ -107,6 +107,7 @@ func cmdPorts(args []string) error {
 	order := fs.String("order", "random", "the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc")
 	seed := fs.Int64("seed", 0, "make the random port order repeat (default: a new one each run)")
 	threshold := fs.Int("pts", 0, "stop asking a host after this many open ports: it answers every port (default: no limit)")
+	unnamed := fs.Int("unnamed", 0, "after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6, a guard against hosts that accept every connect; -1: no limit)")
 	detect := fs.String("detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS; up to 3 connections), banner (what it says on the one connection) or none (connect and close, as naabu without -sV)")
 	cdnFull := fs.Bool("cdn-full", false, "scan CDN and WAF addresses in full, not only ports 80, 443, 8080 and 8443")
 	sn := fs.Bool("sn", false, "list the addresses that are up (a connect to 80 or 443 is accepted or refused) and scan nothing")
@@ -307,6 +308,9 @@ func cmdPorts(args []string) error {
 	run = append(run, "-port-order", *order, "-port-detect", *detect)
 	if *seed != 0 {
 		run = append(run, "-port-seed", strconv.FormatInt(*seed, 10))
+	}
+	if *unnamed != 0 {
+		run = append(run, "-port-unnamed", strconv.Itoa(*unnamed))
 	}
 	if *threshold > 0 {
 		run = append(run, "-port-threshold", strconv.Itoa(*threshold))

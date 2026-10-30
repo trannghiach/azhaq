@@ -137,6 +137,10 @@ type Scanner struct {
 	// Threshold stops asking an address after this many open ports (0: no
 	// limit): a host that answers every port is a tarpit or a SYN proxy.
 	Threshold int
+	// Unnamed is how many open ports of an address no probe could name
+	// before its other silent ports are no longer run down the protocol
+	// list: 0 is 6, below 0 no limit.
+	Unnamed int
 	// Detect is how much is asked of an open port; the default asks it all.
 	Detect Detect
 	// SourceIP is the local address connects are made from (0: the

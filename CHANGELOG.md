@@ -2,6 +2,8 @@
 
 ## v0.10.0
 
+- `ports -unnamed N` (`run -port-unnamed N`) sets how many open ports of an address may go unnamed before its other silent ports get their banner only; the default 6 guards against a host that accepts every connect, `-1` lifts it.
+
 ### Fixed
 
 - The kill file stops sending within a tenth of a second, also for requests that were already waiting for `-rate`. Before, at `-rate 2`, requests counted before the file appeared still went out for up to 2.7 s (Chrome's included). A bench check now measures this on every path.
