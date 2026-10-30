@@ -45,6 +45,7 @@ type record struct {
 	Secrets *secretsRow  `json:"secrets,omitempty"`
 	Tenants *tenantsRow  `json:"tenants,omitempty"`
 	Scale   *scaleRow    `json:"scale,omitempty"`
+	Claims  *claimsRow   `json:"claims,omitempty"`
 	Checks  []check      `json:"checks"`
 	Runs    []runMeasure `json:"runs"`
 }
@@ -68,7 +69,7 @@ type runMeasure struct {
 
 // sections are what -only picks from; dockerParts need the docker apps.
 var (
-	sections    = []string{"apps", "dropin", "dirs", "scope", "secrets", "tenants", "scale", "shots", "params", "domains", "brute", "ports", "network", "probe"}
+	sections    = []string{"apps", "dropin", "dirs", "scope", "secrets", "tenants", "scale", "claims", "shots", "params", "domains", "brute", "ports", "network", "probe"}
 	dockerParts = []string{"dropin", "dirs", "scope", "scale", "shots", "params"}
 )
 
@@ -184,6 +185,9 @@ func main() {
 	}
 	if on("scale", *apps) {
 		rec.Scale = benchScale(juiceURL)
+	}
+	if on("claims", *apps) {
+		rec.Claims = benchClaims()
 	}
 	if on("shots", *apps) {
 		rec.Shots = benchShots([]string{juiceURL, vampiURL, ginURL, "http://rest.vulnweb.com/"})
