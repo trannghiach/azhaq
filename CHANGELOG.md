@@ -10,6 +10,7 @@
 - `-resolvers` (and `-r` in `dns`) takes a file or a comma list with `udp:`, `tcp:`, `dot:` and `doh:` prefixes, in every command; every question carries EDNS0 (4,096 bytes), and `dns -proxy socks5://` sends DNS through a proxy.
 - `dns -t`, `-rl`, `-retry` and `-timeout` mean what they do in dnsx (names in flight, names a second over all resolvers, attempts per question, wait for one answer); `-timeout` is no longer the run's time (`-maxtime` is, and exits 4 with the `-start` to go on from). `-dns-rate` stays per resolver.
 - `dns` no longer asks MX, TXT and NS for every apex name it never printed; `-w` accepts labels with an underscore (`_dmarc`) and prints hits as they come; `-o` appends; `-hf` reads the hosts file; `-trace` follows delegations from the roots; `-asn` names the autonomous system; `-no-wildcard` and `-wd` control the wildcard filter.
+- `run -dns-brute` guesses labels with an underscore too (`_dmarc`, `_domainkey`); `dns -hc` asks each resolver a known name and says how it answered. `-all` does not include AXFR (`-axfr` asks it, held to the scope); `dns -r` resolvers are asked for every name, `localhost` and `.test` included, as dnsx does.
 - The DNS lab answers MX, TXT, NS, SRV, CAA, SOA and AAAA, has a reverse zone for 127.0.0.0/24 and a zone transfer, truncates long UDP answers, and counts what it was asked (`-stats`).
 
 ## v0.9.1

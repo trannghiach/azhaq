@@ -85,6 +85,7 @@ type Pool struct {
 	dot     *dns.Client
 	doh     *http.Client
 	proto   map[string]Server   // by key
+	named   bool                // the resolvers were given, not the defaults
 	dial    proxy.ContextDialer // DNS goes through this (-proxy), over TCP; nil: direct
 	next    atomic.Uint64
 
@@ -150,6 +151,7 @@ type entry struct {
 type Options struct {
 	Resolvers []string      // as ParseResolvers gives them; default DefaultResolvers
 	PerSecond float64       // queries per second per resolver; 0 is no pace but the callers' workers
+	Burst     int           // queries a resolver may be sent at once after a pause; default a fifth of PerSecond, at least 1
 	Timeout   time.Duration // per query; default 2s
 	Retries   int           // extra attempts on other resolvers; default 2
 	Attempts  int           // when set, attempts in all per query (Retries+1), as dnsx -retry
@@ -159,7 +161,8 @@ type Options struct {
 // New returns a Pool.
 func New(o Options) *Pool {
 	servers := o.Resolvers
-	if len(servers) == 0 {
+	named := len(servers) > 0
+	if !named {
 		servers = DefaultResolvers
 	}
 	var norm []string
@@ -199,7 +202,8 @@ func New(o Options) *Pool {
 		servers: norm,
 		health:  hs,
 		proto:   proto,
-		limit:   limit.New(o.PerSecond, max(1, int(o.PerSecond/5))),
+		named:   named,
+		limit:   limit.New(o.PerSecond, cmpBurst(o)),
 		timeout: o.Timeout,
 		retries: o.Retries,
 		udp:     &dns.Client{Net: "udp", Timeout: o.Timeout},
@@ -220,6 +224,13 @@ func New(o Options) *Pool {
 	return p
 }
 
+func cmpBurst(o Options) int {
+	if o.Burst > 0 {
+		return o.Burst
+	}
+	return max(1, int(o.PerSecond/5))
+}
+
 // ProxyError says whether proxy is a URL New can use for DNS.
 func ProxyError(raw string) error {
 	u, err := url.Parse(raw)
@@ -234,11 +245,14 @@ func ProxyError(raw string) error {
 }
 
 // Reserved says whether name is one the pool does not send to its resolvers:
-// a special-use name (localhost, *.test, *.local) or a single label. The
-// system's resolver answers those, so /etc/hosts and local DNS work.
-func Reserved(name string) bool {
+// a special-use name (localhost, *.test, *.local) or a single label, when the
+// resolvers are the default public ones. The system's resolver answers
+// those, so /etc/hosts and local DNS work and nothing local is asked of a
+// public resolver. Resolvers the user named are asked for everything, as
+// dnsx does.
+func (p *Pool) Reserved(name string) bool {
 	name = normalize.Hostname(name)
-	return net.ParseIP(name) == nil && (normalize.SpecialUse(name) || !strings.Contains(name, "."))
+	return !p.named && net.ParseIP(name) == nil && (normalize.SpecialUse(name) || !strings.Contains(name, "."))
 }
 
 // System asks the system's resolver for the addresses of name.

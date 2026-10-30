@@ -271,7 +271,7 @@ func cmdDNS(args []string) error {
 	if attempts == 0 {
 		attempts = 3
 	}
-	pool := dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: rate, Timeout: *timeout, Attempts: attempts, Proxy: *proxyURL})
+	pool := dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: rate, Burst: int(rate), Timeout: *timeout, Attempts: attempts, Proxy: *proxyURL})
 	if *hc {
 		return healthCheck(pool, c.json)
 	}
@@ -697,7 +697,7 @@ type dnsRun struct {
 	kept       []dnsKept
 	watermark  int
 	finished   map[int]bool
-	counts     struct{ done, resolved, wildcard, failed, noAnswer, broken atomic.Int64 }
+	counts     struct{ done, resolved, wildcard, failed, noAnswer, broken, otherCode atomic.Int64 }
 	lastRows   atomic.Int64
 	notes      []string
 	axfrNotes  []string
@@ -793,7 +793,7 @@ func (r *dnsRun) one(ctx context.Context, name string) bool {
 	if len(types) == 0 {
 		return true
 	}
-	if dnsr.Reserved(name) {
+	if r.pool.Reserved(name) {
 		return r.reserved(ctx, name)
 	}
 	lctx := ctx
@@ -820,6 +820,7 @@ func (r *dnsRun) one(ctx context.Context, name string) bool {
 	}
 	// -rcode: only names whose answer has one of the codes.
 	if len(cf.rcodes) > 0 && !d.HostsFile && !cf.rcodes[d.StatusCodeRaw] {
+		r.counts.otherCode.Add(1)
 		return true
 	}
 	if len(d.A)+len(d.AAAA)+len(d.CNAME) > 0 && !cf.noWildcard && !isIP && r.wildcard(ctx, name, d) {
@@ -1228,9 +1229,8 @@ func (r *dnsRun) transfer(ctx context.Context, host string, d *dnsr.Data) {
 	for _, f := range fails {
 		r.noteAXFR(fmt.Sprintf("-axfr %s: %s did not transfer the zone: %v", host, f.Type, f.Err))
 	}
-	if len(chain.Data) > 0 {
-		d.AXFRData = chain
-	} else {
+	d.AXFRData = chain // an empty chain says it was tried, as dnsx's does
+	if len(chain.Data) == 0 {
 		r.noteAXFR(fmt.Sprintf("-axfr %s: no server transferred the zone", host))
 	}
 }
@@ -1379,6 +1379,9 @@ func (r *dnsRun) summarize(ctx context.Context, args []string, maxtime float64) 
 	if n := int(r.counts.failed.Load()); n > 0 {
 		rep.Counts["no answer"] = n
 	}
+	if n := int(r.counts.otherCode.Load()); n > 0 {
+		rep.Counts["other codes"] = n // answered, but not with a code -rcode lists
+	}
 	if n := int(r.counts.broken.Load()); n > 0 {
 		rep.Counts["servfail from every resolver"] = n
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d questions were answered SERVFAIL by every resolver asked: the names' own DNS is broken (status_code SERVFAIL in -json, -rcode servfail lists them)", n))
@@ -1435,7 +1438,7 @@ func (r *dnsRun) summarize(ctx context.Context, args []string, maxtime float64) 
 	rep.Takeover = append(rep.Takeover, r.takeovers...)
 	rep.Notes = append(rep.Notes, r.axfrNotes...)
 	if r.reservedN > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names (%s) are special-use or single labels: the system's resolver was asked, not -resolvers", r.reservedN, strings.Join(r.reservedEg, ", ")))
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names (%s) are special-use or single labels: the system's resolver was asked, not the default public resolvers (name -r resolvers to ask them)", r.reservedN, strings.Join(r.reservedEg, ", ")))
 	}
 	wm := r.watermark
 	r.mu.Unlock()

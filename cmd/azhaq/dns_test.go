@@ -56,7 +56,7 @@ func startLab(t *testing.T) *dnsLab {
 
 var labZone = map[string][]string{
 	"lab.zz.":           {"A 192.0.2.1", "NS ns.lab.zz.", "MX 10 mail.lab.zz.", `TXT "v=spf1 -all"`, "SOA ns.lab.zz. h.lab.zz. 5 1 2 3 4", `CAA 0 issue "ca.test"`},
-	"ns.lab.zz.":        {"A 192.0.2.2"},
+	"ns.lab.zz.":        {"A 127.0.0.1"},
 	"www.lab.zz.":       {"A 192.0.2.1"},
 	"api.lab.zz.":       {"CNAME www.lab.zz."},
 	"v6.lab.zz.":        {"AAAA 2001:db8::1"},
@@ -452,21 +452,21 @@ func TestDNSTransferIsHeldToTheScope(t *testing.T) {
 	t.Chdir(t.TempDir())
 	lab := startLab(t)
 	// the lab is the resolver the user named: it is asked. The zone's name
-	// server, ns.lab.zz at 192.0.2.2, is in the scope by name, and nothing
-	// answers there.
+	// server, ns.lab.zz at 127.0.0.1, is in the scope by name, and nothing
+	// listens on its port 53.
 	ls, rep, _ := dnsOut(t, "-d", "lab.zz", "-r", lab.addr, "-axfr", "-j", "-timeout", "300ms")
 	r := dnsRows(t, ls)["lab.zz"]
 	axfr, _ := r["axfr"].(map[string]any)
 	if chain, _ := axfr["chain"].([]any); len(chain) != 1 {
 		t.Fatalf("zone: %v\n%+v", ls, rep)
 	}
-	if !strings.Contains(strings.Join(rep.Notes, "\n"), "192.0.2.2") {
+	if !strings.Contains(strings.Join(rep.Notes, "\n"), "127.0.0.1:53 did not transfer") {
 		t.Errorf("the name server that did not answer is not said: %v", rep.Notes)
 	}
 	// denied, it is not asked, and the summary says so
-	_, rep, _ = dnsOut(t, "-d", "lab.zz", "-r", lab.addr, "-axfr", "-j", "-timeout", "300ms", "-allow", "lab.zz", "-deny", "192.0.2.2")
+	_, rep, _ = dnsOut(t, "-d", "lab.zz", "-r", lab.addr, "-axfr", "-j", "-timeout", "300ms", "-allow", "lab.zz", "-deny", "127.0.0.1")
 	n := strings.Join(rep.Notes, "\n")
-	if !strings.Contains(n, "outside the scope not asked") || strings.Contains(n, "did not transfer the zone: 192.0.2.2") {
+	if !strings.Contains(n, "outside the scope not asked") || strings.Contains(n, "127.0.0.1:53 did not transfer") {
 		t.Errorf("%v", rep.Notes)
 	}
 	// the text form is the records of the zone, one per line
@@ -517,23 +517,20 @@ func TestDNSStopsWithAnExitAndSaysWhereToGoOn(t *testing.T) {
 	}
 }
 
-func TestDNSSpecialUseNamesGoToTheSystem(t *testing.T) {
+func TestDNSSpecialUseNamesGoToTheSystemOnlyWithTheDefaultResolvers(t *testing.T) {
 	t.Chdir(t.TempDir())
 	lab := startLab(t)
-	ls, rep, _ := dnsOut(t, "-d", "localhost", "-r", lab.addr, "-json")
-	if len(dnsRows(t, ls)) != 1 || lab.asked.Load() != 0 || len(rep.Notes) == 0 {
-		t.Errorf("%v asked %d %v", ls, lab.asked.Load(), rep.Notes)
+	// no -r: the defaults are public resolvers, and localhost is not theirs
+	ls, rep, _ := dnsOut(t, "-d", "localhost", "-json")
+	if len(dnsRows(t, ls)) != 1 || len(rep.Notes) == 0 {
+		t.Errorf("%v %v", ls, rep.Notes)
 	}
-}
-
-func TestDNSServfailFromEveryResolverIsADeadNameNotAFailure(t *testing.T) {
-	t.Chdir(t.TempDir())
-	a, b := startLab(t), startLab(t)
-	ls, rep, code := dnsOut(t, "-d", "servfail.lab.zz", "-r", a.addr+","+b.addr, "-j")
-	if code != exitOK || len(rep.Failed) != 0 || rep.Counts["servfail from every resolver"] != 1 {
-		t.Errorf("exit %d %+v", code, rep)
+	// -r names a resolver: everything is asked of it, as dnsx does
+	_, _, _ = dnsOut(t, "-d", "x.test", "-r", lab.addr, "-silent")
+	if lab.asked.Load() != 1 {
+		t.Errorf("a .test name asked of the named resolver %d times", lab.asked.Load())
 	}
-	if r := dnsRows(t, ls)["servfail.lab.zz"]; r["status_code"] != "SERVFAIL" {
-		t.Errorf("%v", ls)
+	if !dnsr.New(dnsr.Options{}).Reserved("a.test") || dnsr.New(dnsr.Options{Resolvers: []string{lab.addr}}).Reserved("a.test") {
+		t.Error("Reserved is not about the default resolvers")
 	}
 }

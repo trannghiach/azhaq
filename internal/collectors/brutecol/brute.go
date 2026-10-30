@@ -24,7 +24,9 @@ const (
 	PermuteName = "azhaq-permute"
 )
 
-var label = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+// An underscore is a legal label of a service or policy name (_dmarc,
+// _domainkey, _acme-challenge).
+var label = regexp.MustCompile(`^[a-z0-9_]([a-z0-9_-]{0,61}[a-z0-9_])?$`)
 
 // Brute resolves word.domain for every word in Words.
 type Brute struct {
