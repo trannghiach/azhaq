@@ -156,3 +156,35 @@ Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for
 `touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
+
+## 16. Archived URLs, as gau gives them
+
+```
+azhaq urls example.com | httpx -silent                                  # the host alone, each URL as its page arrives
+azhaq urls -d example.com -subs -providers wayback,commoncrawl -o urls.txt
+azhaq urls -d example.com -mc 200 -mt text/html -from 2024 -blacklist png,jpg,css,js -fp
+azhaq urls -d example.com -sort -json | jq -r .url                      # held until every archive answered, sorted
+azhaq urls -d example.com -raw                                          # what the archives said, nothing changed
+azhaq urls -d example.com -urls-pause 0 -urls-pages 0 -retries 5        # as fast as the archives answer, no page cap
+```
+
+Piped, `urls` prints each URL once, as soon as its page arrives, so the next tool starts at once; a stop (Ctrl-C, `-timeout`) keeps what was printed. On a terminal, or with `-sort`, it waits for every archive and prints the URLs sorted. The domain alone is the default, as in gau; `-subs` asks for `*.DOMAIN` too. `azhaq run` keeps asking for the subdomains.
+
+| gau | azhaq `urls` |
+| --- | --- |
+| `gau example.com a.com` | `urls example.com a.com`, `-d` (repeatable), `-dL FILE`, or domains on stdin |
+| `--subs` | `-subs` |
+| `--providers wayback,otx` | `-providers wayback,otx` (the archives are `wayback`, `commoncrawl`, `otx`, `urlscan`, `arquivo`; the API-key file moved to `-provider-config`, and `-providers FILE` still works for a path) |
+| `--mc/--fc/--mt/--ft`, `--from/--to` | `-mc -fc -mt -ft -from -to`; an archive that keeps no status, type or date (OTX; urlscan.io keeps dates only) is not asked, and the summary says so |
+| `--blacklist ttf,woff` | `-blacklist ttf,woff` (with or without the dot) |
+| `--fp` | `-fp` (the first URL of each host and path) |
+| `--threads N` | `-threads N` (domains asked at once; the five archives of a domain always run together) |
+| `--retries N` | `-retries N` (waits of 2, 5, 10 s between tries; 0 makes the first refusal final) |
+| `--proxy URL` | `-proxy URL` (http, https or socks5) |
+| `--timeout S` | `-urls-timeout` bounds each archive per domain; `-timeout` stops the whole run |
+| `--o FILE` | `-o FILE` (appends) |
+| `--json` | `-json` (`{"url","source"}`) |
+| `--config`, `~/.gau.toml` | `-config FILE`, and `~/.gau.toml` is read when it exists; flags win |
+| `--version` | `-version` |
+
+What differs on purpose: URLs are normalized and the scanner junk archives hold is dropped (`-raw` turns both off, and the deduplication too); a URL that two archives hold is printed once; TLS certificates are checked. An archive that failed, a source stopped at the page cap (`-urls-pages`, default 50, 0 for none) and archives left out by a filter are named in the summary; `-fail-on-capped` makes the cap exit 4.

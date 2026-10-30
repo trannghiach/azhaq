@@ -23,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -40,6 +41,7 @@ type common struct {
 	json, silent bool
 	out          string
 	db           string
+	appendOut    bool // -o adds to the file instead of replacing it (urls, as gau)
 }
 
 func (c *common) register(fs *flag.FlagSet) {
@@ -251,7 +253,12 @@ func newWriter(c *common) (*writer, error) {
 			return nil, usagef("-o %s is a directory: -o names the file the results are written to", c.out)
 		}
 		var err error
-		if f, err = os.Create(c.out); err != nil {
+		if c.appendOut {
+			f, err = os.OpenFile(c.out, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+		} else {
+			f, err = os.Create(c.out)
+		}
+		if err != nil {
 			return nil, err
 		}
 		dst = io.MultiWriter(os.Stdout, f)
@@ -975,61 +982,150 @@ func cmdCrawl(args []string) error {
 	return rep.finish(c.json, c.silent)
 }
 
-// cmdURLs is gau: every archived URL of the domains.
+// cmdURLs is gau: every archived URL of the domains. Into a pipe the URLs
+// are printed as the pages arrive (unsorted, each once); on a terminal, or
+// with -sort, once every archive has answered, sorted.
 func cmdURLs(args []string) error {
 	fs := newFlags("urls")
 	var c common
 	c.register(fs)
+	fs.Lookup("o").Usage = "also write results to this file, appending to it as gau does"
 	var domains stringsFlag
-	fs.Var(&domains, "d", "domain (repeatable)")
+	fs.Var(&domains, "d", "domain (repeatable; domains may also be given as arguments, as gau takes them)")
 	list := fs.String("dL", "", "file of domains (- for stdin)")
-	given := inherit(fs, "providers", "urls-timeout", "timeout", "v", "fail-on-errors")
+	subs := fs.Bool("subs", false, "also the subdomains of each domain: the archives are asked for *.DOMAIN (default: the name given, as gau does without --subs; azhaq run keeps the broader default)")
+	providers := fs.String("providers", "", "the archives to ask, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all five). A value that names a file, or has a / in it, is the API-key file, as -providers meant before; -provider-config says that without doubt")
+	threads := new(int)
+	fs.IntVar(threads, "urls-threads", 0, "domains asked at once (default 16)")
+	fs.IntVar(threads, "threads", 0, "same as -urls-threads")
+	stream := fs.Bool("stream", false, "print each URL as it arrives, unsorted (the default when stdout is not a terminal)")
+	sorted := fs.Bool("sort", false, "print once every archive has answered, sorted (the default on a terminal)")
+	config := fs.String("config", "", "a gau config file (default: ~/.gau.toml when it exists): threads, retries, subdomains, parameters, providers, blacklist, proxy, [urlscan] apikey and host, otx, and the [filters] table; flags win")
+	failCapped := fs.Bool("fail-on-capped", false, "exit 4 when an archive stopped at its page cap with more to read")
+	showVersion := fs.Bool("version", false, "print the version")
+	given := inherit(fs, "provider-config=providers", "mc=urls-mc", "fc=urls-fc", "mt=urls-mt", "ft=urls-ft", "from=urls-from", "to=urls-to",
+		"blacklist=urls-blacklist", "fp=urls-fp", "retries=urls-retries", "urls-pages", "urls-pause", "proxy=urls-proxy", "urls-max",
+		"archive=urls-archive", "raw=urls-raw", "urls-timeout", "timeout", "v", "fail-on-errors")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	ds, err := inputs(domains, *list)
+	if *showVersion {
+		return cmdVersion(nil)
+	}
+	var notes []string
+	if cfg, err := gauConfigPath(*config); err != nil {
+		return err
+	} else if cfg != "" {
+		n, err := applyGauConfig(fs, cfg)
+		if err != nil {
+			return usagef("%v", err)
+		}
+		notes = append(notes, n...)
+	}
+	ds, err := inputs(append(domains, fs.Args()...), *list)
 	if err != nil {
 		return err
 	}
 	if len(ds) == 0 {
-		return usagef("give -d DOMAIN, -dL FILE or domains on stdin")
+		return usagef("give -d DOMAIN, -dL FILE, domains as arguments or on stdin")
 	}
-	f, err := os.CreateTemp("", "azhaq-urls-")
-	if err != nil {
-		return err
+	raw := fs.Lookup("raw").Value.String() == "true"
+	switch {
+	case *stream && *sorted:
+		return usagef("-stream and -sort say opposite things")
+	case raw && *sorted:
+		return usagef("-raw prints the URLs as they arrive: it cannot be sorted")
 	}
-	f.Close()
-	defer os.Remove(f.Name())
+	var run []string
+	if *providers != "" {
+		if isKeyFile(*providers) {
+			run = append(run, "-providers", *providers)
+		} else if names := splitList(*providers); true {
+			if err := urlcol.CheckSources(names); err != nil {
+				return usagef("-providers: %v (an API-key file is given with -provider-config)", err)
+			}
+			run = append(run, "-urls-sources", strings.Join(names, ","))
+		}
+	}
+	if *threads > 0 {
+		run = append(run, "-parallel", strconv.Itoa(*threads))
+	}
 	rep := newReport("urls")
 	rep.what = "archived URLs"
-	run := []string{"-passive", "-depth", "0", "-skip", skipAllBut("azhaq-urls"), "-urls", f.Name(), "-urls-source"}
-	for _, d := range ds {
-		run = append(run, "-domain", d)
+	rep.Notes = append(rep.Notes, notes...)
+	live := *stream || raw || !stdoutTerminal()
+	if *sorted {
+		live = false
 	}
-	_, done, err := runPreset(&c, append(run, given()...), rep, nil)
-	if err != nil {
-		return err
-	}
-	defer done()
-	lines, err := loadLines(f.Name())
-	if err != nil {
-		return err
-	}
+	c.appendOut = true
 	w, err := newWriter(&c)
 	if err != nil {
 		return err
 	}
-	for _, l := range lines {
-		u, src, _ := strings.Cut(l, "\t")
-		if w.json {
-			w.obj(map[string]string{"url": u, "source": src})
-		} else {
-			w.line(u)
+	run = append(run, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-urls"), "-urls-subs="+strconv.FormatBool(*subs))
+	flush := func() {}
+	if live {
+		// Each URL is printed from the goroutine that reads its page: a
+		// stop keeps what was already printed.
+		var mu sync.Mutex
+		seen := map[string]bool{}
+		urlSink = func(u, src string) {
+			if !raw {
+				mu.Lock()
+				dup := seen[u]
+				seen[u] = true
+				mu.Unlock()
+				if dup {
+					return
+				}
+			}
+			if w.json {
+				w.obj(map[string]string{"url": u, "source": src})
+			} else {
+				w.line(u)
+			}
+		}
+		defer func() { urlSink = nil }()
+	} else {
+		f, err := os.CreateTemp("", "azhaq-urls-")
+		if err != nil {
+			return err
+		}
+		f.Close()
+		defer os.Remove(f.Name())
+		run = append(run, "-urls", f.Name(), "-urls-source")
+		flush = func() {
+			// The file holds what the archives gave, a stopped run's too.
+			lines, _ := loadLines(f.Name())
+			sort.Strings(lines)
+			seen := map[string]bool{}
+			for _, l := range lines {
+				u, src, _ := strings.Cut(l, "\t")
+				if seen[u] {
+					continue
+				}
+				seen[u] = true
+				if w.json {
+					w.obj(map[string]string{"url": u, "source": src})
+				} else {
+					w.line(u)
+				}
+			}
 		}
 	}
-	if err := w.close(); err != nil {
+	for _, d := range ds {
+		run = append(run, "-domain", d)
+	}
+	st, done, err := runPreset(&c, append(run, given()...), rep, nil)
+	flush()
+	if cerr := w.close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
 		return err
 	}
+	defer done()
+	urlsNotes(rep, payloads(st, "azhaq-urls"), *failCapped)
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
 }

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.10.0
+
+### `urls` as gau has it
+
+- `urls` prints each URL as its page arrives when stdout is not a terminal, so a pipe starts at once; `-sort` (and a terminal) waits and sorts. A stop by Ctrl-C or `-timeout` keeps what was found: the file is written and the summary says which archives were cut short.
+- `urls` asks for the host alone by default, as gau does; `-subs` asks for `*.DOMAIN` too. `run` keeps the broader default (`-urls-subs`).
+- `-mc`, `-fc`, `-mt`, `-ft`, `-from`, `-to` filter on what the archive recorded, sent in the query as gau sends them; an archive that cannot apply one (OTX; urlscan.io keeps dates only) is not asked, and the summary says so. A bad value is a usage error.
+- `-blacklist EXT,…` and `-fp` leave URLs out by extension and by host and path; `-raw` prints every row as the archives gave it.
+- `-providers wayback,otx,…` chooses the archives; the API-key file is `-provider-config` (a path given to `-providers` still works).
+- `-proxy`, `-retries`, `-threads` (`-urls-threads`), `-urls-pages`, `-urls-pause` and `-urls-max` set the transport; an archive that stopped at its page cap is marked `capped` and noted, and `-fail-on-capped` exits 4.
+- `-o` appends; domains may be arguments; `-config` and `~/.gau.toml` are read; `-version`; `-archive NAME=URL` asks a mirror.
+- OTX is asked as a hostname for a name with a subdomain; Common Crawl's "no captures" answer is an empty result, not a failure.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

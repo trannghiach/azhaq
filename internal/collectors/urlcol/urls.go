@@ -8,9 +8,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -39,6 +41,23 @@ type Options struct {
 	OutFrom  bool                // and the source that gave it first, after a tab
 	Timeout  time.Duration       // per source; default 3 minutes
 	MaxPages int                 // per source; default 50
+	MaxURLs  int                 // kept per domain; default 500,000
+
+	Apex      bool              // the domain's own host only, not its subdomains
+	Only      []string          // ask only these sources; default all
+	Filters   Filters           // sent to the archives that can apply them
+	Blacklist []string          // drop URLs whose path ends in one of these extensions
+	FirstPath bool              // keep one URL for each host and path
+	Retries   *int              // per request, on 429, 503 and network errors; default 3
+	Pause     *time.Duration    // between a source's requests; default per source, 0 none
+	Proxy     string            // http, https or socks5 address, when no Client is given
+	Bases     map[string]string // replaces a source's address (a mirror, a test server)
+
+	// OnURL gets each URL the first time it is seen, as the pages arrive.
+	// With Raw it gets every row on the domain exactly as the archive gave
+	// it: no normalising, junk filter or deduplication.
+	OnURL func(url, source string)
+	Raw   bool
 }
 
 type Collector struct {
@@ -51,7 +70,7 @@ type Collector struct {
 func New(o Options) *Collector {
 	if o.Client == nil {
 		// A Wayback page of a large domain is tens of MB and takes minutes.
-		o.Client = &http.Client{Timeout: 5 * time.Minute, Transport: http.DefaultTransport.(*http.Transport).Clone()}
+		o.Client = &http.Client{Timeout: 5 * time.Minute, Transport: transport(o.Proxy)}
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 3 * time.Minute
@@ -59,9 +78,24 @@ func New(o Options) *Collector {
 	if o.MaxPages <= 0 {
 		o.MaxPages = 50
 	}
-	return &Collector{opts: o, sources: allSources(), pauses: map[string]time.Duration{
+	if o.MaxURLs <= 0 {
+		o.MaxURLs = maxURLs
+	}
+	pauses := map[string]time.Duration{
 		"wayback": time.Second, "commoncrawl": time.Second, "otx": 500 * time.Millisecond, "urlscan": 2 * time.Second,
-	}}
+	}
+	if o.Pause != nil {
+		for _, s := range allSources() {
+			pauses[s.name] = *o.Pause
+		}
+	}
+	c := &Collector{opts: o, pauses: pauses}
+	for _, s := range allSources() {
+		if len(o.Only) == 0 || slices.Contains(o.Only, s.name) {
+			c.sources = append(c.sources, s)
+		}
+	}
+	return c
 }
 
 func (c *Collector) Name() string { return Name }
@@ -82,16 +116,43 @@ func (c *Collector) Asks(seed types.Seed) []string {
 	}
 	out := make([]string, 0, len(c.sources))
 	for _, s := range c.sources {
-		out = append(out, s.name)
+		if c.skips(s) == "" {
+			out = append(out, s.name)
+		}
 	}
 	return out
+}
+
+// skips says why a source is not asked: it cannot apply a filter that was
+// given, and its URLs would pass it unfiltered.
+func (c *Collector) skips(s source) string {
+	if lack := c.opts.Filters.needs() &^ s.can; lack != 0 {
+		var what []string
+		if lack&byStatus != 0 {
+			what = append(what, "status")
+		}
+		if lack&byMime != 0 {
+			what = append(what, "type")
+		}
+		if lack&byDate != 0 {
+			what = append(what, "date")
+		}
+		return "holds no " + strings.Join(what, " or ") + " of its captures to filter on"
+	}
+	return ""
 }
 
 type outcome struct {
 	count, pages int
 	err          error
 	took         time.Duration
+	capped       bool
+	skipped      string
 }
+
+// cutGrace is how long before the run's deadline the sources stop, so
+// what they found can still be recorded.
+const cutGrace = 3 * time.Second
 
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	domain := normalize.Hostname(seed.Keys["domain"])
@@ -115,20 +176,48 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if seed.Derived() && timeout > 15*time.Second {
 		timeout = 15 * time.Second
 	}
+	// The sources stop a little before the run's -timeout, so the summary
+	// can still be recorded with what they had read.
+	var cutoff time.Time
+	if dl, ok := ctx.Deadline(); ok {
+		left := time.Until(dl)
+		cutoff = dl.Add(-min(cutGrace, left/4))
+	}
 
+	out := newOutFilter(c.opts.Blacklist, c.opts.FirstPath)
+	deferFirst := c.opts.FirstPath && c.opts.OnURL == nil // sorted output keeps the first in order, not of arrival
+	if deferFirst {
+		out.first = false
+	}
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	from := map[string]string{} // URL → the source that gave it first
 	var all []string
+	dropped := 0 // URLs past the cap
 	results := make([]outcome, len(c.sources))
 	var wg sync.WaitGroup
 	for i, s := range c.sources {
+		if why := c.skips(s); why != "" {
+			results[i].skipped = why
+			continue
+		}
 		wg.Add(1)
 		go func(i int, s source) {
 			defer wg.Done()
 			sctx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
-			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3}
+			byRun := false
+			if !cutoff.IsZero() && time.Until(cutoff) < timeout {
+				cancel()
+				sctx, cancel = context.WithDeadline(ctx, cutoff)
+				defer cancel()
+				byRun = true
+			}
+			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3,
+				apex: c.opts.Apex, filters: c.opts.Filters, base: c.opts.Bases[s.name]}
+			if c.opts.Retries != nil {
+				g.retries = *c.opts.Retries
+			}
 			key := ""
 			if ks := c.opts.Keys[s.name]; len(ks) > 0 {
 				key = ks[0]
@@ -138,15 +227,26 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				mu.Lock()
 				defer mu.Unlock()
 				for _, raw := range urls {
-					u, ok := clean(raw, domain)
-					if !ok {
+					if c.opts.Raw && c.opts.OnURL != nil && onDomain(raw, domain, c.opts.Apex) && !out.blocked(raw) && !out.repeat(raw) {
+						c.opts.OnURL(raw, s.name)
+					}
+					u, ok := clean(raw, domain, c.opts.Apex)
+					if !ok || out.blocked(u) {
 						continue
 					}
 					count++
-					if !seen[u] && len(all) < maxURLs {
-						seen[u] = true
-						from[u] = s.name
-						all = append(all, u)
+					if seen[u] || (!c.opts.Raw && out.repeat(u)) {
+						continue
+					}
+					if len(all) >= c.opts.MaxURLs {
+						dropped++
+						continue
+					}
+					seen[u] = true
+					from[u] = s.name
+					all = append(all, u)
+					if !c.opts.Raw && c.opts.OnURL != nil {
+						c.opts.OnURL(u, s.name)
 					}
 				}
 			}
@@ -154,31 +254,49 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			t0 := time.Now()
 			pages, err := s.fetch(sctx, g, domain, key, add)
 			done()
-			if err == nil && sctx.Err() != nil && ctx.Err() == nil {
-				err = sctx.Err()
+			if sctx.Err() != nil && ctx.Err() == nil {
+				// The run's limit, or this source's own.
+				if byRun && time.Now().After(cutoff.Add(-time.Second)) {
+					err = errors.New(types.CutShort)
+				} else if err == nil {
+					err = sctx.Err()
+				}
 			}
 			mu.Lock()
-			results[i] = outcome{count: count, pages: pages, err: err, took: time.Since(t0)}
+			results[i] = outcome{count: count, pages: pages, err: err, took: time.Since(t0), capped: g.capped && err == nil}
 			mu.Unlock()
 		}(i, s)
 	}
 	wg.Wait()
-	if ctx.Err() != nil {
-		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
-	}
 	sort.Strings(all)
+	if deferFirst {
+		all = firstPerPath(all)
+	}
+	// What was found is kept whatever stopped the run: a recon tool never
+	// throws away work it already did.
 	if err := c.write(all, from); err != nil {
 		return types.RunMeta{Status: types.StatusError, Error: err.Error()}, err
 	}
+	if ctx.Err() != nil {
+		return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+	}
 
 	status := map[string]any{}
-	var failed []string
+	var failed, capped []string
 	for i, s := range c.sources {
 		r := results[i]
+		if r.skipped != "" {
+			status[s.name] = map[string]any{"skipped": r.skipped}
+			continue
+		}
 		row := map[string]any{"count": r.count, "pages": r.pages, "seconds": float64(r.took.Milliseconds()/100) / 10}
 		if r.err != nil {
 			row["error"] = shorten(r.err.Error())
 			failed = append(failed, s.name)
+		}
+		if r.capped {
+			row["capped"] = true
+			capped = append(capped, s.name)
 		}
 		status[s.name] = row
 	}
@@ -188,6 +306,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		nAssets += t.count
 	}
 	payload := map[string]any{"domain": domain, "count": len(all), "templates": len(tmpl), "assets": nAssets, "sources": status}
+	if len(capped) > 0 {
+		sort.Strings(capped)
+		payload["capped"] = capped
+	}
+	if dropped > 0 {
+		payload["truncated"] = dropped
+	}
 	if c.opts.Out != "" {
 		payload["file"] = c.opts.Out
 	}
@@ -232,8 +357,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	return meta, nil
 }
 
-// clean keeps http(s) URLs on domain or its subdomains, normalized.
-func clean(raw, domain string) (string, bool) {
+// clean keeps http(s) URLs on domain (and its subdomains, unless apex),
+// normalized.
+func clean(raw, domain string, apex bool) (string, bool) {
 	raw = strings.TrimSpace(raw)
 	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
 		return "", false
@@ -242,11 +368,32 @@ func clean(raw, domain string) (string, bool) {
 	if err != nil || webextract.JunkURL(u) {
 		return "", false
 	}
-	host := normalize.HostFromURL(u)
-	if host != domain && !strings.HasSuffix(host, "."+domain) {
+	if !hostOn(normalize.HostFromURL(u), domain, apex) {
 		return "", false
 	}
 	return u, true
+}
+
+func hostOn(host, domain string, apex bool) bool {
+	return host == domain || (!apex && strings.HasSuffix(host, "."+domain))
+}
+
+// onDomain is hostOn for a URL as an archive gave it.
+func onDomain(raw, domain string, apex bool) bool {
+	u, err := url.Parse(raw)
+	return err == nil && hostOn(strings.ToLower(u.Hostname()), domain, apex)
+}
+
+// firstPerPath keeps the first of each host and path in urls, which are sorted.
+func firstPerPath(urls []string) []string {
+	f := newOutFilter(nil, true)
+	out := urls[:0]
+	for _, u := range urls {
+		if !f.repeat(u) {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 type template struct {
