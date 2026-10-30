@@ -87,7 +87,8 @@ func benchDocs() *docsRow {
 			row.Changelog = c[1]
 		}
 	}
-	if out, err := exec.Command("git", "describe", "--tags", "--abbrev=0").Output(); err == nil {
+	// Release tags only, not the CI's bench-*, hunt-* and trial-*.
+	if out, err := exec.Command("git", "describe", "--tags", "--abbrev=0", "--match", "v[0-9]*").Output(); err == nil {
 		row.Tag = strings.TrimPrefix(strings.TrimSpace(string(out)), "v")
 	}
 	if r, err := newestRecord("bench/history"); err == nil {
