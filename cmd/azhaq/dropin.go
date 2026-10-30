@@ -1113,6 +1113,7 @@ func cmdURLs(args []string) error {
 			}
 		}
 	}
+	defer func() { urlscanKey = "" }()
 	for _, d := range ds {
 		run = append(run, "-domain", d)
 	}

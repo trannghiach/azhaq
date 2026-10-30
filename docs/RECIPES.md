@@ -187,4 +187,6 @@ Piped, `urls` prints each URL once, as soon as its page arrives, so the next too
 | `--config`, `~/.gau.toml` | `-config FILE`, and `~/.gau.toml` is read when it exists; flags win |
 | `--version` | `-version` |
 
+Several values for one filter (`-mc 200,301`) are alternatives of one filter sent to the archive; gau sends one filter for each value, which the archive ANDs, so it keeps nothing. gau's `--blacklist png` matches nothing (it compares `.png` with `png`) and its `--fp` prints nothing (version 2.2.4); `-blacklist` takes either spelling and `-fp` keeps the first of each host and path.
+
 What differs on purpose: URLs are normalized and the scanner junk archives hold is dropped (`-raw` turns both off, and the deduplication too); a URL that two archives hold is printed once; TLS certificates are checked. An archive that failed, a source stopped at the page cap (`-urls-pages`, default 50, 0 for none) and archives left out by a filter are named in the summary; `-fail-on-capped` makes the cap exit 4.
