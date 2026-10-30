@@ -3,37 +3,38 @@
 `go run ./bench` measures Azhaq against the tools it is meant to replace, on the same targets, and prints the numbers including the ones where Azhaq loses.
 
 ```
-go run ./bench                  # apps and domains
-go run ./bench -domains=false   # apps only
-go run ./bench -crapi           # also OWASP crAPI (about 2 GB of images)
-go run ./bench -brute=false     # skip DNS brute force and permutations on vulnweb.com
-go run ./bench -probe=false     # skip the httpx comparison on live hosts
-go run ./bench -ports=false     # skip the naabu comparison (scanme.nmap.org and this machine)
-go run ./bench -network=false   # skip ASN prefixes against RADb and reverse DNS against dnsx
-go run ./bench -keep            # leave the docker apps running afterwards
+go run ./bench                          # everything, both profiles
+go run ./bench -profile polite          # only the polite profile (default or both too)
+go run ./bench -only fuzz,dns,services  # these sections alone
+go run ./bench -domains=false           # leave out the passive domain lookups
+go run ./bench -crapi                   # also OWASP crAPI (about 2 GB of images)
+go run ./bench -refbin DIR -nmap SCRIPT # reference tools built elsewhere; nmap unpacked without sudo
+go run ./bench -readme                  # rewrite the README's benchmark table from the newest record
 ```
 
-Run it from the repository root. It needs Docker, network access, a C compiler (jsluice uses cgo), Python 3 (arjun), Chrome (screenshots, `-browser`, `-login`) and linux/amd64 (the reference tools are pinned to their linux/amd64 release archives). It exits non-zero if a check fails, and writes a JSON record to `bench/history/`.
+Run it from the repository root. It needs Docker (Juice Shop and VAmPI from `bench/compose.yaml`, the services lab from `bench/services.yaml` when the services section runs), network access, a C compiler (jsluice uses cgo), Python 3 (arjun), Chrome (screenshots, `-browser`, `-login`) and linux/amd64 (the reference tools are pinned to their linux/amd64 release archives, or taken from `-refbin`). It exits non-zero if a check fails, and writes a JSON record to `bench/history/`. The bench never stops containers: `-down` takes down only its own two (`azhaq-bench`).
 
-`-only dirs,params` runs those sections alone (while working on one layer; the full run is for a release). The reference tools' runs are kept for the rest of the UTC day in `bench/.work/refcache` and replayed, with their times, when the same tool is run on the same target with the same arguments and input files; the report says how many were. `-fresh` runs them again.
+## Two profiles
 
-The Wayback Machine and Common Crawl refuse the reference machine's address, and its security software removes naabu, so the archive and port scan comparisons also run on GitHub's network: push a tag `bench-*` (workflow `bench-archives`: domains, archives and ports), and its results are readable as annotations without signing in.
+Every comparison section runs azhaq and its reference tool with the same inputs and settings, once per profile; a check and a measured run carry the profile's name.
 
-## Targets
-
-| Target | How it runs | What is sent |
+| | default | polite |
 | --- | --- | --- |
-| OWASP Juice Shop v20.3.0 | `bench/compose.yaml`, port 3101 | full run |
-| VAmPI | `bench/compose.yaml`, port 5102 | full run |
-| ginandjuice.shop | PortSwigger's public test site | full run |
-| OWASP crAPI v1.1.6 (`-crapi`) | upstream compose with images pinned by digest (`bench/crapi-override.yaml`), port 8888 | full run |
-| `bench/domains.txt` | public domains | subdomain sources, archives and DNS resolution |
-| live names of hackerone.com, tesla.com, vulnweb.com | public bug bounty programs and a test zone | probing: `GET /` over HTTPS or HTTP and the favicon, from each tool, 16 requests in flight; no port scans |
-| vulnweb.com | Acunetix's public test zone | DNS brute force (5,000 words) and permutations, through public resolvers |
-| `wild.example.com` | a DNS server inside the bench on 127.0.0.1 | brute force against a zone where every label resolves |
-| scanme.nmap.org, 127.0.0.1 | Nmap's host for scanning, this machine | TCP connect scan, top 1,000 ports |
-| AS394161, 45.33.32.128/25 | an AS's announced prefixes; the /25 around scanme.nmap.org | RIPEstat and RADb queries, reverse DNS |
-| a multi-tenant app, a secrets page, a counting proxy | served by the bench on 127.0.0.1 | sign-in with Chrome and three roles; planted credentials; budgets, resume and workers on Juice Shop |
+| HTTP | the default flags of both tools | azhaq `-rate 5`; the reference at 5 (`-rl 5` httpx, katana and ffuf; arjun `--rate-limit 5`, which caps requests per second where its `-d` is a delay per thread; gowitness has no rate and gets one thread; notify `-rl 5`; gau one thread) |
+| DNS | azhaq and dnsx defaults, the same two resolvers | azhaq `-dns-rate 10`; dnsx `-rl 10`, the same two resolvers |
+| ports | the defaults, `-scan-type c` for naabu | azhaq `-rate 100`; naabu `-rate 100`; nmap `--max-rate 100` |
+| path and fuzz lists | all 4,750 words of SecLists `common.txt` | about 250 words (`-polite-words`): every Nth word and twenty paths the apps serve. At 5 requests per second the whole list is 16 minutes a tool and app, which does not fit a run under 90 minutes |
+
+Public test sites (ginandjuice.shop, testphp.vulnweb.com, demo.testfire.net) are always asked at 5 requests per second, in both profiles.
+
+## The bar
+
+Each comparison row is two checks.
+
+- **Results**: azhaq's results are at least the reference's, counting only results that something other than azhaq confirms: a server's own log, a second resolver, `ss -ltn`, the app's own routes or planted parameters, a GET to the host itself. Not 95%.
+- **Time**: azhaq's time is at most 1.05 times the reference's: the median of three runs when the first took under 20 s, one run above. A run of azhaq that failed (a flag or a command a stream has not delivered) is no time to compare, and fails the check.
+
+Every check names the exact commands, so a reviewer can run them again. The record still has the old numbers (shares of the reference's results, ratios of times).
 
 ## Reference tools
 
@@ -52,6 +53,8 @@ Downloaded to `bench/.work/bin` and verified against pinned SHA-256 sums (`bench
 | jsluice | commit `0ddfab1` (2024-01-10) | URLs in the scripts katana found, and secrets in the planted script; built from source with `go install` |
 | arjun | 2.2.7 | query parameters (GPL-3.0; installed with pip in a virtual environment and run as a separate program) |
 | gowitness | 3.2.2 | screenshots (GPL-3.0; run as a separate program) |
+| nmap | 7.94 | `-sV` service and version detection on the services lab (NPSL; run as a separate program; extracted from the Ubuntu .debs with `dpkg -x`, no sudo; `-nmap` names a script that runs it) |
+| notify | 1.0.7 | notifications to a local stub (`go install`, MIT) |
 
 Wordlists come from SecLists (MIT) at a pinned commit and are checked against their SHA-256 sums: `subdomains-top1million-5000.txt` for DNS brute force, `common.txt` for paths, `burp-parameter-names.txt` for parameters.
 
@@ -69,22 +72,35 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 
 ## Checks
 
-The command fails when one of these does not hold:
+The command fails when one of these does not hold. Rows marked "both" are measured in both profiles, each with the two checks of the bar.
 
-- Apps: Juice Shop at least 90% of its 77 known routes, VAmPI every path of its OpenAPI document, crAPI at least 30 of its 40; on every app at least as many known routes as katana ∪ jsluice, and no catch-all page reported as visited. ginandjuice.shop: the page scripts are read and the routes only they contain are found; product and blog pages fold into one template row each.
+- Apps (both): `crawl` against katana `-d 3 -jc -jsl` on Juice Shop, VAmPI and ginandjuice.shop, scored on the app's own routes. Default profile: Juice Shop at least 90% of its 77 known routes, VAmPI every path of its OpenAPI document, crAPI at least 30 of its 40; on every app at least as many known routes as katana ∪ jsluice, and no catch-all page reported as visited. ginandjuice.shop: the page scripts are read and the routes only they contain are found; product and blog pages fold into one template row each.
 - With a browser: `-browser` finds at least the known routes katana `-headless` finds, on Juice Shop and crAPI.
 - Diffs: two identical Juice Shop runs produce an empty diff; a diff between two different targets is labelled; `azhaq watch` reports no change on an unchanged app.
 - Roles: on Juice Shop, anonymous against a registered user (with its token, and signed in on the login page with Chrome), `/api/Users` and `/rest/user/authentication-details` go from 401 to 200; on the multi-tenant app, anonymous, member and owner match the known access table, and no signed-in role requests the sign-out link.
-- Paths: at least 95% of ffuf `-ac`'s hits with the same wordlist and rate, and no more false positives. Parameters: at least 95% of arjun's. Ports: at least 95% of naabu's open ports. Screenshots: at least 95% of gowitness's pages. Secrets: everything jsluice finds in the planted script.
-- Scope: no request leaves the program's scope.
-- Drop-in commands and exports: `azhaq crawl`, `probe` and `subs` stand in for katana, httpx and subfinder | dnsx; the OpenAPI export holds VAmPI's paths and 30 of crAPI's; targets and the HTML report are written.
-- Scale: on Juice Shop behind a counting proxy, a run capped at 100 requests per process and resumed until done, a run killed with SIGKILL and resumed, and a run shared with two workers each map the same URLs as one uninterrupted run, and no process sends more than its budget.
-- Domains: no empty subdomain or archive result without an error or `degraded` flag, unless every source answered and found nothing; at least 95% of subfinder's live names, the subdomain results in at most twice its time; at least 95% of gau's historical URLs.
+- Paths (both): hits of `dirs` against `ffuf -ac`, confirmed as not the app's catch-all answer; no more false positives.
+- Fuzz (both): `fuzz` against ffuf on Juice Shop and VAmPI, calibrated (`-ac`) and, by default, with `-fs`; the hits confirmed as not the catch-all answer; the JSON report equals ffuf's after `duration` is dropped.
+- Parameters (both): the parameters a planted server reads (and none it does not) against arjun; ginandjuice.shop, two pages and 1,000 names at 5 requests per second, in at most 1.05 times arjun's time.
+- Ports (both): open ports of scanme.nmap.org (once), of 127.0.0.1 confirmed by `ss -ltn` taken before and after, and of 127.0.0.0/28 against listeners the bench opened, against naabu `-scan-type c`.
+- Services (both): the lab's fifteen daemons, each named by what it says (the lab's own list in `bench/services.yaml`), against `nmap -sV`; at least 90% named.
+- Screenshots (both): image files that decode and are not one colour, against gowitness, on the five local apps and three pages the bench serves.
+- Probing (both): the hosts that answer (the local apps, the services lab's web ports and 100 local servers), confirmed by a GET to the host; status, title and technologies agree on at least 95% of shared hosts; three public test sites at 5 requests per second; and every input is a row, a failure or a skip.
+- Domains (both): `subs -live` against `subfinder | dnsx`, on live names a third resolver confirms, in the time of the two together; every confirmed name only the reference finds is in azhaq's list or its source is named as failed; no empty subdomain or archive result without an error or `degraded` flag.
+- URLs (both): `urls` against gau on vulnweb.com, and every URL gau lists is in azhaq's list.
+- DNS (both): record types (A, AAAA, CNAME, MX, NS, TXT, SRV, CAA, SOA) and `-ptr` against dnsx on a zone the bench serves, counted at the server (answers right, queries received, queries in the busiest second); brute force on the DNS lab with the same words and resolver; in the wildcard zone, the three real names and nothing else.
+- DNS lab, no docker (`lab`): `ports -pu` finds the lab's UDP port, `subs -w -live` gives the names the lab answers, a wildcard subzone gives only its real name, the dangling CNAMEs are named takeover candidates.
+- Notify (both): `azhaq notify` against notify, with the same input and provider config, against a stub whose log is the evidence; the same requests; no webhook token in any output when the webhook cannot be reached.
 - Networks: an AS's announced prefixes match its registered routes; reverse DNS finds at least 95% of what dnsx `-ptr` finds.
-- Probing: Azhaq answers at least 95% of the hosts httpx answers; status, title and technologies agree on at least 95% of them; at most twice httpx's time.
-- DNS: brute force on vulnweb.com finds at least 95% of what dnsx finds with the same words and resolvers, in at most twice its time; in the wildcard zone, the three real names and nothing else.
+- Scope: no request leaves the program's scope, also with Chrome (`-browser`, `-login`, `shots`, `crawl -browser`).
+- Claims: summary, ledger and an independent count agree on every path a request takes, including `azhaq_ports` after the MCP budget is spent.
+- Scale: on Juice Shop behind a counting proxy, a run capped at 100 requests per process and resumed until done, a run killed with SIGKILL and resumed, and a run shared with two workers each map the same URLs as one uninterrupted run, and no process sends more than its budget.
+- OpenAPI: the export of Juice Shop, VAmPI, DVGA, ginandjuice.shop and a fixture with `/blog` and `/blog/` is a valid OpenAPI 3 document by the bench's own checker (`bench/openapi.go`: structure, unique operation ids, path parameters declared, references resolve).
+- Docs: no public doc says an active option needs `-allow` or a scope, or that requests are "GETs only" without HEAD; the README's "Latest run (date, vX)" names the newest release in the changelog and is not older than the tag.
+- Go tests (`go test ./bench`): rows that were one assertion each (`bench/smoke_test.go`).
 
-## Latest results
+## Older results
+
+The numbers below are from v0.6.2 to v0.9.0, taken before the two profiles and the 1.05 bar; the README's table is written from the newest record.
 
 2026-10-27, v0.6.2, Go 1.27.1, one machine: `go run ./bench -crapi` (record `bench/history/2026-10-27T045837-db9f6fa-dirty.json`, taken before the commit). The probe comparison compares a redirect out of the host's site by its own status: httpx `-fr` reports the third party's page as the host's, Azhaq records the redirect. 44 of 45 checks pass; the one failure is the port comparison, which has nothing to compare with: this machine's security software removes the naabu binary. Ports and archives are compared on GitHub's network (workflow `bench-archives`).
 

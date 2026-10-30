@@ -12,6 +12,14 @@
 
 ### Bench
 
+- `go run ./bench -profile default|polite|both` runs every comparison twice, with the default flags of both tools and politely (`-rate 5`, `-dns-rate 10` with dnsx `-rl 10`, ports at `-rate 100`, the reference at the same rate), and names each check and each measured run with its profile.
+- Every comparison row passes only when Azhaq's results, counted only when something other than Azhaq confirms them (a server log, a second resolver, `ss`, the app's source), are at least the reference's and its time is at most 1.05 times the reference's (the median of three runs below 20 s); the old shares and ratios stay in the record.
+- New comparisons: `fuzz` against ffuf (hits, matchers, filters, JSON report), `dns` record types and `-ptr` against dnsx on a zone the bench serves, `urls` against gau, `ports` service and version against `nmap -sV` on the services lab, `notify` against notify on a local stub, and `crawl` against katana; DNS brute force runs on the DNS lab and needs no public zone.
+- A `lab` section checks the DNS lab without docker: the UDP port scan, `subs -w -live`, the wildcard subzone and the dangling CNAMEs.
+- The MCP budget check also calls `azhaq_ports` after the budget is spent; the scope trap also covers `-browser`, `-login`, `shots` and `crawl -browser`.
+- `probe` is held to rows + failed + skipped == inputs; `subs -live` to "every confirmed live name subfinder | dnsx finds is in Azhaq's list or its source is named as failed"; the docs are checked for lines that say active options need `-allow` or a scope, for "GETs only" without HEAD, and for a README benchmark label that is not the release; the OpenAPI exports of Juice Shop, VAmPI, DVGA, ginandjuice.shop and a `/blog` and `/blog/` fixture are validated by the bench's own checker; small Go tests (`bench/smoke_test.go`) hold rows that were one assertion each.
+- `go run ./bench -readme` writes the README's benchmark table from the newest record. The bench no longer stops the docker apps afterwards (`-down` does), and takes reference tools from `-refbin DIR` before `bench/.work/bin`.
+
 - A `claims` section checks every safety claim on every path a request takes, unpaced and at `-rate 10` and `-rate 2`. Each run's summary count, its ledger and an independent logging proxy (or the listeners, for TCP and UDP) must agree exactly. The paths: HTTP, Chrome, sign-in, roles, write replay, path and parameter sweeps, fuzz, ports, MCP, budgets and the kill switch.
 
 ## v0.9.1

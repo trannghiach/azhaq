@@ -262,30 +262,14 @@ The tools run Azhaq itself and return its summary and rows. The scope, the budge
 
 ## Benchmark
 
-`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop, VAmPI and crAPI in Docker, ginandjuice.shop, apps the bench serves itself, and the live names of hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included. The subdomain comparison is on **live** names — the ones that resolve — not the raw count: most of what a passive collector returns does not resolve (stale certificate logs, wildcard noise), so a bigger raw number is not a better result. Latest run (2026-10-30, v0.9.0; the map, access-control, resume and drop-in checks pass, the port comparison runs on GitHub's network because this machine's security software removes naabu):
+`go run ./bench` runs Azhaq and the tools it replaces on the same targets: Juice Shop and VAmPI in Docker, the services lab (fifteen daemons), a DNS lab, servers and a zone the bench serves itself, and, at 5 requests per second, ginandjuice.shop, testphp.vulnweb.com and demo.testfire.net; passive lookups only on hackerone.com, tesla.com and vulnweb.com. It prints the numbers, losses included.
 
-| Job | Replaces | Azhaq | Reference |
-| --- | --- | --- | --- |
-| Live subdomains, 3 domains, no keys | subfinder + dnsx | 561 live, in 116 s (fewer raw names; the dead majority is dropped — `subs -live` shows the split) | 457 live, in 93 s |
-| DNS brute force, 5,000 words | dnsx | 3 in 18 s | 3 in 69 s |
-| Wildcard zone, 3 real names of 50 | dnsx | 3 found, 0 fake | 50 without `-wd` |
-| Probing 575 live hosts | httpx | 409 answered; status, title and technologies agree on 399 of 401 shared (redirects out of the site compared by their own status); 107 s | 402 answered, 138 s |
-| Server routes Juice Shop's frontend calls (77) | katana `-jc -jsl` + jsluice | 70, with methods and body fields | 1 (37 by grepping the scripts katana fetched for quoted paths) |
-| VAmPI's API paths (12), ginandjuice's script-only routes (3), crAPI's routes (40) | katana + jsluice | 12, 3, 32 | 1, 2, 0 |
-| With Chrome: Juice Shop, crAPI | katana `-headless` | 70/77 in 12 s, 32/40 in 17 s | 6/77 in 6 s, 0/40 in 44 s |
-| Historical URLs, 3 domains (Wayback and Common Crawl unreachable for both) | gau | 7,115, including 2,346 of gau's 2,354 | 2,354 |
-| Paths, 4,750 words on Juice Shop and VAmPI | ffuf `-ac` | 22 hits, 2 false positives, 32 s | 22 hits, 2 false positives, 38 s |
-| Parameters, 5 pages | arjun | 5, including arjun's 2 | 2 |
-| Screenshots, 4 front pages | gowitness | 4 in 11 s | 3 in 34 s |
-| Credentials in a script | jsluice | 12, including jsluice's 4 | 4 |
-| Reverse DNS of a /25 | dnsx `-ptr` | 36 | 35, all among Azhaq's |
-| Access matrix, anonymous, member, owner (signed in by Chrome) | manual | 6/6 rows right, no logout sent | |
-| A run capped at 100 requests and resumed; killed and resumed; with two workers | – | each maps everything one run maps; 153 requests over the capped run and its resume, one run 148 | |
-| Memory, Juice Shop | katana `-jc -jsl` | 87 MB | 1.4 GB |
+Every comparison runs **twice**, as a reviewer runs it: with the default flags of both tools, and politely (`-rate 5` for HTTP, `-dns-rate 10` with dnsx `-rl 10` and the same two resolvers, `-rate 100` for ports, the reference at the same rate). `-profile default|polite|both` picks. A row is a win only when Azhaq has at least the reference tool's results, counting only results that something other than Azhaq confirms (a server's own log, a second resolver, `ss`, the app's source), in at most 1.05 times its time (the median of three runs below 20 s, one run above). The record keeps the old shares and ratios too.
 
-The Juice Shop truth is the 77 routes its server defines that its frontend calls (`bench/truth/juice_routes.py`, from the container's own code), not strings found by searching the bundle. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md); katana runs as `katana -u URL -d 3 -jc -jsl -silent -nc -timeout 10 -c 10`. Parameter discovery, 6,453 names: on the local apps Azhaq is faster (1.9 s against arjun's 3.6 s for three pages; arjun also reports a `callback` VAmPI ignores); on ginandjuice.shop, both at 20 requests per second, Azhaq loses on time (74 s a page against 21–24 s), as it halves its groups for a site that refuses long query strings, but finds `category`, `searchTerm` and `search` where arjun finds nothing. On memory it loses to katana without `-jsl` (60 MB). Passive subdomains took longer than subfinder this run (116 s against 93 s): Azhaq asks subdomain.center several times for its random samples and checks the names only such sources give with DNS, which is where its 104 more live names come from.
+<!-- bench:begin -->
+<!-- bench:end -->
 
-[bench/README.md](bench/README.md) has what is measured and the caveats.
+The table above is written from the newest record in `bench/history` by `go run ./bench -readme`, so its numbers cannot drift from a run. The reference commands are pinned in `bench/tools.go` and listed in [bench/README.md](bench/README.md), which also has what is measured, the checks, and the caveats (the polite path and fuzz sweeps send a short list, not 4,750 words, because at 5 requests per second that is 16 minutes a tool and app).
 
 ## Documentation
 
