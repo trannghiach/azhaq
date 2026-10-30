@@ -36,9 +36,7 @@
 
 **`params` exits 3 with `HTTP 429 from the target: it limits requests`.** The page (or a firewall before it) limits requests, and kept doing so after Azhaq waited as its `Retry-After` or 1, 2 and 4 s said. The names found before stay in the result; the rest of the list was not tried. Lower `-rate` (`-rate 2`), use `-stable`, or run it again later. The same exit and a note say requests got no answer (a server that drops connections under a long query: try `-c 100`).
 
-**`params` says `not searched, the page changes by itself`.** The page answers the same request with bodies of very different sizes, or with another status, so a change caused by a name could not be told from its own. Give the URL of a page that is stable (a search route, an API route).
-
-**The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. The summary lists them as failures; the other archives still count. Run again later, or from another network.
+**`params` says `the page changes by itself`.** The page answers the same request with bodies of very different sizes, or with another status, so a change caused by a name could not be told from its own. Give the URL of a page that is stable (a search route, an API route).
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
@@ -62,15 +60,13 @@
 
 **`probe -x POST` sent requests.** `-x`, `-body` and `-rr` send what you give to the targets in scope, and a POST, PUT or DELETE can change data there. Each request is counted, paced by `-rate` and in the ledger; the summary lists the methods sent.
 
-**A UDP port is `open|filtered`.** The port stayed silent when asked twice and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`. `ports -json` lists them; the plain output lists only the open ones.
-
-**`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random 500 of about 6,300 tesla.com names per call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.
+**`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random sample of its names on each call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.
 
 **`subs` lists names with `"unverified": true`.** Without `-live`, subs does not look names up in DNS. The names only subdomain.center guessed (most of its answer is made up) or only the name history held are listed, flagged, and counted in `unverified`; `-live` checks them and leaves out what does not resolve.
 
 **A source answered 429.** The source is asked again after its `Retry-After`, up to three times; the summary says how long that took (`crtname answered 429; it was asked again 1 times after 2 s`). A source that asks for more than 30 s, or keeps refusing, is not waited for and its names are missing from the run: the note says so and the source's row has `gave_up_429`. Slow the sources with `-source-rate N`, or leave the source out with `-exclude-sources`.
 
-**`subs -live` lists a name with no address.** It is a CNAME whose target gives no address (or does not exist). dnsx `-a -cname` lists it too; `cname` holds the chain, and a dangling one is also in the summary's `takeover`.
+**`subs -live` lists a name with no address.** It is a CNAME whose target gives no address (or does not exist). `dnsx -a -cname` lists it too; `cname` holds the chain, and a dangling one is also in the summary's `takeover`.
 
 **The `subs` summary says `degraded`** (in the text summary, `DEGRADED: N of M sources failed` on its first line). A source in the default set failed (`sources failed` is above 0), so the names may be incomplete. The exit code is not changed; the failed sources are listed. `azhaq subs -v` shows what each source returned and its error.
 
@@ -84,11 +80,11 @@
 
 **`shots` says `screenshot … is partial` and exits 3.** The picture was taken while some of the page's images, styles or scripts had not loaded (the row has `"partial":true`, `unloaded` and `resources`). The page was slow, or `-rate` is low for it: a page of 40 requests at `-rate 2` needs 20 seconds, and its time runs from when it last moved, so a slow pace alone does not cut it short; a server that stops answering does. Raise `-rate`, or give the page more time.
 
-**`gallery` says `N of M pages: the picture file is not on disk` and exits 3.** The workspace names a picture file that is no longer where the run wrote it (`file_path`) or beside the database. Keep the `-dir` folder with the workspace, or copy it back; the page still lists those pages, with their headers and record, and no picture.
+**`gallery` says `N of M pages: the picture file is not on disk` and exits 3.** The workspace names a picture file that is no longer where the run wrote it (`file_path`) or beside the database. Keep the `shots -dir` folder with the workspace, or copy it back; the page still lists those pages, with their headers and record, and no picture.
 
 **`gallery` finds no pictures in a workspace, or no groups.** It lists only what `shots` and `run -screenshots` took (`azhaq-shots` rows). A workspace made by an older azhaq has no perceptual hash (no look-alike groups) or no status (a status filter does not list the page); a banner says how many. Take the pages again.
 
-**`gallery`: a `body:` search finds nothing.** Page text is searched only for pages taken with `-shot-html`; the banner and Statistics say for how many it was kept. A free word still matches the URL and the title.
+**`gallery`: a `body:` search finds nothing.** Page text is searched only for pages taken with `shots -shot-html`; the banner and Statistics say for how many it was kept. A free word still matches the URL and the title.
 
 **`gallery` does not show a page taken after it started.** It reads the workspace once at start. Stop it (Ctrl-C) and start it again.
 

@@ -29,7 +29,7 @@ A connector is a separate program, and what it sends is its own: Azhaq does not 
 - One JSON object per line. Blank lines and lines starting with `#` are ignored.
 - Azhaq writes seeds to the connector's stdin, then closes it.
 - The connector writes facts to stdout. Stderr is shown only if the connector fails.
-- Exit code 0 means success. On a non-zero exit, Azhaq keeps the lines it already parsed, counts the failure in the run's `errors`, and continues with its own collectors. With `-fail-on-errors`, `azhaq` exits 1 after printing the summary.
+- Exit code 0 means success. On a non-zero exit, Azhaq keeps the lines it already parsed, counts the failure in the run's `errors`, and continues with its own collectors. The connector's failure is a failure like any other: the run ends with exit 3 (the results are usable), and `-fail-on-errors` makes every failure count, fan-out ones included.
 
 ## Input: seeds
 

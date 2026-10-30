@@ -258,7 +258,7 @@ func init() {
 				"azhaq export -db h1.db -format targets | nuclei -l -",
 			}},
 		{name: "ingest", group: groupWS, run: cmdIngest,
-			summary: "add other tools' results to a database (subfinder, httpx, katana, naabu, ffuf JSONL, or connector facts)",
+			summary: "add other tools' results to a database (subfinder, dnsx, httpx, katana, naabu, nuclei, gau and ffuf output, or connector facts)",
 			usage:   "-in FILE [-db FILE]",
 			output:  "the map of what was added",
 			examples: []string{

@@ -318,7 +318,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	portSeed := fs.Int64("port-seed", 0, "make the random port order repeat (0: a new one each run)")
 	portThreshold := fs.Int("port-threshold", 0, "stop asking a host after this many open ports: it answers every port (0: no limit)")
 	portUnnamed := fs.Int("port-unnamed", 0, "after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6; -1: no limit; each probe is a connect)")
-	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS; up to 3 connections), banner (what it says on the one connection) or none (connect and close)")
+	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close)")
 	portCDNFull := fs.Bool("port-cdn-full", false, "scan CDN and WAF addresses in full, not only their web ports")
 	portDiscover := fs.String("port-discover", "", "ask first whether an address is up, by a connect to 80 and 443: first (scan the ones that answer) or only (list them, scan nothing)")
 	portIP := fs.String("port-ip", "", "the address families of a name to scan: 4 or 6 (default both)")
@@ -357,7 +357,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	getWords := fs.String("get-words", "", "request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets")
 	knownFiles := fs.String("known-files", "", "ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths")
 	proxyFlag := fs.String("proxy", "", "send requests to targets through this proxy (http://, https:// or socks5://); Chrome too (default: $HTTP_PROXY, $HTTPS_PROXY)")
-	crawlScope := fs.String("crawl-scope", "", "the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: the page's own origin)")
+	crawlScope := fs.String("crawl-scope", "", "the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address)")
 	crawlAny := fs.Bool("crawl-any-host", false, "follow links to any host, within -allow and -deny (katana's -ns)")
 	var cookies, headers, allow, deny, domains, crawlIn, crawlOut stringsFlag
 	fs.Var(&crawlIn, "crawl-in", "follow only URLs that match this regex (repeatable)")

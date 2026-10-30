@@ -173,9 +173,9 @@ type Scanner struct {
 type Detect int
 
 const (
-	// DetectAll reads what the service says, asks one that says nothing for
-	// HTTP and TLS, and looks again at a greeter that was late: up to
-	// three connections to an open port.
+	// DetectAll reads what the service says, asks one that says nothing
+	// for HTTP, TLS and the other protocols it knows, and looks again at a
+	// greeter that was late: at most maxProbes connects after the first.
 	DetectAll Detect = iota
 	// DetectBanner reads what the service says on the one connection, and
 	// sends nothing.
