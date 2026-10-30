@@ -88,6 +88,7 @@
 - `top-1000` has 5985 and 5986 (WinRM), not 3007 and 3013, as naabu's list.
 - A name costs 2 DNS queries (A, AAAA), not 5 for an apex name; a name that does not resolve is listed in the summary.
 - `run -cidr/-asn` with `-ports` scans the prefix itself and no longer stops at `-max-ips`.
+- An AMQP broker on another port, which answers the HTTP probe with its version header and closes, is asked AMQP on a new connection: `RabbitMQ 3.13.7`, as nmap names it, not only `amqp 0-9-1`.
 
 ### `dirs`
 

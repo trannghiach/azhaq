@@ -241,6 +241,25 @@ func (id *ident) accept(conn net.Conn, p *protocol, reply []byte) bool {
 // tell from a single answer.
 func (id *ident) passive(reply []byte) bool { return passiveRead(reply, id.o) }
 
+// askOwn sends a port that an answer named, but not its product, the named
+// protocol's own request on a fresh connection: an AMQP broker answers the
+// HEAD with its version header, and says product and version only to AMQP.
+func (id *ident) askOwn() {
+	if id.o.Product != "" {
+		return
+	}
+	for _, p := range protocols {
+		if p.name != id.o.Service || p.request == nil || id.tried[p.name] {
+			continue
+		}
+		if c, err := id.dial(false); err == nil {
+			id.try(c, p)
+			c.Close()
+		}
+		return
+	}
+}
+
 // bannerOf is what to show of an answer: its first printable line, or for
 // a binary one, its first bytes in hex.
 func bannerOf(b []byte) string {
@@ -292,6 +311,7 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 		s.greeted(o, head)
 		return
 	} else if id.passive(head) {
+		id.askOwn()
 		return
 	} else if len(head) > 0 {
 		// Kept, binary or not: a TLS alert, another protocol's complaint.

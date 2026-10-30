@@ -141,6 +141,30 @@ func fakeService(t *testing.T, start []byte, answer []byte) int {
 	})
 }
 
+// An AMQP broker answers the HEAD with its version header and closes; it is
+// then asked AMQP, and its Connection.Start names the product.
+func TestAMQPOnAnotherPortIsAskedAMQP(t *testing.T) {
+	start := fixture(t, "amqp")
+	port := listen(t, func(c net.Conn) {
+		buf := make([]byte, 4096)
+		n, _ := c.Read(buf)
+		if bytes.HasPrefix(buf[:n], []byte("AMQP")) {
+			c.Write(start)
+		} else {
+			c.Write([]byte("AMQP\x00\x00\x09\x01"))
+		}
+		time.Sleep(50 * time.Millisecond)
+	})
+	s := &Scanner{Banner: 150 * time.Millisecond, Timeout: time.Second, Take: func() error { return nil }}
+	r, err := s.ScanEach(context.Background(), "", "127.0.0.1", []int{port})
+	if err != nil || len(r.Open) != 1 {
+		t.Fatalf("%v %+v", err, r)
+	}
+	if o := r.Open[0]; o.Service != "amqp" || o.Product != "RabbitMQ" || o.Version != "3.13.7" {
+		t.Errorf("%+v", o)
+	}
+}
+
 func TestLadderFindsServicesOnOtherPorts(t *testing.T) {
 	redis := fakeService(t, []byte("INFO"), []byte("$31\r\n# Server\r\nredis_version:6.2.1\r\n\r\n"))
 	mc := fakeService(t, []byte("version"), []byte("VERSION 1.6.9\r\n"))

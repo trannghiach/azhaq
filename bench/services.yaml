@@ -33,7 +33,7 @@ services:
   rabbitmq:
     image: rabbitmq:3.13-alpine
     container_name: azq-svc-amqp
-    ports: ["127.0.0.1:15672:5672"]
+    ports: ["127.0.0.1:15682:5672"] # 15672 does not answer on loopback on some hosts
   memcached:
     image: memcached:1.6-alpine
     container_name: azq-svc-memcached
