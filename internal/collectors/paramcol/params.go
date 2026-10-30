@@ -20,11 +20,13 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -44,6 +46,9 @@ type Options struct {
 	// AllGets also sends, with a session, names that read like an action
 	// (delete, reset…); by default they are left out.
 	AllGets bool
+	// Backoff are the waits before asking again after a 429, 418 or 503;
+	// a Retry-After longer than one is used instead. Default 1, 2 and 4 s.
+	Backoff []time.Duration
 }
 
 type Collector struct {
@@ -65,6 +70,9 @@ func New(client *http.Client, o Options) *Collector {
 	}
 	if o.Rate <= 0 {
 		o.Rate = 1e6 // no pace but the answers', as arjun
+	}
+	if len(o.Backoff) == 0 {
+		o.Backoff = []time.Duration{time.Second, 2 * time.Second, 4 * time.Second}
 	}
 	c := *fetch.Client(client)
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -109,9 +117,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	u, _ := url.Parse(raw)
 	page := u.Scheme + "://" + u.Host + u.Path // one search per path, whatever the query
 	c.mu.Lock()
-	if c.done[page] || c.perHost[u.Host] >= c.Opts.PerHost {
+	if c.done[page] {
 		c.mu.Unlock()
 		return types.RunMeta{Status: types.StatusOK}, nil
+	}
+	if c.perHost[u.Host] >= c.Opts.PerHost {
+		c.mu.Unlock()
+		return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, noted(emit, page, fmt.Sprintf("%s: not searched, %d pages of %s were searched already (-params-per-host)", page, c.Opts.PerHost, u.Host))
 	}
 	c.done[page] = true
 	c.perHost[u.Host]++
@@ -123,10 +135,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	s := &search{c: c, ctx: ctx, base: u, known: known, most: c.Opts.Chunk}
 	if !s.calibrate() {
-		if s.err != nil {
+		switch {
+		case s.err != nil:
 			return s.spent(page)
+		case ctx.Err() != nil:
+			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+		case s.stopped != nil || s.lost > 0:
+			return s.give(page, emit, nil, nil)
 		}
-		return types.RunMeta{Status: types.StatusOK}, nil // the page changes by itself or does not answer
+		// The page changes by itself: said, not silently left out.
+		return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, s.skipped(emit, page)
 	}
 	var words []string
 	seen := map[string]bool{}
@@ -143,7 +161,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	found := map[string]string{}
 	note := ""
-	for i := 0; i < len(words) && ctx.Err() == nil && s.err == nil; i += c.Opts.Chunk {
+	for i := 0; i < len(words) && ctx.Err() == nil && s.err == nil && s.stopped == nil; i += c.Opts.Chunk {
 		chunk := words[i:min(i+c.Opts.Chunk, len(words))]
 		s.alone, s.hits = 0, 0
 		s.narrow(chunk, found)
@@ -158,14 +176,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if stopped {
 			hits, tried = s.hits, s.alone
 		}
-		if !stopped && (len(chunk) < minFlood || hits*2 <= len(chunk)) || ctx.Err() != nil || s.err != nil {
+		if !stopped && (len(chunk) < minFlood || hits*2 <= len(chunk)) || ctx.Err() != nil || s.err != nil || s.stopped != nil {
 			continue
 		}
 		// Most names "change" the answer: a page that reacts to names it
 		// does not read, or one that reads most of a short list (names
 		// taken from its own scripts). Random names made like these tell.
 		if s.anyName(chunk) {
-			if s.err != nil {
+			if s.err != nil || s.stopped != nil {
 				break
 			}
 			for _, n := range chunk {
@@ -197,6 +215,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if s.err != nil {
 		return s.spent(page)
 	}
+	return s.give(page, emit, found, &note)
+}
+
+// give emits the page's row and says what cut the search short: a page
+// that limits requests or stops answering fails with the names found so
+// far kept, and names in groups that got no answer are not judged.
+func (s *search) give(page string, emit func(types.Observation) error, found map[string]string, note *string) (types.RunMeta, error) {
 	names := make([]string, 0, len(found))
 	for n := range found {
 		names = append(names, n)
@@ -206,14 +231,47 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if len(found) > 0 {
 		row["why"] = found
 	}
-	if note != "" {
-		row["note"] = note
+	var notes []string
+	if note != nil && *note != "" {
+		notes = append(notes, *note)
+	}
+	var fail error
+	switch {
+	case s.stopped != nil:
+		fail = s.stopped
+		notes = append(notes, fmt.Sprintf("%s: %s, so the page was not fully searched (lower -rate, or wait and run again)", page, s.stopped))
+	case s.lost > 0:
+		fail = fmt.Errorf("%d requests got no answer (%s)", s.lost, s.lostWhy)
+		notes = append(notes, fmt.Sprintf("%s: %d of %d requests got no answer (%s); the names in those groups were not judged", page, s.lost, s.requests, s.lostWhy))
+	}
+	if len(notes) > 0 {
+		row["note"] = strings.Join(notes, "; ")
 	}
 	payload, _ := json.Marshal(row)
 	if err := emit(types.Observation{Collector: Name, Source: page, Kind: "params", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()}); err != nil {
 		return types.RunMeta{}, err
 	}
+	if fail != nil {
+		return types.RunMeta{Status: types.StatusError, Error: fail.Error(), EmitCount: 1}, fail
+	}
 	return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, nil
+}
+
+// skipped says the page was left alone and why.
+func (s *search) skipped(emit func(types.Observation) error, page string) error {
+	why := s.skip
+	if why == "" {
+		why = "the page changes by itself"
+	}
+	return noted(emit, page, fmt.Sprintf("%s: not searched, %s", page, why))
+}
+
+// noted emits a page's row with no parameters and a note for the summary: a
+// page left alone is said, not dropped. (The summary's list of requests
+// left alone omits pages the run asked, so a note carries it.)
+func noted(emit func(types.Observation) error, page, note string) error {
+	payload, _ := json.Marshal(map[string]any{"url": page, "requests": 0, "params": []string{}, "note": note})
+	return emit(types.Observation{Collector: Name, Source: page, Kind: "params", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()})
 }
 
 // answer is what a request is compared on.
@@ -254,6 +312,14 @@ type search struct {
 	// reads: random names made like the chunk's changed nothing, so the
 	// names that do are read, however many.
 	reads bool
+	// stopped: the page limits requests (429, 418, 503) and kept doing so
+	// after the waits; the search ends there.
+	stopped error
+	// lost counts requests that got no answer, lostWhy the last cause;
+	// skip says why calibration left the page alone.
+	lost    int
+	lostWhy string
+	skip    string
 }
 
 // flooded: nearly every name tested alone changed the answer, as on a
@@ -289,9 +355,40 @@ func (s *search) spent(page string) (types.RunMeta, error) {
 	return types.RunMeta{Status: types.StatusCapped}, s.err
 }
 
+// limiting: the statuses of a server telling the client to slow down.
+func limiting(code int) bool {
+	return code == http.StatusTooManyRequests || code == http.StatusTeapot || code == http.StatusServiceUnavailable
+}
+
+// get asks the page with q added to its query. A 429, 418 or 503 that the
+// page did not give for unknown names before is waited out, as long as its
+// Retry-After says (at most 30 s) or 1, 2 and 4 s; if it persists the
+// search stops with s.stopped set.
 func (s *search) get(q []pair) (answer, bool) {
+	for attempt := 0; ; attempt++ {
+		a, wait, ok := s.once(q)
+		if wait == 0 {
+			return a, ok
+		}
+		if attempt >= len(s.c.Opts.Backoff) {
+			s.stopped = fmt.Errorf("HTTP %d from the target: it limits requests", a.status)
+			return answer{}, false
+		}
+		t := time.NewTimer(min(max(wait, s.c.Opts.Backoff[attempt]), 30*time.Second))
+		select {
+		case <-s.ctx.Done():
+			t.Stop()
+			return answer{}, false
+		case <-t.C:
+		}
+	}
+}
+
+// once sends one request. wait is not zero when the page limited it: the
+// time its Retry-After asks for, or 1 ns.
+func (s *search) once(q []pair) (a answer, wait time.Duration, ok bool) {
 	if err := s.c.limiter.Wait(s.ctx, s.base.Host); err != nil {
-		return answer{}, false
+		return answer{}, 0, false
 	}
 	u := *s.base
 	var b strings.Builder
@@ -304,27 +401,40 @@ func (s *search) get(q []pair) (answer, bool) {
 	}
 	u.RawQuery = b.String()
 	if fetch.EndsSession(u.String()) {
-		return answer{}, false
+		s.skip = "the page's address ends the session"
+		return answer{}, 0, false
 	}
 	req, err := http.NewRequestWithContext(s.ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return answer{}, false
+		return answer{}, 0, false
 	}
 	fetch.ApplyHeaders(req)
 	if err := fetch.Spend(s.ctx); err != nil {
 		if errors.Is(err, neterr.ErrBudget) {
 			s.err = err
 		}
-		return answer{}, false
+		return answer{}, 0, false
 	}
 	s.requests++
 	resp, err := s.c.Client.Do(req)
 	if err != nil {
-		return answer{}, false
+		if s.ctx.Err() == nil {
+			s.lost++
+			s.lostWhy = engine.ShortError(err.Error())
+		}
+		return answer{}, 0, false
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-	return answerOf(resp.StatusCode, body), true
+	a = answerOf(resp.StatusCode, body)
+	if limiting(resp.StatusCode) && resp.StatusCode != s.ref.status {
+		wait = time.Nanosecond
+		if n, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && n > 0 {
+			wait = time.Duration(n) * time.Second
+		}
+		return a, wait, false
+	}
+	return a, 0, true
 }
 
 // calibrate takes the page twice with one random parameter, then once
@@ -338,12 +448,17 @@ func (s *search) calibrate() bool {
 		return false
 	}
 	b, ok := s.get(randomPairs(1))
-	if !ok || a.status != b.status {
+	if !ok {
+		return false
+	}
+	if a.status != b.status {
+		s.skip = fmt.Sprintf("the page answers %d, then %d, to the same request", a.status, b.status)
 		return false
 	}
 	s.ref = a
 	s.slack = abs(a.length - b.length)
 	if s.slack >= a.length/2+64 {
+		s.skip = fmt.Sprintf("the page changes by itself (%d and %d bytes for the same request)", a.length, b.length)
 		return false
 	}
 	crowd := randomPairs(s.c.Opts.Chunk)

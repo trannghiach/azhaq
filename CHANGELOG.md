@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.10.0
+
+### Parameters
+
+- `params` no longer says `0 pages` and exits 0 for a server that rate-limits it. A 429, 418 or 503 the page did not give before is waited out (its `Retry-After`, else 1, 2 and 4 s); if it persists the page fails, exit 3, with the names found so far kept and a note. Requests that got no answer fail the page too, and a page left alone (it changes between identical requests, or has more pages than `-params-per-host`) is said in a note.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.
