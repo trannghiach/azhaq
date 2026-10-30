@@ -40,6 +40,7 @@ type mcpServer struct {
 	budget  int64 // requests to targets over the server's life; 0: none
 	mu      sync.Mutex
 	used    int64
+	sending chan struct{} // one command that touches targets at a time
 	out     *json.Encoder
 	outMu   sync.Mutex
 	running map[string]context.CancelFunc // request id → its command
@@ -326,6 +327,20 @@ var progressFirst, progressEvery = time.Second, 5 * time.Second
 
 func (s *mcpServer) run(ctx context.Context, progress any, touches bool, args ...string) (cmdResult, error) {
 	if touches {
+		// One at a time: calls made at once would each see the whole
+		// budget left and each keep the pace, together exceeding both.
+		s.mu.Lock()
+		if s.sending == nil {
+			s.sending = make(chan struct{}, 1)
+		}
+		sem := s.sending
+		s.mu.Unlock()
+		select {
+		case sem <- struct{}{}:
+		case <-ctx.Done():
+			return cmdResult{}, ctx.Err()
+		}
+		defer func() { <-sem }()
 		args = append(args, s.lock...)
 		if s.rate > 0 {
 			args = append(args, "-rate", fmt.Sprint(s.rate))

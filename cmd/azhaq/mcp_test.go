@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -371,5 +372,36 @@ func TestStderrError(t *testing.T) {
 	err = stderrError(`{"command":"diff","error":"no such db x.db","exit":1,"type":"summary"}`, nil)
 	if err.Error() != "no such db x.db" {
 		t.Errorf("%q", err)
+	}
+}
+
+// Calls made at once share the budget: the second waits for the first,
+// then finds it spent, rather than each sending the whole budget.
+func TestMCPConcurrentCallsShareTheBudget(t *testing.T) {
+	dir := t.TempDir()
+	s := &mcpServer{exe: fakeAzhaq(t, dir), dir: dir, lock: []string{"-allow", "127.0.0.1"}, locked: true, budget: 2, rate: 5}
+	t.Setenv("FAKE_SUMMARY", `{"type":"summary","command":"run","exit":4,"requests":2,"stopped":"the request budget of 2 is spent, 5 tasks left","resume":"azhaq resume -db x.db"}`)
+	var wg sync.WaitGroup
+	refused := make(chan bool, 2)
+	for _, ws := range []string{"a", "b"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			text, isErr := callText(t, s, "azhaq_map", map[string]any{"url": "http://127.0.0.1:3001/", "workspace": ws})
+			refused <- isErr && strings.Contains(text, "budget")
+		}()
+	}
+	wg.Wait()
+	close(refused)
+	n := 0
+	for r := range refused {
+		if r {
+			n++
+		}
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "args"))
+	runs := strings.Count(string(raw), "run ")
+	if n != 1 || s.used != 2 {
+		t.Errorf("%d calls refused, used %d, runs started %d:\n%s", n, s.used, runs, raw)
 	}
 }
