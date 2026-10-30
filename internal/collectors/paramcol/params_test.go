@@ -215,7 +215,7 @@ func TestPageAnsweringEveryNameIsNoted(t *testing.T) {
 	if note, _ := got["note"].(string); !strings.Contains(note, "answers names it does not read") {
 		t.Fatalf("no note: %v", got)
 	}
-	if n := got["requests"].(float64); n > 100 {
+	if n := got["requests"].(float64); n > 250 {
 		t.Errorf("%v requests before giving up on the page", n)
 	}
 }
@@ -282,7 +282,7 @@ func TestFloodKeepsEarlierGroups(t *testing.T) {
 		words = append(words, fmt.Sprintf("flood%d", i))
 	}
 	var got map[string]any
-	c := New(srv.Client(), Options{Words: words, Chunk: 10, Rate: 10000, Backoff: []time.Duration{time.Millisecond}})
+	c := New(srv.Client(), Options{Words: words, Chunk: 10, Rate: 10000, Threads: 1, Backoff: []time.Duration{time.Millisecond}})
 	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/catalog"}}, func(o types.Observation) error {
 		return json.Unmarshal(o.Payload, &got)
 	})

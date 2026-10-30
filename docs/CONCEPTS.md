@@ -108,7 +108,7 @@ Verdicts, worst first: anyone reads sensitive fields · reads another role's obj
 | What | Method | When |
 | --- | --- | --- |
 | Pages, scripts, API descriptions, built-in paths, archived URL templates | GET | every run, inside the scope |
-| Path and parameter guesses | GET | `-dirs`, `-params` (held to the targets given, or `-allow`/`-scope`) |
+| Path and parameter guesses | GET; names in a POST, JSON or XML body with `params -X`, which asks for it | `-dirs`, `-params` (held to the targets given, or `-allow`/`-scope`) |
 | GraphQL introspection | POST | `-graphql` (held to the targets given, or `-allow`/`-scope`) |
 | A port's service | TCP connect, one `HEAD /` to a port that says nothing (a `GET /` for a web port whose head names no product; on 5432, 6379 and 27017–27019, that database's own first request) | `-ports`, `ports` |
 | UDP ports | one datagram of the protocol's harmless request per port, a second when none came back | `-ports-udp`, `ports -udp`, `-pu` |

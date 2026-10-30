@@ -138,7 +138,7 @@ Every command prints results on stdout, and a summary on stderr: what failed and
 | --- | --- | --- |
 | Pages, scripts, API descriptions (at the root and under each API base), archived URL templates | GET | every run |
 | 32 built-in path checks per web service (`robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `backup`, `admin`, …) | GET | every run; `-no-paths` turns them off |
-| Path and parameter guesses, ports, GraphQL introspection | GET, a TCP connect and one `HEAD /` (a `GET /` on a web port whose head names no product; on 5432, 6379 and 27017–27019, that database's own first request), POST | `-dirs`, `-params`, `-ports`, `-graphql`, held to the targets given or to `-allow`/`-scope` |
+| Path and parameter guesses, ports, GraphQL introspection | GET (`params -X` sends names in a POST, JSON or XML body, on request), a TCP connect and one `HEAD /` (a `GET /` on a web port whose head names no product; on 5432, 6379 and 27017–27019, that database's own first request), POST | `-dirs`, `-params`, `-ports`, `-graphql`, held to the targets given or to `-allow`/`-scope` |
 | UDP ports | one datagram per port, a protocol's harmless request (a DNS `. NS`, an SNMP GET of `sysDescr.0` with community `public`, …; a DNS query on a port with no known protocol), a second one when none came back (an empty datagram on a port with no known protocol) | `-udp`, `-pu`, `run -ports-udp`, held to the targets given or to `-allow`/`-scope` |
 | A wordlist in a request | the method and body you give it, with the wordlist's words in them | `azhaq fuzz`, held to the host of `-u` or to `-allow`/`-scope` |
 | Chrome | GET, HEAD and CORS preflights, and the sign-in form; a page's own writes are refused and mapped, unless `-browser-writes`; every download is refused and listed, and a page read for its requests is loaded without its images, fonts and media | `-browser`, `-login`, `shots` |
@@ -234,10 +234,10 @@ azhaq ports  -host 192.0.2.7 -p none -pu top -json                             #
 azhaq dirs   -u https://app.example.com/ -w common.txt -e php,bak              # ffuf -ac
 azhaq fuzz   -u https://app.example.com/FUZZ -w common.txt -e .php,.bak -recursion   # ffuf
 azhaq fuzz   -u https://10.0.0.5/ -H 'Host: FUZZ.example.com' -w subdomains.txt -fs 4242   # ffuf, virtual hosts
-azhaq params -u https://app.example.com/search -w burp-parameter-names.txt     # arjun
+azhaq params -u https://app.example.com/search                                 # arjun (6,500 built-in names)
 ```
 
-Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` run as fast as ffuf and arjun (40 guesses in flight, no pace); `-rate N` holds them to N requests a second. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
+Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` run as fast as ffuf and arjun (40 guesses in flight, 5 groups of names in flight, no pace); `-rate N` holds them to N requests a second. `probe`'s `status_code` is the first answer, as httpx's; `final_url` says where an in-scope redirect ended.
 
 **`fuzz`** puts words from a wordlist into a request, anywhere in it: the path, a query value, a header (`Host: FUZZ.example.com` for virtual hosts), the method, a JSON or form body. It takes ffuf's flags (`-w FILE[:KEYWORD]`, `-mode clusterbomb|pitchfork`, the matchers `-mc -ms -mw -ml -mr`, the filters `-fc -fs -fw -fl -fr`, `-recursion`, `-e`, `-t`, `-json`) and counts as ffuf 2.3 does (words are spaces plus one, lines newlines plus one, the same match and filter rules, the same calibration), so a command line moved from ffuf gives the same results. It differs from ffuf in these ways:
 

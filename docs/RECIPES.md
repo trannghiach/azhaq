@@ -102,6 +102,16 @@ azhaq export -db app.db -format sdl > schema.graphql
 
 Introspection is a POST, held to the targets given (or the `-allow`/`-scope` named). A run that finds GraphQL without `-graphql` suggests the command.
 
+## 10b. Find the parameters a page reads
+
+```
+azhaq params -u https://app.example.com/search                  # the built-in list (6,500 names)
+azhaq params -u https://app.example.com/search -w small -rate 5 -oJ params.json
+azhaq params -i burp-export.xml -allow app.example.com -passive # pages from Burp, names the archives hold too
+```
+
+The built-in lists are SecLists' `burp-parameter-names.txt` (MIT) and names Azhaq found itself. Names the page's own form fields and scripts hold are tried first. A page that rate-limits it fails with exit 3 and says so. `-X POST`, `-X JSON` and `-X XML` send the names in a body, which may change data on the target: they need `-allow` or `-scope` to name the targets, or a single page.
+
 ## 11. Retry what failed
 
 ```

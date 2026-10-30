@@ -20,6 +20,10 @@
 
 **Chrome does not start.** Azhaq looks for Chrome or Chromium on the usual paths; `AZHAQ_CHROME=/path/to/chrome` names it. Where Chrome cannot start its sandbox (some containers), the error says so; `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one. Do this only where you accept that the pages Chrome loads are untrusted.
 
+**`params` exits 3 with `HTTP 429 from the target: it limits requests`.** The page (or a firewall before it) limits requests, and kept doing so after Azhaq waited as its `Retry-After` or 1, 2 and 4 s said. The names found before stay in the result; the rest of the list was not tried. Lower `-rate` (`-rate 2`), use `-stable`, or run it again later. The same exit and a note say requests got no answer (a server that drops connections under a long query: try `-c 100`).
+
+**`params` says `not searched, the page changes by itself`.** The page answers the same request with bodies of very different sizes, or with another status, so a change caused by a name could not be told from its own. Give the URL of a page that is stable (a search route, an API route).
+
 **The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. The summary lists them as failures; the other archives still count. Run again later, or from another network.
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
