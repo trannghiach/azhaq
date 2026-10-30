@@ -228,6 +228,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	fetch.Reset()
 	defer fetch.Reset()
 	fetch.SetRate(rate)
+	fetch.ProxyURL = rolesProxy
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
 	client := *fetch.Client(nil)
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }

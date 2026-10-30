@@ -516,6 +516,37 @@ func TestRolesFromHistory(t *testing.T) {
 			t.Errorf("sent to the third party: %q", l)
 		}
 	}
+
+	// -proxy carries every request: the history reads and the replay too.
+	var viaProxy int
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		viaProxy++
+		mu.Unlock()
+		out := r.Clone(r.Context())
+		out.RequestURI = ""
+		resp, err := http.DefaultTransport.RoundTrip(out)
+		if err != nil {
+			w.WriteHeader(502)
+			return
+		}
+		defer resp.Body.Close()
+		for k, vs := range resp.Header {
+			w.Header()[k] = vs
+		}
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body)
+	}))
+	defer proxy.Close()
+	mu.Lock()
+	got = nil
+	mu.Unlock()
+	run("-proxy", proxy.URL, "-replay-writes", "put")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) == 0 || viaProxy != len(got) {
+		t.Errorf("the server got %d requests, the proxy carried %d", len(got), viaProxy)
+	}
 }
 
 // A write is proved in the field it sets: quantity 2 is not seen in an

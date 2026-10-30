@@ -27,6 +27,9 @@ import (
 	"github.com/trannghiach/azhaq/types"
 )
 
+// rolesProxy is the runs' -proxy, which the requests between them use too.
+var rolesProxy *url.URL
+
 // role is one session: a name and the headers its requests carry, or the
 // account it signs in with. A role with neither is anonymous.
 type role struct {
@@ -125,6 +128,7 @@ func cmdRoles(args []string) error {
 	fs.Var(&allows, "allow", "HOST: an origin of the history that is the target besides the ones most of a role's requests go to (the others, analytics and CDNs, are left out) (repeatable)")
 	noAnon := fs.Bool("no-anon", false, "with -har or -burp: do not add the anonymous role")
 	rateFlag := fs.Float64("rate", 0, "requests per second for the history reads and the replay, when the run options give none")
+	proxyFlag := fs.String("proxy", "", "send every request through this proxy (http, https or socks5 URL): the runs, the history reads and the replay")
 	fs.Var(&canarySpecs, "canary", "[ROLE:]URL[=REGEX]: what checks a session during the replay: a URL only a live session reads, and what its body holds (default: the role's own /me-like answer, or a page the anonymous role is refused)")
 	canaryEvery := fs.Int("canary-every", 50, "replay requests between two checks of a role's session (0: no checks)")
 	refusalSpec := fs.String("refusal", "", "REGEX: a 2xx answer whose body matches is a refusal, for every role (a 200 \"Access denied\" page); each origin's own refusal page is learned besides")
@@ -227,9 +231,28 @@ func cmdRoles(args []string) error {
 	bodies = newBodyKeep()
 	defer func() { bodies = nil }()
 	rate := *rateFlag
+	rolesProxy = nil
+	if *proxyFlag != "" {
+		pu, err := parseProxy(*proxyFlag)
+		if err != nil {
+			return err
+		}
+		rolesProxy = pu
+	}
+	if crawl && *proxyFlag != "" && !hasFlag(runArgs, "proxy") {
+		runArgs = append(runArgs, "-proxy", *proxyFlag) // the runs too
+	}
 	if fs := flagsOf("run"); fs != nil && crawl && fs.Parse(runArgs) == nil {
 		if r, _ := strconv.ParseFloat(fs.Lookup("rate").Value.String(), 64); r > 0 {
 			rate = r
+		}
+		// The replay goes through the runs' proxy too, as every request does.
+		if v := fs.Lookup("proxy").Value.String(); v != "" {
+			pu, err := parseProxy(v)
+			if err != nil {
+				return err
+			}
+			rolesProxy = pu
 		}
 	}
 
@@ -409,6 +432,7 @@ func cmdRoles(args []string) error {
 		// answers it alike answers anything.
 		fetch.Reset()
 		fetch.SetRate(rate)
+		fetch.ProxyURL = rolesProxy
 		n, err := askControls(roles, rows, own, pages, refusalRE, max(0, *replayMax-replayed))
 		fetch.Reset()
 		rep.Requests += int64(n)

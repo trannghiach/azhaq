@@ -471,6 +471,7 @@ func readHistoryURLs(r role, urls []string, got map[string]answer, raw map[strin
 	fetch.Reset()
 	defer fetch.Reset()
 	fetch.SetRate(rate)
+	fetch.ProxyURL = rolesProxy
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
 	fetch.Extra = r.session.Clone()
 	ctx := context.Background()

@@ -60,7 +60,7 @@ func cmdParams(args []string) error {
 	outJSON := fs.String("oJ", "", "write results to this file as JSON: {\"URL\": {\"params\": [...], \"method\": \"GET\", \"headers\": {...}}}")
 	outText := fs.String("oT", "", "write results to this file as text, one request per line: URL?name=1234&other=5678")
 	outBurp := fs.String("oB", "", "send each page with the names found through this proxy, HOST:PORT (Burp), after the search")
-	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file", "urls-timeout")
+	given := inherit(fs, "rate=params-rate", "H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file", "urls-timeout", "proxy")
 	if err := parse(fs, args); err != nil {
 		return err
 	}

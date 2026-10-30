@@ -252,6 +252,7 @@ type roleReplay struct {
 func (rr *roleReplay) setup() {
 	fetch.Reset()
 	fetch.SetRate(rr.rate)
+	fetch.ProxyURL = rolesProxy
 	own := rr.own
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
 	fetch.Extra = rr.roles[rr.i].session.Clone()
