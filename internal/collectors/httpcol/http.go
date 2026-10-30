@@ -96,6 +96,9 @@ func (c *Collector) Inputs() []types.SeedType {
 // Skip: an address is probed when it came from a network (-asn, -cidr);
 // the address behind a URL is probed through the URL.
 func (c *Collector) Skip(seed types.Seed) bool {
+	if c.Spec != nil && seed.Type == types.TypeHostname && !slices.Contains(c.Spec.Bare, strings.ToLower(seed.Keys["fqdn"])) {
+		return true // probe: a name met in a URL given is not asked on ports nobody named
+	}
 	return seed.Type == types.TypeIPAddress && seed.Keys["from"] != "prefix"
 }
 

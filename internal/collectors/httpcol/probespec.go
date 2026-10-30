@@ -24,6 +24,10 @@ type Spec struct {
 	// content type, server and location are the last hop's.
 	Follow       bool `json:"follow,omitempty"`
 	MaxRedirects int  `json:"max_redirects,omitempty"` // -maxr
+	// Bare are the names given without a scheme or a port: only those are
+	// asked on the web ports. A name that only comes from a URL or a
+	// host:port given is not (httpx asks what it is given, nothing more).
+	Bare []string `json:"bare,omitempty"`
 	// TargetRate paces the services asked (-rl, as httpx): the first
 	// request to each waits its turn, the ones that follow it do not.
 	TargetRate float64 `json:"target_rate,omitempty"`

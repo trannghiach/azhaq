@@ -9,6 +9,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/pagekind"
 	"github.com/trannghiach/azhaq/store"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -494,6 +495,13 @@ func cmdProbe(args []string) error {
 		return err
 	}
 	spec.PerHost = perHost
+	for _, t := range targets {
+		for _, l := range t.lines {
+			if !strings.ContainsAny(l, ":/") && net.ParseIP(l) == nil {
+				spec.Bare = append(spec.Bare, strings.ToLower(strings.TrimSuffix(l, ".")))
+			}
+		}
+	}
 	spec.TargetRate = *rl
 	if *rlm > 0 && *rl == 0 {
 		spec.TargetRate = *rlm / 60

@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- `probe` asks what it is given and nothing more, as httpx does: a URL or a `host:port` is one request. The name in it was also asked on ports 443 and 80 (two more GETs per input, a second GET to a public host whose one request timed out, and a second row that contradicted the first). A bare name is still asked over https, then http.
 - A `-header` that names a host (`Host`, `X-Forwarded-Host`, `X-Host`, `X-Original-Host`) outside the scope is refused before anything is sent: `-allow 127.0.0.1 -deny secret.lab -header 'Host: secret.lab'` sent 35 requests that a front end routing by Host would serve as the denied host. The MCP server refuses those headers outright, and the ledger records the Host sent (`vhost`) when it is not the URL's.
 - Write replay no longer calls a server error a refusal: when every other role's write got a 5xx (a unique key the server already held: SQLAlchemy's 500), the verdict is `the other roles' writes failed with a server error (5xx): neither refused nor accepted`.
 - `ingest` reads naabu's JSON lines for an address, which carry `ip` and no `host`; they were refused as a format it does not know.

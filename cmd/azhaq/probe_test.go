@@ -277,3 +277,21 @@ func TestProbeRLPacesServices(t *testing.T) {
 		t.Errorf("exit %d rows %s", code, out)
 	}
 }
+
+// A URL or a host:port is asked as given, once: the name in it is not asked
+// on the web ports nobody named (an extra GET to a public host otherwise).
+func TestProbeAsksOnlyWhatIsGiven(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := newProbeSite(t)
+	hp := strings.TrimPrefix(site.URL, "http://")
+	port := hp[strings.LastIndex(hp, ":")+1:]
+	for _, in := range []string{site.URL + "/home", "localhost:" + port} {
+		out, rep, _ := runContract(t, "probe", "-u", in)
+		if rows := probeRows(t, out); len(rows) != 1 {
+			t.Errorf("%s: rows %s", in, out)
+		}
+		if rep.Requests != 1 {
+			t.Errorf("%s: %d requests, want 1", in, rep.Requests)
+		}
+	}
+}
