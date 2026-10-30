@@ -25,6 +25,15 @@
 - `-o` appends; domains may be arguments; `-config` and `~/.gau.toml` are read; `-version`; `-archive NAME=URL` asks a mirror.
 - OTX is asked as a hostname for a name with a subdomain; Common Crawl's "no captures" answer is an empty result, not a failure.
 
+### Notifications
+
+- A webhook URL no longer leaks. A transport error printed the whole URL, token included; errors now name the host and the cause, and no error holds a URL's path or query, a token, or text a server echoed back.
+- `watch -notify @FILE` reads webhook URLs from a file and `AZHAQ_NOTIFY` holds more, so a URL need not stand on the command line where `ps` shows it.
+- Notifications are tried again on a 429 or a 5xx, honouring `Retry-After`, and a text longer than a service takes is sent in labelled parts, not cut (Discord's cut lost the rest of a change set).
+- `azhaq notify` is a drop-in for projectdiscovery/notify: its flags (`-pc`, `-p`, `-id`, `-bulk`, `-cl`, `-mf`, `-rl`, `-d`, `-proxy`, `-config`), its `provider-config.yaml` schema and its message boundaries, the same as notify's for the same input.
+- Providers: Slack (webhook, threads), Discord (webhook, threads), Telegram (parse mode, threads, preview), Pushover, SMTP, Microsoft Teams (connector and workflow), Google Chat, Gotify and custom webhooks with formats and Sprig templates.
+- `watch -notify-config`, `-notify-provider`, `-notify-id`, `-notify-format`, `-notify-rate`, `-notify-proxy` and `-notify-lines`; `watch` and `notify` exit 3 when a message did not arrive, where it was printed on stderr and exit 0.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

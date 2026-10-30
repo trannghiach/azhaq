@@ -26,6 +26,10 @@
 
 **`urls -providers` says a name is not an archive.** `-providers` takes archive names (`wayback,commoncrawl,otx,urlscan,arquivo`). The API-key file is `-provider-config FILE`; a value with a `/` or naming a file that exists is still read as that file.
 
+**A notification did not arrive.** `azhaq watch` prints `azhaq watch: POST https://host/…: reason` for each webhook or provider that failed and exits 3; `azhaq notify` lists them in its summary (`custom failed: … (id ops)`), also exit 3. The reason names the host and the answer (`500 …`, `connection refused`), never the URL's path or token. A 429 or 5xx is tried three times first (`-v` shows each try); a 400, 401, 403 or 404 means the URL or the token is wrong. A Retry-After over a minute is reported instead of waited.
+
+**`notify: provider config: … field … not found`.** The config has a key the schema does not (`slack_webhok_url`). Fix the spelling; azhaq does not skip it silently.
+
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
 **A UDP port is `open|filtered`.** The port stayed silent when asked twice and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`. `ports -json` lists them; the plain output lists only the open ones.
