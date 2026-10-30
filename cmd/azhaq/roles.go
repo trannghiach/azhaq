@@ -232,6 +232,7 @@ func cmdRoles(args []string) error {
 	defer func() { bodies = nil }()
 	rate := *rateFlag
 	rolesProxy = nil
+	defer func() { rolesProxy = nil }()
 	if *proxyFlag != "" {
 		pu, err := parseProxy(*proxyFlag)
 		if err != nil {
