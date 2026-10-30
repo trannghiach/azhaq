@@ -440,7 +440,9 @@ func (id *ident) tls() bool {
 		}
 	}
 	// A service that greets first (IMAPS, POP3S, SMTPS) says so inside.
-	greeting, _ := s.talk(c, nil, nil, s.Banner)
+	// It speaks as soon as the handshake ends, so a short wait is enough, and
+	// an HTTPS port, which does not, loses little by it.
+	greeting, _ := s.talk(c, nil, nil, min(max(3*id.rtt, 150*time.Millisecond), s.Banner))
 	if len(greeting) > 0 {
 		o.Banner = bannerOf(greeting)
 		s.greeted(o, greeting)

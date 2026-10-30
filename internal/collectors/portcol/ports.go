@@ -216,7 +216,7 @@ const unroutedKey = "ipv6_not_scanned"
 func Notes(obs []types.StoredObservation) []string {
 	names := map[string]bool{}
 	var silent []string // address: ports, where a few ports answered neither way, twice
-	udpFiltered := 0
+	udpFiltered, udpLimited := 0, 0
 	var unprobed []string // address: open ports left without the protocol probes
 	for _, o := range obs {
 		if o.Collector != Name {
@@ -228,6 +228,7 @@ func Notes(obs []types.StoredObservation) []string {
 			Unrouted []string `json:"ipv6_not_scanned"`
 			Filtered []int    `json:"filtered_ports"`
 			UDPFilt  []int    `json:"udp_open_filtered"`
+			UDPLimit int      `json:"udp_limited"`
 			Unprobed int      `json:"unprobed"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil {
@@ -237,6 +238,7 @@ func Notes(obs []types.StoredObservation) []string {
 			names[p.Host] = true
 		}
 		udpFiltered += len(p.UDPFilt)
+		udpLimited += p.UDPLimit
 		if p.Unprobed > 0 {
 			unprobed = append(unprobed, fmt.Sprintf("%s: %d", p.IP, p.Unprobed))
 		}
@@ -270,7 +272,7 @@ func Notes(obs []types.StoredObservation) []string {
 		sort.Strings(unprobed)
 		out = append(out, "open ports whose protocol was not probed, after several others on the same address could not be named (a firewall or tarpit that accepts every connect): "+strings.Join(unprobed, "; "))
 	}
-	return append(out, udpNotes(udpFiltered)...)
+	return append(out, udpNotes(udpFiltered, udpLimited)...)
 }
 
 // portList is "80, 443" with at most n ports, then how many more.
