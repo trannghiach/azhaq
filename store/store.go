@@ -23,6 +23,116 @@ type Store struct {
 	db    *sql.DB
 	mu    sync.Mutex
 	runID string
+
+	batchMu sync.Mutex // one Batch at a time
+	tx      *batchTx   // the open Batch's transaction, under mu
+
+	recorded map[string]bool // run and entity pairs already in run_entities, under mu
+}
+
+// queryer is what a statement runs on: the pool, or a Batch's transaction.
+type queryer interface {
+	Exec(string, ...any) (sql.Result, error)
+	Query(string, ...any) (*sql.Rows, error)
+	QueryRow(string, ...any) *sql.Row
+	Prepare(string) (*sql.Stmt, error)
+}
+
+// batchTx is a Batch's transaction; it prepares each statement once, as
+// a batch repeats the same few thousands of times.
+type batchTx struct {
+	tx    *sql.Tx
+	stmts map[string]*sql.Stmt
+}
+
+func (b *batchTx) stmt(query string) (*sql.Stmt, error) {
+	if st, ok := b.stmts[query]; ok {
+		return st, nil
+	}
+	st, err := b.tx.Prepare(query)
+	if err == nil {
+		b.stmts[query] = st
+	}
+	return st, err
+}
+
+func (b *batchTx) Exec(query string, args ...any) (sql.Result, error) {
+	st, err := b.stmt(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Exec(args...)
+}
+
+func (b *batchTx) Query(query string, args ...any) (*sql.Rows, error) {
+	st, err := b.stmt(query)
+	if err != nil {
+		return nil, err
+	}
+	return st.Query(args...)
+}
+
+func (b *batchTx) QueryRow(query string, args ...any) *sql.Row {
+	st, err := b.stmt(query)
+	if err != nil {
+		return b.tx.QueryRow(query, args...)
+	}
+	return st.QueryRow(args...)
+}
+
+func (b *batchTx) Prepare(query string) (*sql.Stmt, error) { return b.tx.Prepare(query) }
+
+func (b *batchTx) commit() error {
+	for _, st := range b.stmts {
+		_ = st.Close()
+	}
+	return b.tx.Commit()
+}
+
+// q is where a statement runs; call it with mu held.
+func (s *Store) q() queryer {
+	if s.tx != nil {
+		return s.tx
+	}
+	return s.db
+}
+
+// begin starts a transaction, or joins the open Batch's, whose commit
+// ends it; call it with mu held.
+func (s *Store) begin() (q queryer, commit func() error, rollback func(), err error) {
+	if s.tx != nil {
+		return s.tx.tx, func() error { return nil }, func() {}, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return tx, tx.Commit, func() { _ = tx.Rollback() }, nil
+}
+
+// Batch runs fn with every write it makes, and any other goroutine makes
+// meanwhile, in one transaction: a commit per statement costs ten times
+// the statement. Only fn's own writes are kept together; a crash loses at
+// most the batch.
+func (s *Store) Batch(fn func()) {
+	s.batchMu.Lock()
+	defer s.batchMu.Unlock()
+	s.mu.Lock()
+	if s.tx == nil {
+		if tx, err := s.db.Begin(); err == nil {
+			s.tx = &batchTx{tx: tx, stmts: map[string]*sql.Stmt{}}
+		}
+	}
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		if s.tx != nil {
+			_ = s.tx.commit()
+			s.tx = nil
+		}
+		s.mu.Unlock()
+	}()
+	fn()
 }
 
 func OpenExisting(path string) (*Store, error) {
@@ -190,7 +300,7 @@ func (s *Store) BeginRun(id string, depth, maxItems int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runID = id
-	_, err := s.db.Exec(`INSERT INTO runs (id, started, capped, depth, max_items) VALUES (?, ?, 0, ?, ?)`,
+	_, err := s.q().Exec(`INSERT INTO runs (id, started, capped, depth, max_items) VALUES (?, ?, 0, ?, ?)`,
 		id, time.Now().UTC().UnixNano(), depth, maxItems)
 	return err
 }
@@ -205,7 +315,7 @@ type Run struct {
 func (s *Store) Runs() ([]Run, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id, started FROM runs ORDER BY started`)
+	rows, err := s.q().Query(`SELECT id, started FROM runs ORDER BY started`)
 	if err != nil {
 		return nil, err
 	}
@@ -240,11 +350,11 @@ func (s *Store) MarkCapped() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.runID != "" {
-		if _, err := s.db.Exec(`UPDATE runs SET capped = 1 WHERE id = ?`, s.runID); err != nil {
+		if _, err := s.q().Exec(`UPDATE runs SET capped = 1 WHERE id = ?`, s.runID); err != nil {
 			return err
 		}
 	}
-	_, err := s.db.Exec(`INSERT INTO meta (k, v) VALUES ('capped', '1') ON CONFLICT(k) DO UPDATE SET v = excluded.v`)
+	_, err := s.q().Exec(`INSERT INTO meta (k, v) VALUES ('capped', '1') ON CONFLICT(k) DO UPDATE SET v = excluded.v`)
 	return err
 }
 
@@ -258,7 +368,7 @@ func (s *Store) UpsertEntity(t types.SeedType, key string, at time.Time) (types.
 	defer s.mu.Unlock()
 	id := EntityID(t, key)
 	ts := at.UnixNano()
-	_, err := s.db.Exec(`
+	_, err := s.q().Exec(`
 INSERT INTO entities (id, type, key, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen
 `, id, string(t), key, ts, ts)
@@ -278,11 +388,11 @@ func (s *Store) UpsertMany(t types.SeedType, keys []string, at time.Time, from, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	tx, err := s.db.Begin()
+	tx, commit, rollback, err := s.begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer rollback()
 	ts := at.UnixNano()
 	ent, err := tx.Prepare(`INSERT INTO entities (id, type, key, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen`)
@@ -327,7 +437,7 @@ ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen`)
 			}
 		}
 	}
-	return tx.Commit()
+	return commit()
 }
 
 func (s *Store) AddObservation(entityID string, o types.Observation) (string, error) {
@@ -346,7 +456,7 @@ func (s *Store) AddObservation(entityID string, o types.Observation) (string, er
 	}
 	sum := sha256.Sum256([]byte(entityID + o.Collector + o.Kind + string(o.Payload) + stamp))
 	id := hex.EncodeToString(sum[:16])
-	_, err := s.db.Exec(`
+	_, err := s.q().Exec(`
 INSERT OR IGNORE INTO observations (id, entity_id, collector, source, kind, payload, confidence, observed_at, run_id)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, entityID, o.Collector, o.Source, o.Kind, string(raw), o.Confidence, o.ObservedAt.UnixNano(), s.runID)
@@ -356,14 +466,103 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	return id, err
 }
 
+// manyRows inserts rows a few dozen to a statement: a statement per row
+// costs several times the row.
+func (s *Store) manyRows(head, tail string, cols int, rows [][]any) error {
+	// SQLite parses a long VALUES list in time that grows faster than its
+	// length: fifty rows a statement is the fastest.
+	const maxRows = 50
+	per := maxRows
+	group := "(" + strings.TrimSuffix(strings.Repeat("?,", cols), ",") + ")"
+	for len(rows) > 0 {
+		n := min(len(rows), per)
+		args := make([]any, 0, n*cols)
+		for _, r := range rows[:n] {
+			args = append(args, r...)
+		}
+		q := head + strings.TrimSuffix(strings.Repeat(group+",", n), ",") + tail
+		if _, err := s.q().Exec(q, args...); err != nil {
+			return err
+		}
+		rows = rows[n:]
+	}
+	return nil
+}
+
+// AddObservations is AddObservation for several of one entity's.
+func (s *Store) AddObservations(entityID string, obs []types.Observation) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rows := make([][]any, 0, len(obs))
+	for _, o := range obs {
+		raw := o.Payload
+		if len(raw) == 0 {
+			raw = []byte("{}")
+		}
+		stamp := s.runID
+		if stamp == "" {
+			stamp = o.ObservedAt.UTC().Format(time.RFC3339Nano)
+		}
+		sum := sha256.Sum256([]byte(entityID + o.Collector + o.Kind + string(o.Payload) + stamp))
+		rows = append(rows, []any{hex.EncodeToString(sum[:16]), entityID, o.Collector, o.Source, o.Kind, string(raw), o.Confidence, o.ObservedAt.UnixNano(), s.runID})
+	}
+	err := s.manyRows(`INSERT OR IGNORE INTO observations (id, entity_id, collector, source, kind, payload, confidence, observed_at, run_id) VALUES `, ``, 9, rows)
+	if err == nil {
+		s.recordEntityLocked(entityID)
+	}
+	return err
+}
+
+// UpsertEntities is UpsertEntity for several keys of one type.
+func (s *Store) UpsertEntities(t types.SeedType, keys []string, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ts := at.UnixNano()
+	rows := make([][]any, 0, len(keys))
+	var run [][]any
+	for _, k := range keys {
+		id := EntityID(t, k)
+		rows = append(rows, []any{id, string(t), k, ts, ts})
+		if s.runID != "" {
+			run = append(run, []any{s.runID, id})
+		}
+	}
+	if err := s.manyRows(`INSERT INTO entities (id, type, key, first_seen, last_seen) VALUES `, ` ON CONFLICT(type, key) DO UPDATE SET last_seen = excluded.last_seen`, 5, rows); err != nil {
+		return err
+	}
+	return s.manyRows(`INSERT OR IGNORE INTO run_entities (run_id, entity_id) VALUES `, ``, 2, run)
+}
+
+// Edge is a link to add: from, to and its type.
+type Edge struct{ From, To, Type string }
+
+// AddEdges is AddEdge for several.
+func (s *Store) AddEdges(edges []Edge, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ts := at.UnixNano()
+	rows := make([][]any, 0, len(edges))
+	var run [][]any
+	for _, e := range edges {
+		rows = append(rows, []any{e.From, e.To, e.Type, ts})
+		if s.runID != "" {
+			run = append(run, []any{s.runID, e.From, e.To, e.Type})
+		}
+	}
+	if err := s.manyRows(`INSERT OR IGNORE INTO edges (from_id, to_id, type, observed_at) VALUES `, ``, 4, rows); err != nil {
+		return err
+	}
+	return s.manyRows(`INSERT OR IGNORE INTO run_edges (run_id, from_id, to_id, type) VALUES `, ``, 4, run)
+}
+
 func (s *Store) AddEdge(from, to, edgeType string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`
+	_, err := s.q().Exec(`
 INSERT OR IGNORE INTO edges (from_id, to_id, type, observed_at) VALUES (?, ?, ?, ?)`,
 		from, to, edgeType, at.UnixNano())
 	if err == nil && s.runID != "" {
-		_, err = s.db.Exec(`INSERT OR IGNORE INTO run_edges (run_id, from_id, to_id, type) VALUES (?, ?, ?, ?)`,
+		_, err = s.q().Exec(`INSERT OR IGNORE INTO run_edges (run_id, from_id, to_id, type) VALUES (?, ?, ?, ?)`,
 			s.runID, from, to, edgeType)
 	}
 	return err
@@ -373,7 +572,17 @@ func (s *Store) recordEntityLocked(entityID string) {
 	if s.runID == "" || entityID == "" {
 		return
 	}
-	_, _ = s.db.Exec(`INSERT OR IGNORE INTO run_entities (run_id, entity_id) VALUES (?, ?)`, s.runID, entityID)
+	// The same few entities (a source, a host) are recorded by each of
+	// thousands of observations.
+	key := s.runID + entityID
+	if s.recorded[key] {
+		return
+	}
+	if len(s.recorded) >= 4096 || s.recorded == nil {
+		s.recorded = map[string]bool{}
+	}
+	s.recorded[key] = true
+	_, _ = s.q().Exec(`INSERT OR IGNORE INTO run_entities (run_id, entity_id) VALUES (?, ?)`, s.runID, entityID)
 }
 
 // Seen reports whether this run already did a piece of work. A database
@@ -382,7 +591,7 @@ func (s *Store) Seen(key string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n int
-	err := s.db.QueryRow(`SELECT 1 FROM idempotency WHERE key = ?`, s.runID+key).Scan(&n)
+	err := s.q().QueryRow(`SELECT 1 FROM idempotency WHERE key = ?`, s.runID+key).Scan(&n)
 	if err == sql.ErrNoRows {
 		return false, nil
 	}
@@ -392,7 +601,7 @@ func (s *Store) Seen(key string) (bool, error) {
 func (s *Store) MarkSeen(key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT OR IGNORE INTO idempotency (key) VALUES (?)`, s.runID+key)
+	_, err := s.q().Exec(`INSERT OR IGNORE INTO idempotency (key) VALUES (?)`, s.runID+key)
 	return err
 }
 
@@ -407,7 +616,7 @@ func (s *Store) Entities() ([]types.Entity, error) {
 JOIN run_entities r ON r.entity_id = e.id AND r.run_id = ? ORDER BY e.type, e.key`
 		args = append(args, s.runID)
 	}
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.q().Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +645,7 @@ func (s *Store) Observations() ([]types.StoredObservation, error) {
 		q = `SELECT id, entity_id, collector, source, kind, payload, confidence, observed_at FROM observations WHERE run_id = ? ORDER BY observed_at`
 		args = append(args, s.runID)
 	}
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.q().Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -465,7 +674,7 @@ func (s *Store) Edges() ([]types.Edge, error) {
 JOIN run_edges r ON r.from_id = e.from_id AND r.to_id = e.to_id AND r.type = e.type AND r.run_id = ?`
 		args = append(args, s.runID)
 	}
-	rows, err := s.db.Query(q, args...)
+	rows, err := s.q().Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -557,18 +766,18 @@ func (s *Store) statsForRun(id string) (Stats, error) {
 	defer s.mu.Unlock()
 	st := Stats{Kind: "summary", RunID: id}
 	var capped int
-	err := s.db.QueryRow(`SELECT capped, depth, max_items FROM runs WHERE id = ?`, id).Scan(&capped, &st.Depth, &st.MaxItems)
+	err := s.q().QueryRow(`SELECT capped, depth, max_items FROM runs WHERE id = ?`, id).Scan(&capped, &st.Depth, &st.MaxItems)
 	if err != nil && err != sql.ErrNoRows {
 		return Stats{}, err
 	}
 	st.Capped = capped == 1
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM run_entities WHERE run_id = ?`, id).Scan(&st.Entities); err != nil {
+	if err := s.q().QueryRow(`SELECT COUNT(*) FROM run_entities WHERE run_id = ?`, id).Scan(&st.Entities); err != nil {
 		return Stats{}, err
 	}
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM run_edges WHERE run_id = ?`, id).Scan(&st.Edges); err != nil {
+	if err := s.q().QueryRow(`SELECT COUNT(*) FROM run_edges WHERE run_id = ?`, id).Scan(&st.Edges); err != nil {
 		return Stats{}, err
 	}
-	rows, err := s.db.Query(`SELECT collector, kind, payload FROM observations WHERE run_id = ?`, id)
+	rows, err := s.q().Query(`SELECT collector, kind, payload FROM observations WHERE run_id = ?`, id)
 	if err != nil {
 		return Stats{}, err
 	}
@@ -602,7 +811,7 @@ func (s *Store) Summary() (string, error) {
 func (s *Store) SetMeta(k, v string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, k, v)
+	_, err := s.q().Exec(`INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, k, v)
 	return err
 }
 
@@ -610,7 +819,7 @@ func (s *Store) GetMeta(k string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var v string
-	if err := s.db.QueryRow(`SELECT v FROM meta WHERE k = ?`, k).Scan(&v); err != nil {
+	if err := s.q().QueryRow(`SELECT v FROM meta WHERE k = ?`, k).Scan(&v); err != nil {
 		return ""
 	}
 	return v
@@ -824,7 +1033,7 @@ func (s *Store) Spent(program, day string) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n int64
-	_ = s.db.QueryRow(`SELECT requests FROM spend WHERE program = ? AND day = ?`, program, day).Scan(&n)
+	_ = s.q().QueryRow(`SELECT requests FROM spend WHERE program = ? AND day = ?`, program, day).Scan(&n)
 	return n
 }
 
@@ -835,7 +1044,7 @@ func (s *Store) AddSpent(program, day string, n int64) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`INSERT INTO spend (program, day, requests) VALUES (?, ?, ?)
+	_, err := s.q().Exec(`INSERT INTO spend (program, day, requests) VALUES (?, ?, ?)
 ON CONFLICT(program, day) DO UPDATE SET requests = requests + excluded.requests`, program, day, n)
 	return err
 }
@@ -854,7 +1063,7 @@ func (s *Store) SaveSeeds(seeds []types.Seed) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err = s.db.Exec(`INSERT INTO meta (k, v) VALUES ('seeds', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, string(raw))
+	_, err = s.q().Exec(`INSERT INTO meta (k, v) VALUES ('seeds', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, string(raw))
 	return err
 }
 
@@ -868,7 +1077,7 @@ func (s *Store) SaveLeftover(seeds []types.Seed) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err = s.db.Exec(`INSERT INTO meta (k, v) VALUES ('leftover', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, string(raw))
+	_, err = s.q().Exec(`INSERT INTO meta (k, v) VALUES ('leftover', ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v`, string(raw))
 	return err
 }
 
@@ -876,7 +1085,7 @@ func (s *Store) LoadLeftover() ([]types.Seed, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var raw string
-	err := s.db.QueryRow(`SELECT v FROM meta WHERE k = 'leftover'`).Scan(&raw)
+	err := s.q().QueryRow(`SELECT v FROM meta WHERE k = 'leftover'`).Scan(&raw)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -894,7 +1103,7 @@ func (s *Store) LoadSeeds() ([]types.Seed, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var raw string
-	err := s.db.QueryRow(`SELECT v FROM meta WHERE k = 'seeds'`).Scan(&raw)
+	err := s.q().QueryRow(`SELECT v FROM meta WHERE k = 'seeds'`).Scan(&raw)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

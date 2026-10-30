@@ -4,6 +4,7 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
 	"time"
 )
@@ -38,6 +39,10 @@ const DerivedKey = "derived"
 // (the scheme that answered for host:port): it does not count as a step of
 // -depth.
 const SameTargetKey = "same"
+
+// StartKey marks a URL seed the user gave, as against one a collector
+// found: a path sweep starts from the path of the first, not the second.
+const StartKey = "start"
 
 // ViaKey on a URL hint says where it was found when that sets what it is
 // worth: ViaArchive for a URL an archive listed, which a run under a
@@ -157,3 +162,23 @@ const (
 // CutShort marks work the run's -timeout stopped: the run hit its limit
 // (exit 4, resumable); the collector did not fail.
 const CutShort = "cut short by the run's -timeout"
+
+// BatchEmit hands several observations at once; the engine writes them in
+// one transaction, which a collector with thousands of them (a path sweep)
+// needs to keep up with its own requests.
+type BatchEmit func([]Observation) error
+
+type batchKey struct{}
+
+// WithBatchEmit is ctx carrying f for the collector's Run.
+func WithBatchEmit(ctx context.Context, f BatchEmit) context.Context {
+	return context.WithValue(ctx, batchKey{}, f)
+}
+
+// BatchEmitFrom is the batch emit the engine gave a collector's Run, or
+// nil when it gave none (a connector worker): the collector then emits one
+// at a time.
+func BatchEmitFrom(ctx context.Context) BatchEmit {
+	f, _ := ctx.Value(batchKey{}).(BatchEmit)
+	return f
+}
