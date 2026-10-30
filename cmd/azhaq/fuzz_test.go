@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fuzz"
@@ -313,5 +315,70 @@ func TestFuzzReportFiles(t *testing.T) {
 	fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "zzz"), "-ac=false", "-fc", "200", "-o", p, "-or")
 	if _, err := os.Stat(p); err == nil {
 		t.Error("-or wrote an empty report")
+	}
+}
+
+// A preflight reads a one-use token the login needs: each request gets its
+// own, the flight requests are counted, and a captured value cannot choose
+// the host.
+func TestFuzzPreflightCarriesATokenAndKeepsTheHost(t *testing.T) {
+	var mu sync.Mutex
+	issued := map[string]bool{}
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.URL.Path == "/form" {
+			n++
+			tok := fmt.Sprintf("t%d", n)
+			issued[tok] = true
+			fmt.Fprintf(w, `<input type="hidden" name="csrf" value="%s">`, tok)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		tok := strings.TrimPrefix(string(b), "csrf=")
+		tok, _, _ = strings.Cut(tok, "&")
+		if !issued[tok] {
+			http.Error(w, "bad token", 403)
+			return
+		}
+		delete(issued, tok)
+		fmt.Fprint(w, "ok "+string(b))
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	pre := filepath.Join(dir, "pre.req")
+	os.WriteFile(pre, []byte("GET /form HTTP/1.1\n\n"), 0o644)
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/login", "-X", "POST", "-d", "csrf=TOKEN&p=FUZZ", "-w", wlist(t, "a", "b", "c"), "-ac=false", "-mc", "200",
+		"-preflight", pre, "-preflight-var", `TOKEN:name="csrf" value="([^"]+)"`)
+	if err != nil || len(rows) != 3 || rep.Requests != 6 {
+		t.Errorf("rows %q requests %d err %v", rows, rep.Requests, err)
+	}
+	// A value taken from the answer that would be a host is refused.
+	pre2 := filepath.Join(dir, "pre2.req")
+	os.WriteFile(pre2, []byte("GET /form HTTP/1.1\nHost: HOSTX\n\n"), 0o644)
+	_, rep, err = fuzzRows(t, "-u", srv.URL+"/login", "-X", "POST", "-d", "p=FUZZ", "-w", wlist(t, "a"), "-ac=false", "-mc", "all",
+		"-preflight", pre, "-preflight-var", `HOSTX:name="csrf" value="([^"]+)"`, "-preflight", pre2)
+	if exitCode(err) != exitPartial || len(rep.Failed) == 0 || !strings.Contains(fmt.Sprint(rep.Failed), "cannot choose where requests go") {
+		t.Errorf("host change: exit %d, failed %+v", exitCode(err), rep.Failed)
+	}
+	if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "a"), "-preflight-var", "X:(y)"); exitCode(err) != exitUsage {
+		t.Errorf("a variable before any -preflight: %v", err)
+	}
+}
+
+func TestFuzzRequestFile(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = r.Method + " " + r.URL.String() + " " + r.Header.Get("X-A") + " " + string(b)
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+	p := filepath.Join(t.TempDir(), "r.req")
+	os.WriteFile(p, []byte("PUT /x?y=1 HTTP/1.1\r\nHost: "+strings.TrimPrefix(srv.URL, "http://")+"\r\nX-A: 1\r\nContent-Length: 3\r\n\r\nk=FUZZ\r\n"), 0o644)
+	rows, _, err := fuzzRows(t, "-request", p, "-request-proto", "http", "-w", wlist(t, "v"), "-ac=false")
+	if err != nil || len(rows) != 1 || got != "PUT /x?y=1 1 k=v" {
+		t.Errorf("rows %q got %q err %v", rows, got, err)
 	}
 }

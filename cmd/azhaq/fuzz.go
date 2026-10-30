@@ -108,6 +108,15 @@ func cmdFuzz(args []string) error {
 	program := fs.String("program", "", "the program to take from a -scope list")
 	fs.Var(&allow, "allow", "a domain, host or address range the run may touch (repeatable); default: the host of -u")
 	fs.Var(&deny, "deny", "a domain, host or address range the run must not touch (repeatable)")
+	flights := &flightFlags{}
+	fs.Var(flightFile{flights, false}, "preflight", "a raw request file sent before each fuzzing request (repeatable, in order); it carries -H and -b of the command, and is held to the scope, budget and pace")
+	fs.Var(flightVar{flights, false, false}, "preflight-var", "a value read from the answer of the -preflight before it: NAME:regexp (the first group; the body, then the headers); NAME in later requests stands for it (repeatable)")
+	fs.Var(flightVar{flights, false, true}, "preflight-var-auto", "a value read from that answer by name: NAME:key tries a form field, meta tag, cookie and header, NAME:[form|meta|cookie|header]key names one (repeatable)")
+	fs.Var(flightFile{flights, true}, "postflight", "a raw request file sent after each fuzzing request that was answered (repeatable)")
+	fs.Var(flightVar{flights, true, false}, "postflight-var", "like -preflight-var, for the -postflight before it")
+	fs.Var(flightVar{flights, true, true}, "postflight-var-auto", "like -preflight-var-auto, for the -postflight before it")
+	preMode := fs.String("preflight-mode", "per-request", "per-request: the preflights run before each request; per-thread: once for each thread, its values kept")
+	preError := fs.String("preflight-error", "abort", "abort: a failed flight fails the request; ignore: it is noted and the request goes on without the flight's values")
 	of := fs.String("of", "", "the format of -o: "+strings.Join(fuzz.Formats, ", ")+" (all writes one file for each, with the suffixes)")
 	od := fs.String("od", "", "keep the request and answer of each match as a file in this directory (its name is shown with the match)")
 	orSkip := fs.Bool("or", false, "write no -o file when there are no matches")
@@ -361,6 +370,21 @@ func cmdFuzz(args []string) error {
 	if *replayProxy != "" {
 		cfg.Replay = sender.(fuzz.Replayer)
 	}
+	if len(flights.pre)+len(flights.post) > 0 {
+		if *preMode != "per-request" && *preMode != "per-thread" {
+			return usagef("-preflight-mode is per-request or per-thread")
+		}
+		if *preError != "abort" && *preError != "ignore" {
+			return usagef("-preflight-error is abort or ignore")
+		}
+		fl := &fuzz.Flights{Pre: flights.pre, Post: flights.post, PerThread: *preMode == "per-thread", Ignore: *preError == "ignore"}
+		if err := fl.Load(tmpl, keywords); err != nil {
+			return usagef("-preflight/-postflight: %v", err)
+		}
+		if cfg.Sender, err = fuzz.WithFlights(sender, fl, tmpl, keywords, rules.Allows); err != nil {
+			return err
+		}
+	}
 
 	w, err := newWriter(&c)
 	if err != nil {
@@ -512,6 +536,12 @@ func cmdFuzz(args []string) error {
 			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-fuzz", Error: "replay through " + *replayProxy + " failed", Retryable: true, Count: st.ReplayErr})
 		}
 	}
+	if ran, failed, first := fuzz.FlightStats(cfg.Sender); ran > 0 || failed > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d preflight/postflight requests were sent (counted in the request total)", ran))
+		if failed > 0 {
+			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-fuzz", Error: "preflight/postflight failed: " + first, Retryable: true, Count: failed})
+		}
+	}
 	if ctrl != nil && len(ctrl.Applied) > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("-control: %d commands taken: %s", len(ctrl.Applied), strings.Join(ctrl.Applied, "; ")))
 	}
@@ -605,14 +635,18 @@ func withConfigFile(args []string) (out []string, note, path string, err error) 
 	if path == "" {
 		return args, "", "", nil
 	}
-	rc, err := rcArgs(path)
+	rc, ignored, err := rcArgs(path)
 	if err != nil {
 		if explicit {
 			return nil, "", "", fmt.Errorf("-config: %v", err)
 		}
 		return nil, "", "", fmt.Errorf("%v (azhaq reads ffuf's ffufrc: fix it, or name another file with -config)", err)
 	}
-	return append(rc, args...), "settings read from " + path, path, nil
+	note = "settings read from " + path
+	if len(ignored) > 0 {
+		note += "; not used by fuzz: " + strings.Join(ignored, ", ")
+	}
+	return append(rc, args...), note, path, nil
 }
 
 // parseDelay reads -p: seconds, or a range "0.1-2.0".

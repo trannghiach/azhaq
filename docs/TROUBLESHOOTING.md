@@ -43,3 +43,5 @@
 **`fuzz` stopped with `over 95% of the first 50 or more answers were 403`.** That is `-sf` (or `-sa`) doing what it says: the target refuses or the run is blocked. The summary gives the command that goes on (`-start N`). `-sa` also stops at over 20% 429, which means the target is rate limiting: lower `-rate` or `-t`.
 
 **`fuzz -x` or `-replay-proxy` shows nothing in the proxy.** Go sends traffic for loopback addresses through a proxy only when it is named with `-x`; the environment's `HTTP_PROXY` is not read. A proxy URL needs its scheme (`http://127.0.0.1:8080`). The summary counts the matches sent through `-replay-proxy` and the ones that failed.
+
+**`fuzz` says `preflight/postflight failed … cannot choose where requests go`.** The value read from the answer ended up in the host, scheme or port of a request (a `Host: TOKEN` line, a `TOKEN/path`). Values come from the target and the request carries your cookies and headers, so azhaq does not allow it, and has no `-preflight-anyhost`. Put the host in the file. `… is outside the scope` means the file names a host the run may not touch: `-allow HOST` adds it.

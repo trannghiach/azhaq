@@ -13,6 +13,7 @@
 - A `fuzz` line that gives its own `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft` no longer calibrates, as in ffuf; `-ac` turns it on.
 - `fuzz -enc` with all of ffuf's encoders, `-input-cmd`/`-input-num`/`-input-shell`, `-mode sniper`, `-D`, `-w a,b`, `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`, `-data*` and `-cookie` aliases, `-V`, `-c` colours, `-debug-log`.
 - `fuzz` reaches servers that speak TLS 1.0 and 1.1.
+- `fuzz -preflight`/`-postflight` with `-…-var`, `-…-var-auto`, `-preflight-mode` and `-preflight-error`: a token or session read from an answer goes into the next request; the flight requests are scoped, paced, counted and in the ledger, and a captured value can never change the host.
 - `fuzz -control FILE` steers a run (rate, pause, filters, queue, save); stderr on a terminal shows one status line a second.
 - `fuzz` with two long wordlists in clusterbomb no longer allocates a byte for each combination.
 - `fuzz -json` and the reports carry `scraper`, `resultfile` and ffuf's `FFUFHASH` input.

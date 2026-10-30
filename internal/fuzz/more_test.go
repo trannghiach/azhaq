@@ -261,15 +261,6 @@ func TestGreedyRecursionAndPitfalls(t *testing.T) {
 	}
 }
 
-func contains(l []string, s string) bool {
-	for _, x := range l {
-		if x == s {
-			return true
-		}
-	}
-	return false
-}
-
 func TestStopOn403(t *testing.T) {
 	f := &fake{hook: func(r *Request) (*Response, error) { return &Response{Status: 403, Header: http.Header{}}, nil }}
 	words := make([]string, 300)

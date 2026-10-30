@@ -378,3 +378,48 @@ func nonNil(s []string) []string {
 	}
 	return s
 }
+
+// flightFlags collects -preflight and -postflight files and the -…-var
+// flags after each, in the order given: a variable belongs to the file before it.
+type flightFlags struct{ pre, post []fuzz.FlightStep }
+
+type flightFile struct {
+	f    *flightFlags
+	post bool
+}
+
+func (v flightFile) String() string { return "" }
+func (v flightFile) Set(s string) error {
+	if s == "" {
+		return fmt.Errorf("a request file is needed")
+	}
+	if v.post {
+		v.f.post = append(v.f.post, fuzz.FlightStep{File: s})
+	} else {
+		v.f.pre = append(v.f.pre, fuzz.FlightStep{File: s})
+	}
+	return nil
+}
+
+type flightVar struct {
+	f          *flightFlags
+	post, auto bool
+}
+
+func (v flightVar) String() string { return "" }
+func (v flightVar) Set(s string) error {
+	steps, file := &v.f.pre, "-preflight"
+	if v.post {
+		steps, file = &v.f.post, "-postflight"
+	}
+	if len(*steps) == 0 {
+		return fmt.Errorf("%q comes before any %s: a variable is read from the file given before it", s, file)
+	}
+	fv, err := fuzz.ParseFlightVar(s, v.auto)
+	if err != nil {
+		return err
+	}
+	last := &(*steps)[len(*steps)-1]
+	last.Vars = append(last.Vars, fv)
+	return nil
+}

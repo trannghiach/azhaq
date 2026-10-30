@@ -240,6 +240,21 @@ func (s *httpSender) Send(ctx context.Context, req *Request, keepBody bool) (*Re
 	return r, nil
 }
 
+// Exchange sends an HTTP request that is not a fuzzing request (a preflight)
+// as the run's own: counted by the budget, paced, in the ledger.
+func (s *httpSender) Exchange(ctx context.Context, hr *http.Request) (*http.Response, error) {
+	if hr.Header.Get("User-Agent") == "" {
+		hr.Header.Set("User-Agent", fetch.UserAgent)
+	}
+	if hr.Header.Get("Accept") == "" {
+		hr.Header.Set("Accept", "*/*")
+	}
+	if err := fetch.Spend(ctx); err != nil {
+		return nil, err
+	}
+	return s.client.Do(hr)
+}
+
 // Replay sends req through the replay proxy and drops the answer.
 func (s *httpSender) Replay(ctx context.Context, req *Request) error {
 	if s.replay == nil {

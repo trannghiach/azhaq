@@ -32,16 +32,15 @@ var rcKeys = map[string]string{
 	"input.dirsearchcompat": "D", "input.encoders": "enc", "input.extensions": "e", "input.ignorewordlistcomments": "ic",
 	"input.inputmode": "mode", "input.inputnum": "input-num", "input.inputshell": "input-shell", "input.inputcommands": "input-cmd",
 	"input.request": "request", "input.requestproto": "request-proto", "input.wordlists": "w",
-	"output.outputdirectory": "od", "output.outputfile": "o", "output.outputformat": "of", "output.outputskipemptyfile": "or",
+	"output.debuglog": "debug-log", "output.outputdirectory": "od", "output.outputfile": "o", "output.outputformat": "of", "output.outputskipemptyfile": "or",
 	"filter.mode": "fmode", "filter.lines": "fl", "filter.regexp": "fr", "filter.size": "fs", "filter.status": "fc", "filter.time": "ft", "filter.words": "fw",
 	"matcher.mode": "mmode", "matcher.lines": "ml", "matcher.regexp": "mr", "matcher.size": "ms", "matcher.status": "mc", "matcher.time": "mt", "matcher.words": "mw",
 }
 
-// rcIgnored are keys of ffuf's file for things azhaq has no use for or
-// that do nothing there either.
+// rcIgnored are keys of ffuf's file for things azhaq fuzz does not have
+// (scrapers, the audit log); they are named in a note, not dropped silently.
 var rcIgnored = map[string]bool{
-	"general.scrapers": true, "general.scraperfile": true, "output.debuglog": true, "output.auditlog": true,
-	"http.preflights": true, "http.postflights": true,
+	"general.scrapers": true, "general.scraperfile": true, "output.auditlog": true,
 }
 
 func normalizeKey(k string) string {
@@ -90,12 +89,11 @@ func flagValue(args []string, name string) (string, bool) {
 }
 
 // rcArgs reads a configuration file as flags.
-func rcArgs(path string) ([]string, error) {
+func rcArgs(path string) (out, ignored []string, err error) {
 	var doc map[string]map[string]any
 	if _, err := toml.DecodeFile(path, &doc); err != nil {
-		return nil, fmt.Errorf("%s: %v", path, err)
+		return nil, nil, fmt.Errorf("%s: %v", path, err)
 	}
-	var out []string
 	sections := make([]string, 0, len(doc))
 	for s := range doc {
 		sections = append(sections, s)
@@ -110,6 +108,9 @@ func rcArgs(path string) ([]string, error) {
 		for _, key := range keys {
 			full := normalizeKey(sec) + "." + normalizeKey(key)
 			if rcIgnored[full] {
+				if v, _ := rcValues(doc[sec][key]); len(v) > 0 && v[0] != "" && v[0] != "false" && !(full == "general.scrapers" && v[0] == "all") {
+					ignored = append(ignored, key)
+				}
 				continue
 			}
 			if full == "output.outputcreateemptyfile" {
@@ -120,11 +121,11 @@ func rcArgs(path string) ([]string, error) {
 			}
 			flagName, ok := rcKeys[full]
 			if !ok {
-				return nil, fmt.Errorf("%s: [%s] %s is not a setting azhaq fuzz knows (ffuf's names: threads, headers, wordlists, ...)", path, sec, key)
+				return nil, nil, fmt.Errorf("%s: [%s] %s is not a setting azhaq fuzz knows (ffuf's names: threads, headers, wordlists, ...; preflights are flags)", path, sec, key)
 			}
 			vals, err := rcValues(doc[sec][key])
 			if err != nil {
-				return nil, fmt.Errorf("%s: [%s] %s: %v", path, sec, key, err)
+				return nil, nil, fmt.Errorf("%s: [%s] %s: %v", path, sec, key, err)
 			}
 			for _, v := range vals {
 				switch v {
@@ -138,7 +139,7 @@ func rcArgs(path string) ([]string, error) {
 			}
 		}
 	}
-	return out, nil
+	return out, ignored, nil
 }
 
 func rcValues(v any) ([]string, error) {

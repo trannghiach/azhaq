@@ -169,3 +169,12 @@ azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -rate 5 -control ctl & 
 An ffuf line works as it is: same flags, same counts, same report files (`jq .results[0]` reads them as it reads ffuf's). `-request` takes the file Burp's "copy to file" gives, with `FUZZ` in it; the keyword is looked for in the method, URL, headers and body. `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits; `-x` sends every request through it. Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target; the requests to the target do, `-ac` calibration included.
 
 Catch: a line with `-fs`, `-fc`, `-fw`, `-fl`, `-fr` or `-ft` runs without calibration, as it did in ffuf; add `-ac` for it. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.
+
+A form that wants a one-use token: save the page request and the login as files, and read the token from the page.
+
+```
+azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 403 \
+  -preflight page.req -preflight-var-auto 'TOKEN:csrf'
+```
+
+`TOKEN` in `login.req` (body, header or path) is replaced by the value of the field `csrf` in the answer to `page.req`, asked again before each request (`-preflight-mode per-thread` asks once for each thread, for tokens that last). `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp from the body, then the headers; `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source (`form`, `meta`, `cookie`, `header`). The flight requests count against `-max-requests` and `-rate`, must be in scope, and say so in the summary (`4 preflight/postflight requests were sent`); one that fails is a `failed` entry (exit 3), and with `-preflight-error ignore` the request goes on without the value. A value that would move a request to another host is refused, always.
