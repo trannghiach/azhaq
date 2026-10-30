@@ -7,7 +7,7 @@
 - `crawl` prints katana's JSON lines with `-jsonl`, its fields with `-f`, `-ot` and `-sf`, filters the printed URLs with `-em`, `-ef`, `-ndef`, `-mr` and `-fr`, and stores answers with `-sr`.
 - A page's links are no longer cut at 64: every link is listed and asked, bounded by templates and `-max-items`.
 - `crawl` follows links to the start host's subdomains with `-fs rdn|fqdn|dn|REGEX`, `-cs`, `-cos` and `-ns`, and `-do` lists the links it left out of scope; the summary counts them.
-- `crawl` sends only what a crawler sends: no built-in path sweep and no favicon request; `-kf all|robotstxt|sitemapxml` asks the known files and reads every entry, `-sweep` brings the 32 paths back.
+- `crawl` sends only what a crawler sends: no built-in path sweep, no favicon request and no source-map guesses; `-kf all|robotstxt|sitemapxml` asks the known files and reads every entry, `-sweep` brings the 32 paths back.
 - Pages are read at every markup sink katana reads (`img`, `srcset`, `area`, `video`, `button formaction`, `object`, `hx-*`, `meta refresh`, the `Link`, `Content-Location` and `Refresh` headers) and redirect hops are listed.
 - Strings in scripts and pages that katana's patterns take (`users.php`, `admin/`) are URLs when they name a page of the app; every other one is kept as a rejected candidate with its reason, listed by `-rejected` and counted in the summary.
 - GET forms are asked once with neutral values; `-submit-forms` sends POST forms (it changes data, each submission is counted and in the ledger).

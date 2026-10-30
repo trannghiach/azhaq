@@ -224,6 +224,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	maxHostReq := fs.Int64("max-host-requests", 0, "requests one host may be sent (0: no cap); the rest of its work is left for azhaq resume")
 	reqTimeout := fs.Duration("request-timeout", 0, "time one request gets, headers and body (default: 10 s for headers, 30 s in all; not -timeout, the run's bound)")
 	maxResp := fs.Int("max-response-size", 0, "bytes read of a page or document (default 2097152; scripts and JSON get 16 MiB)")
+	noMapGuess := fs.Bool("no-map-guess", false, "do not ask for main.js.map next to a script that names no source map (a map a script or a header names is still read)")
 	fillForms := fs.Bool("fill-forms", false, "ask the action of each GET form with neutral values in its fields (a search box gets a word): one request per form, GET only")
 	pathClimb := fs.Bool("path-climb", false, "also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/)")
 	submitForms := fs.Bool("submit-forms", false, "also submit POST forms with neutral values (crawl): CHANGES DATA on the target, each submission counts as a request and is in the ledger, the summary says how many; held to -allow, -deny and the crawl's scope")
@@ -580,7 +581,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		defer func() { _ = st.AddSpent(key, day, fetch.Sent()) }()
 	}
 	cat := catalog.New()
-	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render, KnownFiles: *knownFiles, FillForms: *fillForms, SubmitForms: *submitForms, PathClimb: *pathClimb}
+	opts := collectors.Options{Client: client, WebPorts: ports, NoTech: *noTech, NoFavicon: *noFavicon, Probe: *probe, PortRate: *portRate, MaxIPs: *maxIPs, Shots: *shots, Render: *render, KnownFiles: *knownFiles, FillForms: *fillForms, NoMapGuess: *noMapGuess, SubmitForms: *submitForms, PathClimb: *pathClimb}
 	if *browserWrites && *shots == "" && !*render {
 		return usagef("-browser-writes lets the pages Chrome loads send writes: give it with -browser or -screenshots")
 	}

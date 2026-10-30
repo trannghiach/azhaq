@@ -52,6 +52,7 @@ type Options struct {
 	Shots       string           // azhaq-shots: screenshot directory (runs only when set)
 	Browser     *browser.Browser // the run's Chrome, started on first use
 	Render      bool             // azhaq-render: load pages in Chrome (-browser)
+	NoMapGuess  bool             // azhaq-js does not ask for main.js.map next to a bundle that names no map
 	FillForms   bool             // azhaq-crawl asks the action of GET forms with neutral values
 	PathClimb   bool             // azhaq-crawl lists the parent directories of its links
 	SubmitForms bool             // azhaq-crawl submits POST forms (changes data)
@@ -73,7 +74,9 @@ func Register(cat *catalog.Catalog, o Options) {
 	cc := crawlcol.New(client)
 	cc.FillForms, cc.SubmitForms, cc.Climb = o.FillForms, o.SubmitForms, o.PathClimb
 	cat.MustRegister(cc)
-	jscol.Register(cat, client)
+	jc := jscol.New(client)
+	jc.NoMapGuess = o.NoMapGuess
+	cat.MustRegister(jc)
 	apicol.Register(cat, client)
 	cat.MustRegister(gqlcol.New(client))
 	cat.MustRegister(gqlcol.NewSchema(client))

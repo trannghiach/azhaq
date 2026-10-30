@@ -34,7 +34,7 @@ func cmdCrawl(args []string) error {
 	fs.Var(&urls, "u", "start URL (repeatable, or comma-separated)")
 	list := fs.String("l", "", "file of start URLs (- for stdin)")
 	given := inherit(fs, append([]string{"depth", "max-items", "parallel", "host-parallel", "delay", "paths", "browser", "browser-writes",
-		"login", "login-user", "login-pass", "per-template", "proxy", "retry", "backoff", "cookie-jar", "host-rate", "max-host-requests", "request-timeout", "max-response-size", "submit-forms", "fill-forms", "path-climb", "interact", "interact-clicks", "resolvers", "no-follow",
+		"login", "login-user", "login-pass", "per-template", "proxy", "retry", "backoff", "cookie-jar", "host-rate", "max-host-requests", "request-timeout", "max-response-size", "submit-forms", "fill-forms", "path-climb", "no-map-guess", "interact", "interact-clicks", "resolvers", "no-follow",
 		"kf=known-files", "fs=crawl-scope", "ns=crawl-any-host", "c=host-parallel", "p=parallel", "rl=rate", "ct=timeout", "dr=no-follow", "r=resolvers"},
 		targetFlags...)...)
 	var inScope, outScope stringsFlag
@@ -58,7 +58,7 @@ func cmdCrawl(args []string) error {
 	d := fs.Int("d", -1, "katana's -d: link levels below the start URL to visit (3 by default); -depth N is -d N-1")
 	assets := fs.Bool("assets", false, "also list scripts, styles and images")
 	noShell := fs.Bool("no-catchall", false, "leave out URLs that answer with the page every unknown path gets (client-side routes of a single-page app)")
-	sweep := fs.Bool("sweep", false, "also ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, admin, …), as run does; crawl asks only what a crawler does")
+	sweep := fs.Bool("sweep", false, "also ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, admin, …) and for the source map next to each script, as run does; crawl asks only what a crawler does")
 	showOut := fs.Bool("do", false, "also list the URLs found and left out of the crawl's scope (never requested)")
 	showRejected := fs.Bool("rejected", false, "also list the strings read from scripts and pages and kept out of the URLs, each with its reason (text: string, a tab, the reason; -json: one object each)")
 	jsonl := fs.Bool("jsonl", false, "katana's JSON lines: {timestamp, request{method, endpoint, tag, attribute, source}, response{status_code, technologies, forms, content_length}, error}")
@@ -147,6 +147,9 @@ func cmdCrawl(args []string) error {
 	fs.Visit(func(f *flag.Flag) { explicit[f.Name] = true })
 	if !explicit["fs"] {
 		run = append(run, "-crawl-scope=rdn-origin")
+	}
+	if !*sweep {
+		run = append(run, "-no-map-guess")
 	}
 	if !*sweep && !explicit["kf"] && !explicit["paths"] {
 		run = append(run, "-no-paths")

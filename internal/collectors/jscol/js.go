@@ -50,7 +50,12 @@ const (
 // however many pages use it.
 type Collector struct {
 	Client *http.Client
-	parsed sync.Map // script, map and manifest URL → true
+	// NoMapGuess leaves out the source maps asked for by name next to a
+	// bundle that names none (main.js.map); a map a script or a header
+	// names is still read. crawl sets it: asking for a name is a guess,
+	// not what a crawler sends.
+	NoMapGuess bool
+	parsed     sync.Map // script, map and manifest URL → true
 
 	mu      sync.Mutex
 	guessed map[string]int // origin → source maps asked for by name
@@ -619,7 +624,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			if ref == "" {
 				ref = s.mapRef
 			}
-			if ref == "" && !s.inline {
+			if ref == "" && !s.inline && !c.NoMapGuess {
 				ref, guessed = c.guessMap(s.url), true
 			}
 			if m, sources := c.readMap(ctx, raw, ref, s.url, guessed); m.url != "" {
