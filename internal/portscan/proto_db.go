@@ -287,7 +287,7 @@ func bsonString(doc []byte, key string) string {
 // mongoDeepen asks buildInfo for the exact version: isMaster gives only
 // the wire version, which names the release (major.minor).
 func mongoDeepen(s *Scanner, c net.Conn, o *Open) {
-	r, _ := s.talk(c, mongoCommand("buildInfo"), mongoFrame, s.Banner)
+	r := s.talk(c, mongoCommand("buildInfo"), mongoFrame, s.Banner)
 	if len(r) > 26 && binary.LittleEndian.Uint32(r[12:]) == 2013 {
 		if v := bsonString(r[21:], "version"); v != "" {
 			o.Version = v

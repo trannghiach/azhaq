@@ -78,7 +78,7 @@ func mqttDeepen(s *Scanner, c net.Conn, o *Open) {
 	topic := "$SYS/broker/version"
 	body := append([]byte{0, 1, 0, byte(len(topic))}, topic...)
 	body = append(body, 0)
-	r, _ := s.talk(c, append([]byte{0x82, byte(len(body))}, body...), nil, s.Banner)
+	r := s.talk(c, append([]byte{0x82, byte(len(body))}, body...), nil, s.Banner)
 	for len(r) >= 2 {
 		n := int(r[1])
 		if r[1]&0x80 != 0 || len(r) < 2+n {

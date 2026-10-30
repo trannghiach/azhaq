@@ -131,6 +131,7 @@ type Scanner struct {
 	mu      sync.Mutex
 	unnamed map[string]int // per address: open ports no probe could name
 	skipped map[string]int // per address: ports not run down the ladder after that
+	stop    error          // the budget error a probe of a service met
 }
 
 func (s *Scanner) init() {
@@ -193,6 +194,9 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 	sort.Ints(r.Silent)
 	s.mu.Lock()
 	r.Unprobed = s.skipped[ip]
+	if err == nil {
+		err = s.stop
+	}
 	s.mu.Unlock()
 	return r, err
 }
@@ -396,13 +400,6 @@ func rawData(port int) bool { return port >= 9100 && port <= 9107 }
 
 // ask sends HEAD / and returns the head of the answer, if any.
 func (s *Scanner) ask(conn net.Conn, host string, port, defaultPort int) []byte {
-	head, _ := s.askEnd(conn, host, port, defaultPort)
-	return head
-}
-
-// askEnd is ask, and how the read ended: the answer of a port that closes
-// on an HTTP request differs from one that goes on waiting.
-func (s *Scanner) askEnd(conn net.Conn, host string, port, defaultPort int) ([]byte, endKind) {
 	switch {
 	case port != defaultPort:
 		host = net.JoinHostPort(host, strconv.Itoa(port))

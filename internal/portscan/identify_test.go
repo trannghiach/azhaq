@@ -367,3 +367,37 @@ func TestFramesAndCounts(t *testing.T) {
 		t.Errorf("tds length %d of %d", binary.BigEndian.Uint16(hdr[2:]), len(hdr))
 	}
 }
+
+// Orchestrators and key-value stores name themselves in the body of
+// GET / or /version.
+func TestBodyProductsOfControlPlanes(t *testing.T) {
+	for _, tt := range []struct{ body, product, version string }{
+		{`{"etcdserver":"3.5.9","etcdcluster":"3.5.0"}`, "etcd", "3.5.9"},
+		{`{"major":"1","minor":"29","gitVersion":"v1.29.2","goVersion":"go1.21"}`, "Kubernetes", "1.29.2"},
+		{`{"Platform":{"Name":"Docker Engine - Community"},"Version":"24.0.7","ApiVersion":"1.43"}`, "Docker Engine", "24.0.7"},
+		{`{"version":{"number":"2.11.0","distribution":"opensearch"}}`, "OpenSearch", "2.11.0"},
+		{`{"hello":"world"}`, "", ""},
+	} {
+		if p, v := bodyProduct([]byte(tt.body)); p != tt.product || v != tt.version {
+			t.Errorf("%s: %q %q", tt.body, p, v)
+		}
+	}
+	if !needsVersionPage([]byte(`{"kind":"Status","apiVersion":"v1","status":"Failure","code":403}`)) || !needsVersionPage([]byte("404 page not found\n")) {
+		t.Error("an API's plain refusal is not asked /version")
+	}
+}
+
+// A budget spent while a port is being asked what it serves stops the scan.
+func TestBudgetSpentInTheLadderStopsTheScan(t *testing.T) {
+	port := fakeService(t, []byte("version"), []byte("VERSION 1.6.9\r\n"))
+	n := 0
+	s := &Scanner{Banner: 100 * time.Millisecond, Timeout: time.Second, Take: func() error {
+		if n++; n > 3 {
+			return context.DeadlineExceeded
+		}
+		return nil
+	}}
+	if _, err := s.ScanEach(context.Background(), "", "127.0.0.1", []int{port}); err == nil {
+		t.Fatal("a spent budget in the middle of a port's probes was not reported")
+	}
+}

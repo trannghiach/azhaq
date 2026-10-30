@@ -182,7 +182,7 @@ func versionBindQuery() []byte {
 // dnsDeepen asks version.bind on the same connection.
 func dnsDeepen(s *Scanner, c net.Conn, o *Open) {
 	q := versionBindQuery()
-	r, _ := s.talk(c, dnsTCP(q), lengthFrame(0, 2, 0), s.Banner)
+	r := s.talk(c, dnsTCP(q), lengthFrame(0, 2, 0), s.Banner)
 	if len(r) > 2 {
 		if p, v, ok := versionBind(r[2:], q); ok {
 			o.Product, o.Version = p, v

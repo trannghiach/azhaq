@@ -6,10 +6,8 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
-	"io"
 	"net"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/ledger"
@@ -27,15 +25,6 @@ const maxProbes = 24
 // thousands of connects for nothing). The report says how many were
 // skipped.
 const ladderLimit = 6
-
-// endKind is how a read of a port's answer ended.
-type endKind int
-
-const (
-	endData    endKind = iota // bytes came
-	endEOF                    // the port closed the connection with nothing said
-	endTimeout                // the port stayed open and quiet
-)
 
 // target is what a request is built for.
 type target struct {
@@ -97,28 +86,18 @@ func protocolsOn(port int, secure bool) []*protocol {
 }
 
 // The ladder: the order a port that is none of its usual protocols is asked
-// in. A service that closes the connection on an HTTP request is a
-// different set from one that waits for more bytes, so the HEAD's answer
-// picks which list comes first.
-var (
-	ladderClosed = []string{"redis", "postgresql", "mongodb", "mqtt", "memcached", "amqp", "rdp", "zookeeper", "cassandra", "oracle-tns"}
-	ladderQuiet  = []string{"dns", "ldap", "smb", "kafka", "mssql", "zookeeper", "rdp"}
-	ladderTail   = []string{"sip", "rtsp", "socks5", "x11", "stomp", "xmpp"}
-)
+// in, the likeliest first. How the HEAD ended says too little to reorder
+// it: a DNS server may hold the connection or drop it on its idle timer.
+var ladderOrder = []string{
+	"redis", "postgresql", "mongodb", "memcached", "mqtt", "amqp", "dns", "ldap", "smb", "mssql", "kafka", "rdp",
+	"zookeeper", "cassandra", "oracle-tns", "sip", "rtsp", "socks5", "x11", "stomp", "xmpp",
+}
 
-func ladderFor(end endKind) []*protocol {
-	first, second := ladderClosed, ladderQuiet
-	if end == endTimeout {
-		first, second = second, first
-	}
+func ladder() []*protocol {
 	var out []*protocol
-	seen := map[string]bool{}
-	for _, list := range [][]string{first, second, ladderTail} {
-		for _, n := range list {
-			if p := protocolNamed(n); p != nil && !seen[n] {
-				seen[n] = true
-				out = append(out, p)
-			}
+	for _, n := range ladderOrder {
+		if p := protocolNamed(n); p != nil {
+			out = append(out, p)
 		}
 	}
 	return out
@@ -174,6 +153,7 @@ func (s *Scanner) dialWait(ctx context.Context, host, ip string, port int, secur
 	}
 	if s.Take != nil {
 		if err := s.Take(); err != nil {
+			s.noteStop(err)
 			return nil, err
 		}
 	}
@@ -197,37 +177,24 @@ func (s *Scanner) dialWait(ctx context.Context, host, ip string, port int, secur
 // talk writes req (when there is one) and reads the answer until frame
 // says it is whole, the port closes, or nothing more comes. The first byte
 // may take until wait; after that a pause of a fifth of a second ends it.
-func (s *Scanner) talk(conn net.Conn, req []byte, frame func([]byte) int, wait time.Duration) ([]byte, endKind) {
-	t0 := time.Now()
-	_ = conn.SetDeadline(t0.Add(wait))
+func (s *Scanner) talk(conn net.Conn, req []byte, frame func([]byte) int, wait time.Duration) []byte {
+	_ = conn.SetDeadline(time.Now().Add(wait))
 	if len(req) > 0 {
 		if _, err := conn.Write(req); err != nil {
-			return nil, endEOF
+			return nil
 		}
 	}
 	var buf []byte
 	tmp := make([]byte, 4096)
-	end := endTimeout
 	for len(buf) < 1<<16 {
 		n, err := conn.Read(tmp)
 		buf = append(buf, tmp[:n]...)
-		if err != nil {
-			var ne net.Error
-			if !(errors.As(err, &ne) && ne.Timeout()) || errors.Is(err, io.EOF) {
-				end = endEOF
-			}
-			if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, io.EOF) {
-				end = endEOF
-			}
+		if err != nil || n == 0 {
 			break
-		}
-		if n == 0 {
-			continue
 		}
 		if frame != nil {
 			need := frame(buf)
 			if need < 0 || need > 0 && len(buf) >= need {
-				end = endData
 				break
 			}
 			if need > 0 {
@@ -236,19 +203,14 @@ func (s *Scanner) talk(conn net.Conn, req []byte, frame func([]byte) int, wait t
 		}
 		_ = conn.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
 	}
-	if len(buf) > 0 {
-		end = endData
-	} else if end == endEOF && time.Since(t0) >= wait-250*time.Millisecond {
-		end = endTimeout // closed by its own idle timer, not by what it was sent
-	}
-	return buf, end
+	return buf
 }
 
 // try asks p on conn and reads the answer; it says whether p recognised it.
 func (id *ident) try(conn net.Conn, p *protocol) bool {
 	s := id.s
 	id.tried[p.name] = true
-	reply, _ := s.talk(conn, p.request(target{id.host, id.o.Port}), p.frame, id.patience(500*time.Millisecond))
+	reply := s.talk(conn, p.request(target{id.host, id.o.Port}), p.frame, id.patience(500*time.Millisecond))
 	return id.accept(conn, p, reply)
 }
 
@@ -313,7 +275,7 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 			return
 		}
 	}
-	head, end := s.askEnd(conn, host, o.Port, 80)
+	head := s.ask(conn, host, o.Port, 80)
 	wantTLS := true
 	if status, banner, ok := httpAnswer(head); ok {
 		o.Service, o.Banner = "http", banner
@@ -353,7 +315,7 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 			s.ladderFailed(ip)
 		}
 	}()
-	for _, p := range ladderFor(end) {
+	for _, p := range ladder() {
 		if id.left <= 0 || ctx.Err() != nil {
 			return
 		}
@@ -442,7 +404,7 @@ func (id *ident) tls() bool {
 	// A service that greets first (IMAPS, POP3S, SMTPS) says so inside.
 	// It speaks as soon as the handshake ends, so a short wait is enough, and
 	// an HTTPS port, which does not, loses little by it.
-	greeting, _ := s.talk(c, nil, nil, min(max(3*id.rtt, 150*time.Millisecond), s.Banner))
+	greeting := s.talk(c, nil, nil, min(max(3*id.rtt, 150*time.Millisecond), s.Banner))
 	if len(greeting) > 0 {
 		o.Banner = bannerOf(greeting)
 		s.greeted(o, greeting)
@@ -469,7 +431,7 @@ func (id *ident) tls() bool {
 			c = c2
 		}
 	}
-	head, _ := s.askEnd(c, id.host, o.Port, 443)
+	head := s.ask(c, id.host, o.Port, 443)
 	if status, banner, ok := httpAnswer(head); ok {
 		o.Service, o.Banner = "https", banner
 		s.webProduct(id.ctx, o, head, status, id.host, id.ip, true)
@@ -477,4 +439,14 @@ func (id *ident) tls() bool {
 		return true
 	}
 	return true
+}
+
+// noteStop keeps the error that stopped a probe (the run's request budget is
+// spent) so the scan reports it, though the port that met it goes on as it was.
+func (s *Scanner) noteStop(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stop == nil {
+		s.stop = err
+	}
 }
