@@ -582,3 +582,21 @@ func TestKeptArgsScopePath(t *testing.T) {
 		t.Errorf("kept %q", got)
 	}
 }
+
+// Pages whose hashes are near one another form a group through any
+// member, an earlier run's hash is a group of its own, and three
+// different pages are three groups.
+func TestShotGroups(t *testing.T) {
+	shot := func(url, hash string) types.StoredObservation {
+		raw, _ := json.Marshal(map[string]any{"url": url, "file": url + ".png", "phash": hash})
+		return types.StoredObservation{Observation: types.Observation{Collector: "azhaq-shots", Kind: "screenshot", Payload: raw}}
+	}
+	obs := []types.StoredObservation{
+		shot("a", "p:b1313131313373fb"), shot("b", "p:b3338ccc66663399"), shot("c", "p:83787c54d5d5d078"),
+		shot("a2", "p:b1313131313373fa"), shot("a3", "p:b1313131313373f8"), shot("old", "0080800000000000"),
+	}
+	groups := shotGroups(obs)
+	if len(groups) != 4 || len(groups[0]) != 3 {
+		t.Errorf("want a group of 3 and three singles, got %d groups: %v", len(groups), groups)
+	}
+}

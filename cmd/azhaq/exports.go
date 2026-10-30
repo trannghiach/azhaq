@@ -1378,11 +1378,15 @@ func isAPI(r engine.MapEntry) bool {
 	return r.Role == "api" || len(r.Methods) > 0 || webextract.ClassifyURL(r.Entity.Key) == "api"
 }
 
+// shotNear is how many bits two perceptual hashes may differ and the
+// pages still look alike.
+const shotNear = 10
+
 type reportShot struct{ URL, File, Title, Hash string }
 
-// shotGroups puts screenshots that look alike (perceptual hashes at most 8
-// bits apart) together, largest group first: a login portal deployed on
-// thirty hosts is one row.
+// shotGroups puts screenshots that look alike (perceptual hashes at most
+// shotNear bits apart, from any member of a group) together, largest
+// group first: a login portal deployed on thirty hosts is one row.
 func shotGroups(obs []types.StoredObservation) [][]reportShot {
 	var shots []reportShot
 	for _, o := range obs {
@@ -1398,7 +1402,7 @@ func shotGroups(obs []types.StoredObservation) [][]reportShot {
 	for _, s := range shots {
 		placed := false
 		for i, g := range groups {
-			if s.Hash != "" && shotcol.Distance(s.Hash, g[0].Hash) <= 8 {
+			if s.Hash != "" && slices.ContainsFunc(g, func(m reportShot) bool { return shotcol.Distance(s.Hash, m.Hash) <= shotNear }) {
 				groups[i] = append(groups[i], s)
 				placed = true
 				break

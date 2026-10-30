@@ -7,19 +7,23 @@ package shotcol
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
+	_ "image/jpeg"
 	_ "image/png"
 	"math/bits"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/corona10/goimagehash"
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
@@ -194,61 +198,42 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	})
 }
 
-// DHash is a 64-bit difference hash of an image, as hex: each bit says
-// whether a cell of a 9×8 grey thumbnail is brighter than its right
-// neighbour. Pages that look alike have hashes a few bits apart.
-func DHash(pngData []byte) (string, bool) {
-	img, _, err := image.Decode(bytes.NewReader(pngData))
+// HashPrefix marks a perceptual hash (a DCT hash of the picture); the
+// 9×8 difference hash of earlier runs has none and is not comparable.
+const HashPrefix = "p:"
+
+// DHash is a 64-bit perceptual hash of an image, "p:" and 16 hex digits:
+// the picture scaled to 32×32 grey, its low frequencies by a discrete
+// cosine transform, each compared with their median. Pages that look
+// alike have hashes a few bits apart; a sparse page (a login form on
+// white) still differs from another, where a hash of brightness steps
+// gave all of them the same few bits. The name is kept for its callers.
+func DHash(data []byte) (string, bool) {
+	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return "", false
 	}
 	b := img.Bounds()
-	if b.Dx() < 9 || b.Dy() < 8 {
+	if b.Dx() < 8 || b.Dy() < 8 {
 		return "", false
 	}
-	var grey [8][9]float64
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 9; x++ {
-			x0, x1 := b.Min.X+x*b.Dx()/9, b.Min.X+(x+1)*b.Dx()/9
-			y0, y1 := b.Min.Y+y*b.Dy()/8, b.Min.Y+(y+1)*b.Dy()/8
-			var sum float64
-			n := 0
-			for yy := y0; yy < y1; yy += max(1, (y1-y0)/8) {
-				for xx := x0; xx < x1; xx += max(1, (x1-x0)/8) {
-					r, g, bl, _ := img.At(xx, yy).RGBA()
-					sum += 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(bl)
-					n++
-				}
-			}
-			grey[y][x] = sum / float64(max(n, 1))
-		}
+	h, err := goimagehash.PerceptionHash(img)
+	if err != nil {
+		return "", false
 	}
-	var h uint64
-	for y := 0; y < 8; y++ {
-		for x := 0; x < 8; x++ {
-			h <<= 1
-			if grey[y][x] > grey[y][x+1] {
-				h |= 1
-			}
-		}
-	}
-	out := make([]byte, 8)
-	for i := 0; i < 8; i++ {
-		out[i] = byte(h >> (56 - 8*i))
-	}
-	return hex.EncodeToString(out), true
+	return fmt.Sprintf("%s%016x", HashPrefix, h.GetHash()), true
 }
 
-// Distance is the number of differing bits of two DHash values.
+// Distance is the number of differing bits of two hashes, 64 when they
+// are not of the same kind (an earlier run's hash has no prefix).
 func Distance(a, b string) int {
-	x, err1 := hex.DecodeString(a)
-	y, err2 := hex.DecodeString(b)
-	if err1 != nil || err2 != nil || len(x) != len(y) {
+	if !strings.HasPrefix(a, HashPrefix) || !strings.HasPrefix(b, HashPrefix) {
 		return 64
 	}
-	d := 0
-	for i := range x {
-		d += bits.OnesCount8(x[i] ^ y[i])
+	x, err1 := strconv.ParseUint(a[len(HashPrefix):], 16, 64)
+	y, err2 := strconv.ParseUint(b[len(HashPrefix):], 16, 64)
+	if err1 != nil || err2 != nil {
+		return 64
 	}
-	return d
+	return bits.OnesCount64(x ^ y)
 }
