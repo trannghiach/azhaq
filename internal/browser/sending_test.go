@@ -74,3 +74,61 @@ let i = 0; setInterval(() => fetch('/tick' + (i++)), 20);
 		t.Errorf("counted %d requests, the server got %d", n, len(got))
 	}
 }
+
+// A script several pages share is answered from Chrome's cache after the
+// first: the ledger and the count hold the one that reached the server.
+func TestCacheHitsAreNotListed(t *testing.T) {
+	b := startChrome(t)
+	own := newRecorder(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/shared.js", "/shared.css":
+			w.Header().Set("Cache-Control", "max-age=3600")
+			if r.URL.Path == "/shared.js" {
+				w.Header().Set("Content-Type", "text/javascript")
+				fmt.Fprint(w, "document.title = 'ok';")
+				return
+			}
+			w.Header().Set("Content-Type", "text/css")
+			fmt.Fprint(w, "body{}")
+		default:
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<html><head><link rel=stylesheet href="/shared.css"><script src="/shared.js"></script></head><body>page</body></html>`)
+		}
+	})
+	defer own.Close()
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	for _, p := range []string{"/a", "/b", "/c"} {
+		_ = fetch.Spend(ctx) // each page, which Load's caller counts
+		if _, err := b.Load(ctx, own.URL+p, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	time.Sleep(500 * time.Millisecond)
+	b.Close()
+	l.Close()
+	var listed []string
+	_ = ledger.Read(path, func(e ledger.Entry) error {
+		u, _ := url.Parse(e.Target)
+		listed = append(listed, u.Path)
+		return nil
+	})
+	got := own.got()
+	slices.Sort(listed)
+	slices.Sort(got)
+	if !slices.Equal(listed, got) {
+		t.Errorf("ledger %v\nserver %v", listed, got)
+	}
+	if n := fetch.Sent(); n != int64(len(got)) {
+		t.Errorf("counted %d requests, the server got %d: %v", n, len(got), got)
+	}
+}

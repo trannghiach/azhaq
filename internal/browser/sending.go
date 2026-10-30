@@ -57,15 +57,40 @@ func (b *Browser) pausedAgain(id network.RequestID, raw string) {
 }
 
 // sentOff lists the request Chrome sent under id (Network's
-// requestWillBeSentExtraInfo: its headers went out).
+// requestWillBeSentExtraInfo: its headers went out). One already taken
+// for a cache hit left after all (a revalidation): it is counted again.
 func (b *Browser) sentOff(id network.RequestID) {
 	b.sendMu.Lock()
 	g, ok := b.out[id]
 	delete(b.out, id)
+	if !ok {
+		if g, ok = b.cached[id]; ok {
+			delete(b.cached, id)
+			fetch.Count(1)
+		}
+	}
 	b.sendMu.Unlock()
 	if ok {
 		ledger.Chrome(g.ctx, g.method, g.url)
 	}
+}
+
+// fromCache takes back a request Chrome answered from its cache (Network's
+// requestServedFromCache): nothing left, so it is neither listed nor
+// counted. It is kept aside in case its headers are heard of late.
+func (b *Browser) fromCache(id network.RequestID) {
+	b.sendMu.Lock()
+	defer b.sendMu.Unlock()
+	g, ok := b.out[id]
+	if !ok {
+		return
+	}
+	delete(b.out, id)
+	if b.cached == nil {
+		b.cached = map[network.RequestID]letGo{}
+	}
+	b.cached[id] = g
+	fetch.Refund()
 }
 
 // unheard lists what was let go for t (nil: for any page) and not heard
@@ -77,6 +102,11 @@ func (b *Browser) unheard(t *tab) {
 		if t == nil || g.t == t {
 			left = append(left, g)
 			delete(b.out, id)
+		}
+	}
+	for id, g := range b.cached {
+		if t == nil || g.t == t {
+			delete(b.cached, id)
 		}
 	}
 	b.sendMu.Unlock()

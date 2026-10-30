@@ -349,6 +349,28 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 			b.sentOff(ev.RequestID)
 		}
 	})
+	hits := chromedp.Events(ctx, network.RequestServedFromCache)
+	wg.Go(func() {
+		for ev, err := range hits {
+			if err != nil {
+				return
+			}
+			b.fromCache(ev.RequestID)
+		}
+	})
+	// A disk cache hit says so only in its response; requestServedFromCache
+	// is for the memory cache.
+	answered := chromedp.Events(ctx, network.ResponseReceived)
+	wg.Go(func() {
+		for ev, err := range answered {
+			if err != nil {
+				return
+			}
+			if r := ev.Response; r != nil && (r.FromDiskCache || r.FromPrefetchCache || r.FromServiceWorker) {
+				b.fromCache(ev.RequestID)
+			}
+		}
+	})
 	sockets := chromedp.Events(ctx, network.WebSocketCreated)
 	wg.Go(func() {
 		for ev, err := range sockets {
