@@ -529,6 +529,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
 	}
 	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}.Compile()
+	if err := hostHeadersInScope(fetch.Extra, rules); err != nil {
+		return err
+	}
 	if !rules.Empty() {
 		// What the scope excludes is never touched, even when it was given
 		// as a target: it is listed in the summary instead.
@@ -2059,6 +2062,30 @@ func browserAgent() string {
 		return ua
 	}
 	return fetch.UserAgent
+}
+
+// hostHeaders are the request headers that name the host a front end
+// serves (a CDN or an ingress routes by them).
+var hostHeaders = []string{"Host", "X-Forwarded-Host", "X-Host", "X-Original-Host"}
+
+// hostHeadersInScope refuses a -header that names a host the scope leaves
+// out: it would reach that host through an address the scope allows.
+func hostHeadersInScope(h http.Header, rules scope.Rules) error {
+	if rules.Empty() {
+		return nil
+	}
+	for _, k := range hostHeaders {
+		for _, v := range h.Values(k) {
+			host := v
+			if hh, _, err := net.SplitHostPort(v); err == nil {
+				host = hh
+			}
+			if !rules.Allows(host) {
+				return usagef("-header %s: %s names a host outside the scope: a front end that routes by it serves that host", k, v)
+			}
+		}
+	}
+	return nil
 }
 
 func applyExtra(cookies, headers []string) error {

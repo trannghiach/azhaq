@@ -581,6 +581,16 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	}
 	limit := min(num(a, "limit", 100), maxLimit)
 	ws := wsName(a)
+	// A header that names a host would reach it through an address the lock
+	// allows: the target is named by url or targets, never by a header.
+	for _, h := range strList(a, "headers") {
+		k, _, _ := strings.Cut(h, ":")
+		for _, hh := range hostHeaders {
+			if strings.EqualFold(strings.TrimSpace(k), hh) {
+				return nil, fmt.Errorf("headers: %s is not accepted: it names the host a front end serves; give the target in url or targets", hh)
+			}
+		}
+	}
 	result := func(r cmdResult, extra map[string]any) (map[string]any, error) {
 		s.forMCP(r.summary, ws)
 		data := map[string]any{"summary": r.summary}

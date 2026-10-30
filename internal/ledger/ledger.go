@@ -29,7 +29,8 @@ type Entry struct {
 	Method    string    `json:"method,omitempty"`
 	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
 	Host      string    `json:"host,omitempty"`
-	Rule      string    `json:"rule,omitempty"` // the scope rule that allowed it
+	VHost     string    `json:"vhost,omitempty"` // the Host header sent, when it is not the URL's
+	Rule      string    `json:"rule,omitempty"`  // the scope rule that allowed it
 	Collector string    `json:"collector,omitempty"`
 	Prev      string    `json:"prev,omitempty"`
 	Hash      string    `json:"hash,omitempty"`

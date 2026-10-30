@@ -6,7 +6,9 @@ import (
 	"flag"
 	"fmt"
 	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/scope"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -455,5 +457,26 @@ func TestBudgetErrorIsALimit(t *testing.T) {
 	err := fmt.Errorf("role alice: %w", fmt.Errorf("%w (Chrome was refused requests while signing in)", neterr.ErrBudget))
 	if got := exitCode(err); got != exitLimit {
 		t.Fatalf("exit %d, want %d", got, exitLimit)
+	}
+}
+
+// A -header that names a host the scope leaves out is refused before any
+// request; one inside the scope is sent and in the ledger as vhost.
+func TestHostHeaderOutsideScope(t *testing.T) {
+	rules := scope.Rules{Allow: []string{"127.0.0.1", "ok.lab"}, Deny: []string{"secret.lab"}}.Compile()
+	for v, ok := range map[string]bool{"secret.lab": false, "secret.lab:8080": false, "ok.lab": true, "other.test": false} {
+		h := http.Header{}
+		h.Set("Host", v)
+		if err := hostHeadersInScope(h, rules); (err == nil) != ok {
+			t.Errorf("Host %s: %v", v, err)
+		}
+	}
+	h := http.Header{}
+	h.Set("X-Forwarded-Host", "secret.lab")
+	if hostHeadersInScope(h, rules) == nil {
+		t.Error("X-Forwarded-Host passed")
+	}
+	if hostHeadersInScope(h, scope.Rules{}) != nil {
+		t.Error("no scope given: nothing to hold the header to")
 	}
 }

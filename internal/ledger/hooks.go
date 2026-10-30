@@ -35,7 +35,11 @@ func HTTP(req *http.Request) {
 		method = http.MethodGet
 	}
 	host := req.URL.Hostname()
-	l.Record(Entry{Kind: "http", Method: method, Target: req.URL.Redacted(), Host: host,
+	vhost := req.Host
+	if vhost == req.URL.Host || vhost == host {
+		vhost = ""
+	}
+	l.Record(Entry{Kind: "http", Method: method, Target: req.URL.Redacted(), Host: host, VHost: vhost,
 		Rule: l.rule(host), Collector: collectorOf(req.Context())})
 }
 

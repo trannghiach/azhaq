@@ -421,3 +421,19 @@ func TestMCPShutdownAnswered(t *testing.T) {
 		t.Errorf("answer %s", out.String())
 	}
 }
+
+// A header that names a host never reaches azhaq from an MCP call: the lock
+// names targets, and a Host header would route past it.
+func TestMCPRefusesHostHeaders(t *testing.T) {
+	dir := t.TempDir()
+	s := &mcpServer{exe: fakeAzhaq(t, dir), dir: dir, lock: []string{"-allow", "127.0.0.1", "-deny", "secret.lab"}, locked: true, budget: 50}
+	for _, h := range []string{"Host: secret.lab", "x-forwarded-host: secret.lab"} {
+		text, isErr := callText(t, s, "azhaq_map", map[string]any{"url": "http://127.0.0.1:18090/", "headers": []any{h}})
+		if !isErr || !strings.Contains(text, "not accepted") {
+			t.Errorf("%s: %v %s", h, isErr, text)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "args")); err == nil {
+		t.Error("azhaq ran")
+	}
+}
