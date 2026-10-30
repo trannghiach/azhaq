@@ -24,7 +24,10 @@ type Spec struct {
 	// content type, server and location are the last hop's.
 	Follow       bool `json:"follow,omitempty"`
 	MaxRedirects int  `json:"max_redirects,omitempty"` // -maxr
-	SameHost     bool `json:"same_host,omitempty"`     // -fhr
+	// TargetRate paces the services asked (-rl, as httpx): the first
+	// request to each waits its turn, the ones that follow it do not.
+	TargetRate float64 `json:"target_rate,omitempty"`
+	SameHost   bool    `json:"same_host,omitempty"` // -fhr
 	// NoFallback asks for both schemes of an input with none (-nf) and
 	// reports each that answers.
 	NoFallback bool `json:"no_fallback,omitempty"`

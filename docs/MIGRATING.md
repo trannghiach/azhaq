@@ -135,7 +135,7 @@ On top: a dangling CNAME is listed with the service it points at (a takeover can
 | `-ss` | `-ss` | A screenshot of each front page (Chrome on the machine). |
 | `-j`, `-json`, `-csv`, `-md` | the same | |
 | `-o FILE`, `-oa FILE` | the same | |
-| `-rl 150` | `-rl 150` (or `-rate`) | Requests per second over all hosts. The default is no pace; httpx's is 150. |
+| `-rl 150` | `-rl 150` | Services a second, as httpx counts them: a target's first request waits its turn, its favicon, redirects and second scheme do not. `-rate N` paces every request instead. The default is no pace; httpx's is 150. |
 | `-t 50` | `-t 50` | Work items in flight. The default is 16; httpx's is 50. |
 | `-timeout 10` | `-req-timeout 10s` | One request's time. azhaq's `-timeout` stops the whole run. |
 | `-retries N`, `-maxhr N` | the same | |

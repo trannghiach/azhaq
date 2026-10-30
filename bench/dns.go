@@ -185,7 +185,8 @@ func benchDNS() *dnsRow {
 	must(os.WriteFile(list, []byte(strings.Join(names, "\n")+"\n"), 0o644))
 	row := &dnsRow{Profile: prof, Names: len(names)}
 	types := []string{"-a", "-aaaa", "-cname", "-mx", "-ns", "-txt", "-srv", "-caa", "-soa"}
-	aa := append(append([]string{"dns", "-l", list, "-resolvers", res, "-json", "-silent"}, types...), pick([]string(nil), []string{"-dns-rate", politeDNS})...)
+	// azhaq dns -rl is dnsx's -rl (names a second); -dns-rate paces each query.
+	aa := append(append([]string{"dns", "-l", list, "-resolvers", res, "-json", "-silent"}, types...), pick([]string(nil), []string{"-rl", politeDNS})...)
 	da := append(append([]string{"-l", list, "-r", z.addr, "-json", "-silent"}, types...), pick([]string(nil), []string{"-rl", politeDNS})...)
 	cmds := cmdLine(azhaq, aa...) + " vs " + cmdLine("dnsx", da...)
 

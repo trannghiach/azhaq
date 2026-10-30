@@ -31,6 +31,7 @@
 
 ### `probe`
 
+- `probe -rl N` (`-rate-limit`, `-rlm` per minute) paces services as httpx does: a target's first request waits its turn, its favicon, redirects and second scheme follow at once. It was `-rate`, which paces every request: at the same setting a run took twice httpx's time (45 s against 22 s for 107 hosts at 5 a second). `-rate` still paces each request.
 - A target whose name does not resolve says what DNS said (`no such host`, `the name has no address`, a special-use name such as `.invalid`) and is one row: before, a name with no record was `no answer and no failure recorded`, and a URL's name that DNS refused was listed again as a target of its own.
 - `probe` follows no redirect unless given `-fr` (with `-maxr`, `-fhr`, `-rhsts`), as httpx does. A row's status, title, length and content type all come from one answer; with `-fr` they are the last answer's and the chain is in `chain_status_codes` and `final_url`. `run` keeps following.
 - `probe` takes httpx's matchers and filters over the response as sent: `-mc/-fc`, `-ml/-fl`, `-mlc/-flc`, `-mwc/-fwc`, `-mfc/-ffc`, `-ms/-fs`, `-mr/-fe`, `-mcdn/-fcdn`, `-mrt/-frt`, `-mdc/-fdc`, `-fd`, `-fpt/-fep`. The summary says how many rows they left out and which conditions could not be judged.

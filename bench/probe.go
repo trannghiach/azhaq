@@ -151,7 +151,7 @@ func benchProbe(local []string) *probeRow {
 	azFlags := append([]string{"-json", "-silent", "-favicon"}, azFollow...)
 	hxFlags := []string{"-silent", "-json", "-fr", "-td", "-cdn", "-favicon", "-title", "-sc", "-no-color"}
 	if polite() {
-		azFlags = append(azFlags, "-rate", politeHTTP)
+		azFlags = append(azFlags, "-rl", politeHTTP) // httpx -rl: services a second (-rate would pace the favicons and redirects too)
 		hxFlags = append(hxFlags, "-rl", politeHTTP)
 	}
 	aa := append([]string{"probe", "-l", list}, azFlags...)

@@ -64,15 +64,15 @@ func benchFuzz(apps []string) *fuzzRow {
 			fa := append(append([]string{"-u", u, "-w", words, "-s"}, lg.ff...), rate...)
 			var az, ff map[string]bool
 			var am, fm runMeasure
+			beforeEach = func() { freshApp(app) }
 			legWithApp(app, func() {
 				var out []byte
-				freshApp(app)
 				out, am = timed(app, 40*time.Minute, work, azhaq, aa...)
 				az = fuzzHits(out, app)
-				freshApp(app)
 				out, fm = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
 				ff = fuzzHits(out, app)
 			})
+			beforeEach = nil
 			leg.AzhaqSecs, leg.FfufSecs = am.Seconds, fm.Seconds
 			leg.AzhaqHits, leg.FfufHits, leg.Shared = len(az), len(ff), overlap(az, ff)
 			for h := range az {
@@ -130,7 +130,9 @@ func (l *fuzzLeg) reportEqual(u, words string) {
 	tag := strings.NewReplacer("http://", "", "/", "", ":", "-").Replace(u)
 	af, ff := filepath.Join(dir, tag+"-azhaq.json"), filepath.Join(dir, tag+"-ffuf.json")
 	_ = os.Remove(af)
+	freshApp(u)
 	_, am := run(u, 20*time.Minute, work, azhaq, "fuzz", "-u", u, "-w", words, "-s", "-ac", "-of", "json", "-o", af)
+	freshApp(u)
 	run(u, 20*time.Minute, work, ref("ffuf"), "-u", u, "-w", words, "-s", "-ac", "-of", "json", "-o", ff)
 	a, aerr := normalizedResults(af)
 	f, ferr := normalizedResults(ff)
@@ -175,6 +177,9 @@ func normalizedResults(path string) ([]string, error) {
 	for _, r := range doc.Results {
 		delete(r, "duration")
 		delete(r, "resultfile")
+		if in, ok := r["input"].(map[string]any); ok {
+			delete(in, "FFUFHASH") // a random prefix per run, in ffuf's own reports too
+		}
 		b, _ := json.Marshal(r) // map keys marshal sorted
 		out = append(out, string(b))
 	}

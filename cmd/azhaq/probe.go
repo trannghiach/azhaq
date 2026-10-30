@@ -423,9 +423,11 @@ func cmdProbe(args []string) error {
 	list := fs.String("l", "", "file of targets (- for stdin; a glob such as 'hosts-*.txt')")
 	var pf probeFlags
 	pf.register(fs)
-	rlm := fs.Float64("rlm", 0, "requests per minute to targets, over all hosts (as -rate, per minute)")
+	rl := fs.Float64("rl", 0, "services asked per second, as httpx -rl: each target's first request waits its turn, its favicon, redirects and second scheme do not (-rate paces every request)")
+	fs.Var(fs.Lookup("rl").Value, "rate-limit", "same as -rl")
+	rlm := fs.Float64("rlm", 0, "services asked per minute (as -rl, per minute)")
 	fs.Bool("nc", false, "accepted, as httpx has it: azhaq prints no color")
-	given := inherit(fs, append([]string{"parallel", "t=parallel", "host-parallel", "no-follow", "no-tech", "resolvers", "dns-rate", "max-ips", "rl=rate"}, targetFlags...)...)
+	given := inherit(fs, append([]string{"parallel", "t=parallel", "host-parallel", "no-follow", "no-tech", "resolvers", "dns-rate", "max-ips"}, targetFlags...)...)
 	favicon := fs.Bool("favicon", false, "also hash each front page's favicon (one or two more requests per service)")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -492,6 +494,10 @@ func cmdProbe(args []string) error {
 		return err
 	}
 	spec.PerHost = perHost
+	spec.TargetRate = *rl
+	if *rlm > 0 && *rl == 0 {
+		spec.TargetRate = *rlm / 60
+	}
 	if len(targets) == 0 {
 		return usagef("give -u TARGET, -l FILE or targets on stdin")
 	}
@@ -559,9 +565,6 @@ func cmdProbe(args []string) error {
 		run = append(run, "-screenshots", filepath.Join(probeDir(pf.srd), "screenshot"))
 	}
 	run = append(run, given()...)
-	if *rlm > 0 && !hasFlag(args, "rate", "rl") {
-		run = append(run, fmt.Sprintf("-rate=%g", *rlm/60))
-	}
 	if pf.delay > 0 && !hasFlag(args, "rate", "rl", "rlm") {
 		run = append(run, fmt.Sprintf("-rate=%g", 1/pf.delay.Seconds()))
 	}

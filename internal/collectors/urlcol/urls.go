@@ -223,14 +223,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				key = ks[0]
 			}
 			count := 0
+			// The host alone is how wayback, Common Crawl and arquivo are
+			// asked; otx and urlscan answer for the domain with its
+			// subdomains, and gau prints those too.
+			apex := c.opts.Apex && s.name != "otx" && s.name != "urlscan"
 			add := func(urls []string) {
 				mu.Lock()
 				defer mu.Unlock()
 				for _, raw := range urls {
-					if c.opts.Raw && c.opts.OnURL != nil && onDomain(raw, domain, c.opts.Apex) && !out.blocked(raw) && !out.repeat(raw) {
+					if c.opts.Raw && c.opts.OnURL != nil && onDomain(raw, domain, apex) && !out.blocked(raw) && !out.repeat(raw) {
 						c.opts.OnURL(raw, s.name)
 					}
-					u, ok := clean(raw, domain, c.opts.Apex)
+					u, ok := clean(raw, domain, apex)
 					if !ok || out.blocked(u) {
 						continue
 					}

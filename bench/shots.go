@@ -26,6 +26,7 @@ type shotsRow struct {
 	GowitnessOK   int     `json:"gowitness_confirmed"`
 	AzhaqSeconds  float64 `json:"azhaq_seconds"`
 	GowitnessSecs float64 `json:"gowitness_seconds"`
+	Unpaced       bool    `json:"gowitness_unpaced,omitempty"` // polite: gowitness has no rate option, so the times are not compared
 }
 
 // shotPages serves three pages with content a blank screenshot would lack.
@@ -92,9 +93,16 @@ func benchShots() *shotsRow {
 	if files, _ := os.ReadDir(filepath.Join(dir, "gowitness0")); len(files) > 0 {
 		row.Gowitness = len(files)
 	}
-	barOne("screenshots", row.AzhaqOK, row.GowitnessOK, row.AzhaqSeconds, row.GowitnessSecs, "the image files: each decodes and is not one colour",
-		cmdLine(azhaq, azArgs(0)...)+" vs "+cmdLine("gowitness", gwArgs(0)...),
-		fmt.Sprintf("%s; %d targets; azhaq listed %d, gowitness wrote %d files; %s%s", share(row.AzhaqOK, row.GowitnessOK), row.Targets, row.Azhaq, row.Gowitness, ratio(row.AzhaqSeconds, row.GowitnessSecs), azErr(m)))
+	cmds := cmdLine(azhaq, azArgs(0)...) + " vs " + cmdLine("gowitness", gwArgs(0)...)
+	note := fmt.Sprintf("%s; %d targets; azhaq listed %d, gowitness wrote %d files; %s%s", share(row.AzhaqOK, row.GowitnessOK), row.Targets, row.Azhaq, row.Gowitness, ratio(row.AzhaqSeconds, row.GowitnessSecs), azErr(m))
+	if polite() {
+		// gowitness cannot be paced: its time at full speed is no polite reference.
+		addCheck("screenshots: results ≥ the reference's, confirmed by the image files: each decodes and is not one colour", row.AzhaqOK >= row.GowitnessOK,
+			"azhaq %d, reference %d; %s | %s", row.AzhaqOK, row.GowitnessOK, note, cmds)
+		row.Unpaced = true
+		return row
+	}
+	barOne("screenshots", row.AzhaqOK, row.GowitnessOK, row.AzhaqSeconds, row.GowitnessSecs, "the image files: each decodes and is not one colour", cmds, note)
 	return row
 }
 

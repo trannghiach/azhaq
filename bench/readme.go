@@ -120,6 +120,9 @@ func tableRows(ps *profileSet) []tableRow {
 	}
 	if s := ps.Shots; s != nil {
 		rows = append(rows, tableRow{fmt.Sprintf("Screenshots, %d targets (not blank)", s.Targets), "gowitness", fmt.Sprintf("%d in %s", s.AzhaqOK, secs(s.AzhaqSeconds)), fmt.Sprintf("%d in %s", s.GowitnessOK, secs(s.GowitnessSecs))})
+		if s.Unpaced {
+			rows[len(rows)-1].job += " (gowitness has no rate option and ran at full speed: the times are not compared)"
+		}
 	}
 	if n := ps.Notify; n != nil {
 		rows = append(rows, tableRow{fmt.Sprintf("Notifications, %d messages to 2 providers, as the stub received them", n.Messages), "notify", fmt.Sprintf("%d in %s", n.AzhaqOK, secs(n.AzhaqSecs)), fmt.Sprintf("%d in %s", n.NotifyOK, secs(n.NotifySecs))})

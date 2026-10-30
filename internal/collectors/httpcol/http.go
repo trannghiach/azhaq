@@ -22,6 +22,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"golang.org/x/time/rate"
+
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
@@ -57,6 +59,18 @@ type Collector struct {
 
 	emitted sync.Map // URLs already reported in this run
 	ownURL  sync.Map // URLs reported by their own URL task
+
+	turnOnce sync.Once
+	turns    *rate.Limiter // Spec.TargetRate
+}
+
+// turn waits for a service's turn under -rl.
+func (c *Collector) turn(ctx context.Context) error {
+	if c.Spec == nil || c.Spec.TargetRate <= 0 {
+		return nil
+	}
+	c.turnOnce.Do(func() { c.turns = rate.NewLimiter(rate.Limit(c.Spec.TargetRate), 1) })
+	return c.turns.Wait(ctx)
 }
 
 func New(client *http.Client) *Collector {
@@ -100,6 +114,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	// the first that answers stands for it.
 	variants := c.variants(groups0(groups))
 	for _, group := range groups {
+		if err := c.turn(ctx); err != nil {
+			return types.RunMeta{Status: types.StatusCancelled}, err
+		}
 		for gi, raw := range group {
 			if ctx.Err() != nil {
 				return meta, ctx.Err()

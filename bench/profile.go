@@ -77,7 +77,14 @@ const slowRun = 20.0 // seconds: from here a single run is the measure
 // timedArgs runs a command, and below slowRun seconds twice more, and
 // returns the first run's output with the median of the seconds. mk builds
 // the arguments of run i, for commands that must not reuse a file.
+// beforeEach, when set, runs before every run timedArgs makes (the bench's
+// Juice Shop is started fresh for each sweep of a leg).
+var beforeEach func()
+
 func timedArgs(target string, timeout time.Duration, dir, name string, mk func(i int) []string) ([]byte, runMeasure) {
+	if beforeEach != nil {
+		beforeEach()
+	}
 	out, m := run(target, timeout, dir, name, mk(0)...)
 	if m.Error != "" && !benignExit(m.Error) || m.Seconds >= slowRun {
 		return out, m
@@ -85,6 +92,9 @@ func timedArgs(target string, timeout time.Duration, dir, name string, mk func(i
 	secs := []float64{m.Seconds}
 	noCache = true
 	for i := 1; i < 3; i++ {
+		if beforeEach != nil {
+			beforeEach()
+		}
 		_, m2 := run(target, timeout, dir, name, mk(i)...)
 		if m2.Error == "" || benignExit(m2.Error) {
 			secs = append(secs, m2.Seconds)

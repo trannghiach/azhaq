@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // probeSite is a server with a few pages, counting what it is sent.
@@ -256,5 +257,23 @@ func TestProbeUnresolvedNameIsOneRow(t *testing.T) {
 		if f.Error == "no answer and no failure recorded" {
 			t.Errorf("gap %+v", f)
 		}
+	}
+}
+
+// -rl paces services, as httpx -rl: four services at 4 a second take three
+// turns; each one's favicon does not wait for one.
+func TestProbeRLPacesServices(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var args []string
+	for i := 0; i < 4; i++ {
+		args = append(args, "-u", newProbeSite(t).URL)
+	}
+	t0 := time.Now()
+	out, _, code := runContract(t, append([]string{"probe"}, append(args, "-rl", "4", "-favicon")...)...)
+	if el := time.Since(t0); el < 700*time.Millisecond || el > 3*time.Second {
+		t.Errorf("4 services at -rl 4 took %v", el)
+	}
+	if rows := probeRows(t, out); len(rows) != 4 || code != exitOK {
+		t.Errorf("exit %d rows %s", code, out)
 	}
 }

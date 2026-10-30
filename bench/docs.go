@@ -32,7 +32,8 @@ var (
 )
 
 // docLinesAllowed are lines that say a thing about a command where it is true.
-var docLinesAllowed = []string{"mcp", "azhaq worker", "-serve", "unlocked", "hackerone", "program"}
+var docLinesAllowed = []string{"mcp", "azhaq worker", "-serve", "unlocked", "hackerone", "program",
+	"may change data", "when there is none, the targets given"} // params bodies (true: they need a named target); the scope rule stated whole
 
 func benchDocs() *docsRow {
 	row := &docsRow{}
