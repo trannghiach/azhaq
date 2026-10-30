@@ -71,22 +71,51 @@ func Spend(ctx context.Context) error {
 // Pace waits for the run's pace (-rate) without counting a request: for
 // one counted with Take that is sent as a run's own request would be (a
 // request of Chrome's).
+//
+// The kill file ends the wait: a request counted before it appeared and
+// still waiting its turn is not sent after it.
 func Pace(ctx context.Context) error {
 	paceMu.Lock()
 	p := pace
 	paceMu.Unlock()
+	wake := killWake()
 	if p != nil {
-		if err := p.Wait(ctx); err != nil {
+		wctx, stop := ctx, func() {}
+		if wake != nil {
+			var cancel context.CancelFunc
+			wctx, cancel = context.WithCancel(ctx)
+			go func() {
+				select {
+				case <-wake:
+					cancel()
+				case <-wctx.Done():
+				}
+			}()
+			stop = cancel
+		}
+		err := p.Wait(wctx)
+		stop()
+		if k := Killed(); k != nil {
+			return k
+		}
+		if err != nil {
 			if ctx.Err() == nil {
 				// Too little time left to keep the pace: the work stops at
 				// the deadline, as a run's -timeout stops it, and is not
 				// a failure of the target.
-				<-ctx.Done()
+				select {
+				case <-ctx.Done():
+				case <-wake:
+					return Killed()
+				}
 				return ctx.Err()
 			}
 			return err
 		}
 		return nil
+	}
+	if k := Killed(); k != nil {
+		return k
 	}
 	return ctx.Err()
 }

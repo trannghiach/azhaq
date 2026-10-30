@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -328,5 +330,39 @@ func TestPacePastTheDeadlineIsTheDeadline(t *testing.T) {
 	err := Pace(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("err %v, want the deadline", err)
+	}
+}
+
+// A request waiting for the pace when the kill file appears is not sent:
+// the wait ends at once with the kill.
+func TestKillEndsTheWaitForThePace(t *testing.T) {
+	Reset()
+	defer Reset()
+	path := filepath.Join(t.TempDir(), "stop")
+	defer SetKill(path)()
+	SetRate(0.5) // one request every 2 s
+	ctx := context.Background()
+	if err := Spend(ctx); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- Spend(ctx) }() // waits about 2 s for its turn
+	time.Sleep(100 * time.Millisecond)
+	os.WriteFile(path, nil, 0o644)
+	start := time.Now()
+	select {
+	case err := <-done:
+		var k *neterr.Killed
+		if !errors.As(err, &k) {
+			t.Errorf("err %v, want the kill", err)
+		}
+		if waited := time.Since(start); waited > 400*time.Millisecond {
+			t.Errorf("the wait ended %v after the file", waited)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the waiting request went on after the kill file")
+	}
+	if Sent() != 1 {
+		t.Errorf("counted %d, want 1 (the one that waited was not sent)", Sent())
 	}
 }

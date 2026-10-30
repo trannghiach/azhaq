@@ -10,11 +10,12 @@ import (
 )
 
 // KillCheck is how often the kill file is looked for.
-const KillCheck = 500 * time.Millisecond
+const KillCheck = 100 * time.Millisecond
 
 var (
 	killMu   sync.Mutex
 	killStop chan struct{}
+	killNow  chan struct{} // closed once the file is seen: wakes what waits for the pace
 	killed   atomic.Pointer[neterr.Killed]
 )
 
@@ -34,11 +35,13 @@ func SetKill(path string) (stop func()) {
 		return func() {}
 	}
 	done := make(chan struct{})
-	killStop = done
+	now := make(chan struct{})
+	killStop, killNow = done, now
 	killMu.Unlock()
 	seen := func() bool {
 		if _, err := os.Stat(path); err == nil {
 			killed.Store(&neterr.Killed{Path: path})
+			close(now)
 			return true
 		}
 		return false
@@ -64,10 +67,17 @@ func SetKill(path string) (stop func()) {
 		defer killMu.Unlock()
 		if killStop == done {
 			close(done)
-			killStop = nil
+			killStop, killNow = nil, nil
 			killed.Store(nil)
 		}
 	}
+}
+
+// killWake is closed once the kill file is seen; nil without a watch.
+func killWake() <-chan struct{} {
+	killMu.Lock()
+	defer killMu.Unlock()
+	return killNow
 }
 
 // Killed is the refusal a kill file the run has seen gives, or nil.
