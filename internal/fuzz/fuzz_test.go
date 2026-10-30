@@ -59,8 +59,8 @@ func TestTemplateDefaults(t *testing.T) {
 }
 
 func TestCounts(t *testing.T) {
-	users := List{"USER", []string{"a", "b", "c", "d"}}
-	pass := List{"PASS", []string{"1", "2", "3"}}
+	users := List{Keyword: "USER", Words: []string{"a", "b", "c", "d"}}
+	pass := List{Keyword: "PASS", Words: []string{"1", "2", "3"}}
 	if n := Total(Clusterbomb, []List{users, pass}); n != 12 {
 		t.Errorf("clusterbomb 4x3 = %d", n)
 	}
@@ -68,7 +68,7 @@ func TestCounts(t *testing.T) {
 	if n := Total(Pitchfork, []List{users, pass}); n != 4 {
 		t.Errorf("pitchfork 4,3 = %d", n)
 	}
-	if n := Total(Pitchfork, []List{{"A", []string{"x", "y"}}, {"B", []string{"1", "2"}}}); n != 2 {
+	if n := Total(Pitchfork, []List{{Keyword: "A", Words: []string{"x", "y"}}, {Keyword: "B", Words: []string{"1", "2"}}}); n != 2 {
 		t.Errorf("pitchfork 2,2 = %d", n)
 	}
 	seen := map[string]bool{}
@@ -90,7 +90,7 @@ func TestCounts(t *testing.T) {
 func TestReadList(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "w.txt")
 	os.WriteFile(p, []byte("admin\n# note\n\nlogin # tail\r\nlast"), 0o644)
-	l, err := ReadList(p, "FUZZ", []string{".php", ".bak"}, false)
+	l, err := ReadList(p, "FUZZ", ListOptions{Exts: []string{".php", ".bak"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,7 +98,7 @@ func TestReadList(t *testing.T) {
 	if !reflect.DeepEqual(l.Words, want) {
 		t.Errorf("words %q", l.Words)
 	}
-	l, _ = ReadList(p, "USER", []string{".php"}, true)
+	l, _ = ReadList(p, "USER", ListOptions{Exts: []string{".php"}, IgnoreComments: true})
 	if !reflect.DeepEqual(l.Words, []string{"admin", "", "login", "last"}) {
 		t.Errorf("a list of another keyword, comments dropped: %q", l.Words)
 	}
@@ -225,7 +225,7 @@ func runFake(t *testing.T, f *fake, mut func(*Config)) (Stats, []Result) {
 	set := NewSet([]string{"FUZZ"})
 	set.AddMatcher("status", "200-299,301,302,307,401,403,405,500")
 	cfg := Config{Template: tmpl, Mode: Clusterbomb, Set: set, Sender: f, Threads: 4,
-		Lists: []List{{"FUZZ", []string{"admin", "login", "static", "x", "y", "z"}}}}
+		Lists: []List{{Keyword: "FUZZ", Words: []string{"admin", "login", "static", "x", "y", "z"}}}}
 	var mu sync.Mutex
 	var out []Result
 	cfg.OnResult = func(r Result) { mu.Lock(); out = append(out, r); mu.Unlock() }
@@ -431,7 +431,7 @@ func TestSenderCountsLikeFfuf(t *testing.T) {
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	s := NewSender(HTTPOptions{Timeout: 5 * time.Second, Threads: 2})
+	s := mustSender(t, HTTPOptions{Timeout: 5 * time.Second, Threads: 2})
 	tmpl, _ := NewTemplate("POST", srv.URL+"/a", `{"k":"FUZZ"}`, []string{"Host: FUZZ.lab.test", "Content-Type: application/json"}, nil)
 	req := tmpl.Expand(map[string]string{"FUZZ": "v"})
 	r, err := s.Send(context.Background(), &req, true)
@@ -462,7 +462,7 @@ func TestSenderSpendsTheBudget(t *testing.T) {
 	fetch.Reset()
 	fetch.MaxRequests = 2
 	defer fetch.Reset()
-	s := NewSender(HTTPOptions{Timeout: time.Second, Threads: 1})
+	s := mustSender(t, HTTPOptions{Timeout: time.Second, Threads: 1})
 	tmpl, _ := NewTemplate("", srv.URL+"/", "", nil, nil)
 	req := tmpl.Expand(nil)
 	var errs []error
@@ -487,10 +487,19 @@ func TestSenderRefusesACutOffAnswer(t *testing.T) {
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	s := NewSender(HTTPOptions{Timeout: time.Second, Threads: 1})
+	s := mustSender(t, HTTPOptions{Timeout: time.Second, Threads: 1})
 	tmpl, _ := NewTemplate("", srv.URL+"/FUZZ", "", nil, nil)
 	req := tmpl.Expand(map[string]string{"FUZZ": "zh-cn"})
 	if r, err := s.Send(context.Background(), &req, false); err == nil {
 		t.Errorf("cut-off answer taken: %+v", r)
 	}
+}
+
+func mustSender(t *testing.T, o HTTPOptions) Sender {
+	t.Helper()
+	s, err := NewSender(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
 }

@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fuzz"
@@ -69,6 +71,9 @@ func fuzzRows(t *testing.T, args ...string) ([]string, report, error) {
 		}
 		in := map[string]string{}
 		for k, v := range m["input"].(map[string]any) {
+			if k == "FFUFHASH" { // ffuf's name for the request; differs each run
+				continue
+			}
 			raw, _ := base64.StdEncoding.DecodeString(v.(string))
 			in[k] = string(raw)
 		}
@@ -127,7 +132,7 @@ func TestFuzzRecursion(t *testing.T) {
 
 func TestFuzzHostHeaderAndBody(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, _, err := fuzzRows(t, "-u", srv.URL+"/", "-H", "Host: FUZZ.lab.test", "-w", wlist(t, "www", "dev", "mail"), "-mc", "200", "-fs", "35")
+	rows, _, err := fuzzRows(t, "-u", srv.URL+"/", "-H", "Host: FUZZ.lab.test", "-w", wlist(t, "www", "dev", "mail"), "-mc", "200", "-fs", "35", "-ac")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +254,7 @@ func TestFuzzScopeRules(t *testing.T) {
 
 func TestFuzzIsInTheCommandTable(t *testing.T) {
 	c, ok := lookup("fuzz")
-	if !ok || c.group != groupDropIn || c.like != "ffuf" || len(c.examples) != 3 || c.usage == "" || c.output == "" {
+	if !ok || c.group != groupDropIn || c.like != "ffuf" || len(c.examples) != 5 || c.usage == "" || c.output == "" {
 		t.Errorf("registry entry %+v", c)
 	}
 }
@@ -261,5 +266,119 @@ func TestFuzzResumeArgs(t *testing.T) {
 	}
 	if s := shellJoin([]string{"-H", "Host: FUZZ.x", "-mr", "it's"}); s != `-H 'Host: FUZZ.x' -mr 'it'\''s'` {
 		t.Fatalf("%s", s)
+	}
+}
+
+// A command line moved from ffuf that gives its own filter has calibrated by
+// hand: no calibration request goes out unless -ac says so.
+func TestFuzzOwnFilterTurnsCalibrationOff(t *testing.T) {
+	srv := fuzzServer(t)
+	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Requests != 2 {
+		t.Errorf("%d requests, want 2 (no calibration)", rep.Requests)
+	}
+	_, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242", "-ac")
+	if rep.Requests != 8 {
+		t.Errorf("%d requests with -ac, want 8", rep.Requests)
+	}
+}
+
+func TestFuzzReportFiles(t *testing.T) {
+	srv := fuzzServer(t)
+	dir := t.TempDir()
+	for _, f := range []string{"json", "ejson", "csv", "ecsv", "md", "html"} {
+		p := filepath.Join(dir, "r."+f)
+		if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "docs"), "-ac=false", "-o", p, "-of", f); err != nil {
+			t.Fatal(f, err)
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil || !strings.Contains(string(raw), "admin") && !strings.Contains(string(raw), "YWRtaW4=") {
+			t.Errorf("%s report: %v %.80q", f, err, raw)
+		}
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "r.json"))
+	var rep struct {
+		Results []struct{ Input map[string]string }
+		Config  map[string]any
+	}
+	if json.Unmarshal(raw, &rep) != nil || len(rep.Results) != 2 || rep.Results[0].Input["FUZZ"] != "admin" || rep.Config["threads"] == nil {
+		t.Errorf("json report %s", raw)
+	}
+	if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "a"), "-o", filepath.Join(dir, "x"), "-of", "yaml"); exitCode(err) != exitUsage {
+		t.Errorf("-of yaml: %v", err)
+	}
+	// -or: no file for no matches.
+	p := filepath.Join(dir, "none.json")
+	fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "zzz"), "-ac=false", "-fc", "200", "-o", p, "-or")
+	if _, err := os.Stat(p); err == nil {
+		t.Error("-or wrote an empty report")
+	}
+}
+
+// A preflight reads a one-use token the login needs: each request gets its
+// own, the flight requests are counted, and a captured value cannot choose
+// the host.
+func TestFuzzPreflightCarriesATokenAndKeepsTheHost(t *testing.T) {
+	var mu sync.Mutex
+	issued := map[string]bool{}
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.URL.Path == "/form" {
+			n++
+			tok := fmt.Sprintf("t%d", n)
+			issued[tok] = true
+			fmt.Fprintf(w, `<input type="hidden" name="csrf" value="%s">`, tok)
+			return
+		}
+		b, _ := io.ReadAll(r.Body)
+		tok := strings.TrimPrefix(string(b), "csrf=")
+		tok, _, _ = strings.Cut(tok, "&")
+		if !issued[tok] {
+			http.Error(w, "bad token", 403)
+			return
+		}
+		delete(issued, tok)
+		fmt.Fprint(w, "ok "+string(b))
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	pre := filepath.Join(dir, "pre.req")
+	os.WriteFile(pre, []byte("GET /form HTTP/1.1\n\n"), 0o644)
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/login", "-X", "POST", "-d", "csrf=TOKEN&p=FUZZ", "-w", wlist(t, "a", "b", "c"), "-ac=false", "-mc", "200",
+		"-preflight", pre, "-preflight-var", `TOKEN:name="csrf" value="([^"]+)"`)
+	if err != nil || len(rows) != 3 || rep.Requests != 6 {
+		t.Errorf("rows %q requests %d err %v", rows, rep.Requests, err)
+	}
+	// A value taken from the answer that would be a host is refused.
+	pre2 := filepath.Join(dir, "pre2.req")
+	os.WriteFile(pre2, []byte("GET /form HTTP/1.1\nHost: HOSTX\n\n"), 0o644)
+	_, rep, err = fuzzRows(t, "-u", srv.URL+"/login", "-X", "POST", "-d", "p=FUZZ", "-w", wlist(t, "a"), "-ac=false", "-mc", "all",
+		"-preflight", pre, "-preflight-var", `HOSTX:name="csrf" value="([^"]+)"`, "-preflight", pre2)
+	if exitCode(err) != exitPartial || len(rep.Failed) == 0 || !strings.Contains(fmt.Sprint(rep.Failed), "cannot choose where requests go") {
+		t.Errorf("host change: exit %d, failed %+v", exitCode(err), rep.Failed)
+	}
+	if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "a"), "-preflight-var", "X:(y)"); exitCode(err) != exitUsage {
+		t.Errorf("a variable before any -preflight: %v", err)
+	}
+}
+
+func TestFuzzRequestFile(t *testing.T) {
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = r.Method + " " + r.URL.String() + " " + r.Header.Get("X-A") + " " + string(b)
+		fmt.Fprint(w, "ok")
+	}))
+	defer srv.Close()
+	p := filepath.Join(t.TempDir(), "r.req")
+	os.WriteFile(p, []byte("PUT /x?y=1 HTTP/1.1\r\nHost: "+strings.TrimPrefix(srv.URL, "http://")+"\r\nX-A: 1\r\nContent-Length: 3\r\n\r\nk=FUZZ\r\n"), 0o644)
+	rows, _, err := fuzzRows(t, "-request", p, "-request-proto", "http", "-w", wlist(t, "v"), "-ac=false")
+	if err != nil || len(rows) != 1 || got != "PUT /x?y=1 1 k=v" {
+		t.Errorf("rows %q got %q err %v", rows, got, err)
 	}
 }

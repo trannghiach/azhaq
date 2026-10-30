@@ -201,3 +201,25 @@ Piped, `urls` prints each URL once, as soon as its page arrives, so the next too
 Several values for one filter (`-mc 200,301`) are alternatives of one filter sent to the archive; gau sends one filter for each value, which the archive ANDs, so it keeps nothing. gau's `--blacklist png` matches nothing (it compares `.png` with `png`) and its `--fp` prints nothing (version 2.2.4); `-blacklist` takes either spelling and `-fp` keeps the first of each host and path.
 
 What differs on purpose: URLs are normalized and the scanner junk archives hold is dropped (`-raw` turns both off, and the deduplication too); a URL that two archives hold is printed once; TLS certificates are checked. An archive that failed, a source stopped at the page cap (`-urls-pages`, default 50, 0 for none) and archives left out by a filter are named in the summary; `-fail-on-capped` makes the cap exit 4.
+
+## 17. Move an ffuf command line, or replay it through Burp
+
+```
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -mc all -fc 404 -fs 4242 -o ffuf.json -x http://127.0.0.1:8080
+azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 401 -o login.csv -of csv
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -replay-proxy http://127.0.0.1:8080 -rate 5
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -rate 5 -control ctl &  echo 'fs 4242' >> ctl
+```
+
+An ffuf line works as it is: same flags, same counts, same report files (`jq .results[0]` reads them as it reads ffuf's). `-request` takes the file Burp's "copy to file" gives, with `FUZZ` in it; the keyword is looked for in the method, URL, headers and body. `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits; `-x` sends every request through it. Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target; the requests to the target do, `-ac` calibration included.
+
+Catch: a line with `-fs`, `-fc`, `-fw`, `-fl`, `-fr` or `-ft` runs without calibration, as it did in ffuf; add `-ac` for it. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.
+
+A form that wants a one-use token: save the page request and the login as files, and read the token from the page.
+
+```
+azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 403 \
+  -preflight page.req -preflight-var-auto 'TOKEN:csrf'
+```
+
+`TOKEN` in `login.req` (body, header or path) is replaced by the value of the field `csrf` in the answer to `page.req`, asked again before each request (`-preflight-mode per-thread` asks once for each thread, for tokens that last). `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp from the body, then the headers; `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source (`form`, `meta`, `cookie`, `header`). The flight requests count against `-max-requests` and `-rate`, must be in scope, and say so in the summary (`4 preflight/postflight requests were sent`); one that fails is a `failed` entry (exit 3), and with `-preflight-error ignore` the request goes on without the value. A value that would move a request to another host is refused, always.
