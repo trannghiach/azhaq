@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.10.0
+
+### fuzz
+
+- `fuzz -o FILE -of json|ejson|csv|ecsv|html|md|all` writes ffuf's report files, and `-od DIR` the raw request and answer of each match; a report that cannot be written is a failure in the summary.
+- `fuzz -request FILE -request-proto` reads a raw request as Burp saves it.
+- `fuzz -x` sends through an http, https or socks5 proxy; `-replay-proxy` sends each match once more through one, outside the ledger, budget and pace.
+- `fuzz` decodes gzip, deflate and brotli bodies, so `-fs` counts match ffuf's when `Accept-Encoding` is given.
+- `fuzz -mt` and `-ft` match and filter on milliseconds to the first byte.
+- `fuzz -p`, `-maxtime-job`, `-recursion-strategy greedy`, `-sf`, `-sa`, `-se` (and `-se-after`), `-acs`, `-acc`, `-ach` and `-config` (ffuf's TOML file) work as in ffuf.
+- A `fuzz` line that gives its own `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft` no longer calibrates, as in ffuf; `-ac` turns it on.
+- `fuzz -enc` with all of ffuf's encoders, `-input-cmd`/`-input-num`/`-input-shell`, `-mode sniper`, `-D`, `-w a,b`, `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`, `-data*` and `-cookie` aliases, `-V`, `-c` colours, `-debug-log`.
+- `fuzz` reaches servers that speak TLS 1.0 and 1.1.
+- `fuzz -control FILE` steers a run (rate, pause, filters, queue, save); stderr on a terminal shows one status line a second.
+- `fuzz` with two long wordlists in clusterbomb no longer allocates a byte for each combination.
+- `fuzz -json` and the reports carry `scraper`, `resultfile` and ffuf's `FFUFHASH` input.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

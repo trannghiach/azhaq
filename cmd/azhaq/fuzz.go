@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -10,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,40 +35,72 @@ func cmdFuzz(args []string) error {
 	c.register(fs)
 	fs.Lookup("db").Usage = "keep the matches in this database for query, show, export and diff (none by default)"
 	fs.Lookup("silent").Usage = "print the input values only, no progress; the summary only when something failed"
+	fs.Lookup("o").Usage = "write the report to this file, in the format -of says (json by default; a name ending .txt gets what stdout shows, as before)"
 	fs.BoolVar(&c.silent, "s", false, "ffuf's name for -silent")
 	rawURL := fs.String("u", "", "target URL; the keyword (FUZZ) may stand anywhere in it, in the host too")
-	var lists, headers, cookies, allow, deny stringsFlag
-	fs.Var(&lists, "w", "wordlist `FILE[:KEYWORD]` (- for stdin; repeatable; the keyword is FUZZ without one)")
-	mode := fs.String("mode", "clusterbomb", "how several wordlists combine: clusterbomb (every combination) or pitchfork (line by line)")
+	var lists, headers, cookies, allow, deny, inputCmds, encs, acStrategies, acStrings stringsFlag
+	fs.Var(&lists, "w", "wordlist `FILE[:KEYWORD]` (- for stdin; repeatable; a comma list is several; the keyword is FUZZ without one)")
+	mode := fs.String("mode", "clusterbomb", "how several wordlists combine: clusterbomb (every combination), pitchfork (line by line) or sniper (one wordlist in each §marked§ place of the request in turn)")
 	method := fs.String("X", "", "HTTP method (default GET, POST with -d); the keyword may stand in it")
 	data := fs.String("d", "", "request body; the keyword may stand in it")
+	fs.StringVar(data, "data", "", "ffuf's alias of -d")
+	fs.StringVar(data, "data-ascii", "", "ffuf's alias of -d")
+	fs.StringVar(data, "data-binary", "", "ffuf's alias of -d")
 	fs.Var(&headers, "H", "header \"Name: value\"; the keyword may stand in name and value, Host included (repeatable)")
 	fs.Var(&cookies, "b", "cookie data \"NAME=VALUE; NAME2=VALUE2\"")
+	fs.Var(&cookies, "cookie", "ffuf's alias of -b")
+	reqFile := fs.String("request", "", "read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds")
+	reqProto := fs.String("request-proto", "https", "the protocol for the URL a -request file's Host header gives")
+	proxy := fs.String("x", "", "send every request through this proxy: an http, https, socks5 or socks5h URL")
+	replayProxy := fs.String("replay-proxy", "", "send each match once more through this proxy (Burp, for the history); the copy is the proxy's own, not counted by -max-requests or -rate and not in the ledger")
+	ignoreBody := fs.Bool("ignore-body", false, "do not read the answer's body: size is the Content-Length, words and lines 0")
+	raw := fs.Bool("raw", false, "send the path and query as written, not encoded")
+	sni := fs.String("sni", "", "the server name for TLS (the keyword does not work here)")
+	http2 := fs.Bool("http2", false, "use HTTP/2 where the server offers it")
+	certFile := fs.String("cc", "", "client certificate file for TLS; -ck names its key")
+	keyFile := fs.String("ck", "", "client key file for TLS")
 	mc := fs.String("mc", "", "match these statuses, comma-separated values and ranges, or all (default 200-299,301,302,307,401,403,405,500, unless another matcher is given)")
 	ms := fs.String("ms", "", "match these response sizes (values and ranges)")
 	mw := fs.String("mw", "", "match these word counts (values and ranges)")
 	ml := fs.String("ml", "", "match these line counts (values and ranges)")
 	mr := fs.String("mr", "", "match answers (headers and body) with this regexp; the keyword stands for its input")
+	mt := fs.String("mt", "", "match answers by milliseconds to the first byte: >MS or <MS")
 	fc := fs.String("fc", "", "filter out these statuses")
 	fsz := fs.String("fs", "", "filter out these response sizes")
 	fw := fs.String("fw", "", "filter out these word counts")
 	fl := fs.String("fl", "", "filter out these line counts")
 	fr := fs.String("fr", "", "filter out answers matching this regexp")
+	ft := fs.String("ft", "", "filter out answers by milliseconds to the first byte: >MS or <MS")
 	mmode := fs.String("mmode", "or", "matchers: an answer must match any (or) or all (and) of them")
 	fmode := fs.String("fmode", "or", "filters: an answer is dropped by any (or) or by all (and) of them")
-	ac := fs.Bool("ac", true, "calibrate the filters on paths that cannot exist (-ac=false turns it off; ffuf's default is off)")
+	ac := fs.Bool("ac", true, "calibrate the filters on paths that cannot exist (-ac=false turns it off; ffuf's default is off; it is also off when -fc, -fs, -fw, -fl, -fr or -ft is given, as a line moved from ffuf has calibrated by hand, unless -ac is given)")
 	ack := fs.String("ack", "FUZZ", "the keyword calibration replaces")
+	ach := fs.Bool("ach", false, "calibrate for each host and directory of the path (with a Host header or a keyword in the host)")
+	fs.Var(&acStrategies, "acs", "calibration strategy: basic, advanced (adds the names as directories), or a file ~/.config/ffuf/autocalibration/NAME.json (repeatable or comma list)")
+	fs.Var(&acStrings, "acc", "a name to calibrate with instead of the random ones (repeatable)")
 	recursion := fs.Bool("recursion", false, "descend into directories found (the URL must end with FUZZ)")
 	depth := fs.Int("recursion-depth", 0, "levels of recursion (0: no limit)")
+	strategy := fs.String("recursion-strategy", "default", "default: directories that redirect to themselves; greedy: every match")
 	start := fs.Int("start", 0, "skip the first N inputs: where a stopped run left off (its summary gives the command)")
 	exts := fs.String("e", "", "extensions added to each FUZZ word, comma-separated: .php,.bak")
+	dirsearch := fs.Bool("D", false, "dirsearch wordlists: %EXT% in a line stands for each -e extension")
 	ic := fs.Bool("ic", false, "ignore comments in wordlists")
+	fs.Var(&inputCmds, "input-cmd", "a command whose output is the input, `COMMAND[:KEYWORD]`, run for each number up to -input-num with FFUF_NUM set (repeatable)")
+	inputNum := fs.Int("input-num", 100, "how many inputs an -input-cmd gives")
+	inputShell := fs.String("input-shell", "/bin/sh", "the shell that runs an -input-cmd")
+	fs.Var(&encs, "enc", "encoders for a keyword: 'FUZZ:urlencode b64encode' (repeatable); one of "+strings.Join(fuzz.EncoderNames(), ", ")+" or a .tmpl file with #PAYLOAD#")
 	threads := fs.Int("t", 40, "requests in flight")
 	rate := fs.Float64("rate", 0, "requests per second, over all (0: no pace)")
+	delay := fs.String("p", "", "seconds each thread waits after a request: 0.1, or a random time in a range 0.1-2.0")
 	ledgerFlag := fs.String("ledger", "", ledgerHelp)
 	killFile := fs.String("kill-file", "", killFileHelp)
 	timeout := fs.Float64("timeout", 10, "each request's timeout, in `seconds`")
 	maxtime := fs.Float64("maxtime", 0, "stop after this many `seconds` and say so (0: no limit)")
+	maxtimeJob := fs.Float64("maxtime-job", 0, "give up a job (the first one, or a directory found by -recursion) after this many `seconds` and go on with the next (0: no limit)")
+	sf := fs.Bool("sf", false, "stop when more than 95% of the first 50 or more answers are 403")
+	sa := fs.Bool("sa", false, "stop on all of these: -sf, over 20% of answers 429, and -se")
+	se := fs.Bool("se", false, "stop on spurious errors: twice -t requests in a row failing (without it, five requests in a row that got no answer stop the run)")
+	seAfter := fs.Int("se-after", 0, "stop after this many requests in a row failing, in place of -se's twice -t")
 	follow := fs.Bool("r", false, "follow redirects")
 	verbose := fs.Bool("v", false, "print the full URL and redirect location with each result")
 	maxReq := fs.Int64("max-requests", 0, "requests this run may send (0: no cap)")
@@ -75,43 +108,142 @@ func cmdFuzz(args []string) error {
 	program := fs.String("program", "", "the program to take from a -scope list")
 	fs.Var(&allow, "allow", "a domain, host or address range the run may touch (repeatable); default: the host of -u")
 	fs.Var(&deny, "deny", "a domain, host or address range the run must not touch (repeatable)")
-	fs.Bool("c", false, "accepted for ffuf's command lines: no effect")
-	fs.Bool("noninteractive", false, "accepted for ffuf's command lines: no effect")
+	of := fs.String("of", "", "the format of -o: "+strings.Join(fuzz.Formats, ", ")+" (all writes one file for each, with the suffixes)")
+	od := fs.String("od", "", "keep the request and answer of each match as a file in this directory (its name is shown with the match)")
+	orSkip := fs.Bool("or", false, "write no -o file when there are no matches")
+	controlFile := fs.String("control", "", "steer the run from this file: lines added to it are commands (rate N, pause, resume, stop, fc|fs|fw|fl|fr|ft VALUE, afc… to add, none to remove, show, savejson FILE, queueshow, queuedel N, queueskip)")
+	debugLog := fs.String("debug-log", "", "write each failed request and its error to this file")
+	colors := fs.Bool("c", false, "colour the status of each result in the text output")
+	fs.String("config", "", "read these settings from an ffuf configuration file (default: ~/.config/ffuf/ffufrc, else ~/.ffufrc); flags override it")
+	showVersion := fs.Bool("V", false, "print the version")
+	fs.Bool("noninteractive", false, "accepted for ffuf's command lines: no effect (there is no console; see -control)")
+	origArgs := args
+	rcNote, cfgPath := "", ""
+	if !describing {
+		var err error
+		if args, rcNote, cfgPath, err = withConfigFile(args); err != nil {
+			return usageErr{err}
+		}
+	}
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	if *rawURL == "" {
-		return usagef("give the target with -u, with the keyword FUZZ where the words go")
+	if *showVersion {
+		fmt.Println("azhaq " + version)
+		return nil
 	}
-	if len(lists) == 0 {
-		return usagef("give a wordlist with -w FILE[:KEYWORD]")
+	if *rawURL == "" && *reqFile == "" {
+		return usagef("give the target with -u, with the keyword FUZZ where the words go (or a request with -request)")
+	}
+	if len(lists) == 0 && len(inputCmds) == 0 {
+		return usagef("give a wordlist with -w FILE[:KEYWORD] (or a command with -input-cmd)")
 	}
 	md, err := fuzz.ParseMode(*mode)
 	if err != nil {
 		return usageErr{err}
 	}
-	tmpl, err := fuzz.NewTemplate(*method, *rawURL, *data, headers, cookies)
+	if *reqProto != "http" && *reqProto != "https" {
+		return usagef("-request-proto is http or https")
+	}
+	given := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
+	tmpl, err := fuzzTemplate(*method, *rawURL, *data, *reqFile, *reqProto, headers, cookies)
 	if err != nil {
 		return usageErr{err}
+	}
+	rawTmplURL := tmpl.URL
+	if md == fuzz.Sniper {
+		if len(lists)+len(inputCmds) != 1 {
+			return usagef("sniper mode takes one wordlist (or one input command)")
+		}
+		marked, err := fuzz.HasSniperMarks(tmpl)
+		if err != nil {
+			return usageErr{err}
+		}
+		if !marked {
+			return usagef("sniper mode wants places marked %s like this%s in the URL, headers or body", fuzz.SniperMark, fuzz.SniperMark)
+		}
+		if *recursion {
+			return usagef("-recursion does not work with -mode sniper")
+		}
+		tmpl.URL = strings.ReplaceAll(tmpl.URL, fuzz.SniperMark, "")
 	}
 	u, err := url.Parse(tmpl.URL)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return usagef("-u needs an http(s) URL, got %q", tmpl.URL)
 	}
+	if md == fuzz.Sniper {
+		tmpl.URL = rawTmplURL
+	}
+	if *threads < 1 {
+		return usagef("-t wants at least 1")
+	}
+	if *strategy != "default" && *strategy != "greedy" {
+		return usagef("-recursion-strategy is default or greedy")
+	}
+	if *inputNum < 1 {
+		return usagef("-input-num wants at least 1")
+	}
+	for _, v := range []struct{ name, val string }{{"-x", *proxy}, {"-replay-proxy", *replayProxy}} {
+		if v.val == "" {
+			continue
+		}
+		pu, err := url.Parse(v.val)
+		if err != nil || pu.Host == "" || (pu.Scheme != "http" && pu.Scheme != "https" && pu.Scheme != "socks5" && pu.Scheme != "socks5h") {
+			return usagef("%s needs an http, https or socks5 URL such as http://127.0.0.1:8080, got %q", v.name, v.val)
+		}
+	}
+	dmin, dmax, err := parseDelay(*delay)
+	if err != nil {
+		return usageErr{err}
+	}
+	chains := map[string]fuzz.Chain{}
+	for _, e := range encs {
+		kw, chain, ok := strings.Cut(e, ":")
+		if !ok {
+			return usagef("-enc %q: want 'KEYWORD:encoder encoder' (e.g. FUZZ:urlencode)", e)
+		}
+		ch, err := fuzz.ParseChain(chain)
+		if err != nil {
+			return usagef("-enc %s: %v", kw, err)
+		}
+		chains[kw] = ch
+	}
 	extList := splitList(*exts)
 	var all []fuzz.List
-	for _, spec := range lists {
+	for _, spec := range fuzz.SplitWordlists(lists) {
 		path, kw := fuzz.ParseWordlist(spec)
-		l, err := fuzz.ReadList(path, kw, extList, *ic)
+		if md == fuzz.Sniper {
+			path, kw = spec, "FUZZ"
+			if p, k := fuzz.ParseWordlist(spec); k != "FUZZ" {
+				return usagef("-w %s: sniper mode does not take a keyword (%s)", spec, p)
+			}
+		}
+		l, err := fuzz.ReadList(path, kw, fuzz.ListOptions{Exts: extList, IgnoreComments: *ic, DirSearch: *dirsearch, Chain: chains[kw]})
 		if err != nil {
 			return usagef("-w %s: %v", spec, err)
 		}
+		// Two lists of one keyword (-w a.txt,b.txt) are one list, a then b:
+		// as two they would be a product in which the second hides the first.
+		if i := slices.IndexFunc(all, func(x fuzz.List) bool { return x.Keyword == kw && x.Gen == nil }); i >= 0 {
+			all[i].Words = append(all[i].Words, l.Words...)
+			continue
+		}
 		all = append(all, l)
+	}
+	cmdKeywords := map[string]bool{}
+	for _, spec := range inputCmds {
+		command, kw := splitInputCmd(spec)
+		if md == fuzz.Sniper {
+			kw = "FUZZ"
+		}
+		all = append(all, fuzz.CommandList(*inputShell, command, kw, *inputNum, chains[kw]))
+		cmdKeywords[kw] = true
 	}
 	var kept []fuzz.List
 	var keywords []string
 	for _, l := range all {
-		if !tmpl.Has(l.Keyword) {
+		if md != fuzz.Sniper && !tmpl.Has(l.Keyword) {
 			fmt.Fprintf(os.Stderr, "azhaq: the keyword %s is in no part of the request: its wordlist is not used\n", l.Keyword)
 			continue
 		}
@@ -121,21 +253,22 @@ func cmdFuzz(args []string) error {
 	if len(kept) == 0 {
 		return usagef("no wordlist keyword is in the request: put FUZZ in the URL, a header or the body")
 	}
+	for kw := range chains {
+		if !slices.Contains(keywords, kw) {
+			fmt.Fprintf(os.Stderr, "azhaq: -enc %s: no wordlist has that keyword\n", kw)
+		}
+	}
 	if *recursion && !strings.HasSuffix(tmpl.URL, "FUZZ") {
 		return usagef("with -recursion the URL (-u) must end with FUZZ")
 	}
-	if *threads < 1 {
-		return usagef("-t wants at least 1")
-	}
 
 	set := fuzz.NewSet(keywords)
+	set.PerHost = *ach
 	set.MatcherAnd, set.FilterAnd = *mmode == "and", *fmode == "and"
 	if (*mmode != "and" && *mmode != "or") || (*fmode != "and" && *fmode != "or") {
 		return usagef("-mmode and -fmode take and or or")
 	}
-	given := map[string]bool{}
-	fs.Visit(func(f *flag.Flag) { given[f.Name] = true })
-	if given["mc"] || !(given["ms"] || given["ml"] || given["mw"] || given["mr"]) {
+	if given["mc"] || !(given["ms"] || given["ml"] || given["mw"] || given["mr"] || given["mt"]) {
 		if *mc == "" {
 			*mc = "200-299,301,302,307,401,403,405,500"
 		}
@@ -147,8 +280,8 @@ func cmdFuzz(args []string) error {
 		kind, val string
 		match     bool
 	}{
-		{"size", *ms, true}, {"word", *mw, true}, {"line", *ml, true}, {"regexp", *mr, true},
-		{"status", *fc, false}, {"size", *fsz, false}, {"word", *fw, false}, {"line", *fl, false}, {"regexp", *fr, false},
+		{"size", *ms, true}, {"word", *mw, true}, {"line", *ml, true}, {"regexp", *mr, true}, {"time", *mt, true},
+		{"status", *fc, false}, {"size", *fsz, false}, {"word", *fw, false}, {"line", *fl, false}, {"regexp", *fr, false}, {"time", *ft, false},
 	} {
 		if o.val == "" {
 			continue
@@ -163,7 +296,39 @@ func cmdFuzz(args []string) error {
 		}
 	}
 
+	// A command line moved from ffuf that gives its own filters has calibrated
+	// by hand: calibrating again would add requests and could drop answers
+	// it keeps. -ac (or -acs, -acc, -ach) asks for it.
+	calibrate := *ac
+	var notes []string
+	if rcNote != "" {
+		notes = append(notes, rcNote)
+	}
+	if !given["ac"] && !given["acs"] && !given["acc"] && !given["ach"] {
+		var own []string
+		for _, f := range []string{"fc", "fs", "fw", "fl", "fr", "ft"} {
+			if given[f] {
+				own = append(own, "-"+f)
+			}
+		}
+		if len(own) > 0 {
+			calibrate = false
+			notes = append(notes, "auto-calibration is off because "+strings.Join(own, ", ")+" was given, as in a command line moved from ffuf; -ac turns it on")
+		}
+	}
+	calGroups, err := fuzz.CalibrationGroups(splitAll(acStrategies), acStrings)
+	if err != nil {
+		return usageErr{err}
+	}
+
 	rules, err := fuzzScope(tmpl, keywords, *scopeSpec, *program, allow, deny)
+	if err != nil {
+		return err
+	}
+
+	// The output files, checked before the first request: a run that finds
+	// it cannot write its report only at the end has wasted its requests.
+	out, err := newFuzzOut(&c, *of, *od, *orSkip, given["of"])
 	if err != nil {
 		return err
 	}
@@ -172,41 +337,119 @@ func cmdFuzz(args []string) error {
 	fetch.SetRate(*rate)
 	fetch.MaxRequests = *maxReq
 	to := time.Duration(*timeout * float64(time.Second))
+	sender, err := fuzz.NewSender(fuzz.HTTPOptions{Timeout: to, Threads: *threads, Follow: *follow, Allow: rules.Allows,
+		Proxy: *proxy, ReplayProxy: *replayProxy, IgnoreBody: *ignoreBody, Raw: *raw, SNI: *sni, HTTP2: *http2,
+		CertFile: *certFile, KeyFile: *keyFile, KeepRaw: *od != ""})
+	if err != nil {
+		return usageErr{err}
+	}
+	trips := fetch.OriginTrips
+	anyErr := *se || *sa || *seAfter > 0
+	if *se || *sa {
+		trips = 2 * *threads
+	}
+	if *seAfter > 0 {
+		trips = *seAfter
+	}
 	cfg := fuzz.Config{
-		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads,
-		Sender:    fuzz.NewSender(fuzz.HTTPOptions{Timeout: to, Threads: *threads, Follow: *follow, Allow: rules.Allows}),
-		Calibrate: *ac, CalKeyword: *ack, Recursion: *recursion, Depth: *depth,
-		Allow: rules.Allows, OriginTrips: fetch.OriginTrips, Start: *start,
+		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads, Sender: sender,
+		Calibrate: calibrate, CalKeyword: *ack, CalGroups: calGroups, Recursion: *recursion, Depth: *depth, Strategy: *strategy,
+		MaxTimeJob: time.Duration(*maxtimeJob * float64(time.Second)), DelayMin: dmin, DelayMax: dmax,
+		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
+		Progress: new(fuzz.Progress),
+	}
+	if *replayProxy != "" {
+		cfg.Replay = sender.(fuzz.Replayer)
 	}
 
 	w, err := newWriter(&c)
 	if err != nil {
 		return err
 	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ctx, cancelRun := context.WithCancelCause(ctx)
+	defer cancelRun(nil)
+	if *maxtime > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(*maxtime*float64(time.Second)))
+		defer cancel()
+	}
+
 	var hitsMu sync.Mutex
 	var hits []fuzz.Result
+	look := fuzzLook{keywords: keywords, command: cmdKeywords, verbose: *verbose, colors: *colors && !c.json && !c.silent}
+	var debug *debugLogger
+	if *debugLog != "" {
+		if debug, err = newDebugLog(*debugLog); err != nil {
+			return err
+		}
+		defer debug.close()
+		cfg.OnError = debug.request
+	}
 	cfg.OnResult = func(r fuzz.Result) {
+		r = out.keep(r, &c)
 		hitsMu.Lock()
 		hits = append(hits, r)
 		hitsMu.Unlock()
 		switch {
 		case c.json:
-			w.obj(fuzzJSON(r))
+			w.obj(fuzz.StdoutJSON(r))
 		case c.silent:
-			w.line(fuzzInputs(r, keywords))
-		case len(keywords) > 1 || *verbose:
-			w.line(fuzzMultiline(r, keywords, *verbose))
+			w.line(look.inputs(r))
+		case len(keywords) > 1 || *verbose || *od != "":
+			w.line(look.multiline(r))
 		default:
-			w.line(fmt.Sprintf("%-23s [Status: %d, Size: %d, Words: %d, Lines: %d, Duration: %dms]", fuzzInputs(r, keywords), r.Status, r.Length, r.Words, r.Lines, r.Duration/int64(time.Millisecond)))
+			w.line(look.normal(r))
 		}
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer stop()
-	if *maxtime > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, time.Duration(*maxtime*float64(time.Second)))
-		defer cancel()
+	snapshot := func() fuzz.Report {
+		hitsMu.Lock()
+		defer hitsMu.Unlock()
+		res := append([]fuzz.Result(nil), hits...)
+		return out.report(res, keywords, os.Args, set, fuzzReportConfig(fuzzCfgInfo{
+			args: os.Args, set: set, tmpl: tmpl, lists: lists, cmds: inputCmds, encs: encs, exts: extList, mode: md, threads: *threads, timeout: int(*timeout), rate: int64(*rate),
+			delay: *delay, maxtime: int(*maxtime), maxtimeJob: int(*maxtimeJob), follow: *follow, ignoreBody: *ignoreBody, ic: *ic, dirsearch: *dirsearch,
+			inputNum: *inputNum, inputShell: *inputShell, mmode: *mmode, fmode: *fmode, od: *od, o: out.file, of: out.format, orSkip: *orSkip, proxy: *proxy, replay: *replayProxy,
+			raw: *raw, recursion: *recursion, depth: *depth, strategy: *strategy, reqFile: *reqFile, reqProto: *reqProto, sni: *sni, sa: *sa, sf: *sf, se: *se,
+			verbose: *verbose, http2: *http2, cc: *certFile, ck: *keyFile, calibrate: calibrate, ack: *ack, ach: *ach, acs: acStrategies, acc: acStrings,
+			json: c.json, silent: c.silent, colors: *colors, config: cfgPath, keywords: keywords,
+		}))
+	}
+	var ctrl *fuzz.Control
+	if *controlFile != "" {
+		ctrl = fuzz.NewControl(fuzz.ControlEnv{
+			Set: set, SetRate: fetch.SetRate,
+			Save: func(path string) error { return fuzz.WriteReport(path, "json", snapshot()) },
+			Show: func() string {
+				hitsMu.Lock()
+				defer hitsMu.Unlock()
+				var b []string
+				for _, h := range hits {
+					b = append(b, look.normal(h))
+				}
+				return strings.Join(b, "\n")
+			},
+			Prune: func() {
+				hitsMu.Lock()
+				defer hitsMu.Unlock()
+				kept := hits[:0]
+				for _, h := range hits {
+					if set.KeptBy(&fuzz.Response{Status: h.Status, Length: h.Length, Words: h.Words, Lines: h.Lines, Duration: h.Duration}) {
+						kept = append(kept, h)
+					}
+				}
+				hits = kept
+			},
+			Log: func(m string) {
+				if !c.json && !c.silent {
+					fmt.Fprintln(os.Stderr, "azhaq: "+m)
+				}
+			},
+		})
+		ctrl.Stop = func(why string) { cancelRun(errors.New(why)) }
+		cfg.Control = ctrl
+		go ctrl.Watch(ctx, *controlFile)
 	}
 	rep := newReport("fuzz")
 	led, err := startLedger(*ledgerFlag, *killFile, c.db, c.db == "", rules)
@@ -215,8 +458,12 @@ func cmdFuzz(args []string) error {
 	}
 	defer led.close(rep)
 	rep.what = "matches"
-	if !c.json && !c.silent {
-		t0 := time.Now()
+	t0 := time.Now()
+	switch {
+	case c.silent:
+	case stderrIsTerminal():
+		defer fuzzProgress(ctx, cfg.Progress, t0)()
+	case !c.json:
 		tick := time.NewTicker(30 * time.Second)
 		defer tick.Stop()
 		go func() {
@@ -247,23 +494,51 @@ func cmdFuzz(args []string) error {
 	if len(st.Filters) > 0 {
 		rep.Notes = append(rep.Notes, "auto-calibration filtered out answers with "+strings.Join(st.Filters, ", "))
 	}
-	rep.Notes = append(rep.Notes, st.Notes...)
+	rep.Notes = append(rep.Notes, notes...)
+	rep.Notes = appendUnique(rep.Notes, st.Notes...)
+	if len(st.Timeouts) > 0 {
+		rep.Notes = append(rep.Notes, "requests timed out while -mt or -ft is on, so their time was not judged: "+strings.Join(st.Timeouts, "; ")+" (more may have)")
+	}
+	for _, j := range st.CutJobs {
+		rep.Notes = append(rep.Notes, "-maxtime-job ended "+j+": the rest of it was not asked")
+	}
+	if *replayProxy != "" {
+		n := fmt.Sprintf("%d matches were sent through the replay proxy %s (the proxy's own requests: not in the request count or the ledger)", st.Replayed, *replayProxy)
+		if st.ReplayErr > 0 {
+			n += fmt.Sprintf("; %d could not be sent", st.ReplayErr)
+		}
+		rep.Notes = append(rep.Notes, n)
+		if st.ReplayErr > 0 {
+			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-fuzz", Error: "replay through " + *replayProxy + " failed", Retryable: true, Count: st.ReplayErr})
+		}
+	}
+	if ctrl != nil && len(ctrl.Applied) > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("-control: %d commands taken: %s", len(ctrl.Applied), strings.Join(ctrl.Applied, "; ")))
+	}
 	var killed *neterr.Killed
+	cause := context.Cause(ctx)
 	switch {
 	case errors.As(fetch.Killed(), &killed):
 		rep.Stopped = "the kill switch: kill file " + killed.Path + " exists"
 	case st.Spent:
 		rep.Stopped = fmt.Sprintf("the request budget of %d is spent", fetch.MaxRequests)
+	case st.StoppedBy != "":
+		rep.Stopped = st.StoppedBy
 	case len(st.Down) > 0:
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%s stopped answering after %d requests in a row without an answer", strings.Join(st.Down, ", "), fetch.OriginTrips))
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%s stopped answering after %d requests in a row %s", strings.Join(st.Down, ", "), trips, map[bool]string{true: "failing", false: "without an answer"}[anyErr]))
+	case ctx.Err() != nil && cause != nil && !errors.Is(cause, context.Canceled) && !errors.Is(cause, context.DeadlineExceeded):
+		rep.Stopped = cause.Error()
 	case ctx.Err() != nil && *maxtime > 0 && time.Since(rep.start) >= time.Duration(*maxtime*float64(time.Second)):
 		rep.Stopped = fmt.Sprintf("-maxtime %gs reached", *maxtime)
 	case ctx.Err() != nil:
 		rep.Stopped = "interrupted"
 	}
+	if err := out.write(snapshot, rep); err != nil {
+		rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-fuzz", Error: "the report " + out.file + " was not written: " + err.Error()})
+	}
 	if rep.Stopped != "" {
 		// Go on from the first input not answered; azhaq resume -db runs it.
-		next := append(withoutFlag(args, "start"), "-start", strconv.Itoa(*start+st.Done))
+		next := append(withoutFlag(origArgs, "start"), "-start", strconv.Itoa(*start+st.Done))
 		rep.Resume = "azhaq fuzz " + shellJoin(next)
 		if st.Queued > 0 {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("%d directories found for -recursion were not swept: run fuzz on each (they are in the results)", st.Queued))
@@ -279,13 +554,112 @@ func cmdFuzz(args []string) error {
 		}
 	}
 	if c.db != "" {
-		if err := keepFuzzHits(c.db, hits, tmpl.Method, os.Args); err != nil {
+		hitsMu.Lock()
+		kept := append([]fuzz.Result(nil), hits...)
+		hitsMu.Unlock()
+		if err := keepFuzzHits(c.db, kept, tmpl.Method, os.Args); err != nil {
 			return err
 		}
 		rep.DB = c.db
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db)
 	}
 	return rep.finish(c.json, c.silent)
+}
+
+// fuzzTemplate is the request: -request's file when there is one, with
+// -u, -X, -d, -H and -b put over it, else what those say.
+func fuzzTemplate(method, rawURL, data, reqFile, proto string, headers, cookies []string) (fuzz.Template, error) {
+	if reqFile == "" {
+		return fuzz.NewTemplate(method, rawURL, data, headers, cookies)
+	}
+	t, err := fuzz.ParseRequestFile(reqFile, proto)
+	if err != nil {
+		return t, fmt.Errorf("-request %s: %v", reqFile, err)
+	}
+	if rawURL != "" {
+		t.URL = rawURL
+	}
+	if t.URL == "" {
+		return t, fmt.Errorf("-request %s has no Host header: say where it goes with -u", reqFile)
+	}
+	if m := strings.TrimSpace(method); m != "" {
+		t.Method = m
+	}
+	if data != "" {
+		t.Data = data
+	}
+	over, err := fuzz.NewTemplate("", "http://x/", "", headers, cookies)
+	if err != nil {
+		return t, err
+	}
+	for _, h := range over.Headers {
+		t = t.WithHeader(h.Name, h.Value)
+	}
+	return t, nil
+}
+
+// withConfigFile puts the settings of ffuf's configuration file in front of
+// the command line's flags. note says which file was read.
+func withConfigFile(args []string) (out []string, note, path string, err error) {
+	path, explicit := rcPath(args)
+	if path == "" {
+		return args, "", "", nil
+	}
+	rc, err := rcArgs(path)
+	if err != nil {
+		if explicit {
+			return nil, "", "", fmt.Errorf("-config: %v", err)
+		}
+		return nil, "", "", fmt.Errorf("%v (azhaq reads ffuf's ffufrc: fix it, or name another file with -config)", err)
+	}
+	return append(rc, args...), "settings read from " + path, path, nil
+}
+
+// parseDelay reads -p: seconds, or a range "0.1-2.0".
+func parseDelay(s string) (min, max time.Duration, err error) {
+	if s == "" {
+		return 0, 0, nil
+	}
+	lo, hi, isRange := strings.Cut(s, "-")
+	a, err1 := strconv.ParseFloat(lo, 64)
+	if err1 != nil || a < 0 {
+		return 0, 0, fmt.Errorf("-p needs a number of seconds (0.1) or a range (0.1-2.0), got %q", s)
+	}
+	min = time.Duration(a * float64(time.Second))
+	if !isRange {
+		return min, 0, nil
+	}
+	b, err2 := strconv.ParseFloat(hi, 64)
+	if err2 != nil || b < a {
+		return 0, 0, fmt.Errorf("-p needs a number of seconds (0.1) or a range (0.1-2.0), got %q", s)
+	}
+	return min, time.Duration(b * float64(time.Second)), nil
+}
+
+// splitInputCmd is "COMMAND[:KEYWORD]": the keyword is after the last colon
+// when it looks like one.
+func splitInputCmd(spec string) (command, keyword string) {
+	if i := strings.LastIndex(spec, ":"); i > 0 && regexp.MustCompile(`^[A-Za-z0-9_]+$`).MatchString(spec[i+1:]) {
+		return spec[:i], spec[i+1:]
+	}
+	return spec, "FUZZ"
+}
+
+func splitAll(vals []string) []string {
+	var out []string
+	for _, v := range vals {
+		out = append(out, splitList(v)...)
+	}
+	return out
+}
+
+func appendUnique(dst []string, add ...string) []string {
+	for _, a := range add {
+		if !slices.Contains(dst, a) {
+			dst = append(dst, a)
+		}
+	}
+	return dst
 }
 
 // fuzzScope is the rules the run keeps to: -allow, -deny and a program's
@@ -320,55 +694,20 @@ func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, 
 	return rules, nil
 }
 
-// fuzzInputs is ffuf's one-line form of a result's inputs: the word, or
-// "KEY : word" for each keyword when there are several.
-func fuzzInputs(r fuzz.Result, keywords []string) string {
-	if len(keywords) == 1 {
-		return r.Input[keywords[0]]
-	}
-	var b strings.Builder
-	for _, k := range keywords {
-		fmt.Fprintf(&b, "%s : %s ", k, r.Input[k])
-	}
-	return b.String()
-}
-
-func fuzzMultiline(r fuzz.Result, keywords []string, verbose bool) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "[Status: %d, Size: %d, Words: %d, Lines: %d, Duration: %dms]\n", r.Status, r.Length, r.Words, r.Lines, r.Duration/int64(time.Millisecond))
-	if verbose {
-		fmt.Fprintf(&b, "| URL | %s\n", r.URL)
-		if r.RedirectLocation != "" {
-			fmt.Fprintf(&b, "| --> | %s\n", r.RedirectLocation)
-		}
-	}
-	for _, k := range keywords {
-		fmt.Fprintf(&b, "    * %s: %s\n", k, r.Input[k])
-	}
-	return b.String()
-}
-
-// fuzzJSON is a result with ffuf's field names; its inputs are base64, as
-// ffuf prints them.
-func fuzzJSON(r fuzz.Result) map[string]any {
-	in := make(map[string]string, len(r.Input))
-	for k, v := range r.Input {
-		in[k] = base64.StdEncoding.EncodeToString([]byte(v))
-	}
-	return map[string]any{
-		"input": in, "position": r.Position, "status": r.Status, "length": r.Length, "words": r.Words, "lines": r.Lines,
-		"content-type": r.ContentType, "redirectlocation": r.RedirectLocation, "url": r.URL, "duration": r.Duration, "host": r.Host,
-	}
-}
-
 // keepFuzzHits stores the hits in the workspace as ffuf's report, which
 // ingest reads: a hit asked with GET is the URL's answer, with another
 // method it says the route takes it.
 func keepFuzzHits(path string, hits []fuzz.Result, method string, argv []string) error {
 	rows := make([]map[string]any, 0, len(hits))
 	for _, h := range hits {
+		in := make(map[string]string, len(h.Input))
+		for k, v := range h.Input {
+			if k != "FFUFHASH" { // a name for the request, not an input
+				in[k] = v
+			}
+		}
 		rows = append(rows, map[string]any{
-			"input": h.Input, "position": h.Position, "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines,
+			"input": in, "position": h.Position, "status": h.Status, "length": h.Length, "words": h.Words, "lines": h.Lines,
 			"content-type": h.ContentType, "redirectlocation": h.RedirectLocation, "url": h.URL, "duration": h.Duration, "host": h.Host,
 		})
 	}

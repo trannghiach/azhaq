@@ -156,3 +156,16 @@ Every run with a workspace writes `app.db.ledger.jsonl` next to it: one line for
 `touch app.db.stop` from another terminal stops the run: within half a second nothing more is sent, and the run exits 4. Remove the file and `azhaq resume -db app.db` continues.
 
 Catch: DNS queries and the third-party sources of `subs` and `urls` are not in the ledger; they are not targets. A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
+
+## 16. Move an ffuf command line, or replay it through Burp
+
+```
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -mc all -fc 404 -fs 4242 -o ffuf.json -x http://127.0.0.1:8080
+azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 401 -o login.csv -of csv
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -replay-proxy http://127.0.0.1:8080 -rate 5
+azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -rate 5 -control ctl &  echo 'fs 4242' >> ctl
+```
+
+An ffuf line works as it is: same flags, same counts, same report files (`jq .results[0]` reads them as it reads ffuf's). `-request` takes the file Burp's "copy to file" gives, with `FUZZ` in it; the keyword is looked for in the method, URL, headers and body. `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits; `-x` sends every request through it. Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target; the requests to the target do, `-ac` calibration included.
+
+Catch: a line with `-fs`, `-fc`, `-fw`, `-fl`, `-fr` or `-ft` runs without calibration, as it did in ffuf; add `-ac` for it. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.

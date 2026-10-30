@@ -69,6 +69,9 @@ func fuzzRows(t *testing.T, args ...string) ([]string, report, error) {
 		}
 		in := map[string]string{}
 		for k, v := range m["input"].(map[string]any) {
+			if k == "FFUFHASH" { // ffuf's name for the request; differs each run
+				continue
+			}
 			raw, _ := base64.StdEncoding.DecodeString(v.(string))
 			in[k] = string(raw)
 		}
@@ -127,7 +130,7 @@ func TestFuzzRecursion(t *testing.T) {
 
 func TestFuzzHostHeaderAndBody(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, _, err := fuzzRows(t, "-u", srv.URL+"/", "-H", "Host: FUZZ.lab.test", "-w", wlist(t, "www", "dev", "mail"), "-mc", "200", "-fs", "35")
+	rows, _, err := fuzzRows(t, "-u", srv.URL+"/", "-H", "Host: FUZZ.lab.test", "-w", wlist(t, "www", "dev", "mail"), "-mc", "200", "-fs", "35", "-ac")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +252,7 @@ func TestFuzzScopeRules(t *testing.T) {
 
 func TestFuzzIsInTheCommandTable(t *testing.T) {
 	c, ok := lookup("fuzz")
-	if !ok || c.group != groupDropIn || c.like != "ffuf" || len(c.examples) != 3 || c.usage == "" || c.output == "" {
+	if !ok || c.group != groupDropIn || c.like != "ffuf" || len(c.examples) != 5 || c.usage == "" || c.output == "" {
 		t.Errorf("registry entry %+v", c)
 	}
 }
@@ -261,5 +264,54 @@ func TestFuzzResumeArgs(t *testing.T) {
 	}
 	if s := shellJoin([]string{"-H", "Host: FUZZ.x", "-mr", "it's"}); s != `-H 'Host: FUZZ.x' -mr 'it'\''s'` {
 		t.Fatalf("%s", s)
+	}
+}
+
+// A command line moved from ffuf that gives its own filter has calibrated by
+// hand: no calibration request goes out unless -ac says so.
+func TestFuzzOwnFilterTurnsCalibrationOff(t *testing.T) {
+	srv := fuzzServer(t)
+	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Requests != 2 {
+		t.Errorf("%d requests, want 2 (no calibration)", rep.Requests)
+	}
+	_, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242", "-ac")
+	if rep.Requests != 8 {
+		t.Errorf("%d requests with -ac, want 8", rep.Requests)
+	}
+}
+
+func TestFuzzReportFiles(t *testing.T) {
+	srv := fuzzServer(t)
+	dir := t.TempDir()
+	for _, f := range []string{"json", "ejson", "csv", "ecsv", "md", "html"} {
+		p := filepath.Join(dir, "r."+f)
+		if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "docs"), "-ac=false", "-o", p, "-of", f); err != nil {
+			t.Fatal(f, err)
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil || !strings.Contains(string(raw), "admin") && !strings.Contains(string(raw), "YWRtaW4=") {
+			t.Errorf("%s report: %v %.80q", f, err, raw)
+		}
+	}
+	raw, _ := os.ReadFile(filepath.Join(dir, "r.json"))
+	var rep struct {
+		Results []struct{ Input map[string]string }
+		Config  map[string]any
+	}
+	if json.Unmarshal(raw, &rep) != nil || len(rep.Results) != 2 || rep.Results[0].Input["FUZZ"] != "admin" || rep.Config["threads"] == nil {
+		t.Errorf("json report %s", raw)
+	}
+	if _, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "a"), "-o", filepath.Join(dir, "x"), "-of", "yaml"); exitCode(err) != exitUsage {
+		t.Errorf("-of yaml: %v", err)
+	}
+	// -or: no file for no matches.
+	p := filepath.Join(dir, "none.json")
+	fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "zzz"), "-ac=false", "-fc", "200", "-o", p, "-or")
+	if _, err := os.Stat(p); err == nil {
+		t.Error("-or wrote an empty report")
 	}
 }

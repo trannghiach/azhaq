@@ -35,3 +35,11 @@
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
 
 **A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again.
+
+**`fuzz` found fewer matches than ffuf (or more).** Compare the filters first: the summary says what calibration added (`auto-calibration filtered out answers with size 1234`) and notes when it is off because `-fs` and its kind were given. ffuf's default is no calibration; `-ac=false` gives it. A different `Size` on a compressed page means a different `Accept-Encoding`: azhaq decodes gzip, deflate and brotli, as ffuf, so the same header gives the same size. The `User-Agent` is a browser's, not ffuf's; send `-H 'User-Agent: Fuzz Faster U Fool v2.1.0'` where an app answers by it.
+
+**`fuzz` says `the report … was not written` or `-o … is a directory`.** `-o` names a file. A report that cannot be written is a failure in the summary (exit 3), with the reason; the place is tested before the first request, so a bad path is usually found at once.
+
+**`fuzz` stopped with `over 95% of the first 50 or more answers were 403`.** That is `-sf` (or `-sa`) doing what it says: the target refuses or the run is blocked. The summary gives the command that goes on (`-start N`). `-sa` also stops at over 20% 429, which means the target is rate limiting: lower `-rate` or `-t`.
+
+**`fuzz -x` or `-replay-proxy` shows nothing in the proxy.** Go sends traffic for loopback addresses through a proxy only when it is named with `-x`; the environment's `HTTP_PROXY` is not read. A proxy URL needs its scheme (`http://127.0.0.1:8080`). The summary counts the matches sent through `-replay-proxy` and the ones that failed.

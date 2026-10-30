@@ -3,6 +3,8 @@ module github.com/trannghiach/azhaq
 go 1.26.0
 
 require (
+	github.com/BurntSushi/toml v1.6.0
+	github.com/andybalholm/brotli v1.2.0
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
 	github.com/gaissmai/bart v0.29.1
