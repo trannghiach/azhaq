@@ -43,7 +43,14 @@ func Rate() float64 {
 // for the run's pace, and refuses with neterr.ErrBudget once the budget is
 // spent, and with neterr.ErrKilled once the kill file exists. Every request to a target goes through it (GETs, path and
 // parameter guesses, GraphQL, pages loaded in Chrome).
-func Spend(ctx context.Context) error {
+func Spend(ctx context.Context) error { return spend(ctx, true) }
+
+// SpendUnpaced is Spend without the wait for the pace: for a request
+// whose sender waits for it itself, when it is sent (Chrome's pages),
+// not when it is counted, so that no number of them is let go at once.
+func SpendUnpaced(ctx context.Context) error { return spend(ctx, false) }
+
+func spend(ctx context.Context, paced bool) error {
 	w, _ := ctx.Value(refusedKey{}).(*watch)
 	if err := Killed(); err != nil {
 		if w != nil {
@@ -65,6 +72,9 @@ func Spend(ctx context.Context) error {
 	}
 	if w != nil {
 		w.used.Add(1)
+	}
+	if !paced {
+		return nil
 	}
 	if err := Pace(ctx); err != nil {
 		Refund() // never sent

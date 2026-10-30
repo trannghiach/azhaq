@@ -184,7 +184,7 @@ func (c *Collector) shoot(ctx context.Context, tries []string, isURL bool, emit 
 		}
 		raw = t
 		left := budgetLeft()
-		if err := fetch.Spend(ctx); err != nil {
+		if err := fetch.SpendUnpaced(ctx); err != nil {
 			c.shot.Delete(t)
 			if errors.Is(err, neterr.ErrBudget) {
 				v, _ := c.need.Load(t)

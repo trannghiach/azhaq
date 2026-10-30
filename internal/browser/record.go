@@ -205,7 +205,7 @@ func (r *pageLog) failed(ev *network.EventLoadingFailed) {
 		e.Error = ev.ErrorText
 		// Refused by azhaq (outside the scope, the tab's icon): the page
 		// was held to where it may go, which is not a page that did not load.
-		e.blocked = ev.ErrorText == "net::ERR_BLOCKED_BY_CLIENT" || ev.Canceled
+		e.blocked = strings.HasPrefix(ev.ErrorText, "net::ERR_BLOCKED_BY_CLIENT") || ev.Canceled
 		e.Millis = ms(e.start, float64(ev.Timestamp))
 	}
 }

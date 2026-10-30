@@ -91,7 +91,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		c.count[u.Host]--
 		c.mu.Unlock()
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := fetch.SpendUnpaced(ctx); err != nil {
 		undo()
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}

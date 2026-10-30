@@ -254,7 +254,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		}
 	}
 	b.pausedAgain(ev.NetworkID, raw)
-	paid, refuse := false, true
+	refuse := true
 	switch {
 	case b.isPopup(ev.FrameID):
 		b.done(t)
@@ -283,7 +283,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.fail(root, ev.RequestID)
 		return
 	case r.doc && b.paidFor(ev.FrameID):
-		paid, refuse = true, false // the page itself: its caller counted and paced it (fetch.Spend)
+		refuse = false // the page itself: its caller counted it (fetch.SpendUnpaced); it waits for the pace as it is sent
 	case fetch.Take() != nil:
 		r.budget = true
 	default:
@@ -301,7 +301,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.wrote(t, ev.FrameID, w)
 	}
 	b.done(t)
-	if !paid {
+	{
 		ctx := root
 		if t != nil {
 			ctx = t.ctx
