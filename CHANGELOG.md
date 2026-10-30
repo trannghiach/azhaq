@@ -152,6 +152,22 @@
 - `probe -x`, `-body` and `-rr` send the methods, body or raw request you give to the targets in scope, counted, paced and in the ledger; the summary says non-GET requests were sent. They can change data on the target.
 - A page in Shift-JIS, GBK, Big5 or another declared charset has its title read in UTF-8; httpx reads only GBK, Big5 and EUC-KR.
 
+### `subs`
+
+- `subs -live` is no slower than `subfinder | dnsx` at the same DNS rate, and lists live names it did not. subdomain.center is asked again only while a round gave a name that resolves and no other source had; each round's new names are looked up before the next round is asked, and no name is looked up twice. With `-dns-rate`, the guesses cost at most half what the real names did.
+- A name that is only a CNAME is a live name with `-live`, as dnsx `-a -cname` lists it (tesla.com: 25 such names that `subs -live` left out).
+- A DNS answer too big for 512 bytes (a long CNAME chain) is asked for with EDNS0 and read over TCP when truncated; before, names such as `autodiscover.tesla.com` failed with `buffer size too small`.
+- A resolver whose NXDOMAIN answers a second resolver has confirmed 64 times in a row is checked on one in 16 (and every time again after one it gets wrong), so a dead name costs one query instead of two.
+- A source that answers 429 is asked again after its `Retry-After` (2, 4, 8 s when it gives none), up to three times; the summary says what the waiting cost, and a source that keeps refusing is listed as having given up.
+- Without `-live`, `subs` looks nothing up: a name only subdomain.center guessed, or only the name history held, is listed with `"unverified": true` and counted, and a guess is not added to the name history until a run has seen it resolve.
+- The summary's counts add up: `from sources`, `did not resolve`, `unverified`, `not checked`, `CNAME only`, and a `count:` note that writes the sum.
+- crt.sh is asked again after 1, 2 and 4 s and not past 12 s (it was 2, 4 and 8 s): a down crt.sh set the time of every run.
+- Cert Spotter pages with `after=` when a key is given, and says it read the first page only when it is not.
+- subfinder is v2.14.1-0.20261026103132-98ef8711acb9 (main), with its archive and windvane fixes.
+- subfinder's input and flags: `-d` takes comma lists, URLs and trailing dots (IP addresses are left out with a note); `-m`, `-f`, `-match-regex`, `-filter-regex`; `-ls` (`-json`); `-cs`, `-oI`, `-oD`; `-o` appends; `-recursive`; `-stats`; `-version`; `-nW` and `-oJ`; `-source-rate`, `-source-rates`, `-max-results`, `-max-time`, `-max-body`, `-source-proxy`; `$SOURCE_API_KEY` and `$VAR` in provider files; `-t` is `-parallel`. An unknown name in `-sources` is said, and alone is a usage error.
+- `-max-names` on `subs` (default 200,000 per domain, not 20,000); names cut are counted and the run exits 3. `wildcard_certificate` marks a name a certificate gave as `*.name`.
+- Without `-live`, a domain's names are printed when its sources have answered, not when the last domain has.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

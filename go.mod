@@ -1,6 +1,6 @@
 module github.com/trannghiach/azhaq
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/BurntSushi/toml v1.6.0
@@ -9,7 +9,7 @@ require (
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
 	github.com/corona10/goimagehash v1.1.0
-	github.com/gaissmai/bart v0.29.1
+	github.com/gaissmai/bart v0.30.0
 	github.com/happyhackingspace/dit v0.0.33
 	github.com/hdm/jarm-go v0.0.8
 	github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6
@@ -18,7 +18,7 @@ require (
 	github.com/projectdiscovery/awesome-search-queries v0.0.0-20260104120501-961ef30f7193
 	github.com/projectdiscovery/cdncheck v1.3.2
 	github.com/projectdiscovery/gologger v1.1.73
-	github.com/projectdiscovery/subfinder/v2 v2.17.0
+	github.com/projectdiscovery/subfinder/v2 v2.14.1-0.20261026103132-98ef8711acb9
 	github.com/projectdiscovery/wappalyzergo v0.3.5
 	github.com/stretchr/testify v1.12.1
 	go.yaml.in/yaml/v3 v3.0.5
@@ -54,9 +54,9 @@ require (
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/projectdiscovery/blackrock v0.0.2 // indirect
-	github.com/projectdiscovery/ratelimit v0.0.92 // indirect
+	github.com/projectdiscovery/ratelimit v0.0.94 // indirect
 	github.com/projectdiscovery/retryabledns v1.0.116 // indirect
-	github.com/projectdiscovery/utils v0.11.6 // indirect
+	github.com/projectdiscovery/utils v0.11.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d // indirect

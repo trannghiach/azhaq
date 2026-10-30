@@ -25,19 +25,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func resolving(live ...string) func(context.Context, string, []string) ([]string, int) {
+func resolving(live ...string) func(context.Context, string, []string) ([]string, []string) {
 	set := map[string]bool{}
 	for _, n := range live {
 		set[n] = true
 	}
-	return func(_ context.Context, _ string, names []string) ([]string, int) {
+	return func(_ context.Context, _ string, names []string) ([]string, []string) {
 		var out []string
 		for _, n := range names {
 			if set[n] {
 				out = append(out, n)
 			}
 		}
-		return out, 0
+		return out, nil
 	}
 }
 
@@ -214,7 +214,7 @@ func TestHistoryCapDropsOldest(t *testing.T) {
 		at := time.Date(2026, 10, 1+i, 0, 0, 0, 0, time.UTC)
 		now = func() time.Time { return at }
 		name := n + ".example.org"
-		if err := remember("example.org", []string{name}, map[string][]string{name: {"x"}}, nil, false); err != nil {
+		if err := remember("example.org", []string{name}, map[string][]string{name: {"x"}}, nil); err != nil {
 			t.Fatal(err)
 		}
 	}

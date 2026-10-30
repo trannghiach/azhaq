@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -86,6 +87,8 @@ type source struct {
 	deflt   bool    // part of the default set
 	perSec  float64 // request rate; 0 is unlimited
 	verify  bool    // a name only it gave is kept when it resolves
+	sampler bool    // asked again by sampled(): it keeps its own time
+	recurse bool    // handles subdomains of a subdomain (-recursive)
 	collect func(ctx context.Context, domain string, keys []string, s *subscraping.Session) ([]string, error)
 }
 
@@ -101,10 +104,11 @@ func pd(newSource func() subscraping.Source, perSec float64) source {
 		need = requiredKey
 	}
 	return source{
-		name:   s.Name(),
-		need:   need,
-		deflt:  s.IsDefault(),
-		perSec: perSec,
+		name:    s.Name(),
+		need:    need,
+		deflt:   s.IsDefault(),
+		perSec:  perSec,
+		recurse: s.HasRecursiveSupport(),
 		collect: func(ctx context.Context, domain string, keys []string, sess *subscraping.Session) ([]string, error) {
 			src := newSource()
 			if len(keys) > 0 {
@@ -224,54 +228,120 @@ func verified(s source) source {
 	return s
 }
 
-// sampled asks a keyless source again while its answers keep adding names:
-// subdomain.center answers a different random 500 per call (2026-10-29: five
-// calls gave 2135 tesla.com names, 49 live hosts one call missed). Rounds use
-// half the source's bound, leaving the rest for the DNS check.
+// sampled asks a keyless source again while its answers keep adding names
+// that resolve: subdomain.center answers a different random 500 per call
+// (2026-10-29: five calls gave 2135 tesla.com names, 49 live hosts one call
+// missed). Each round's new names are resolved before the next round is
+// asked (the checker in ctx); it stops when a round adds no new live name.
+// Without resolvers it stops when under a tenth of a round is new. The
+// source's bound (-source-timeout) is for asking: a request may take that
+// long and the asking half of it in all; resolving is paced by -dns-rate.
 func sampled(s source) source {
 	collect := s.collect
+	s.sampler = true
 	s.collect = func(ctx context.Context, domain string, keys []string, sess *subscraping.Session) ([]string, error) {
 		if len(keys) > 0 {
 			return collect(ctx, domain, keys, sess) // a key pages the whole set
 		}
-		stop := time.Now().Add(sampleBudget)
-		if dl, ok := ctx.Deadline(); ok {
-			stop = time.Now().Add(time.Until(dl) / 2)
+		timeout := DefaultSourceTimeout
+		if sess != nil && sess.Timeout > 0 {
+			timeout = time.Duration(sess.Timeout) * time.Second
 		}
+		chk, _ := ctx.Value(checkerKey{}).(*checker)
+		start := time.Now()
+		var asking time.Duration
 		var names []string
 		seen := map[string]bool{}
-		for round := 0; round < sampleRounds; round++ {
+		for call := 0; call < sampleRounds; call++ {
 			countCall(ctx)
-			got, err := collect(ctx, domain, nil, sess)
+			fctx, cancel := context.WithTimeout(ctx, timeout)
+			t0 := time.Now()
+			got, err := collect(fctx, domain, nil, sess)
+			cancel()
+			asking += time.Since(t0)
 			recordRound(ctx, got)
-			fresh := 0
+			var fresh []string
 			for _, n := range got {
 				if !seen[n] {
 					seen[n] = true
 					names = append(names, n)
-					fresh++
+					fresh = append(fresh, n)
 				}
 			}
+			keepPartial(ctx, names)
+			st := roundStat{Got: len(got), New: len(fresh)}
 			switch {
-			case err == nil && fresh*10 >= len(got) && fresh > 0:
-			case err != nil && strings.Contains(err.Error(), "status code 429") && time.Until(stop) > samplePause:
-				select {
-				case <-ctx.Done():
-					return names, ctx.Err()
-				case <-time.After(samplePause):
-				}
 			case err != nil && (len(names) == 0 || ctx.Err() != nil):
 				return names, err
-			default:
-				return names, nil // saturated, or later rounds refused
+			case err != nil:
+				return names, nil // later rounds were refused: the row says so
+			case len(fresh) == 0:
+				return names, nil // saturated
+			case chk == nil:
+				// Nothing to check them against: a second sample would only
+				// add more guesses.
+				return names, nil
 			}
-			if time.Now().After(stop) {
-				break
+			t1 := time.Now()
+			asked := chk.asked
+			st.Live = chk.check(cleaned(fresh, domain))
+			st.Asked = chk.asked - asked
+			st.Seconds = round(time.Since(t1).Seconds())
+			recordStat(ctx, st)
+			switch {
+			case st.Live == 0:
+				return names, nil // this round found nothing new that resolves
+			case !chk.room():
+				return names, nil // the guesses have cost what the real names did
+			case !chk.paced && time.Since(start) >= sampleBudget, asking >= timeout/2, ctx.Err() != nil:
+				return names, nil
 			}
 		}
 		return names, nil
 	}
 	return s
+}
+
+// roundStat is one round of a sampled source, for its row: the names it
+// gave, how many were new, how many of those were looked up and how many
+// resolved and no other source had.
+type roundStat struct {
+	Got     int     `json:"names"`
+	New     int     `json:"new"`
+	Asked   int     `json:"looked_up"`
+	Live    int     `json:"new_live"`
+	Seconds float64 `json:"check_seconds"`
+}
+
+func recordStat(ctx context.Context, st roundStat) {
+	if l, ok := ctx.Value(roundsKey{}).(*roundLog); ok {
+		l.mu.Lock()
+		l.stats = append(l.stats, st)
+		l.mu.Unlock()
+	}
+}
+
+type partialKey struct{}
+
+// partialNames keeps what a sampled source has gathered, for Run to use
+// when it stops waiting before the source returns.
+type partialNames struct {
+	mu    sync.Mutex
+	names []string
+}
+
+func (p *partialNames) snapshot() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]string(nil), p.names...)
+}
+
+func keepPartial(ctx context.Context, names []string) {
+	if p, ok := ctx.Value(partialKey{}).(*partialNames); ok {
+		p.mu.Lock()
+		p.names = append(p.names[:0], names...)
+		p.mu.Unlock()
+	}
 }
 
 type callsKey struct{}
@@ -286,8 +356,9 @@ func countCall(ctx context.Context) {
 
 var (
 	sampleRounds = 12
-	sampleBudget = 30 * time.Second
-	samplePause  = 12 * time.Second
+	// sampleBudget bounds the sampling when DNS is not paced: a round is a
+	// request and its lookups, a few seconds.
+	sampleBudget = 20 * time.Second
 )
 
 // keyed marks a source that has started to require a key.
@@ -302,9 +373,10 @@ func keyed(s source) source {
 // again a few times.
 func crtshSource() source {
 	return source{
-		name:  "crtsh",
-		need:  noKey,
-		deflt: true,
+		name:    "crtsh",
+		need:    noKey,
+		deflt:   true,
+		recurse: true,
 		collect: func(ctx context.Context, domain string, _ []string, sess *subscraping.Session) ([]string, error) {
 			u := "https://crt.sh/json?q=" + url.QueryEscape(domain)
 			var rows []struct {
@@ -312,8 +384,14 @@ func crtshSource() source {
 				NameValue  string `json:"name_value"`
 			}
 			var err error
-			for attempt, wait := 0, 2*time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
+			start := time.Now()
+			for attempt, wait := 0, time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
 				if err = getJSON(ctx, sess, "crtsh", u, nil, &rows); err == nil || !retry(err) {
+					break
+				}
+				// crt.sh is often down for a while: a few quick retries, not a
+				// minute of them, since every other source waits for this one.
+				if time.Since(start)+wait > crtshRetryBudget {
 					break
 				}
 				select {
@@ -335,10 +413,15 @@ func crtshSource() source {
 	}
 }
 
-// retry: crt.sh's gateway errors and dropped connections pass.
+// crtshRetryBudget is how long crt.sh may take, retries included, before
+// its failure is taken as the answer.
+const crtshRetryBudget = 12 * time.Second
+
+// retry: crt.sh's gateway errors and dropped connections pass (a 429 is
+// waited out in the transport).
 func retry(err error) bool {
 	s := err.Error()
-	for _, code := range []string{" 429", " 500", " 502", " 503", " 504"} {
+	for _, code := range []string{" 500", " 502", " 503", " 504"} {
 		if strings.HasSuffix(s, code) {
 			return true
 		}
@@ -347,30 +430,89 @@ func retry(err error) bool {
 }
 
 // certspotterSource asks Cert Spotter. Unlike subfinder's version it also
-// works without a key, at the free tier's rate.
+// works without a key, at the free tier's rate, where it reads the first
+// page only (100 issuances) and says so; with a key it pages with
+// after=<last id> until a page is empty, as subfinder does.
 func certspotterSource() source {
 	return source{
-		name:  "certspotter",
-		need:  optionalKey,
-		deflt: true,
+		name:    "certspotter",
+		need:    optionalKey,
+		deflt:   true,
+		recurse: true,
 		collect: func(ctx context.Context, domain string, keys []string, sess *subscraping.Session) ([]string, error) {
-			u := "https://api.certspotter.com/v1/issuances?domain=" + url.QueryEscape(domain) + "&include_subdomains=true&expand=dns_names"
+			base := "https://api.certspotter.com/v1/issuances?domain=" + url.QueryEscape(domain) + "&include_subdomains=true&expand=dns_names"
 			headers := map[string]string{}
-			if k := subscraping.PickRandom(keys, "certspotter"); k != "" {
-				headers["Authorization"] = "Bearer " + k
-			}
-			var rows []struct {
-				DNSNames []string `json:"dns_names"`
-			}
-			if err := getJSON(ctx, sess, "certspotter", u, headers, &rows); err != nil {
-				return nil, err
+			key := subscraping.PickRandom(keys, "certspotter")
+			if key != "" {
+				headers["Authorization"] = "Bearer " + key
 			}
 			var names []string
-			for _, r := range rows {
-				names = append(names, r.DNSNames...)
+			after := ""
+			for page := 0; page < certspotterMaxPages; page++ {
+				u := base
+				if after != "" {
+					u += "&after=" + url.QueryEscape(after)
+				}
+				var rows []struct {
+					ID       string   `json:"id"`
+					DNSNames []string `json:"dns_names"`
+				}
+				if err := getJSON(ctx, sess, "certspotter", u, headers, &rows); err != nil {
+					if len(names) > 0 {
+						addNote(ctx, fmt.Sprintf("stopped after page %d: %v; the names of the pages before it are kept", page+1, err))
+						return names, nil
+					}
+					return nil, err
+				}
+				for _, r := range rows {
+					names = append(names, r.DNSNames...)
+				}
+				if len(rows) == 0 || rows[len(rows)-1].ID == "" {
+					return names, nil
+				}
+				if key == "" {
+					if len(rows) >= certspotterPage {
+						addNote(ctx, "first page only (without a key it is not paged): more issuances exist; a Cert Spotter key in the provider file pages them all")
+					}
+					return names, nil
+				}
+				after = rows[len(rows)-1].ID
 			}
+			addNote(ctx, fmt.Sprintf("stopped at %d pages; more issuances exist", certspotterMaxPages))
 			return names, nil
 		},
+	}
+}
+
+const (
+	certspotterPage     = 100 // issuances per page
+	certspotterMaxPages = 1000
+)
+
+type noteKey struct{}
+
+// rowNote is what a source says about its own answer, for its row.
+type rowNote struct {
+	mu   sync.Mutex
+	text string
+}
+
+func (n *rowNote) get() string {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.text
+}
+
+// addNote tells the run something about the source's answer: it is partial,
+// and why. It is shown with the source's row and in the summary.
+func addNote(ctx context.Context, text string) {
+	if n, ok := ctx.Value(noteKey{}).(*rowNote); ok {
+		n.mu.Lock()
+		if n.text != "" {
+			n.text += "; "
+		}
+		n.text += text
+		n.mu.Unlock()
 	}
 }
 

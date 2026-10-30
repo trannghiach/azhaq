@@ -123,7 +123,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
 	sub := o.Subdomains
-	sub.Verify = func(ctx context.Context, apex string, names []string) (live []string, unchecked int) {
+	sub.Verify = func(ctx context.Context, apex string, names []string) (live, failed []string) {
 		var ask []string
 		for _, n := range names {
 			if fetch.Allow == nil || fetch.Allow(n) { // outside the scope: not even resolved
@@ -134,12 +134,13 @@ func Register(cat *catalog.Catalog, o Options) {
 		for _, a := range pool.ResolveMany(dnsr.Bulk(ctx), ask, 128) {
 			switch {
 			case a.Status == dnsr.StatusFailed || ctx.Err() != nil:
-				unchecked++
-			case a.Live() && !dnsc.Wild.Match(ctx, a.Name, apex, a):
+				failed = append(failed, a.Name)
+			// A name that is only a CNAME exists too (dnsx -a -cname lists it).
+			case (a.Live() || len(a.CNAME) > 0) && !dnsc.Wild.Match(ctx, a.Name, apex, a):
 				live = append(live, a.Name)
 			}
 		}
-		return live, unchecked
+		return live, failed
 	}
 	subcol.Register(cat, sub)
 	cat.MustRegister(urlcol.New(o.URLs))

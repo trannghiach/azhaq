@@ -302,9 +302,9 @@ func TestRunDeadlineSkipsSlowPaddingVerify(t *testing.T) {
 	pad.verify = true
 	stuck := make(chan struct{})
 	defer close(stuck)
-	c := collector(Options{SourceTimeout: time.Minute, Verify: func(ctx context.Context, _ string, names []string) ([]string, int) {
+	c := collector(Options{SourceTimeout: time.Minute, Verify: func(ctx context.Context, _ string, names []string) ([]string, []string) {
 		<-ctx.Done() // the DNS check never answers in time
-		return nil, len(names)
+		return nil, names
 	}},
 		fake("fast", noKey, true, []string{"www.example.org"}, nil),
 		pad,
@@ -323,8 +323,8 @@ func TestRunDeadlineSkipsSlowPaddingVerify(t *testing.T) {
 	if err != nil || ctx.Err() != nil {
 		t.Fatalf("emitted nothing before the deadline (%s): %v", time.Since(t0), err)
 	}
-	if got := strings.Join(strs(payload["names"]), ","); got != "www.example.org" {
-		t.Errorf("want the real name kept and the unchecked padding name dropped, got %q", got)
+	if got := strings.Join(strs(payload["names"]), ","); got != "junk.example.org,www.example.org" || strings.Join(strs(payload["unverified"]), ",") != "junk.example.org" {
+		t.Errorf("want the real name kept and the unchecked padding name listed unverified, got %q", got)
 	}
 	if payload["partial"] != true {
 		t.Errorf("a cut-short result is partial: %+v", payload)
@@ -334,19 +334,18 @@ func TestRunDeadlineSkipsSlowPaddingVerify(t *testing.T) {
 	}
 }
 
+// allLive is a Verify that finds every name live.
+func allLive(_ context.Context, _ string, names []string) ([]string, []string) { return names, nil }
+
 func TestSampledGathersUntilSaturated(t *testing.T) {
-	samplePause = 10 * time.Millisecond
-	defer func() { samplePause = 12 * time.Second }()
 	answers := []struct {
 		names []string
 		err   error
 	}{
-		{[]string{"a", "b", "c", "d"}, nil},
-		{nil, errors.New("unexpected status code 429 received from x")},
-		{[]string{"c", "d", "e", "f"}, nil},
-		{[]string{"a", "b", "c", "d", "e", "f"}, nil}, // nothing new: stop
+		{[]string{"a.example.org", "b.example.org", "c.example.org", "d.example.org"}, nil},
+		{[]string{"c.example.org", "d.example.org", "e.example.org", "f.example.org"}, nil},
+		{[]string{"a.example.org", "b.example.org", "c.example.org", "d.example.org", "e.example.org", "f.example.org"}, nil}, // nothing new: stop
 		{[]string{"never"}, nil},
-		{nil, errors.New("unexpected status code 500 received from x")},
 	}
 	calls := 0
 	s := sampled(source{name: "s", collect: func(_ context.Context, _ string, keys []string, _ *subscraping.Session) ([]string, error) {
@@ -359,25 +358,146 @@ func TestSampledGathersUntilSaturated(t *testing.T) {
 	}})
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	chk := newChecker(ctx, "example.org", allLive, nil)
+	ctx = context.WithValue(ctx, checkerKey{}, chk)
 	got, err := s.collect(ctx, "example.org", nil, nil)
-	if err != nil || calls != 4 || strings.Join(got, ",") != "a,b,c,d,e,f" {
+	if err != nil || calls != 3 || strings.Join(got, ",") != "a.example.org,b.example.org,c.example.org,d.example.org,e.example.org,f.example.org" {
 		t.Fatalf("got %v %v after %d calls", got, err, calls)
 	}
 	if got, _ := s.collect(ctx, "example.org", []string{"k"}, nil); len(got) != 1 || got[0] != "keyed" {
 		t.Fatalf("a key should page once: %v", got)
 	}
-	calls = 5 // a failed first call is the source's failure
-	if _, err := s.collect(ctx, "example.org", nil, nil); err == nil {
+	// A failed first call is the source's failure; a later one ends the
+	// asking and keeps what the rounds gave.
+	fail := errors.New("unexpected status code 500 received from x")
+	calls = 0
+	bad := sampled(source{name: "b.example.org", collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+		calls++
+		if calls == 1 {
+			return []string{"a.example.org"}, nil
+		}
+		return nil, fail
+	}})
+	if got, err := bad.collect(ctx, "example.org", nil, nil); err != nil || len(got) != 1 {
+		t.Fatalf("a later round refused: %v %v", got, err)
+	}
+	first := sampled(source{name: "f.example.org", collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+		return nil, fail
+	}})
+	if _, err := first.collect(ctx, "example.org", nil, nil); err == nil {
 		t.Fatal("first-round error swallowed")
 	}
-	// Refused every time until the time ran out: a failure, not an honest zero.
-	refused := sampled(source{name: "r", collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
-		return nil, errors.New("unexpected status code 429 received from x")
-	}})
-	short, cancel2 := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel2()
-	if got, err := refused.collect(short, "example.org", nil, nil); err == nil {
-		t.Fatalf("a source refused throughout returned %v and no error", got)
+}
+
+// subdomain.center answers a random sample per call. With resolvers, a
+// round's new names are resolved before the next round is asked, a name is
+// resolved once, and the asking stops at the first round that adds no name
+// that resolves.
+func TestSampledStopsWhenARoundAddsNoLiveName(t *testing.T) {
+	rounds := [][]string{
+		{"a.example.org", "b.example.org", "c.example.org"},
+		{"b.example.org", "d.example.org", "e.example.org"}, // d is live
+		{"a.example.org", "f.example.org", "g.example.org"}, // nothing live: stop
+		{"h.example.org"},
+	}
+	var mu sync.Mutex
+	var log []string
+	asked := 0
+	pad := sampled(verified(source{name: "pad", deflt: true, collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		log = append(log, "ask")
+		r := rounds[min(asked, len(rounds)-1)]
+		asked++
+		return r, nil
+	}}))
+	live := map[string]bool{"a.example.org": true, "d.example.org": true}
+	sent := map[string]int{}
+	c := collector(Options{SourceTimeout: 5 * time.Second, NoHistory: true, Verify: func(_ context.Context, _ string, names []string) ([]string, []string) {
+		mu.Lock()
+		defer mu.Unlock()
+		var out []string
+		for _, n := range names {
+			sent[n]++
+			if live[n] {
+				out = append(out, n)
+			}
+		}
+		log = append(log, "check")
+		return out, nil
+	}}, pad, fake("real", noKey, true, []string{"www.example.org"}, nil))
+	payload, _ := run(t, c, context.Background())
+	if got := strings.Join(log, " "); got != "ask check ask check ask check" {
+		t.Errorf("order %q", got)
+	}
+	for n, k := range sent {
+		if k != 1 {
+			t.Errorf("%s resolved %d times", n, k)
+		}
+	}
+	if got := strings.Join(strs(payload["names"]), ","); got != "a.example.org,d.example.org,www.example.org" {
+		t.Errorf("names %s", got)
+	}
+	if payload["from_sources"] != float64(8) || payload["dropped"] != float64(5) || payload["checked"] != float64(7) {
+		t.Errorf("counts %v", payload)
+	}
+	row := payload["sources"].(map[string]any)["pad"].(map[string]any)
+	if row["calls"] != float64(3) || row["kept"] != float64(2) || row["error"] != nil {
+		t.Errorf("row %v", row)
+	}
+}
+
+// Without -live nothing is resolved: the guesses are listed, unverified,
+// and not kept in the history.
+func TestNoCheckListsGuessesUnverified(t *testing.T) {
+	t.Setenv("AZHAQ_DATA_DIR", t.TempDir())
+	pad := fake("pad", noKey, true, []string{"junk.example.org", "real.example.org"}, nil)
+	pad.verify = true
+	asked := 0
+	c := collector(Options{NoCheck: true, Verify: func(context.Context, string, []string) ([]string, []string) {
+		asked++
+		return nil, nil
+	}}, pad, fake("a", noKey, true, []string{"www.example.org"}, nil))
+	payload, _ := run(t, c, context.Background())
+	if asked != 0 {
+		t.Errorf("%d DNS checks without -live", asked)
+	}
+	if got := strings.Join(strs(payload["names"]), ","); got != "junk.example.org,real.example.org,www.example.org" {
+		t.Errorf("names %s", got)
+	}
+	if got := strings.Join(strs(payload["unverified"]), ","); got != "junk.example.org,real.example.org" {
+		t.Errorf("unverified %s", got)
+	}
+	if m, _ := loadHistory(historyPath("example.org")); len(m) != 1 || m["www.example.org"].Last == "" {
+		t.Errorf("history holds %v", m)
+	}
+}
+
+// The resolvers failing on a name leaves it listed, unverified, not dropped.
+func TestFailedCheckIsUnverifiedNotDropped(t *testing.T) {
+	pad := fake("pad", noKey, true, []string{"flaky.example.org", "dead.example.org", "real.example.org"}, nil)
+	pad.verify = true
+	c := collector(Options{NoHistory: true, Verify: func(_ context.Context, _ string, names []string) ([]string, []string) {
+		var live, failed []string
+		for _, n := range names {
+			switch n {
+			case "real.example.org":
+				live = append(live, n)
+			case "flaky.example.org":
+				failed = append(failed, n)
+			}
+		}
+		return live, failed
+	}}, pad)
+	payload, _ := run(t, c, context.Background())
+	if got := strings.Join(strs(payload["names"]), ","); got != "flaky.example.org,real.example.org" {
+		t.Errorf("names %s", got)
+	}
+	if got := strings.Join(strs(payload["unverified"]), ","); got != "flaky.example.org" || payload["dropped"] != float64(1) {
+		t.Errorf("unverified %s dropped %v", got, payload["dropped"])
+	}
+	if e, _ := payload["sources"].(map[string]any)["pad"].(map[string]any)["error"].(string); !strings.Contains(e, "1 of its names not checked") {
+		t.Errorf("row error %q", e)
 	}
 }
 
@@ -392,10 +512,43 @@ func TestSampledRowCountsCalls(t *testing.T) {
 		i++
 		return a, nil
 	}})
-	c := collector(Options{SourceTimeout: 5 * time.Second}, s)
+	c := collector(Options{SourceTimeout: 5 * time.Second, Verify: allLive}, s)
 	payload, _ := run(t, c, context.Background())
 	row := payload["sources"].(map[string]any)["s"].(map[string]any)
 	if row["calls"] != float64(3) || row["count"] != float64(4) {
 		t.Fatalf("row %v", row)
+	}
+}
+
+// With a DNS pace the guesses may cost what the real names did and no less
+// than guessFloor; without one only the time bounds them. Each round's
+// numbers are in the source's row.
+func TestSampledGuessBudgetFollowsThePace(t *testing.T) {
+	round := 0
+	mk := func() source {
+		round = 0
+		return sampled(verified(source{name: "pad", deflt: true, collect: func(context.Context, string, []string, *subscraping.Session) ([]string, error) {
+			round++
+			names := make([]string, 500)
+			for i := range names {
+				names[i] = "g" + strings.Repeat("x", round) + string(rune('a'+i%26)) + string(rune('a'+i/26%26)) + ".example.org"
+			}
+			return names, nil
+		}}))
+	}
+	for _, tc := range []struct {
+		paced  bool
+		rounds int
+	}{{true, 2}, {false, 12}} {
+		c := collector(Options{SourceTimeout: 5 * time.Second, NoHistory: true, DNSPaced: tc.paced, Verify: allLive}, mk(), fake("real", noKey, true, []string{"www.example.org"}, nil))
+		payload, _ := run(t, c, context.Background())
+		row := payload["sources"].(map[string]any)["pad"].(map[string]any)
+		if got := int(row["calls"].(float64)); got != tc.rounds {
+			t.Errorf("paced %v: %d rounds, want %d (%v)", tc.paced, got, tc.rounds, row)
+		}
+		st := row["rounds"].([]any)
+		if first := st[0].(map[string]any); first["names"] != float64(500) || first["looked_up"] != float64(500) || first["new_live"] != float64(500) {
+			t.Errorf("round stats %v", st)
+		}
 	}
 }

@@ -111,6 +111,13 @@ type roundsKey struct{}
 type roundLog struct {
 	mu     sync.Mutex
 	rounds [][]string
+	stats  []roundStat
+}
+
+func (l *roundLog) statSnapshot() []roundStat {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]roundStat(nil), l.stats...)
 }
 
 func (l *roundLog) snapshot() [][]string {

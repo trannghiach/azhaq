@@ -24,9 +24,19 @@ func ProviderPaths() []string {
 }
 
 // LoadProviders reads API keys per source: a YAML map from source name to
-// a list of keys, the format subfinder uses. A missing file means no keys.
+// a list of keys, the format subfinder uses ($VAR in a key is the
+// environment's, and $SOURCE_API_KEY adds a key to that source). A missing
+// file means no keys.
 // The returned path is the file that was read, if any.
 func LoadProviders(paths ...string) (map[string][]string, string, error) {
+	keys, from, err := loadFile(paths...)
+	if err != nil {
+		return nil, from, err
+	}
+	return withEnv(keys), from, nil
+}
+
+func loadFile(paths ...string) (map[string][]string, string, error) {
 	for _, p := range paths {
 		raw, err := os.ReadFile(p)
 		if errors.Is(err, fs.ErrNotExist) {
@@ -43,7 +53,7 @@ func LoadProviders(paths ...string) (map[string][]string, string, error) {
 		for name, list := range m {
 			var clean []string
 			for _, k := range list {
-				if k = strings.TrimSpace(k); k != "" {
+				if k = strings.TrimSpace(os.ExpandEnv(k)); k != "" {
 					clean = append(clean, k)
 				}
 			}

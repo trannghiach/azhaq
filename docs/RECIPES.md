@@ -294,3 +294,17 @@ azhaq probe -u https://app.example.com -x GET,OPTIONS -path /api,/admin -rate 5
 ```
 
 Each target given ends as a row, a failure or a skip; with `-json`, a target with no answer is a row with `failed: true`. Matchers and filters read the response as sent (headers and body); the summary says how many rows they left out. `-x POST -body …` and `-rr FILE` send writes: they can change data on the target, count against `-max-requests` and `-rate`, and are in the ledger.
+
+## 21. The live subdomains of a domain, politely
+
+```
+azhaq subs -d example.com -live -dns-rate 5 -resolvers two.txt -source-rate 2 -db subs.db -json > names.jsonl
+azhaq subs -d example.com -live -m '*.dev.example.com' -oI
+azhaq subs -d example.com,example.org -json | jq 'select(.unverified | not)'
+```
+
+The first line is `subfinder | dnsx` at a pace: `-dns-rate` is queries a second per resolver (two resolvers in `two.txt` make twice that), `-source-rate` is requests a second to each passive source. The summary's `counts` add up (`from sources` less `did not resolve`, plus what DNS found as CNAME targets, is `results`) and the `count:` note writes the sum out.
+
+Without `-live` nothing is looked up in DNS, so the names subdomain.center only guessed and the ones only the name history held carry `"unverified": true`; the last line leaves them out. A name that is only a CNAME is listed with `-live` too (`cname`, no `a`), as dnsx `-a -cname` lists it.
+
+Catch: subdomain.center answers a random 500 names per call and its real names differ between calls, so two runs list different names. A run asks it again only while a round gives a new name that resolves; the name history brings back names an earlier run found.
