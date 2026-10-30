@@ -50,11 +50,12 @@ type Collector struct {
 }
 
 type scan struct {
-	done   chan struct{}
-	host   string // the name the services were asked under
-	open   []portscan.Open
-	silent []int
-	err    error
+	done     chan struct{}
+	host     string // the name the services were asked under
+	open     []portscan.Open
+	silent   []int
+	unprobed int
+	err      error
 }
 
 func New(pool *dnsr.Pool, ports []int, rate float64) *Collector {
@@ -137,7 +138,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if edge {
 			ports = cdnPorts
 		}
-		open, silent, err := c.scanOnce(ctx, host, ip, ports)
+		open, silent, unprobed, err := c.scanOnce(ctx, host, ip, ports)
 		if err != nil && ctx.Err() != nil {
 			return types.RunMeta{Status: types.StatusCancelled}, err
 		}
@@ -166,6 +167,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		}
 		if len(open) > 0 {
 			row["services"] = open
+		}
+		if unprobed > 0 {
+			row["unprobed"] = unprobed
 		}
 		if len(silent) > 0 {
 			row["filtered"] = len(silent)
@@ -212,7 +216,8 @@ const unroutedKey = "ipv6_not_scanned"
 func Notes(obs []types.StoredObservation) []string {
 	names := map[string]bool{}
 	var silent []string // address: ports, where a few ports answered neither way, twice
-	udpFiltered := 0
+	udpFiltered, udpLimited := 0, 0
+	var unprobed []string // address: open ports left without the protocol probes
 	for _, o := range obs {
 		if o.Collector != Name {
 			continue
@@ -223,6 +228,8 @@ func Notes(obs []types.StoredObservation) []string {
 			Unrouted []string `json:"ipv6_not_scanned"`
 			Filtered []int    `json:"filtered_ports"`
 			UDPFilt  []int    `json:"udp_open_filtered"`
+			UDPLimit int      `json:"udp_limited"`
+			Unprobed int      `json:"unprobed"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil {
 			continue
@@ -231,6 +238,10 @@ func Notes(obs []types.StoredObservation) []string {
 			names[p.Host] = true
 		}
 		udpFiltered += len(p.UDPFilt)
+		udpLimited += p.UDPLimit
+		if p.Unprobed > 0 {
+			unprobed = append(unprobed, fmt.Sprintf("%s: %d", p.IP, p.Unprobed))
+		}
 		if len(p.Filtered) > 0 {
 			where := p.Host
 			if p.IP != "" && p.IP != p.Host {
@@ -257,7 +268,11 @@ func Notes(obs []types.StoredObservation) []string {
 		out = append(out, fmt.Sprintf("ports that neither accepted nor refused a connect, asked twice: %s%s; filtered, or the host drops connects: scan them again to be sure (azhaq show -db FILE HOST lists them all)",
 			strings.Join(silent, "; "), more))
 	}
-	return append(out, udpNotes(udpFiltered)...)
+	if len(unprobed) > 0 {
+		sort.Strings(unprobed)
+		out = append(out, "open ports whose protocol was not probed, after several others on the same address could not be named (a firewall or tarpit that accepts every connect): "+strings.Join(unprobed, "; "))
+	}
+	return append(out, udpNotes(udpFiltered, udpLimited)...)
 }
 
 // portList is "80, 443" with at most n ports, then how many more.
@@ -281,7 +296,7 @@ func portList(ports []int, n int) string {
 // enough.
 const maxListed = 64
 
-func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) ([]portscan.Open, []int, error) {
+func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) ([]portscan.Open, []int, int, error) {
 	c.mu.Lock()
 	s, ok := c.byIP[ip]
 	if !ok {
@@ -293,18 +308,18 @@ func (c *Collector) scanOnce(ctx context.Context, host, ip string, ports []int) 
 		select {
 		case <-s.done:
 		case <-ctx.Done():
-			return nil, nil, ctx.Err()
+			return nil, nil, 0, ctx.Err()
 		}
 		if s.err != nil || s.host == host {
-			return s.open, s.silent, s.err
+			return s.open, s.silent, s.unprobed, s.err
 		}
 		open, err := c.askAgain(ctx, host, ip, s.open)
-		return open, s.silent, err
+		return open, s.silent, s.unprobed, err
 	}
 	r, err := c.Scanner.ScanEach(ctx, host, ip, ports)
-	s.open, s.silent, s.err = r.Open, r.Silent, err
+	s.open, s.silent, s.unprobed, s.err = r.Open, r.Silent, r.Unprobed, err
 	close(s.done)
-	return s.open, s.silent, s.err
+	return s.open, s.silent, s.unprobed, s.err
 }
 
 // askAgain is an address's open ports for another name on it: the

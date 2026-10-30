@@ -32,7 +32,7 @@
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
-**A UDP port is `open|filtered`.** The port stayed silent when asked twice and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`. `ports -json` lists them; the plain output lists only the open ones.
+**A UDP port is `open|filtered`.** The port stayed silent when asked every way its protocol has (a port with no known protocol is asked four ways) and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`; a host that rate-limits its ICMP replies leaves closed ports silent too, and the summary says when that may be the case (`udp: N silent ports on a host that refused others …`). `ports -json` lists them; the plain output lists only the open ones.
 
 **`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random 500 of about 6,300 tesla.com names per call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.
 
@@ -41,6 +41,8 @@
 **`shots` says `screenshot … not taken`.** The page's images, scripts and styles count against `-max-requests`, and too few were left; the note says how many the page needs and how many were left. Raise `-max-requests`.
 
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
+
+**An open TCP port has no `service` or `product`.** The port said nothing and none of the protocols azhaq asks (about 30, one request each, at most 24 connects per port) answered, or it answered in a protocol azhaq does not know. The row keeps the first bytes of any answer in `banner`. A port that accepts a connection and closes it without a word is `tcpwrapped`. When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports and the list was not run for the rest.
 
 **A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again.
 

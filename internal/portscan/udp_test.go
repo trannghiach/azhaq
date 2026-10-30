@@ -17,7 +17,7 @@ import (
 
 func TestUDPPorts(t *testing.T) {
 	top, err := UDPPorts("")
-	if err != nil || len(top) != 20 || top[0] != 53 {
+	if err != nil || len(top) != 25 || top[0] != 53 {
 		t.Fatalf("default list: %v %v", top, err)
 	}
 	if p, _ := UDPPorts("top"); !reflect.DeepEqual(p, top) {
@@ -134,17 +134,19 @@ func TestUDPStates(t *testing.T) {
 	if r.Closed != 1 {
 		t.Fatalf("closed: %d", r.Closed)
 	}
-	if got := quietReads.Load(); got != 2 {
-		t.Fatalf("the silent port was asked %d times, want 2", got)
+	// An unknown port is asked a DNS query, an SNMP get, memcached's version
+	// and an empty datagram.
+	if got := quietReads.Load(); got != 4 {
+		t.Fatalf("the silent port was asked %d times, want 4", got)
 	}
-	if got := takes.Load(); got != 4 { // 3 ports, the silent one twice
-		t.Fatalf("%d probes counted against the budget, want 4", got)
+	if got := takes.Load(); got != 6 { // 3 ports, the silent one four times
+		t.Fatalf("%d probes counted against the budget, want 6", got)
 	}
 }
 
 // DNS moved to a port nobody assigns to it is found by the first ask,
-// and a service that answers only an empty datagram by the second: no
-// more datagrams than before.
+// SNMP by the second and a service that answers only an empty datagram
+// by the fourth (memcached's version by the third).
 func TestUDPUnknownPortsAskDNSThenEmpty(t *testing.T) {
 	dns, dnsReads := udpResponder(t, func(in []byte) []byte {
 		if len(in) < 12 {
@@ -179,8 +181,8 @@ func TestUDPUnknownPortsAskDNSThenEmpty(t *testing.T) {
 	if len(r.OpenFiltered) != 0 {
 		t.Errorf("open|filtered: %+v", r.OpenFiltered)
 	}
-	if dnsReads.Load() != 1 || pongReads.Load() != 2 || takes.Load() != 3 {
-		t.Errorf("datagrams: dns port %d, other %d, %d counted; want 1, 2, 3", dnsReads.Load(), pongReads.Load(), takes.Load())
+	if dnsReads.Load() != 1 || pongReads.Load() != 4 || takes.Load() != 5 {
+		t.Errorf("datagrams: dns port %d, other %d, %d counted; want 1, 4, 5", dnsReads.Load(), pongReads.Load(), takes.Load())
 	}
 }
 
@@ -228,8 +230,8 @@ func TestEveryUDPProbeIsRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if got != int(takes.Load()) || got != len(ports)+1 {
-		t.Fatalf("ledger has %d udp entries, %d probes were counted, want %d", got, takes.Load(), len(ports)+1)
+	if got != int(takes.Load()) || got != len(ports)+3 {
+		t.Fatalf("ledger has %d udp entries, %d probes were counted, want %d", got, takes.Load(), len(ports)+3)
 	}
 }
 
@@ -287,7 +289,7 @@ func TestUDPParsers(t *testing.T) {
 	}{
 		{"dns", 53, dnsReply, udpInfo{service: "dns", banner: "dns answer, rcode 0, 13 records"}},
 		{"ntp", 123, func([]byte) []byte { return ntp }, udpInfo{service: "ntp", banner: "ntp v3 stratum 2"}},
-		{"snmp", 161, func([]byte) []byte { return snmp }, udpInfo{service: "snmp", banner: "Linux box 6.1.0 #1 SMP x86_64"}},
+		{"snmp", 161, func([]byte) []byte { return snmp }, udpInfo{service: "snmp", product: "Linux", version: "6.1.0", banner: "Linux box 6.1.0 #1 SMP x86_64"}},
 		{"ssdp", 1900, func([]byte) []byte {
 			return []byte("HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age=120\r\nSERVER: Linux/5.15 UPnP/1.1 MiniUPnPd/2.3.3\r\nST: ssdp:all\r\n\r\n")
 		}, udpInfo{service: "ssdp", product: "MiniUPnPd", version: "2.3.3", banner: "Linux/5.15 UPnP/1.1 MiniUPnPd/2.3.3"}},
@@ -337,5 +339,151 @@ func TestUDPRequestsAreHarmless(t *testing.T) {
 	}
 	if !bytes.HasPrefix(udpRequest(1900).payload, []byte("M-SEARCH * HTTP/1.1")) {
 		t.Error("ssdp request")
+	}
+}
+
+// The requests added for TFTP, rpcbind, the SQL Server Browser, SIP,
+// NAT-PMP, Ubiquiti discovery, ASF-RMCP and SNMPv3, against replies built
+// from their specifications.
+func TestUDPBreadthParsers(t *testing.T) {
+	rpc := func(sent []byte) []byte {
+		r := append([]byte{}, sent[:4]...)
+		for _, v := range []uint32{1, 0, 0, 0, 0} { // REPLY, accepted, AUTH_NONE verifier, SUCCESS
+			r = binary.BigEndian.AppendUint32(r, v)
+		}
+		for _, e := range [][5]uint32{{1, 100000, 2, 6, 111}, {1, 100003, 3, 6, 2049}, {1, 100005, 3, 17, 20048}} {
+			for _, v := range e {
+				r = binary.BigEndian.AppendUint32(r, v)
+			}
+		}
+		return binary.BigEndian.AppendUint32(r, 0)
+	}
+	sqlb := append([]byte{5, 0, 0}, "ServerName;DB1;InstanceName;MSSQLSERVER;IsClustered;No;Version;15.0.2000.5;tcp;1433;;"...)
+	binary.LittleEndian.PutUint16(sqlb[1:], uint16(len(sqlb)-3))
+	ubnt := []byte{1, 0, 0, 0, 0x0b, 0, 3, 'a', 'p', '1', 0x14, 0, 6, 'U', 'A', 'P', '-', 'A', 'C', 0x03, 0, 6, '6', '.', '5', '.', '5', '0'}
+	binary.BigEndian.PutUint16(ubnt[2:], uint16(len(ubnt)-4))
+	// A v3 Report: version 3, global data, then the security parameters
+	// whose first member is the engine id (enterprise 8072, text format).
+	engine := []byte{0x80, 0, 0x1f, 0x88, 4, 'a', 'b', 'c'}
+	usm := tlv(0x30, tlv(0x04, engine), tlv(0x02, []byte{1}), tlv(0x02, []byte{9}), tlv(0x04, nil), tlv(0x04, nil), tlv(0x04, nil))
+	v3 := tlv(0x30, tlv(0x02, []byte{3}), tlv(0x30, tlv(0x02, []byte{1})), tlv(0x04, usm), tlv(0x30, nil))
+
+	tests := []struct {
+		name  string
+		port  int
+		pass  int
+		reply func(sent []byte) []byte
+		want  udpInfo
+	}{
+		{"tftp", 69, 0, func([]byte) []byte {
+			return []byte{0, 5, 0, 1, 'F', 'i', 'l', 'e', ' ', 'n', 'o', 't', ' ', 'f', 'o', 'u', 'n', 'd', 0}
+		}, udpInfo{service: "tftp", banner: "tftp error 1: File not found"}},
+		{"rpcbind", 111, 0, rpc, udpInfo{service: "rpcbind", banner: "rpcbind: portmapper, nfs, mountd"}},
+		{"mssql browser", 1434, 0, func([]byte) []byte { return sqlb }, udpInfo{service: "mssql-browser", product: "Microsoft SQL Server", version: "15.0.2000.5", banner: printable(sqlb[3:])}},
+		{"sip", 5060, 0, func([]byte) []byte { return []byte("SIP/2.0 200 OK\r\nServer: Asterisk PBX 20.5.0\r\n\r\n") }, udpInfo{service: "sip", product: "Asterisk PBX", version: "20.5.0", banner: "SIP/2.0 200 OK"}},
+		{"nat-pmp", 5351, 0, func([]byte) []byte { return []byte{0, 128, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1} }, udpInfo{service: "nat-pmp", banner: "nat-pmp result 0"}},
+		{"ubiquiti", 10001, 0, func([]byte) []byte { return ubnt }, udpInfo{service: "ubiquiti-discovery", product: "Ubiquiti", version: "6.5.50", banner: "ubiquiti UAP-AC ap1"}},
+		{"rmcp", 623, 0, func([]byte) []byte { return []byte{6, 0, 0xff, 6, 0, 0, 0x11, 0xbe, 0x40, 0, 0, 0x10} }, udpInfo{service: "asf-rmcp", banner: "rmcp presence pong"}},
+		{"snmpv3 discovery", 161, 1, func([]byte) []byte { return v3 }, udpInfo{service: "snmp", product: "Net-SNMP", banner: "snmpv3 engine id 80001f8804616263"}},
+		{"snmp on any port", 5555, 1, func([]byte) []byte {
+			return tlv(0x30, tlv(0x02, []byte{1}), tlv(0x04, []byte("public")), tlv(0xa2, tlv(0x02, []byte{1}), tlv(0x02, []byte{0}), tlv(0x02, []byte{0}),
+				tlv(0x30, tlv(0x30, tlv(0x06, []byte{0x2b, 6, 1, 2, 1, 1, 1, 0}), tlv(0x04, []byte("Cisco IOS Software, C2960 Software, Version 15.2(4)E7, RELEASE"))))))
+		}, udpInfo{service: "snmp", product: "Cisco IOS", version: "15.2(4)E7", banner: "Cisco IOS Software, C2960 Software, Version 15.2(4)E7, RELEASE"}},
+	}
+	for _, tt := range tests {
+		req, ok := udpAsk(tt.port, tt.pass)
+		if !ok || len(req.payload) == 0 {
+			t.Errorf("%s: no request", tt.name)
+			continue
+		}
+		got, ok := req.parse(tt.reply(req.payload), req.payload)
+		if !ok || got != tt.want {
+			t.Errorf("%s: got %+v %v, want %+v", tt.name, got, ok, tt.want)
+		}
+		if _, ok := req.parse([]byte("hello"), req.payload); ok {
+			t.Errorf("%s: a stray answer was taken for the protocol's", tt.name)
+		}
+	}
+	if _, ok := udpAsk(5555, 4); ok {
+		t.Error("an unknown port has a fifth ask")
+	}
+	if r, _ := udpAsk(5555, 1); !bytes.Contains(r.payload, []byte("public")) {
+		t.Error("the second ask of an unknown port is SNMP")
+	}
+	if !req0(69).anySource {
+		t.Error("TFTP is read on a socket that is not connected")
+	}
+}
+
+func req0(port int) udpReq { r, _ := udpAsk(port, 0); return r }
+
+// A TFTP server answers from a port of its own; the scan still reads it, and
+// still tells a closed port by its ICMP error.
+func TestUDPAnswerFromAnotherPort(t *testing.T) {
+	srv, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srv.Close()
+	go func() {
+		buf := make([]byte, 600)
+		for {
+			_, from, err := srv.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			other, err := net.ListenPacket("udp", "127.0.0.1:0") // a fresh transfer id
+			if err != nil {
+				return
+			}
+			other.WriteTo([]byte{0, 5, 0, 1, 'n', 'o', 0}, from)
+			other.Close()
+		}
+	}()
+	// The port the server listens on is not 69: ask it as TFTP by the
+	// request a scan of port 69 would send.
+	saved, tftp := udpRequestHook, req0(69)
+	udpRequestHook = func(port int) (udpReq, bool) { return tftp, true }
+	defer func() { udpRequestHook = saved }()
+	s := &Scanner{Timeout: 500 * time.Millisecond}
+	port := srv.LocalAddr().(*net.UDPAddr).Port
+	closed := closedUDPPort(t)
+	r, err := s.ScanUDP(context.Background(), "", "127.0.0.1", []int{port, closed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Open) != 1 || r.Open[0].Service != "tftp" || r.Closed != 1 {
+		t.Fatalf("open %+v closed %d filtered %+v", r.Open, r.Closed, r.OpenFiltered)
+	}
+}
+
+// A host that refused some ports and stayed silent on a few: those few are
+// asked again one at a time, and too many are not, but counted.
+func TestUDPICMPRateLimit(t *testing.T) {
+	savedLo, savedGap, savedMax := isLoopback, icmpGap, icmpPaceMax
+	isLoopback = func(string) bool { return false }
+	icmpGap = 60 * time.Millisecond
+	defer func() { isLoopback, icmpGap, icmpPaceMax = savedLo, savedGap, savedMax }()
+
+	var ports []int
+	for i := 0; i < 4; i++ {
+		p, _ := udpListener(t, nil)
+		ports = append(ports, p)
+	}
+	ports = append(ports, closedUDPPort(t))
+	s := &Scanner{Timeout: 100 * time.Millisecond}
+	start := time.Now()
+	r, err := s.ScanUDP(context.Background(), "", "127.0.0.1", ports)
+	if err != nil || r.Limited != 0 || len(r.OpenFiltered) != 4 || r.Closed != 1 {
+		t.Fatalf("%+v %v", r, err)
+	}
+	// The paced pass: four ports, each a timeout and a gap.
+	if d := time.Since(start); d < 4*(100+60)*time.Millisecond {
+		t.Errorf("the second ask of the silent ports took %v: not one at a time", d)
+	}
+	icmpPaceMax = 2
+	r, err = s.ScanUDP(context.Background(), "", "127.0.0.1", ports)
+	if err != nil || r.Limited != 4 || len(r.OpenFiltered) != 4 {
+		t.Fatalf("too many to pace: %+v %v", r, err)
 	}
 }

@@ -6,11 +6,9 @@ package portscan
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -129,6 +127,11 @@ type Scanner struct {
 	once      sync.Once
 	limiter   *limit.Limiter
 	loopPaced bool
+
+	mu      sync.Mutex
+	unnamed map[string]int // per address: open ports no probe could name
+	skipped map[string]int // per address: ports not run down the ladder after that
+	stop    error          // the budget error a probe of a service met
 }
 
 func (s *Scanner) init() {
@@ -162,6 +165,9 @@ type Report struct {
 	// Silent are the ports that neither accepted nor refused a connect
 	// (a timeout, an ICMP unreachable): filtered, or dropped on the way.
 	Silent []int
+	// Unprobed counts the open ports whose protocol was not asked for
+	// after several others on the address could not be named.
+	Unprobed int
 }
 
 // ScanEach connects to each port of ip and says which are open and
@@ -186,6 +192,12 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 	}
 	sort.Slice(r.Open, func(i, j int) bool { return r.Open[i].Port < r.Open[j].Port })
 	sort.Ints(r.Silent)
+	s.mu.Lock()
+	r.Unprobed = s.skipped[ip]
+	if err == nil {
+		err = s.stop
+	}
+	s.mu.Unlock()
 	return r, err
 }
 
@@ -258,7 +270,9 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 	d := net.Dialer{Timeout: s.Timeout}
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
 	ledger.TCP(ctx, host, addr)
+	t0 := time.Now()
 	conn, err := d.DialContext(ctx, "tcp", addr)
+	rtt := time.Since(t0)
 	if err != nil {
 		if errors.Is(err, syscall.ECONNREFUSED) || ctx.Err() != nil {
 			return Open{}, portClosed
@@ -269,7 +283,7 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 	o := Open{Port: port}
 	if s.Banner > 0 {
 		_ = conn.SetReadDeadline(time.Now().Add(s.Banner))
-		buf := make([]byte, 256)
+		buf := make([]byte, 512)
 		n, err := conn.Read(buf)
 		var ne net.Error
 		var silentGreeter bool
@@ -282,10 +296,17 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 		}
 		o.Banner = printable(buf[:n])
 		s.greeted(&o, buf[:n])
+		if n > 0 && o.Product == "" && bannerService(o.Banner) == "ftp-or-smtp" {
+			s.settle220(conn, &o)
+		}
 		// Still open after the wait, the service waits to be asked. One
 		// that closed the connection says nothing to anyone (tcpwrapped).
-		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) && !s.speak(&o, conn) {
-			s.identify(ctx, &o, conn, host, ip)
+		if n == 0 && errors.As(err, &ne) && ne.Timeout() && !rawData(port) {
+			s.identify(ctx, &o, conn, host, ip, rtt)
+		} else if n == 0 && err != nil && !errors.As(err, &ne) && !speaksFirst(port) {
+			// Accepted and closed with nothing said: a TCP wrapper or an
+			// access list answers so, to anyone it does not know.
+			o.Service = "tcpwrapped"
 		}
 		// Nothing, not even an answer to the HEAD: sshd drops or delays
 		// its greeting when many connects arrive at once.
@@ -377,71 +398,6 @@ var speaksFirst = func(port int) bool {
 // them anything would print it.
 func rawData(port int) bool { return port >= 9100 && port <= 9107 }
 
-// identify asks a port that said nothing what it serves, once: an HTTP
-// HEAD on the connection still open, then, without an HTTP answer or
-// with a 400 (what nginx and Go answer plain HTTP on an HTTPS port with),
-// a TLS handshake on a second connection, which counts and is paced like
-// a connect, and the same request inside it.
-func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip string) {
-	if host == "" {
-		host = ip
-	}
-	answer := s.ask(conn, host, o.Port, 80)
-	if status, banner, ok := httpAnswer(answer); ok {
-		o.Service, o.Banner = "http", banner
-		s.webProduct(ctx, o, answer, status, host, ip, false)
-		if status != 400 {
-			return
-		}
-	} else if postgresError(answer) {
-		o.Service, o.Product, o.Banner = "postgresql", "PostgreSQL", ""
-		return
-	} else if _, product, _ := greetingProduct(answer, printable(answer)); product != "" {
-		// A greeting that came late, in reply to the HEAD.
-		o.Banner = printable(answer)
-		s.greeted(o, answer)
-		return
-	} else if text := printable(answer); text != "" && text != "(binary)" {
-		// Another protocol's error, such as redis's -ERR: not TLS.
-		o.Banner = text
-		if redisError.MatchString(text) {
-			o.Service, o.Product = "redis", "Redis"
-		}
-		return
-	}
-	if s.wait(ctx, ip) != nil || s.Take != nil && s.Take() != nil {
-		return
-	}
-	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}
-	if net.ParseIP(host) == nil {
-		cfg.ServerName = host
-	}
-	hctx, cancel := context.WithTimeout(ctx, s.Timeout+s.Banner)
-	defer cancel()
-	td := tls.Dialer{NetDialer: &net.Dialer{Timeout: s.Timeout}, Config: cfg}
-	addr := net.JoinHostPort(ip, strconv.Itoa(o.Port))
-	ledger.TCP(ctx, host, addr)
-	c, err := td.DialContext(hctx, "tcp", addr)
-	if err != nil {
-		return
-	}
-	defer c.Close()
-	o.TLS = true
-	o.Service, o.Banner = "tls", ""
-	if certs := c.(*tls.Conn).ConnectionState().PeerCertificates; len(certs) > 0 {
-		o.SubjectCN = certs[0].Subject.CommonName
-		o.SubjectAN = append(o.SubjectAN, certs[0].DNSNames...)
-		for _, a := range certs[0].IPAddresses {
-			o.SubjectAN = append(o.SubjectAN, a.String())
-		}
-	}
-	head := s.ask(c, host, o.Port, 443)
-	if status, banner, ok := httpAnswer(head); ok {
-		o.Service, o.Banner = "https", banner
-		s.webProduct(ctx, o, head, status, host, ip, true)
-	}
-}
-
 // ask sends HEAD / and returns the head of the answer, if any.
 func (s *Scanner) ask(conn net.Conn, host string, port, defaultPort int) []byte {
 	switch {
@@ -450,26 +406,28 @@ func (s *Scanner) ask(conn net.Conn, host string, port, defaultPort int) []byte 
 	case strings.Contains(host, ":"):
 		host = "[" + host + "]"
 	}
-	// The time of a connect and of a banner: a remote server's answer
-	// takes a round trip more than its silence.
-	_ = conn.SetDeadline(time.Now().Add(s.Timeout + s.Banner))
 	req := "HEAD / HTTP/1.0\r\nHost: " + host + "\r\n"
 	if s.UserAgent != "" {
 		req += "User-Agent: " + s.UserAgent + "\r\n"
 	}
-	if _, err := conn.Write([]byte(req + "Accept: */*\r\n\r\n")); err != nil {
-		return nil
+	// The time of a connect and of a banner: a remote server's answer
+	// takes a round trip more than its silence.
+	return s.talk(conn, []byte(req+"Accept: */*\r\n\r\n"), headFrame, s.Timeout+s.Banner)
+}
+
+// headFrame ends the read of an HTTP head at its blank line, and lets any
+// other answer stop at a pause.
+func headFrame(b []byte) int {
+	if !bytes.HasPrefix(b, []byte("HTTP/")) && !bytes.HasPrefix(b, []byte("ICY ")) {
+		return 0
 	}
-	var head []byte
-	buf := make([]byte, 1024)
-	for len(head) < 4096 && !bytes.Contains(head, []byte("\r\n\r\n")) {
-		n, err := conn.Read(buf)
-		head = append(head, buf[:n]...)
-		if err != nil {
-			break
-		}
+	if i := bytes.Index(b, []byte("\r\n\r\n")); i >= 0 {
+		return i + 4
 	}
-	return head
+	if len(b) >= 4096 {
+		return len(b)
+	}
+	return len(b) + 1 // more is coming
 }
 
 // httpAnswer reads the head of an HTTP answer: its status, and what to
@@ -523,47 +481,11 @@ func printable(b []byte) string {
 	return strings.TrimSpace(out.String())
 }
 
-var banners = []struct {
-	re      *regexp.Regexp
-	service string
-}{
-	{regexp.MustCompile(`^SSH-`), "ssh"},
-	{regexp.MustCompile(`(?i)^220[ -].*(ftp|filezilla|vsftpd|proftpd)`), "ftp"},
-	{regexp.MustCompile(`(?i)^220[ -].*(smtp|esmtp|postfix|exim|sendmail)`), "smtp"},
-	{regexp.MustCompile(`(?i)^\+OK`), "pop3"},
-	{regexp.MustCompile(`(?i)^\* OK`), "imap"},
-	{regexp.MustCompile(`(?i)mysql|mariadb`), "mysql"},
-	{regexp.MustCompile(`^-ERR|^-NOAUTH`), "redis"},
-	{regexp.MustCompile(`(?i)^HTTP/`), "http"},
-	{regexp.MustCompile(`^RFB \d`), "vnc"},
-	{regexp.MustCompile(`^220[ -]`), "ftp-or-smtp"},
-}
-
-// wellKnown names the service a silent port usually runs.
-var wellKnown = map[int]string{
-	80: "http", 443: "https", 8080: "http", 8443: "https", 8000: "http", 8008: "http", 8888: "http",
-	3000: "http", 5000: "http", 9000: "http", 53: "dns", 3306: "mysql", 5432: "postgresql",
-	6379: "redis", 27017: "mongodb", 9200: "elasticsearch", 3389: "rdp", 445: "smb", 139: "netbios",
-	5900: "vnc", 1433: "mssql", 1521: "oracle", 11211: "memcached", 2375: "docker", 6443: "kubernetes",
-}
-
-func guess(port int, banner string) string {
-	for _, b := range banners {
-		if banner != "" && b.re.MatchString(banner) {
-			return b.service
-		}
-	}
-	if s, ok := wellKnown[port]; ok {
-		return s + "?"
-	}
-	return ""
-}
-
 // Web is true for an open port worth an HTTP probe: one that said nothing
 // or answered like HTTP, and is not a known non-web service.
 func (o Open) Web() bool {
 	switch strings.TrimSuffix(o.Service, "?") {
-	case "", "http", "https", "tls", "elasticsearch", "docker", "kubernetes":
+	case "", "http", "https", "tls", "elasticsearch", "docker", "kubernetes", "http-proxy":
 		return true // tls: a handshake answered, HTTP inside it may be slow
 	}
 	return false

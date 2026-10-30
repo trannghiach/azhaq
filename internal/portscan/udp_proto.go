@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"strings"
@@ -18,6 +19,10 @@ type udpInfo struct {
 type udpReq struct {
 	payload []byte
 	parse   func(reply, sent []byte) (udpInfo, bool)
+	// anySource: the answer comes from another port than the one asked
+	// (TFTP's reply uses a fresh transfer id), so it is read on a socket
+	// that is not connected.
+	anySource bool
 }
 
 // udpRequest returns a standard discovery or version request of the
@@ -26,35 +31,85 @@ type udpReq struct {
 func udpRequest(port int) udpReq {
 	switch port {
 	case 53:
-		return udpReq{dnsQuery(), parseDNS}
+		return udpReq{dnsQuery(), parseDNS, false}
 	case 123:
 		p := make([]byte, 48)
 		p[0] = 0x1b // version 3, mode 3 (client)
-		return udpReq{p, parseNTP}
+		return udpReq{p, parseNTP, false}
 	case 161:
-		return udpReq{snmpGet(), parseSNMP}
+		return udpReq{snmpGet(), parseSNMP, false}
 	case 1900:
-		return udpReq{[]byte("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n"), parseSSDP}
+		return udpReq{[]byte("M-SEARCH * HTTP/1.1\r\nHOST: 239.255.255.250:1900\r\nMAN: \"ssdp:discover\"\r\nMX: 1\r\nST: ssdp:all\r\n\r\n"), parseSSDP, false}
 	case 5353:
-		return udpReq{mdnsQuery(), parseMDNS}
+		return udpReq{mdnsQuery(), parseMDNS, false}
 	case 137:
-		return udpReq{nbstat(), parseNBStat}
+		return udpReq{nbstat(), parseNBStat, false}
 	case 500:
-		return udpReq{ikeInit(false), parseIKE}
+		return udpReq{ikeInit(false), parseIKE, false}
 	case 4500:
-		return udpReq{ikeInit(true), parseIKE}
+		return udpReq{ikeInit(true), parseIKE, false}
 	case 3478:
-		return udpReq{stunBinding(), parseSTUN}
+		return udpReq{stunBinding(), parseSTUN, false}
 	case 11211:
 		// UDP frame header: request id, sequence 0, one datagram, reserved.
-		return udpReq{append([]byte{0, 1, 0, 0, 0, 1, 0, 0}, "version\r\n"...), parseMemcached}
+		return udpReq{append([]byte{0, 1, 0, 0, 0, 1, 0, 0}, "version\r\n"...), parseMemcached, false}
 	case 47808:
 		// BVLC original-unicast-NPDU, NPDU v1 without routing, unconfirmed Who-Is.
-		return udpReq{[]byte{0x81, 0x0a, 0x00, 0x08, 0x01, 0x00, 0x10, 0x08}, parseBACnet}
+		return udpReq{[]byte{0x81, 0x0a, 0x00, 0x08, 0x01, 0x00, 0x10, 0x08}, parseBACnet, false}
 	case 5683:
-		return udpReq{coapWellKnown(), parseCoAP}
+		return udpReq{coapWellKnown(), parseCoAP, false}
+	case 69:
+		return udpReq{tftpRead(), parseTFTP, true}
+	case 111:
+		return udpReq{rpcDump(), parseRPCBind, false}
+	case 1434:
+		return udpReq{[]byte{3}, parseSQLBrowser, false} // CLNT_UCAST_EX
+	case 5060:
+		return udpReq{sipOptions("azhaq.invalid", "UDP"), parseSIP, false}
+	case 5351:
+		return udpReq{[]byte{0, 0}, parseNATPMP, false}
+	case 10001:
+		return udpReq{[]byte{1, 0, 0, 0}, parseUbiquiti, false}
+	case 623:
+		return udpReq{rmcpPing(), parseRMCP, false}
 	}
-	return udpReq{nil, func([]byte, []byte) (udpInfo, bool) { return udpInfo{}, false }}
+	return udpReq{nil, func([]byte, []byte) (udpInfo, bool) { return udpInfo{}, false }, false}
+}
+
+// udpRequestHook lets a test choose the request of any port.
+var udpRequestHook func(port int) (udpReq, bool)
+
+// udpAsk is the request for the pass-th ask of a port (0 is the first), and
+// false when there is none. A port with a protocol of its own is asked it
+// twice (the second ask of 161 is SNMPv3 discovery, which an agent that
+// wants a community string still answers); any other is asked DNS, then
+// SNMP with the community public, then memcached's version, then an empty
+// datagram.
+func udpAsk(port, pass int) (udpReq, bool) {
+	if udpRequestHook != nil {
+		return udpRequestHook(port)
+	}
+	req := udpRequest(port)
+	if len(req.payload) > 0 {
+		switch {
+		case pass == 1 && port == 161:
+			return udpReq{snmpV3Discovery(), parseSNMP, false}, true
+		case pass > 1:
+			return udpReq{}, false
+		}
+		return req, true
+	}
+	switch pass {
+	case 0:
+		return udpReq{dnsQuery(), parseDNS, false}, true
+	case 1:
+		return udpReq{snmpGet(), parseSNMP, false}, true
+	case 2:
+		return udpRequest(11211), true
+	case 3:
+		return req, true
+	}
+	return udpReq{}, false
 }
 
 func randBytes(n int) []byte {
@@ -131,9 +186,12 @@ func parseSNMP(r, _ []byte) (udpInfo, bool) {
 	if !ok {
 		return udpInfo{}, false
 	}
-	_, _, rest, ok := berNext(msg) // version
+	_, ver, rest, ok := berNext(msg) // version
 	if !ok {
 		return udpInfo{}, false
+	}
+	if len(ver) == 1 && ver[0] == 3 {
+		return parseSNMPv3(rest)
 	}
 	_, _, rest, ok = berNext(rest) // community
 	if !ok {
@@ -163,6 +221,75 @@ func parseSNMP(r, _ []byte) (udpInfo, bool) {
 	info := udpInfo{service: "snmp"}
 	if tag, s, _, ok := berNext(val); ok && tag == 0x04 {
 		info.banner = printable(s)
+		info.product, info.version = sysDescrProduct(info.banner)
+	}
+	return info, true
+}
+
+var (
+	ciscoRe = regexp.MustCompile(`^Cisco IOS.*?Version (\d[\w.()]*)`)
+	junosRe = regexp.MustCompile(`JUNOS (\d[\w.\-]*)`)
+	linuxRe = regexp.MustCompile(`^Linux \S+ (\d+\.\d+[\w.\-+]*)`)
+	winRe   = regexp.MustCompile(`Software: Windows`)
+)
+
+// sysDescrProduct names what a sysDescr.0 says it is: the operating system
+// or firmware of the device (the agent's own name is not in it).
+func sysDescrProduct(d string) (string, string) {
+	switch {
+	case ciscoRe.MatchString(d):
+		return "Cisco IOS", ciscoRe.FindStringSubmatch(d)[1]
+	case junosRe.MatchString(d):
+		return "Juniper JUNOS", junosRe.FindStringSubmatch(d)[1]
+	case linuxRe.MatchString(d):
+		return "Linux", linuxRe.FindStringSubmatch(d)[1]
+	case winRe.MatchString(d):
+		return "Microsoft Windows", ""
+	}
+	return "", ""
+}
+
+// snmpV3Discovery is the message RFC 3414 (4) has a manager send to learn
+// an agent's engine id: version 3, reportable, no authentication, an empty
+// security-parameters block and an empty GetRequest.
+func snmpV3Discovery() []byte {
+	usm := tlv(0x30, tlv(0x04, nil), tlv(0x02, []byte{0}), tlv(0x02, []byte{0}), tlv(0x04, nil), tlv(0x04, nil), tlv(0x04, nil))
+	global := tlv(0x30, tlv(0x02, randBytes(3)[:2]), tlv(0x02, []byte{0x00, 0xff, 0xe3}), tlv(0x04, []byte{4}), tlv(0x02, []byte{3}))
+	pdu := tlv(0xa0, tlv(0x02, randBytes(3)[:2]), tlv(0x02, []byte{0}), tlv(0x02, []byte{0}), tlv(0x30))
+	scoped := tlv(0x30, tlv(0x04, nil), tlv(0x04, nil), pdu)
+	return tlv(0x30, tlv(0x02, []byte{3}), global, tlv(0x04, usm), scoped)
+}
+
+// snmpEnterprises name the vendor in an engine id (the IANA private
+// enterprise numbers).
+var snmpEnterprises = map[uint32]string{
+	9: "Cisco", 11: "HP", 311: "Microsoft", 674: "Dell", 2011: "Huawei", 2021: "Net-SNMP", 2636: "Juniper",
+	6876: "VMware", 8072: "Net-SNMP", 12356: "Fortinet", 14988: "MikroTik", 25506: "H3C", 41112: "Ubiquiti",
+}
+
+// parseSNMPv3 reads what an agent answers a discovery with: a Report whose
+// security parameters carry its engine id (RFC 3414, 4).
+func parseSNMPv3(rest []byte) (udpInfo, bool) {
+	_, _, rest, ok := berNext(rest) // msgGlobalData
+	if !ok {
+		return udpInfo{}, false
+	}
+	tag, sec, _, ok := berNext(rest)
+	if !ok || tag != 0x04 {
+		return udpInfo{}, false
+	}
+	_, usm, _, ok := berNext(sec)
+	if !ok {
+		return udpInfo{}, false
+	}
+	_, id, _, ok := berNext(usm)
+	if !ok || len(id) < 5 {
+		return udpInfo{}, false
+	}
+	info := udpInfo{service: "snmp", banner: "snmpv3 engine id " + hex.EncodeToString(id)}
+	if id[0]&0x80 != 0 {
+		ent := uint32(id[0]&0x7f)<<24 | uint32(id[1])<<16 | uint32(id[2])<<8 | uint32(id[3])
+		info.product = snmpEnterprises[ent]
 	}
 	return info, true
 }

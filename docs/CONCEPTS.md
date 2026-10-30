@@ -110,8 +110,8 @@ Verdicts, worst first: anyone reads sensitive fields · reads another role's obj
 | Pages, scripts, API descriptions, built-in paths, archived URL templates | GET | every run, inside the scope |
 | Path and parameter guesses | GET | `-dirs`, `-params` (held to the targets given, or `-allow`/`-scope`) |
 | GraphQL introspection | POST | `-graphql` (held to the targets given, or `-allow`/`-scope`) |
-| A port's service | TCP connect, one `HEAD /` to a port that says nothing (a `GET /` for a web port whose head names no product; on 5432, 6379 and 27017–27019, that database's own first request) | `-ports`, `ports` |
-| UDP ports | one datagram of the protocol's harmless request per port, a second when none came back | `-ports-udp`, `ports -udp`, `-pu` |
+| A port's service | TCP connect, then for a port that says nothing: its own protocol's request on its usual number, one `HEAD /`, a TLS handshake, and one request of each of the other protocols until one answers (at most 24 more connects per port; a `GET /` for a web page whose head names no product) | `-ports`, `ports` |
+| UDP ports | one datagram of the protocol's harmless request per port, more when none came back (a port with no known protocol is asked four ways) | `-ports-udp`, `ports -udp`, `-pu` |
 | A wordlist in a request | the method and body you give it | `azhaq fuzz` (held to the host of `-u`, or `-allow`/`-scope`) |
 | Chrome | what the page loads, inside the scope | `-browser`, `-login`, `shots`, `-role-login` |
 | Writes of other roles | POST, PUT, PATCH, DELETE | `roles -replay-writes` (held to the `-url` hosts, or `-allow`/`-scope`) |

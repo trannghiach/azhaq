@@ -131,7 +131,7 @@ func init() {
 				"azhaq urls -d example.com -mc 200 -mt text/html -from 2024 -urls-pause 0",
 			}},
 		{name: "ports", group: groupDropIn, like: "naabu", run: cmdPorts,
-			summary:  "open TCP ports (connect scan, no root), with banners, products and versions; -udp asks the common UDP ports",
+			summary:  "open TCP ports (connect scan, no root), named by what they answer on any port, with products and versions; -udp asks the common UDP ports",
 			usage:    "-host HOST | -l FILE | stdin  [-p top-100|top-1000|full|none|LIST] [-udp | -pu LIST] [-rate N] [-json]",
 			output:   "host:port per open port (host:port/udp for UDP); -json: {\"host\",\"ip\",\"port\",\"protocol\",\"state\",\"service\",\"product\",\"version\",\"title\",\"banner\"}",
 			examples: []string{"azhaq ports -host scanme.nmap.org -p top-1000 -json", "azhaq ports -host 127.0.0.1 -p none -pu 1-1024 -json"}},

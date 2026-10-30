@@ -3,7 +3,6 @@ package portscan
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/binary"
 	"encoding/json"
 	"html"
@@ -12,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // A greeting signature names a product from the first line a service
@@ -35,6 +32,8 @@ var greetings = []greeting{
 	{regexp.MustCompile(`(?i)\bESMTP OpenSMTPD\b`), "OpenSMTPD"},
 	{regexp.MustCompile(`(?i)\bMicrosoft ESMTP MAIL Service, Version: (?P<v>\d[\w.]*)`), "Microsoft Exchange smtpd"},
 	{regexp.MustCompile(`(?i)\bESMTP Haraka\b`), "Haraka"},
+	{regexp.MustCompile(`(?i)\bMailpit ESMTP\b`), "Mailpit"},
+	{regexp.MustCompile(`(?i)\bESMTP MailHog\b`), "MailHog"},
 	{regexp.MustCompile(`(?i)\bDovecot\b(?: (?P<v>\d[\d.]*))?`), "Dovecot"},
 	{regexp.MustCompile(`(?i)\bCyrus (?:IMAP|POP3)[ -]?(?:v)?(?P<v>\d[\w.]*)`), "Cyrus"},
 	{regexp.MustCompile(`(?i)\bCourier-IMAP\b`), "Courier"},
@@ -198,6 +197,25 @@ func bodyProduct(body []byte) (product, version string) {
 	if string(body) == "Ollama is running" {
 		return "Ollama", ""
 	}
+	var other struct {
+		Etcd    string `json:"etcdserver"`
+		GitVer  string `json:"gitVersion"`
+		Docker  string `json:"Version"`
+		APIVer  string `json:"ApiVersion"`
+		Compose []struct {
+			Name string `json:"Name"`
+		} `json:"Components"`
+	}
+	if len(body) > 0 && body[0] == '{' && json.Unmarshal(body, &other) == nil {
+		switch {
+		case other.Etcd != "":
+			return "etcd", other.Etcd
+		case other.GitVer != "":
+			return "Kubernetes", strings.TrimPrefix(other.GitVer, "v")
+		case other.Docker != "" && other.APIVer != "":
+			return "Docker Engine", other.Docker
+		}
+	}
 	var doc struct {
 		Version struct {
 			Number       string `json:"number"`
@@ -221,11 +239,14 @@ func bodyProduct(body []byte) (product, version string) {
 func (s *Scanner) greeted(o *Open, raw []byte) {
 	service, product, version := greetingProduct(raw, o.Banner)
 	if product == "" {
+		passiveRead(raw, o)
 		return
 	}
 	o.Product, o.Version = product, version
 	if service != "" {
 		o.Service = service
+	} else if tmp := *o; passiveRead(raw, &tmp) {
+		*o = tmp // a protocol of its own names it (ManageSieve, behind Dovecot's name)
 	}
 	if service == "mysql" {
 		v, _ := mysqlVersion(raw)
@@ -233,9 +254,48 @@ func (s *Scanner) greeted(o *Open, raw []byte) {
 	}
 }
 
+// passiveRead reads a greeting or an answer with every protocol strict
+// enough to be told from one message.
+func passiveRead(raw []byte, o *Open) bool {
+	for _, p := range protocols {
+		if !p.passive {
+			continue
+		}
+		c := *o
+		if p.read(raw, &c) {
+			if c.Service == "" {
+				c.Service = p.name
+			}
+			if c.Banner == "" && isText(raw) {
+				c.Banner = printable(raw)
+			}
+			*o = c
+			return true
+		}
+	}
+	return false
+}
+
+// settle220 tells an FTP server from an SMTP one when the greeting is only
+// "220 ...": SMTP answers EHLO with 250, an FTP server answers SYST with
+// its system type or a request to log in.
+func (s *Scanner) settle220(conn net.Conn, o *Open) {
+	r := s.talk(conn, []byte("EHLO azhaq.invalid\r\n"), nil, s.Banner)
+	if bytes.HasPrefix(r, []byte("250")) {
+		o.Service = "smtp"
+		return
+	}
+	r = s.talk(conn, []byte("SYST\r\n"), nil, s.Banner)
+	switch {
+	case bytes.HasPrefix(r, []byte("215")), bytes.HasPrefix(r, []byte("530")), bytes.HasPrefix(r, []byte("331")):
+		o.Service = "ftp"
+	}
+}
+
 // webProduct reads the product of an HTTP answer to the HEAD, and when
-// the head names none (or only Elasticsearch's header), asks GET / once
-// more for a body that does, or for an HTML page's title and generator.
+// the head names none (or only Elasticsearch's header), or the HEAD was
+// refused (405, 501) or answered with an error page, asks GET / once more
+// for a body that names one, or for an HTML page's title and generator.
 // https says the port speaks TLS.
 func (s *Scanner) webProduct(ctx context.Context, o *Open, head []byte, status int, host, ip string, https bool) {
 	h, ok := parseHead(head)
@@ -245,20 +305,89 @@ func (s *Scanner) webProduct(ctx context.Context, o *Open, head []byte, status i
 	if p, v := headProduct(h); p != "" {
 		o.Product, o.Version = p, v
 	}
+	if o.Product != "" && h.elastic == "" {
+		return
+	}
 	small := h.contentLength < 0 || h.contentLength <= 4096
 	typed := strings.Contains(h.contentType, "json") || strings.Contains(h.contentType, "text/plain")
-	if (o.Product == "" || h.elastic != "") && (status == 200 || status == 401) && typed && small {
-		if p, v := bodyProduct(s.getBody(ctx, o.Port, host, ip, https)); p != "" {
-			o.Product, o.Version = p, v
+	html := strings.Contains(h.contentType, "text/html")
+	switch status {
+	case 200, 401:
+		if !(typed && small || html && o.Product == "") {
+			return
 		}
-	} else if o.Product == "" && (status == 200 || status == 401) && strings.Contains(h.contentType, "text/html") {
-		// An app that names no product still says what it is in its title.
-		body := s.getBody(ctx, o.Port, host, ip, https)
-		o.Title = pageTitle(body)
-		if p, v := generatorProduct(body); p != "" {
+	case 403, 404, 405, 501:
+		// The HEAD was refused, or this is an error page: the page itself may say.
+	default:
+		return
+	}
+	body := s.getBody(ctx, o.Port, host, ip, https)
+	if p, v := bodyProduct(body); p != "" {
+		o.Product, o.Version = p, v
+		return
+	}
+	if o.Product != "" {
+		return
+	}
+	if t := pageTitle(body); t != "" {
+		o.Title = t
+	}
+	if p, v := generatorProduct(body); p != "" {
+		o.Product, o.Version = p, v
+	} else if p, v := titleProduct(o.Title, body); p != "" {
+		o.Product, o.Version = p, v
+	} else if needsVersionPage(body) {
+		if p, v := bodyProduct(s.getPath(ctx, o.Port, host, ip, https, "/version")); p != "" {
 			o.Product, o.Version = p, v
 		}
 	}
+}
+
+// titleProducts name an application by its page's title: a product that
+// serves a page of its own and puts no name in a header.
+var titleProducts = []struct {
+	title   *regexp.Regexp
+	product string
+	version *regexp.Regexp // looked for in the page
+}{
+	{regexp.MustCompile(`(?i)^mailpit$`), "Mailpit", regexp.MustCompile(`/dist/app\.css\?v(\d[\w.]*)`)},
+	{regexp.MustCompile(`(?i)^rabbitmq management$`), "RabbitMQ Management", nil},
+	{regexp.MustCompile(`(?i)^grafana$`), "Grafana", nil},
+	{regexp.MustCompile(`(?i)\[jenkins\]$`), "Jenkins", nil},
+	{regexp.MustCompile(`(?i)^kibana$`), "Kibana", nil},
+	{regexp.MustCompile(`(?i)^prometheus time series`), "Prometheus", nil},
+	{regexp.MustCompile(`(?i)^portainer$`), "Portainer", nil},
+	{regexp.MustCompile(`(?i)^phpmyadmin$`), "phpMyAdmin", nil},
+	{regexp.MustCompile(`(?i)^welcome to nginx!?$`), "nginx", nil},
+}
+
+var tomcatTitle = regexp.MustCompile(`^Apache Tomcat/(\d[\w.]*)`)
+
+func titleProduct(title string, body []byte) (product, version string) {
+	if m := tomcatTitle.FindStringSubmatch(title); m != nil {
+		return "Apache Tomcat", m[1]
+	}
+	for _, t := range titleProducts {
+		if !t.title.MatchString(title) {
+			continue
+		}
+		if t.version != nil {
+			if m := t.version.FindSubmatch(body); m != nil {
+				return t.product, string(m[1])
+			}
+		}
+		return t.product, ""
+	}
+	return "", ""
+}
+
+// needsVersionPage: a Go server's plain 404, or a Kubernetes API's Status
+// object, says nothing of itself on /, but etcd, Kubernetes and Docker
+// answer /version.
+func needsVersionPage(body []byte) bool {
+	b := bytes.TrimSpace(body)
+	return string(b) == "404 page not found" || bytes.HasPrefix(b, []byte(`{"kind":"Status"`)) ||
+		bytes.HasPrefix(b, []byte("{\n  \"kind\": \"Status\""))
 }
 
 var (
@@ -323,27 +452,15 @@ func generatorProduct(body []byte) (product, version string) {
 // connect), and the first 64 KiB of the body: a page's title can come
 // after a long head.
 func (s *Scanner) getBody(ctx context.Context, port int, host, ip string, https bool) []byte {
-	if s.wait(ctx, ip) != nil || s.Take != nil && s.Take() != nil {
-		return nil
-	}
+	return s.getPath(ctx, port, host, ip, https, "/")
+}
+
+// getPath is GET path on a new connection.
+func (s *Scanner) getPath(ctx context.Context, port int, host, ip string, https bool, path string) []byte {
 	if host == "" {
 		host = ip
 	}
-	addr := net.JoinHostPort(ip, strconv.Itoa(port))
-	ledger.TCP(ctx, host, addr)
-	var conn net.Conn
-	var err error
-	if https {
-		cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}
-		if net.ParseIP(host) == nil {
-			cfg.ServerName = host
-		}
-		hctx, cancel := context.WithTimeout(ctx, s.Timeout+s.Banner)
-		defer cancel()
-		conn, err = (&tls.Dialer{NetDialer: &net.Dialer{Timeout: s.Timeout}, Config: cfg}).DialContext(hctx, "tcp", addr)
-	} else {
-		conn, err = (&net.Dialer{Timeout: s.Timeout}).DialContext(ctx, "tcp", addr)
-	}
+	conn, err := s.dial(ctx, host, ip, port, https)
 	if err != nil {
 		return nil
 	}
@@ -356,7 +473,7 @@ func (s *Scanner) getBody(ctx context.Context, port int, host, ip string, https 
 	case strings.Contains(host, ":"):
 		hostHdr = "[" + host + "]"
 	}
-	req := "GET / HTTP/1.0\r\nHost: " + hostHdr + "\r\n"
+	req := "GET " + path + " HTTP/1.0\r\nHost: " + hostHdr + "\r\n"
 	if s.UserAgent != "" {
 		req += "User-Agent: " + s.UserAgent + "\r\n"
 	}
@@ -378,81 +495,7 @@ func (s *Scanner) getBody(ctx context.Context, port int, host, ip string, https 
 	return nil
 }
 
-// speak asks the ports whose service waits for its own protocol, on the
-// connection already open: PostgreSQL's SSLRequest (which any PostgreSQL
-// answers with one byte), Redis's PING, MongoDB's isMaster. It says
-// whether the port was identified; nothing is sent that logs in or
-// changes state.
-func (s *Scanner) speak(o *Open, conn net.Conn) bool {
-	switch {
-	case o.Port == 5432 || o.Port == 5433:
-		reply := s.exchange(conn, []byte{0, 0, 0, 8, 0x04, 0xd2, 0x16, 0x2f})
-		if len(reply) == 1 && (reply[0] == 'S' || reply[0] == 'N') {
-			o.Service, o.Product = "postgresql", "PostgreSQL"
-			o.Banner = "SSLRequest answered " + string(reply)
-			return true
-		}
-	case o.Port == 6379:
-		return s.redis(o, conn)
-	case o.Port >= 27017 && o.Port <= 27019:
-		if v, ok := mongoHello(s.exchange(conn, mongoIsMaster())); ok {
-			o.Service, o.Product, o.Version = "mongodb", "MongoDB", v
-			return true
-		}
-	}
-	return false
-}
-
-// exchange writes req and reads one answer.
-func (s *Scanner) exchange(conn net.Conn, req []byte) []byte {
-	_ = conn.SetDeadline(time.Now().Add(s.Timeout + s.Banner))
-	if _, err := conn.Write(req); err != nil {
-		return nil
-	}
-	buf := make([]byte, 1024)
-	n, _ := conn.Read(buf)
-	return buf[:n]
-}
-
-// redis sends the PING redis-cli starts with: +PONG, or -NOAUTH (or
-// -DENIED) from one that wants a password.
-func (s *Scanner) redis(o *Open, conn net.Conn) bool {
-	reply := string(s.exchange(conn, []byte("PING\r\n")))
-	if strings.HasPrefix(reply, "+PONG") || strings.HasPrefix(reply, "-NOAUTH") || strings.HasPrefix(reply, "-DENIED") {
-		o.Service, o.Product = "redis", "Redis"
-		o.Banner = printable([]byte(reply))
-		return true
-	}
-	return false
-}
-
-// redisError is what Redis answers a request that is not its own with
-// (an old server quotes the command with ', a newer one with `): the HEAD
-// of the HTTP probe, or a password it wants.
-var redisError = regexp.MustCompile("^-(?:NOAUTH|DENIED)\\b|^-ERR unknown command [`']")
-
-// postgresError is what PostgreSQL answers a request that is not its own
-// with.
-func postgresError(answer []byte) bool {
-	return len(answer) > 0 && answer[0] == 'E' && bytes.Contains(answer, []byte("unsupported frontend protocol"))
-}
-
-// mongoIsMaster is an OP_MSG carrying {isMaster: 1, $db: "admin"}.
-func mongoIsMaster() []byte {
-	doc := []byte{34, 0, 0, 0, 0x10}
-	doc = append(doc, "isMaster\x00"...)
-	doc = append(doc, 1, 0, 0, 0, 0x02)
-	doc = append(doc, "$db\x00"...)
-	doc = append(doc, 6, 0, 0, 0)
-	doc = append(doc, "admin\x00"...)
-	doc = append(doc, 0)
-	msg := make([]byte, 16, 55)
-	binary.LittleEndian.PutUint32(msg[0:], 55)
-	binary.LittleEndian.PutUint32(msg[4:], 1)
-	binary.LittleEndian.PutUint32(msg[12:], 2013)
-	msg = append(msg, 0, 0, 0, 0, 0) // flag bits, section kind 0
-	return append(msg, doc...)
-}
+func mongoIsMaster() []byte { return mongoCommand("isMaster") }
 
 // mongoReleases maps maxWireVersion to the release that introduced it.
 var mongoReleases = map[int32]string{

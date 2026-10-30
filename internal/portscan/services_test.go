@@ -325,68 +325,6 @@ func TestPageTitleAndGenerator(t *testing.T) {
 	}
 }
 
-func TestScanRedisPostgresMongoOnTheirPorts(t *testing.T) {
-	s := &Scanner{Banner: 150 * time.Millisecond, Timeout: time.Second}
-	pipe := func(serve func(c net.Conn)) net.Conn {
-		a, b := net.Pipe()
-		go func() { defer b.Close(); serve(b) }()
-		return a
-	}
-	read := func(c net.Conn) []byte {
-		buf := make([]byte, 64)
-		n, _ := c.Read(buf)
-		return buf[:n]
-	}
-
-	o := Open{Port: 6379}
-	c := pipe(func(c net.Conn) {
-		if string(read(c)) == "PING\r\n" {
-			c.Write([]byte("-NOAUTH Authentication required.\r\n"))
-		}
-	})
-	if !s.speak(&o, c) || o.Service != "redis" || o.Product != "Redis" {
-		t.Errorf("redis: %+v", o)
-	}
-	c.Close()
-
-	o = Open{Port: 6379}
-	c = pipe(func(c net.Conn) { read(c); c.Write([]byte("+PONG\r\n")) })
-	if !s.speak(&o, c) || o.Product != "Redis" || o.Banner != "+PONG" {
-		t.Errorf("redis pong: %+v", o)
-	}
-	c.Close()
-
-	o = Open{Port: 5432}
-	c = pipe(func(c net.Conn) {
-		if r := read(c); len(r) == 8 && binary.BigEndian.Uint32(r[4:]) == 80877103 {
-			c.Write([]byte("N"))
-		}
-	})
-	if !s.speak(&o, c) || o.Service != "postgresql" || o.Product != "PostgreSQL" || o.Version != "" {
-		t.Errorf("postgres: %+v", o)
-	}
-	c.Close()
-
-	// Not PostgreSQL: something that answers with more than one byte.
-	o = Open{Port: 5432}
-	c = pipe(func(c net.Conn) { read(c); c.Write([]byte("HTTP/1.1 400 Bad Request\r\n\r\n")) })
-	if s.speak(&o, c) || o.Product != "" {
-		t.Errorf("a web server taken for postgres: %+v", o)
-	}
-	c.Close()
-
-	o = Open{Port: 27017}
-	c = pipe(func(c net.Conn) { read(c) }) // closes without an answer
-	if s.speak(&o, c) || o.Product != "" {
-		t.Errorf("silence taken for mongodb: %+v", o)
-	}
-	c.Close()
-
-	if s.speak(&Open{Port: 8080}, nil) {
-		t.Error("an ordinary port was asked a database's question")
-	}
-}
-
 // Redis answers the HTTP HEAD with an error of its own, PostgreSQL with a
 // complaint about the protocol: neither needs another request.
 func TestScanFindsRedisAndPostgresOnOtherPorts(t *testing.T) {

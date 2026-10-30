@@ -61,6 +61,13 @@
 - `run -dns-brute` guesses labels with an underscore too (`_dmarc`, `_domainkey`); `dns -hc` asks each resolver a known name and says how it answered. `-all` does not include AXFR (`-axfr` asks it, held to the scope); `dns -r` resolvers are asked for every name, `localhost` and `.test` included, as dnsx does.
 - The DNS lab answers MX, TXT, NS, SRV, CAA, SOA and AAAA, has a reverse zone for 127.0.0.0/24 and a zone transfer, truncates long UDP answers, and counts what it was asked (`-stats`).
 
+### Ports
+
+- `ports` names a service by what it answers, not by its port number. A port that says nothing and does not answer the HTTP probe is asked one harmless request of each of about 30 protocols until one answers: Redis (with `redis_version`), PostgreSQL, MongoDB (with `buildInfo`), MQTT (Mosquitto's version), AMQP (RabbitMQ's), memcached, LDAP (anonymous root DSE), SMB2, DNS over TCP, Kafka, ZooKeeper, SQL Server, Oracle TNS, Cassandra, Kerberos, RDP, X11, SOCKS5, STOMP, XMPP, RTSP, SIP, AFP, Minecraft and others. An open port costs at most 24 connects after the first, every one paced, counted and in the ledger; after six open ports of one address that nothing could name, the rest are not run down the list, and the row's `unprobed` and the summary say how many.
+- Greetings are read without a request: Telnet, IRC, NNTP, RTSP, SIP, ManageSieve, VNC (protocol version in `version`), `ICY`. A greeting inside TLS (IMAPS, POP3S, SMTPS, LDAPS) is read before the HEAD. A binary answer to the HEAD is kept as a banner, a connection closed without a word is `tcpwrapped`, and a web port whose HEAD was refused (405, 501) is asked `GET /` for its title and product (Mailpit, Tomcat, etcd, Kubernetes, Docker).
+- UDP: TFTP, rpcbind, the SQL Server Browser, SIP, NAT-PMP, Ubiquiti discovery and IPMI/ASF-RMCP are asked on their ports, the default list is 25 ports, and a port with no known protocol is asked DNS, then SNMP (v1; v3 engine id on 161), then memcached's version, then an empty datagram. A sysDescr names Linux, Cisco IOS, JUNOS or Windows as `product`.
+- A host that refuses some UDP ports but leaves others silent may be rate-limiting its ICMP replies: up to 80 such ports are asked again one at a time at its pace, and more are left `open|filtered` and counted in `udp_limited` and the summary. Only an ICMP unreachable for the port makes it `closed`.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

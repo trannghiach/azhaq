@@ -253,7 +253,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	bruteFile := fs.String("dns-brute", "", "resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow)")
 	permute := fs.Bool("permute", false, "resolve variations of found names (active; the targets given are the scope unless -allow)")
 	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888 (active; the targets given are the scope unless -allow)")
-	portsUDP := fs.String("ports-udp", "", "ask UDP ports (active): top (about 20 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open|filtered (-ports none: UDP only)")
+	portsUDP := fs.String("ports-udp", "", "ask UDP ports (active): top (about 25 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open|filtered (-ports none: UDP only)")
 	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1000, as naabu, and 127.0.0.1 unpaced)")
 	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active; the targets given are the scope unless -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")

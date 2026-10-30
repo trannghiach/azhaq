@@ -57,15 +57,23 @@ func addUDP(row map[string]any, r portscan.UDPReport, scanned int) {
 	row["udp_open"] = open
 	row["udp_open_filtered"] = filtered
 	row["udp_closed"] = r.Closed
+	if r.Limited > 0 {
+		row["udp_limited"] = r.Limited
+	}
 	if len(services) > 0 {
 		row["udp_services"] = services
 	}
 }
 
-// udpNotes says what open|filtered means, once, for the summary.
-func udpNotes(filtered int) []string {
-	if filtered == 0 {
-		return nil
+// udpNotes says what open|filtered means, once, for the summary, and when
+// a host that refused some ports may have rate-limited its refusals.
+func udpNotes(filtered, limited int) []string {
+	var out []string
+	if filtered > 0 {
+		out = append(out, fmt.Sprintf("udp: %d open|filtered (asked on every way its protocol has, no answer and no ICMP port unreachable): a service that ignores the probe, or a filter; a closed port answers with an ICMP error", filtered))
 	}
-	return []string{fmt.Sprintf("udp: %d open|filtered (asked twice, no answer and no ICMP port unreachable): a service that ignores the probe, or a filter; a closed port answers with an ICMP error", filtered)}
+	if limited > 0 {
+		out = append(out, fmt.Sprintf("udp: %d silent ports on a host that refused others were not asked again at its ICMP rate limit (about one reply a second; too many for that): some of them may be closed, so scan fewer ports to be sure", limited))
+	}
+	return out
 }
