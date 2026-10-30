@@ -56,7 +56,7 @@
 
 **An open TCP port has no `service` or `product`.** The port said nothing and none of the protocols azhaq asks (about 30, one request each, at most 24 connects per port) answered, or it answered in a protocol azhaq does not know. The row keeps the first bytes of any answer in `banner`. A port that accepts a connection and closes it without a word is `tcpwrapped`. When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports and the list was not run for the rest.
 
-**A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again.
+**A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again. `-retries 3` asks the silent ones three more times, `-connect-timeout 3s` waits longer for a far host.
 
 **`fuzz` found fewer matches than ffuf (or more).** Compare the filters first: the summary says what calibration added (`auto-calibration filtered out answers with size 1234`) and notes when it is off because `-fs` and its kind were given. ffuf's default is no calibration; `-ac=false` gives it. A different `Size` on a compressed page means a different `Accept-Encoding`: azhaq decodes gzip, deflate and brotli, as ffuf, so the same header gives the same size. The `User-Agent` is a browser's, not ffuf's; send `-H 'User-Agent: Fuzz Faster U Fool v2.1.0'` where an app answers by it.
 
@@ -77,3 +77,11 @@
 **`dns -d 192.0.2.0/24` printed nothing.** Addresses and ranges are looked up only with `-ptr` (reverse names) and are otherwise left out; the summary says so under `left out`. An AS number (`AS13335`) expands to the prefixes RIPEstat lists for it.
 
 **`dns -axfr` found no zone.** A name server that refuses a transfer is common. The summary's notes say, per server, whether it refused, did not answer, or was left alone because the scope does not allow it (`-allow` the server's name or address to ask it). Only the name servers of the name and the `-resolvers` you gave are asked.
+
+**`ports -timeout 500` is refused.** `-timeout` is how long the whole run may take (`90s`); the wait for one connect is `-connect-timeout` (`500` is milliseconds there).
+
+**`ports` on a CDN name scans four ports.** An address in a CDN or WAF range is asked 80, 443, 8080 and 8443 only (the row has `cdn`, the summary says so). `-cdn-full` scans it in full.
+
+**`ports` on a range says addresses "answered neither a connect to 80 nor to 443".** That is `-wn`: an address is up when 80 or 443 accepts or refuses. A host that drops both reads as down; scan without `-wn` to ask every address.
+
+**`ports -T4` or a high `-rate` finds fewer ports than before.** A short connect timeout and few retries lose ports on a lossy path; the summary lists the ports that stayed silent. Raise `-connect-timeout` or `-retries`.

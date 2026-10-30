@@ -137,7 +137,7 @@ var (
 
 func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int, gap time.Duration) (open []UDPPort, silent []int, closed int, err error) {
 	var mu sync.Mutex
-	sem := make(chan struct{}, s.Workers)
+	sem := make(chan struct{}, s.udpWorkers)
 	var wg sync.WaitGroup
 	var stop error
 	for i, p := range ports {

@@ -162,8 +162,9 @@ func (s *Scanner) dialWait(ctx context.Context, host, ip string, port int, secur
 	}
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
 	ledger.TCP(ctx, host, addr)
+	d := s.dialer(ip)
 	if !secure {
-		return (&net.Dialer{Timeout: s.Timeout}).DialContext(ctx, "tcp", addr)
+		return d.DialContext(ctx, "tcp", addr)
 	}
 	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}
 	if net.ParseIP(host) == nil {
@@ -171,7 +172,7 @@ func (s *Scanner) dialWait(ctx context.Context, host, ip string, port int, secur
 	}
 	hctx, cancel := context.WithTimeout(ctx, handshake)
 	defer cancel()
-	return (&tls.Dialer{NetDialer: &net.Dialer{Timeout: s.Timeout}, Config: cfg}).DialContext(hctx, "tcp", addr)
+	return (&tls.Dialer{NetDialer: &d, Config: cfg}).DialContext(hctx, "tcp", addr)
 }
 
 // talk writes req (when there is one) and reads the answer until frame

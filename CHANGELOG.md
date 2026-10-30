@@ -97,6 +97,20 @@
 - A word with a `?` starts the query, as in ffuf (`render?url=…`, `dns-query?name=…`); it was sent as part of the path.
 - A sweep whose guesses were answered 429, and one with paths that got no whole answer, say so in the summary and exit 3. Before, a rate-limited target gave 0 paths and exit 0.
 
+### Ports
+
+- `ports` scans a range or an AS number without a cap: `ports 10.0.0.0/16 -p 22,443` takes CIDR (IPv4, IPv6 down to /104) and `AS13335`, asks the addresses in blocks, and sends no reverse DNS query per address. Before, `-l` over 2,048 addresses stopped, and CIDR and ASN were refused.
+- `-host a,b` takes several targets, `host:port` asks that port when `-p` is not given, bare arguments and `-no-stdin` work, `-p -` is every port, and `-tp`, `-pf`, `-ep`, `-eh`, `-ef`, `-iv`, `-sa` and `-r 1.1.1.1,8.8.8.8` are as naabu's. `-host a,b` used to scan nothing and exit 0.
+- Output: `-csv`, `-oX`, `-oG`, `-oA`, `-lof`, `-eof`, and `cdn` and `cdn-name` in `-json`, whose timestamp is now UTC.
+- Timing: `-connect-timeout`, `-retries` (`-max-retries`), `-c` (`-workers`), `-min-rate`, `-T0` to `-T5`, `-pts`; `-timeout` stays the run's limit, and `-timeout 500` says to use `-connect-timeout`. The default rate is 1500, and as many connects are in flight as the rate allows.
+- `-cdn-full` scans a CDN or WAF address in full; the default still asks 80, 443, 8080 and 8443, and now says so in the summary.
+- `-sn` lists the addresses that are up and `-wn` scans only those (a connect to 80 or 443 accepted or refused).
+- Ports are asked in random order, the likeliest first; `-order asc` and `-seed N`.
+- `-detect none|banner|all` sets how much an open port is asked (naabu's one connect per port with `none`); `-proxy` (SOCKS5), `-source-ip` and `-cp PAYLOAD`.
+- `top-1000` has 5985 and 5986 (WinRM), not 3007 and 3013, as naabu's list.
+- A name costs 2 DNS queries (A, AAAA), not 5 for an apex name; a name that does not resolve is listed in the summary.
+- `run -cidr/-asn` with `-ports` scans the prefix itself and no longer stops at `-max-ips`.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

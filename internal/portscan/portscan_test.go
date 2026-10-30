@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -358,5 +359,199 @@ func TestLoopbackUnpacedUnlessRateGiven(t *testing.T) {
 		if took := time.Since(t0); (took > time.Second) != c.slow {
 			t.Fatalf("rate %v on loopback took %v", c.s.Rate, took)
 		}
+	}
+}
+
+func TestPortsDashIsAll(t *testing.T) {
+	if p, err := Ports("-"); err != nil || len(p) != 65535 {
+		t.Fatalf("%d %v", len(p), err)
+	}
+	p, _ := Ports("top-1000")
+	if !slices.Contains(p, 5985) || !slices.Contains(p, 5986) || slices.Contains(p, 3007) || slices.Contains(p, 3013) {
+		t.Error("top-1000 is not naabu's list")
+	}
+}
+
+func TestSpecAndExclude(t *testing.T) {
+	if s := Spec([]int{22, 80, 81, 82, 443}); s != "22,80-82,443" {
+		t.Error(s)
+	}
+	got, err := Exclude([]int{22, 80, 81, 443}, "80-81,9")
+	if err != nil || !reflect.DeepEqual(got, []int{22, 443}) {
+		t.Errorf("%v %v", got, err)
+	}
+}
+
+func TestTieredOrder(t *testing.T) {
+	all, _ := Ports("1-3000")
+	a, b := Tiered(all, 1), Tiered(all, 1)
+	if !reflect.DeepEqual(a, b) || len(a) != len(all) || reflect.DeepEqual(a, all) {
+		t.Fatal("not a repeatable shuffle")
+	}
+	top, _ := Ports("top-100")
+	in := map[int]bool{}
+	for _, p := range top {
+		in[p] = true
+	}
+	n := 0
+	for _, p := range all {
+		if in[p] {
+			n++
+		}
+	}
+	for _, p := range a[:n] {
+		if !in[p] {
+			t.Fatalf("%d before the end of the top 100", p)
+		}
+	}
+}
+
+func listener(t *testing.T) (port int, stop func()) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	return l.Addr().(*net.TCPAddr).Port, func() { l.Close() }
+}
+
+// -detect none: one connect per open port, nothing read or sent.
+func TestDetectNoneIsOneConnectPerPort(t *testing.T) {
+	var n atomic.Int32
+	s := &Scanner{Detect: DetectNone, Take: func() error { n.Add(1); return nil }}
+	var ports []int
+	for i := 0; i < 3; i++ {
+		p, stop := listener(t)
+		defer stop()
+		ports = append(ports, p)
+	}
+	r, err := s.ScanEach(context.Background(), "", "127.0.0.1", ports)
+	if err != nil || len(r.Open) != 3 || n.Load() != 3 {
+		t.Fatalf("%d open, %d connects, %v", len(r.Open), n.Load(), err)
+	}
+}
+
+// A threshold stops asking an address that answers everywhere.
+func TestThresholdStopsAHost(t *testing.T) {
+	var ports []int
+	for i := 0; i < 6; i++ {
+		p, stop := listener(t)
+		defer stop()
+		ports = append(ports, p)
+	}
+	s := &Scanner{Detect: DetectNone, Threshold: 2, Workers: 1}
+	r, _ := s.ScanEach(context.Background(), "", "127.0.0.1", ports)
+	if !r.Threshold || len(r.Open) < 2 || len(r.Open) > 3 || r.Asked >= len(ports) {
+		t.Fatalf("open %d asked %d threshold %v", len(r.Open), r.Asked, r.Threshold)
+	}
+}
+
+// Retries: n passes over the silent ports, counted as connects.
+func TestRetriesCountedAsConnects(t *testing.T) {
+	// 192.0.2.1 is never routed: its connects time out (or are refused on
+	// a machine without a route); use loopback closed ports instead and
+	// check that refused ports are not retried.
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	p := l.Addr().(*net.TCPAddr).Port
+	l.Close()
+	var n atomic.Int32
+	s := &Scanner{Detect: DetectNone, Retries: 3, Take: func() error { n.Add(1); return nil }}
+	r, err := s.ScanEach(context.Background(), "", "127.0.0.1", []int{p})
+	if err != nil || len(r.Open) != 0 || len(r.Silent) != 0 || n.Load() != 1 {
+		t.Fatalf("%d connects, %+v, %v", n.Load(), r, err)
+	}
+}
+
+func TestUpAnswersOnRefusal(t *testing.T) {
+	s := &Scanner{}
+	up, err := s.Up(context.Background(), "127.0.0.1", "127.0.0.1")
+	if err != nil || !up {
+		t.Fatalf("loopback is up: %v %v", up, err)
+	}
+}
+
+// A socket that connected to itself is not an open port (a dial from the
+// ephemeral range to a closed local port can pick that port as its source).
+func TestSelfConnectIsNotOpen(t *testing.T) {
+	var conn net.Conn
+	for p := 40000; p < 40200 && conn == nil; p++ {
+		d := net.Dialer{LocalAddr: &net.TCPAddr{IP: net.IPv4(127, 0, 0, 1), Port: p}}
+		c, err := d.Dial("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+		if err == nil {
+			conn = c
+		}
+	}
+	if conn == nil {
+		t.Skip("this kernel did not self-connect")
+	}
+	defer conn.Close()
+	if !selfConnect(conn) {
+		t.Fatal("a socket connected to itself was not noticed")
+	}
+	port, stop := listener(t)
+	defer stop()
+	if c, err := net.Dial("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))); err != nil || selfConnect(c) {
+		t.Errorf("a connection to a listener is not a self-connect: %v", err)
+	} else {
+		c.Close()
+	}
+}
+
+// Scanning the ephemeral range of loopback reports only ports something
+// listens on, however many closed ones meet themselves.
+func TestEphemeralRangeHasNoPhantomPorts(t *testing.T) {
+	listeners := func() map[int]bool {
+		m := map[int]bool{}
+		for _, file := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+			raw, err := os.ReadFile(file)
+			if err != nil {
+				t.Skip("no " + file)
+			}
+			for _, l := range strings.Split(string(raw), "\n")[1:] {
+				f := strings.Fields(l)
+				if len(f) > 3 && f[3] == "0A" {
+					i := strings.LastIndex(f[1], ":")
+					if n, err := strconv.ParseInt(f[1][i+1:], 16, 32); err == nil {
+						m[int(n)] = true
+					}
+				}
+			}
+		}
+		return m
+	}
+	before := listeners()
+	var ports []int
+	for p := 32768; p <= 60999; p++ {
+		ports = append(ports, p)
+	}
+	s := &Scanner{Detect: DetectNone}
+	r, err := s.ScanEach(context.Background(), "", "127.0.0.1", ports)
+	if err != nil {
+		t.Fatal(err)
+	}
+	after := listeners()
+	for _, o := range r.Open {
+		if before[o.Port] || after[o.Port] {
+			continue
+		}
+		// Another test's server may have come and gone during the scan; a
+		// phantom port does not accept a second connection.
+		c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(o.Port)), time.Second)
+		if err == nil {
+			self := selfConnect(c)
+			c.Close()
+			if !self {
+				continue
+			}
+		}
+		t.Errorf("port %d reported open and nothing listens on it", o.Port)
 	}
 }
