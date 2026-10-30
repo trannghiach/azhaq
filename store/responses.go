@@ -14,11 +14,21 @@ type Response struct {
 	Body []byte
 }
 
-// SaveResponses records answers of the current run in one transaction.
+// SaveResponses records answers of the current run, a few hundred to a
+// transaction: the store is not held for a sweep's thousands at once.
 func (s *Store) SaveResponses(rs []Response) error {
-	if len(rs) == 0 {
-		return nil
+	const chunk = 256
+	for len(rs) > 0 {
+		n := min(len(rs), chunk)
+		if err := s.saveResponses(rs[:n]); err != nil {
+			return err
+		}
+		rs = rs[n:]
 	}
+	return nil
+}
+
+func (s *Store) saveResponses(rs []Response) error {
 	packed := make([][]byte, len(rs))
 	for i, r := range rs {
 		packed[i] = gz(r.Body)
@@ -28,11 +38,11 @@ func (s *Store) SaveResponses(rs []Response) error {
 	if s.runID == "" {
 		return nil
 	}
-	tx, err := s.db.Begin()
+	tx, commit, rollback, err := s.begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer rollback()
 	ins, err := tx.Prepare(`INSERT OR REPLACE INTO responses (run_id, url, meta, body) VALUES (?, ?, ?, ?)`)
 	if err != nil {
 		return err
@@ -43,7 +53,7 @@ func (s *Store) SaveResponses(rs []Response) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	return commit()
 }
 
 // LoadResponse is the current run's recorded answer for url.
@@ -69,12 +79,12 @@ func (s *Store) LoadResponse(url string) (Response, bool) {
 func (s *Store) DropResponses(keep string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res, err := s.db.Exec(`DELETE FROM responses WHERE run_id <> ?`, keep)
+	res, err := s.q().Exec(`DELETE FROM responses WHERE run_id <> ?`, keep)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n > 0 {
-		_, _ = s.db.Exec(`PRAGMA incremental_vacuum`)
+		_, _ = s.q().Exec(`PRAGMA incremental_vacuum`)
 	}
 	return nil
 }

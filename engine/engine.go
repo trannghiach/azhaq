@@ -40,6 +40,7 @@ type Engine struct {
 	Client *http.Client
 
 	secured sync.Map // hosts whose http URLs are the https site's (scheme.go)
+	recent  sync.Map // entities upserted a moment ago (upsertRecent)
 }
 
 func (e *Engine) Plan(seeds []types.Seed) []types.WorkItem {
@@ -84,16 +85,35 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	e.linkInDomain(seed, ent, now)
 
 	meta := types.RunMeta{ItemID: item.ID, Status: types.StatusOK}
-	write := func(o types.Observation) error {
-		if _, err := e.Store.AddObservation(ent.ID, o); err != nil {
-			return err
-		}
-		e.linkFacts(ent, o, time.Now().UTC())
-		if e.Observe != nil {
-			e.Observe(ent, o)
-		}
-		return nil
+	// Observations and their links go in one transaction: a sweep with
+	// thousands of hits spent most of its time committing.
+	writeMany := func(obs []types.Observation) (err error) {
+		e.Store.Batch(func() {
+			if len(obs) > 1 {
+				if err = e.Store.AddObservations(ent.ID, obs); err != nil {
+					return
+				}
+				e.linkFactsMany(ent, obs, time.Now().UTC())
+				if e.Observe != nil {
+					for _, o := range obs {
+						e.Observe(ent, o)
+					}
+				}
+				return
+			}
+			for _, o := range obs {
+				if _, err = e.Store.AddObservation(ent.ID, o); err != nil {
+					return
+				}
+				e.linkFacts(ent, o, time.Now().UTC())
+				if e.Observe != nil {
+					e.Observe(ent, o)
+				}
+			}
+		})
+		return err
 	}
+	write := func(o types.Observation) error { return writeMany([]types.Observation{o}) }
 	// Under a request budget, what a task reports is held until it ends: a
 	// refused request can pass for a missing page (a catch-all check that
 	// never ran), so the reports of a task the budget stopped are dropped
@@ -123,13 +143,32 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		}
 		return write(o)
 	}
+	emitMany := func(obs []types.Observation) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		for i := range obs {
+			if obs[i].ObservedAt.IsZero() {
+				obs[i].ObservedAt = time.Now().UTC()
+			}
+			if obs[i].Collector == "" {
+				obs[i].Collector = col.Name()
+			}
+			meta.EmitCount++
+		}
+		if hold {
+			held = append(held, obs...)
+			return nil
+		}
+		return writeMany(obs)
+	}
 	release := func() error {
 		mu.Lock()
 		defer mu.Unlock()
-		for _, o := range held {
-			if err := write(o); err != nil {
-				return err
-			}
+		if err := writeMany(held); err != nil {
+			return err
 		}
 		held = nil
 		return nil
@@ -137,7 +176,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 
 	done := timing.Start(ctx, col.Name(), seed.Key())
 	ctx, refused, used := fetch.WatchBudget(ledger.WithCollector(ctx, col.Name()))
-	got, err := col.Run(ctx, seed, emit)
+	got, err := col.Run(types.WithBatchEmit(ctx, emitMany), seed, emit)
 	done()
 	if errors.Is(err, neterr.ErrBudget) || refused() {
 		// Not done, whatever the collector made of the refusal: nothing
@@ -301,26 +340,14 @@ func (e *Engine) linkNames(from types.Entity, o types.Observation, now time.Time
 }
 
 func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.Time) {
-	if o.Kind != "url" {
+	u, ok := e.foundTarget(o)
+	if !ok {
 		return
 	}
 	var p struct {
-		URL  string `json:"url"`
-		Role string `json:"role"`
 		From string `json:"from"`
 	}
-	if err := json.Unmarshal(o.Payload, &p); err != nil || p.URL == "" {
-		return
-	}
-	u, err := FoundKey(p.URL, p.Role)
-	if err != nil || webextract.JunkURL(u) {
-		return
-	}
-	base, frag, _ := strings.Cut(u, "#")
-	u = e.onHTTPS(base)
-	if frag != "" {
-		u += "#" + frag
-	}
+	_ = json.Unmarshal(o.Payload, &p)
 	to, err := e.Store.UpsertEntity(types.TypeURL, u, now)
 	if err != nil {
 		return
@@ -332,19 +359,114 @@ func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.T
 		}
 	}
 	_ = e.Store.AddEdge(from.ID, to.ID, "FOUND", now)
-	if host := normalize.HostFromURL(u); host != "" {
-		if ip := net.ParseIP(host); ip != nil {
-			h, err := e.Store.UpsertEntity(types.TypeIPAddress, ip.String(), now)
+	if host, ip := hostOf(u); host != "" {
+		if ip {
+			h, err := e.Store.UpsertEntity(types.TypeIPAddress, host, now)
 			if err == nil {
 				_ = e.Store.AddEdge(to.ID, h.ID, "ON_HOST", now)
 			}
 			return
 		}
-		h, err := e.Store.UpsertEntity(types.TypeHostname, host, now)
+		h, err := e.upsertRecent(types.TypeHostname, host, now)
 		if err == nil {
 			_ = e.Store.AddEdge(to.ID, h.ID, "ON_HOST", now)
 		}
 	}
+}
+
+// foundTarget is the URL a "url" observation names, as the map keeps it.
+func (e *Engine) foundTarget(o types.Observation) (string, bool) {
+	if o.Kind != "url" {
+		return "", false
+	}
+	var p struct {
+		URL  string `json:"url"`
+		Role string `json:"role"`
+	}
+	if err := json.Unmarshal(o.Payload, &p); err != nil || p.URL == "" {
+		return "", false
+	}
+	u, err := FoundKey(p.URL, p.Role)
+	if err != nil || webextract.JunkURL(u) {
+		return "", false
+	}
+	base, frag, _ := strings.Cut(u, "#")
+	u = e.onHTTPS(base)
+	if frag != "" {
+		u += "#" + frag
+	}
+	return u, true
+}
+
+// hostOf is the host of a URL, and whether it is an IP address.
+func hostOf(u string) (string, bool) {
+	host := normalize.HostFromURL(u)
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.String(), true
+	}
+	return host, false
+}
+
+// linkFactsMany is linkFacts for the observations of one entity written
+// together; the URLs a sweep found are linked a statement for all of them,
+// not a few for each.
+func (e *Engine) linkFactsMany(from types.Entity, obs []types.Observation, now time.Time) {
+	var urls, hosts, ips []string
+	var edges []store.Edge
+	seenHost := map[string]bool{}
+	for _, o := range obs {
+		var p struct {
+			From string `json:"from"`
+		}
+		u, ok := e.foundTarget(o)
+		if ok {
+			_ = json.Unmarshal(o.Payload, &p)
+		}
+		if !ok || p.From != "" {
+			e.linkFacts(from, o, now)
+			continue
+		}
+		urls = append(urls, u)
+		edges = append(edges, store.Edge{From: from.ID, To: store.EntityID(types.TypeURL, u), Type: "FOUND"})
+		if host, ip := hostOf(u); host != "" {
+			t := types.TypeHostname
+			if ip {
+				t = types.TypeIPAddress
+			}
+			edges = append(edges, store.Edge{From: store.EntityID(types.TypeURL, u), To: store.EntityID(t, host), Type: "ON_HOST"})
+			if !seenHost[host] {
+				seenHost[host] = true
+				if ip {
+					ips = append(ips, host)
+				} else {
+					hosts = append(hosts, host)
+				}
+			}
+		}
+	}
+	if len(urls) == 0 {
+		return
+	}
+	_ = e.Store.UpsertEntities(types.TypeURL, urls, now)
+	for _, h := range hosts {
+		_, _ = e.upsertRecent(types.TypeHostname, h, now)
+	}
+	_ = e.Store.UpsertEntities(types.TypeIPAddress, ips, now)
+	_ = e.Store.AddEdges(edges, now)
+}
+
+// upsertRecent is UpsertEntity, except that an entity upserted a moment ago
+// is not upserted again: a sweep's thousands of hits name the same host.
+func (e *Engine) upsertRecent(t types.SeedType, key string, now time.Time) (types.Entity, error) {
+	k := string(t) + " " + key
+	if at, ok := e.recent.Load(k); ok && now.Sub(at.(time.Time)) < 2*time.Second {
+		return types.Entity{ID: store.EntityID(t, key), Type: t, Key: key, FirstSeen: now, LastSeen: now}, nil
+	}
+	ent, err := e.Store.UpsertEntity(t, key, now)
+	if err == nil {
+		e.recent.Store(k, now)
+	}
+	return ent, err
 }
 
 func (e *Engine) linkDNS(from types.Entity, o types.Observation, now time.Time) {

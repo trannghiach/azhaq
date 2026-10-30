@@ -83,6 +83,20 @@
 - `params -X POST|JSON|XML` sends names in a form, JSON or XML body. It needs `-allow` or `-scope` to name the targets, or a single page; every request is counted in the budget, paced and in the ledger; the row and the summary say writes were sent.
 - `params` takes `-i` (a Burp XML export or a raw request, with its method, body and headers), `-include`, `-casing`, `-passive`, `-c`, `-d`, `-stable`, `-T`, and writes `-oJ` (arjun's file), `-oT` (`URL?name=1234&…`) and `-oB HOST:PORT` (replay through Burp).
 
+### `dirs`
+
+- `dirs -u https://host/api/` sweeps `https://host/api/WORD`. It used to sweep nothing and print `0 paths` with exit 0 for any URL with a path. A query or fragment on the URL is dropped, and a note says so.
+- `dirs` has a built-in wordlist, SecLists' `common.txt` (4,750 words, MIT): `azhaq dirs -u URL` works without `-w`, and `-dirs @common` names it for `run`.
+- `dirs` takes ffuf's matchers and filters: `-ms -mw -ml -mr` and `-fc -fs -fw -fl -fr`, with the values and rules of `fuzz`, and `run` has them as `-dirs-ms` and the rest. A bad value is a usage error.
+- `dirs -mc` accepts `all`, and the default is ffuf's whole `200-299` range, so a 250 is reported.
+- `dirs` counts words and lines as ffuf does, over the whole body (newlines + 1): the body `a b c` and two blank lines is `Lines: 4`, where it said 1. A `-fl` value from a ffuf run carries over.
+- `dirs` keeps one connection per thread. Before, about every third request opened a new one: 45,000 words left 13,500 sockets in TIME-WAIT on loopback (now 45, ffuf 40), and each new connection to an https target cost a handshake.
+- `dirs` against a target that answers every guess (5,000 hits in 50,000 words) took 6.9 s against 1.5 s for the same list with no hits. Hits are now written to the workspace in batches, and the same run takes about 1.3 to 1.9 s.
+- The catch-all check hides a guess whose size differs from the not-found answers only where those answers differ in size among themselves, or repeat the path they were asked for. A real page close in size to a static not-found page is no longer hidden.
+- The calibration requests are paced by `-rate`, as the guesses are; they were not.
+- A word with a `?` starts the query, as in ffuf (`render?url=…`, `dns-query?name=…`); it was sent as part of the path.
+- A sweep whose guesses were answered 429, and one with paths that got no whole answer, say so in the summary and exit 3. Before, a rate-limited target gave 0 paths and exit 0.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

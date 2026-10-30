@@ -116,6 +116,15 @@ azhaq dns -d example.com -axfr -allow example.com     # ask the name servers for
 
 `-r` takes a file or a comma list, over UDP, `tcp:`, `dot:` or `doh:`; `-rl` is names a second over all resolvers, and `-timeout` is one answer's wait, as in dnsx.
 
+Content discovery in the ffuf way, from a directory, with ffuf's filters:
+
+```
+azhaq dirs -u https://app.example.com/api/                 # built-in common.txt, swept under /api/
+azhaq dirs -u https://app.example.com/ -w big.txt -fs 4242 -fc 404 -e .php,.bak
+```
+
+`dirs` calibrates like `ffuf -ac`; with `-fs`/`-fw`/`-fl` the sizes, word and line counts are ffuf's, so a filter value moves over from a ffuf run.
+
 ## 10. Read a GraphQL schema
 
 ```

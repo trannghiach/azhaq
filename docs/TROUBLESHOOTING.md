@@ -38,6 +38,12 @@
 
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
+**`dirs` hid a page I know exists.** The calibration drops a guess that answers like a path that cannot exist: the same status and size (ffuf's rule), the same word and line counts where the not-found pages differ in size among themselves, or a size within the path's length where they repeat the path. A real page that is byte-for-byte the not-found page cannot be told apart by any size or count; `-fs`, `-fw` and `-fl` do not undo the calibration. Use `fuzz -ac=false -mc all` to see every answer.
+
+**`dirs` says `N of M guesses were answered 429`.** The service is rate-limiting the sweep. A 429 is not in the default `-mc`, so those guesses were not judged and the paths may exist. The exit code is 3. Lower `-rate` or `-t` and run again.
+
+**`dirs -u URL/path` found less than a sweep of the root.** A URL with a path is swept under that path only (`/api/WORD`); it does not also sweep `/`. Give both URLs to sweep both.
+
 **A UDP port is `open|filtered`.** The port stayed silent when asked every way its protocol has (a port with no known protocol is asked four ways) and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`; a host that rate-limits its ICMP replies leaves closed ports silent too, and the summary says when that may be the case (`udp: N silent ports on a host that refused others …`). `ports -json` lists them; the plain output lists only the open ones.
 
 **`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random 500 of about 6,300 tesla.com names per call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.

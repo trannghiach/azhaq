@@ -42,11 +42,11 @@ func (s *Store) SaveTasks(add []Task, done []string, stopped []Stopped) error {
 	if s.runID == "" {
 		return nil
 	}
-	tx, err := s.db.Begin()
+	tx, commit, rollback, err := s.begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer rollback()
 	if len(add) > 0 {
 		ins, err := tx.Prepare(`INSERT OR IGNORE INTO tasks (run_id, id, collector, seed, depth, prio, done) VALUES (?, ?, ?, ?, ?, ?, 0)`)
 		if err != nil {
@@ -87,7 +87,7 @@ func (s *Store) SaveTasks(add []Task, done []string, stopped []Stopped) error {
 			}
 		}
 	}
-	return tx.Commit()
+	return commit()
 }
 
 // Tasks lists the current run's tasks: the ones that need the fewest
@@ -97,7 +97,7 @@ func (s *Store) SaveTasks(add []Task, done []string, stopped []Stopped) error {
 func (s *Store) Tasks() ([]Task, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	rows, err := s.db.Query(`SELECT id, collector, seed, depth, prio, done, tries, need FROM tasks WHERE run_id = ? ORDER BY need, rowid`, s.runID)
+	rows, err := s.q().Query(`SELECT id, collector, seed, depth, prio, done, tries, need FROM tasks WHERE run_id = ? ORDER BY need, rowid`, s.runID)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (s *Store) TasksDone() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n int
-	_ = s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE run_id = ? AND done = 1`, s.runID).Scan(&n)
+	_ = s.q().QueryRow(`SELECT COUNT(*) FROM tasks WHERE run_id = ? AND done = 1`, s.runID).Scan(&n)
 	return n
 }
 
@@ -131,7 +131,7 @@ func (s *Store) TasksLeft() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n int
-	_ = s.db.QueryRow(`SELECT COUNT(*) FROM tasks WHERE run_id = ? AND done = 0`, s.runID).Scan(&n)
+	_ = s.q().QueryRow(`SELECT COUNT(*) FROM tasks WHERE run_id = ? AND done = 0`, s.runID).Scan(&n)
 	return n
 }
 
@@ -146,7 +146,7 @@ func (s *Store) Forget(ids []string) error {
 		for i, id := range ids[:n] {
 			args[i] = s.runID + id
 		}
-		if _, err := s.db.Exec(`DELETE FROM idempotency WHERE key IN (?`+strings.Repeat(",?", n-1)+`)`, args...); err != nil {
+		if _, err := s.q().Exec(`DELETE FROM idempotency WHERE key IN (?`+strings.Repeat(",?", n-1)+`)`, args...); err != nil {
 			return err
 		}
 		ids = ids[n:]
@@ -163,7 +163,7 @@ func (s *Store) SetRunArgs(args []string) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err = s.db.Exec(`UPDATE runs SET args = ? WHERE id = ?`, string(raw), s.runID)
+	_, err = s.q().Exec(`UPDATE runs SET args = ? WHERE id = ?`, string(raw), s.runID)
 	return err
 }
 
@@ -173,7 +173,7 @@ func (s *Store) RunArgs() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var raw sql.NullString
-	if s.db.QueryRow(`SELECT args FROM runs WHERE id = ?`, s.runID).Scan(&raw) != nil || !raw.Valid {
+	if s.q().QueryRow(`SELECT args FROM runs WHERE id = ?`, s.runID).Scan(&raw) != nil || !raw.Valid {
 		return nil
 	}
 	var args []string
@@ -187,7 +187,7 @@ func (s *Store) Resumable() (id string, args []string, left int, ok bool, err er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var raw sql.NullString
-	err = s.db.QueryRow(`
+	err = s.q().QueryRow(`
 SELECT r.id, r.args, (SELECT COUNT(*) FROM tasks t WHERE t.run_id = r.id AND t.done = 0) AS left
 FROM runs r WHERE left > 0 ORDER BY r.started DESC LIMIT 1`).Scan(&id, &raw, &left)
 	if err == sql.ErrNoRows {
@@ -212,11 +212,11 @@ func (s *Store) Claim(key, owner string) string {
 	if s.runID == "" {
 		return owner
 	}
-	if _, err := s.db.Exec(`INSERT OR IGNORE INTO claims (run_id, key, owner) VALUES (?, ?, ?)`, s.runID, key, owner); err != nil {
+	if _, err := s.q().Exec(`INSERT OR IGNORE INTO claims (run_id, key, owner) VALUES (?, ?, ?)`, s.runID, key, owner); err != nil {
 		return owner
 	}
 	got := owner
-	_ = s.db.QueryRow(`SELECT owner FROM claims WHERE run_id = ? AND key = ?`, s.runID, key).Scan(&got)
+	_ = s.q().QueryRow(`SELECT owner FROM claims WHERE run_id = ? AND key = ?`, s.runID, key).Scan(&got)
 	return got
 }
 
@@ -230,7 +230,7 @@ func (s *Store) Reopen(collector string, targets []string) (int, error) {
 	for _, t := range targets {
 		want[t] = true
 	}
-	rows, err := s.db.Query(`SELECT id, seed FROM tasks WHERE run_id = ? AND collector = ? AND done = 1`, s.runID, collector)
+	rows, err := s.q().Query(`SELECT id, seed FROM tasks WHERE run_id = ? AND collector = ? AND done = 1`, s.runID, collector)
 	if err != nil {
 		return 0, err
 	}
@@ -248,7 +248,7 @@ func (s *Store) Reopen(collector string, targets []string) (int, error) {
 	}
 	rows.Close()
 	for _, id := range ids {
-		if _, err := s.db.Exec(`UPDATE tasks SET done = 0 WHERE run_id = ? AND id = ?`, s.runID, id); err != nil {
+		if _, err := s.q().Exec(`UPDATE tasks SET done = 0 WHERE run_id = ? AND id = ?`, s.runID, id); err != nil {
 			return 0, err
 		}
 	}

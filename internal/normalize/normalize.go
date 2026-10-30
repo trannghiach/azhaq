@@ -28,6 +28,8 @@ func Seed(s types.Seed) types.Seed {
 	return out
 }
 
+var braces = strings.NewReplacer("%7B", "{", "%7D", "}")
+
 func URL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -58,7 +60,7 @@ func URL(raw string) (string, error) {
 		u.Path = "/"
 	}
 	// Keep {param} placeholders readable in API templates.
-	out := strings.NewReplacer("%7B", "{", "%7D", "}").Replace(u.String())
+	out := braces.Replace(u.String())
 	return out, nil
 }
 

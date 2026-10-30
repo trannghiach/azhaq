@@ -24,6 +24,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
@@ -90,6 +91,8 @@ func forWorkers(fs *flag.FlagSet, args, allow, deny []string) (workerConfig, err
 			cfg.Args = append(cfg.Args, "-"+name+"="+val) // a list of resolvers, not a file of them
 		case name == "params" && builtinNames(val):
 			cfg.Args = append(cfg.Args, "-params="+val)
+		case name == "dirs" && val == dirscol.Builtin:
+			cfg.Files[name] = []byte(strings.Join(dirscol.DefaultWords(), "\n") + "\n")
 		case fileOptions[name]:
 			raw, err := os.ReadFile(val)
 			if err != nil {

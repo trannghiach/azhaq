@@ -3,13 +3,17 @@ package dirscol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -39,9 +43,14 @@ func spa(t *testing.T) *httptest.Server {
 
 func sweepOf(t *testing.T, c *Collector, base string) ([]string, map[string]any) {
 	t.Helper()
+	return sweepSeed(t, c, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": base}}, base)
+}
+
+func sweepSeed(t *testing.T, c *Collector, seed types.Seed, base string) ([]string, map[string]any) {
+	t.Helper()
 	var got []string
 	var summary map[string]any
-	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": base}}, func(o types.Observation) error {
+	_, err := c.Run(context.Background(), seed, func(o types.Observation) error {
 		var m map[string]any
 		_ = json.Unmarshal(o.Payload, &m)
 		switch o.Kind {
@@ -121,5 +130,188 @@ func TestSweepDropsCutOffAnswers(t *testing.T) {
 	}
 	if summary["failed"].(float64) != 1 {
 		t.Errorf("failed %v, want 1 (zh-cn, cut off twice)", summary["failed"])
+	}
+}
+
+// A URL with a path is swept from that path; one sweep per directory the
+// user gave.
+func TestSweepStartsAtTheGivenPath(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sub/secret":
+			w.Write([]byte("sub secret"))
+		case "/rootonly":
+			w.Write([]byte("root page"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.Client(), Options{Words: []string{"secret", "rootonly", "nope"}, Rate: 1000})
+	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/sub", types.StartKey: "1"}}
+	if c.Skip(seed) {
+		t.Fatal("a URL the user gave is swept")
+	}
+	if !c.Skip(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/sub/secret"}}) {
+		t.Error("a URL found by another collector is not swept")
+	}
+	got, _ := sweepSeed(t, c, seed, srv.URL+"/sub")
+	// Paths are shown relative to the start: /sub/secret, not /rootonly.
+	if len(got) != 1 || got[0] != "/secret" {
+		t.Errorf("hits %v, want /sub/secret only", got)
+	}
+}
+
+// Lines are newlines+1 of the whole body, as ffuf counts them; a status
+// ffuf's range holds (250) is matched; -fs hides a size.
+func TestCountsMatchersAndFilters(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/trail":
+			w.Write([]byte("a b c\n\n\n"))
+		case "/s250":
+			w.WriteHeader(250)
+			w.Write([]byte("two fifty"))
+		case "/big":
+			w.Write([]byte(strings.Repeat("x", 4242)))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	words := []string{"trail", "s250", "big", "none"}
+	rows := func(set *fuzz.Set) map[string]hit {
+		c := New(srv.Client(), Options{Words: words, Rate: 1000, Set: set})
+		out := map[string]hit{}
+		var seen []types.Observation
+		_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error { seen = append(seen, o); return nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, o := range seen {
+			var h hit
+			if o.Kind == "url" && json.Unmarshal(o.Payload, &h) == nil {
+				out[strings.TrimPrefix(h.URL, srv.URL+"/")] = h
+			}
+		}
+		return out
+	}
+	got := rows(nil)
+	if h := got["trail"]; h.Lines != 4 || h.Words != 3 {
+		t.Errorf("trail: lines %d words %d, want 4 and 3", h.Lines, h.Words)
+	}
+	if got["s250"].Status != 250 {
+		t.Errorf("a 250 is in ffuf's default range: %v", got)
+	}
+	set := NewSet()
+	if err := set.AddFilter("size", "4242"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(set); got["big"].URL != "" || got["trail"].URL == "" {
+		t.Errorf("-fs 4242 hides big only: %v", got)
+	}
+	only := fuzz.NewSet(nil)
+	if err := only.AddMatcher("line", "4"); err != nil {
+		t.Fatal(err)
+	}
+	if got := rows(only); len(got) != 1 || got["trail"].URL == "" {
+		t.Errorf("-ml 4 keeps trail only: %v", got)
+	}
+}
+
+// Soft 404s that echo the path (in the body, in a redirect) are explained;
+// real pages of nearly the same size are kept.
+func TestSoftNotFoundKeepsRealPages(t *testing.T) {
+	fetch.Reset()
+	pad := strings.Repeat("lorem ipsum dolor sit amet ", 20)
+	real := map[string]bool{"admin": true, "backup": true, "config": true}
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.Trim(r.URL.Path, "/")
+		if real[p] {
+			fmt.Fprintf(w, "<title>%s</title>%s Welcome to the %s area.", p, pad, p)
+			return
+		}
+		fmt.Fprintf(w, "<title>Not found: %s</title>%s The page %s does not exist.", p, pad, p)
+	}))
+	t.Cleanup(echo.Close)
+	redir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.Trim(r.URL.Path, "/")
+		switch {
+		case p == "login":
+			w.Write([]byte(pad + " sign in"))
+		case real[p]:
+			w.WriteHeader(403)
+			w.Write([]byte(pad + " forbidden " + p))
+		default:
+			http.Redirect(w, r, "/login?next=/"+p, http.StatusFound)
+		}
+	}))
+	t.Cleanup(redir.Close)
+	words := []string{"admin", "backup", "config", "alpha", "beta", "gamma-long-name", "x", "delta", "login"}
+	for name, srv := range map[string]*httptest.Server{"echo": echo, "redirect": redir} {
+		c := New(srv.Client(), Options{Words: words, Rate: 1000})
+		got, _ := sweepOf(t, c, srv.URL+"/")
+		want := []string{"/admin", "/backup", "/config"}
+		if name == "redirect" {
+			want = append(want, "/login")
+		}
+		sort.Strings(want)
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s: hits %v, want %v", name, got, want)
+		}
+	}
+}
+
+// A sweep keeps a connection per thread, not a new one for every third
+// request; many hits are all reported.
+func TestSweepReusesConnectionsAndReportsEveryHit(t *testing.T) {
+	fetch.Reset()
+	var conns atomic.Int64
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/hit") {
+			fmt.Fprintf(w, "unique page %s %s", r.URL.Path, strings.Repeat("y", len(r.URL.Path)*7))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	srv.Config.ConnState = func(_ net.Conn, s http.ConnState) {
+		if s == http.StateNew {
+			conns.Add(1)
+		}
+	}
+	srv.Start()
+	t.Cleanup(srv.Close)
+	var words []string
+	for i := 0; i < 3000; i++ {
+		words = append(words, fmt.Sprintf("hit%d", i), fmt.Sprintf("miss%d", i))
+	}
+	c := New(srv.Client(), Options{Words: words, Rate: 1e5, Threads: 16})
+	got, summary := sweepOf(t, c, srv.URL+"/")
+	if len(got) != 3000 || summary["hits"].(float64) != 3000 {
+		t.Errorf("hits %d (summary %v), want 3000", len(got), summary["hits"])
+	}
+	if n := conns.Load(); n > 16+10 {
+		t.Errorf("%d connections for 6000 requests at 16 threads", n)
+	}
+}
+
+// A "?" in a word starts the query, as in ffuf (common.txt has
+// dns-query?name=…): the path is /dns-query, the query follows.
+func TestWordWithQuery(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/dns-query" && r.URL.Query().Get("name") == "a b" {
+			w.Write([]byte("resolver answer"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.Client(), Options{Words: []string{"dns-query?name=a b", "dns-query"}, Rate: 1000})
+	got, _ := sweepOf(t, c, srv.URL+"/")
+	if len(got) != 1 || got[0] != "/dns-query?name=a%20b" {
+		t.Errorf("hits %v", got)
 	}
 }
