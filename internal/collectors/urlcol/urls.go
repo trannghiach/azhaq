@@ -214,7 +214,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				byRun = true
 			}
 			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3,
-				apex: c.opts.Apex, filters: c.opts.Filters, base: c.opts.Bases[s.name]}
+				apex: c.opts.Apex, filters: c.opts.Filters, base: c.opts.Bases[s.name], raw: c.opts.Raw}
 			if c.opts.Retries != nil {
 				g.retries = *c.opts.Retries
 			}
@@ -361,7 +361,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 // normalized.
 func clean(raw, domain string, apex bool) (string, bool) {
 	raw = strings.TrimSpace(raw)
-	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+	if l := strings.ToLower(raw[:min(len(raw), 8)]); !strings.HasPrefix(l, "http://") && !strings.HasPrefix(l, "https://") {
 		return "", false
 	}
 	u, err := normalize.URL(raw)

@@ -49,6 +49,7 @@ type getter struct {
 	filters  Filters // sent to the archive
 	base     string  // replaces the source's address
 	capped   bool    // the source stopped at its page cap with more to read
+	raw      bool    // only what gau would print: urlscan's page URLs, not its task URLs
 }
 
 // at is the source's address: the override, or def.
@@ -395,7 +396,10 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 		}
 		var urls []string
 		for _, x := range r.Results {
-			urls = append(urls, x.Page.URL, x.Task.URL)
+			urls = append(urls, x.Page.URL)
+			if !g.raw {
+				urls = append(urls, x.Task.URL)
+			}
 		}
 		add(urls)
 		if !r.HasMore || len(r.Results) == 0 {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -74,7 +76,7 @@ func newMirror(t *testing.T, wayback map[string][]string) *mirror {
 		case strings.HasPrefix(r.URL.Path, "/otx/"):
 			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx"},{"url":"http://api.example.org/otx"}]}`)
 		case r.URL.Path == "/urlscan":
-			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us"},"task":{"url":"http://example.org/us"},"sort":[1,"a"]}]}`)
+			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us"},"task":{"url":"http://example.org/us-task"},"sort":[1,"a"]}]}`)
 		case r.URL.Path == "/arquivo":
 			fmt.Fprint(w, `{"url":"http://example.org/arq"}`+"\n")
 		default:
@@ -154,7 +156,7 @@ func TestApexAsksTheHostAlone(t *testing.T) {
 	}
 	slices.Sort(got)
 	want := []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/a?x=3", "http://example.org/arq", "http://example.org/b",
-		"http://example.org/cc", "http://example.org/img/logo.PNG", "http://example.org/otx", "http://example.org/page", "http://example.org/us"}
+		"http://example.org/cc", "http://example.org/img/logo.PNG", "http://example.org/otx", "http://example.org/page", "http://example.org/us", "http://example.org/us-task"}
 	if !slices.Equal(got, want) {
 		t.Errorf("apex URLs %v, want %v", got, want)
 	}
@@ -485,6 +487,99 @@ func TestDateBound(t *testing.T) {
 	}{{"2024", false, "2024-01-01"}, {"2024", true, "2024-12-31"}, {"202402", true, "2024-02-29"}, {"202302", true, "2023-02-28"}, {"20240315", false, "2024-03-15"}, {"20240315120000", true, "2024-03-15"}} {
 		if got := dateBound(c.in, c.last); got != c.want {
 			t.Errorf("%s last=%v: %s, want %s", c.in, c.last, got, c.want)
+		}
+	}
+}
+
+// An archive may hold a scheme in capitals; the URL is the same page.
+func TestCleanKeepsAnUppercaseScheme(t *testing.T) {
+	got, ok := clean("HTTP://Example.ORG/Upper#frag", "example.org", true)
+	if !ok || got != "http://example.org/Upper" {
+		t.Errorf("%q %v", got, ok)
+	}
+	if _, ok := clean("ftp://example.org/x", "example.org", true); ok {
+		t.Error("ftp kept")
+	}
+}
+
+// socks5 serves one no-auth CONNECT at a time and relays it to target,
+// whatever name the client asked for; asked lists the names.
+func socks5(t *testing.T, target string, asked *[]string, mu *sync.Mutex) string {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 262)
+				if _, err := io.ReadFull(c, buf[:2]); err != nil {
+					return
+				}
+				if _, err := io.ReadFull(c, buf[:buf[1]]); err != nil {
+					return
+				}
+				c.Write([]byte{5, 0})
+				if _, err := io.ReadFull(c, buf[:5]); err != nil || buf[3] != 3 {
+					return
+				}
+				n := int(buf[4])
+				if _, err := io.ReadFull(c, buf[:n+2]); err != nil {
+					return
+				}
+				mu.Lock()
+				*asked = append(*asked, string(buf[:n]))
+				mu.Unlock()
+				up, err := net.Dial("tcp", target)
+				if err != nil {
+					return
+				}
+				defer up.Close()
+				c.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
+				go io.Copy(up, c)
+				io.Copy(c, up)
+			}(c)
+		}
+	}()
+	return ln.Addr().String()
+}
+
+func TestSocks5Proxy(t *testing.T) {
+	m := newMirror(t, pages)
+	var mu sync.Mutex
+	var asked []string
+	addr := socks5(t, strings.TrimPrefix(m.URL, "http://"), &asked, &mu)
+	var got []string
+	o := Options{Proxy: "socks5://" + addr, Only: []string{"wayback"}, Bases: map[string]string{"wayback": "http://archive.test/wayback"}, Apex: true,
+		OnURL: func(u, _ string) { got = append(got, u) }}
+	if _, _, _, err := run(t, o, context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) == 0 || asked[0] != "archive.test" || len(got) == 0 {
+		t.Errorf("socks5 server asked for %v, got %v", asked, got)
+	}
+}
+
+// Raw is what gau prints: urlscan's page URLs, without the task URLs
+// azhaq otherwise adds.
+func TestRawLeavesUrlscanTaskURLsOut(t *testing.T) {
+	for raw, want := range map[bool]int{false: 2, true: 1} {
+		m := newMirror(t, pages)
+		var got []string
+		o := Options{Bases: m.bases(), Client: m.Client(), Only: []string{"urlscan"}, Raw: raw, OnURL: func(u, _ string) { got = append(got, u) }}
+		if _, _, _, err := run(t, o, context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != want {
+			t.Errorf("raw=%v: %v", raw, got)
 		}
 	}
 }
