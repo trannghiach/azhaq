@@ -8,6 +8,7 @@ require (
 	github.com/andybalholm/brotli v1.2.0
 	github.com/chromedp/cdproto v0.157.8
 	github.com/chromedp/chromedp v0.21.0
+	github.com/corona10/goimagehash v1.1.0
 	github.com/gaissmai/bart v0.29.1
 	github.com/miekg/dns v1.1.73
 	github.com/projectdiscovery/cdncheck v1.3.2
@@ -43,6 +44,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
+	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/projectdiscovery/blackrock v0.0.2 // indirect
 	github.com/projectdiscovery/ratelimit v0.0.92 // indirect

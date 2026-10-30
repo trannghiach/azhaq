@@ -111,6 +111,20 @@
 - A name costs 2 DNS queries (A, AAAA), not 5 for an apex name; a name that does not resolve is listed in the summary.
 - `run -cidr/-asn` with `-ports` scans the prefix itself and no longer stops at `-max-ips`.
 
+### Screenshots
+
+- A screenshot at a polite `-rate` is no longer silently blank. Four pages of 42 requests at `-rate 2` gave four pictures with no images, exit 0 and no note. A page's deadlines now run from when it last moved, not from when it started, tabs open as the pace can fund them, and the tab's icon, which no screenshot shows, is not fetched. The same run gives four complete pictures (0.000% of pixels differ from the `-rate 0` ones), at most 3 requests in any second at the server, and the summary, the ledger and the server count the same requests.
+- A screenshot is taken once the page has stopped asking for what it shows: a single-page app (Juice Shop) asks for its product images only after a script's request is answered, which at `-rate 5` came after the picture was taken. A screenshot of Juice Shop at `-rate 2`, 5 and 10 is the one an unpaced run takes with `-shot-wait 5s` (0.000% of pixels differ); at the default wait the unpaced one lacks the last row of images (2.4%).
+- A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
+- Look-alike screenshots are grouped by a DCT perceptual hash (`p:` and 16 hex digits). A login form, the nginx default page and an admin page were one group of the old 9×8 brightness hash; they are three now, and thirty copies of one portal are still one.
+- `export -format html` embeds each screenshot (scaled to 560 pixels wide), so the report opens from any directory and after the screenshot folder is gone; it was `<img src="DIR/file.png">` relative to the run's `-dir`. A picture marked `partial` says so in the report.
+- `shots` takes more targets: a URL with a path or query is shot (it used to give 0 results and exit 0), `-u 192.0.2.0/28`, `-p` port lists (numbers, ranges, `small`, `medium`, `large`), `-no-http`, `-no-https`, `-random`, `-nmap FILE` and `-nessus FILE`.
+- `shots` and `run -screenshots` have flags for the picture and Chrome: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-shot-html`, `-chrome`, `-chrome-proxy`, `-chrome-profile`. Chrome's restricted ports (6000, 10080, …) are allowed (`-unsafe-ports=false` keeps its refusal).
+- A page's row in `shots -json` has what Chrome saw: response code, headers, TLS session, the technologies of the rendered page, console messages and the network log, at no extra request. `shots -csv FILE` writes the scalar columns.
+- A page's own request waits for the pace when Chrome sends it, not when it is counted, so four tabs no longer send four pages' documents together.
+- `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
+- A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

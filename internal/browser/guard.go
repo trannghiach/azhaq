@@ -36,6 +36,7 @@ type guard struct {
 	peers   peers
 	ctx     context.Context
 	stop    context.CancelFunc
+	via     *url.URL // the proxy for Chrome's connections when it is not the environment's
 
 	mu     sync.Mutex
 	closed bool
@@ -186,7 +187,7 @@ func (g *guard) handle(c net.Conn) {
 		scheme = "https"
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	up, err := dialOut(ctx, scheme, addr)
+	up, err := dialOut(ctx, scheme, addr, g.via)
 	cancel()
 	if err != nil {
 		if ws {
@@ -355,8 +356,11 @@ func closeWrite(c net.Conn) {
 // dialOut connects to addr as the run's own requests to a scheme://addr
 // URL would: through the proxy the environment names for it, if any (Burp,
 // a SOCKS tunnel), or directly, a name through the run's resolver.
-func dialOut(ctx context.Context, scheme, addr string) (net.Conn, error) {
-	p, err := http.ProxyFromEnvironment(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+func dialOut(ctx context.Context, scheme, addr string, via *url.URL) (net.Conn, error) {
+	p, err := via, error(nil)
+	if p == nil {
+		p, err = http.ProxyFromEnvironment(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+	}
 	if err != nil {
 		return nil, err
 	}

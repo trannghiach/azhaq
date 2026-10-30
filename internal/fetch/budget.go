@@ -18,6 +18,7 @@ var (
 	sent   atomic.Int64
 	paceMu sync.Mutex
 	pace   *rate.Limiter
+	paceR  float64
 )
 
 // SetRate paces the requests to targets: perSecond over all hosts (-rate);
@@ -25,17 +26,31 @@ var (
 func SetRate(perSecond float64) {
 	paceMu.Lock()
 	defer paceMu.Unlock()
-	pace = nil
+	pace, paceR = nil, 0
 	if perSecond > 0 {
-		pace = rate.NewLimiter(rate.Limit(perSecond), max(1, int(perSecond/5)))
+		pace, paceR = rate.NewLimiter(rate.Limit(perSecond), max(1, int(perSecond/5))), perSecond
 	}
+}
+
+// Rate is the pace in requests per second (-rate), or 0 without one.
+func Rate() float64 {
+	paceMu.Lock()
+	defer paceMu.Unlock()
+	return paceR
 }
 
 // Spend accounts for one request to a target before it is sent: it waits
 // for the run's pace, and refuses with neterr.ErrBudget once the budget is
 // spent, and with neterr.ErrKilled once the kill file exists. Every request to a target goes through it (GETs, path and
 // parameter guesses, GraphQL, pages loaded in Chrome).
-func Spend(ctx context.Context) error {
+func Spend(ctx context.Context) error { return spend(ctx, true) }
+
+// SpendUnpaced is Spend without the wait for the pace: for a request
+// whose sender waits for it itself, when it is sent (Chrome's pages),
+// not when it is counted, so that no number of them is let go at once.
+func SpendUnpaced(ctx context.Context) error { return spend(ctx, false) }
+
+func spend(ctx context.Context, paced bool) error {
 	w, _ := ctx.Value(refusedKey{}).(*watch)
 	if err := Killed(); err != nil {
 		if w != nil {
@@ -57,6 +72,9 @@ func Spend(ctx context.Context) error {
 	}
 	if w != nil {
 		w.used.Add(1)
+	}
+	if !paced {
+		return nil
 	}
 	if err := Pace(ctx); err != nil {
 		Refund() // never sent

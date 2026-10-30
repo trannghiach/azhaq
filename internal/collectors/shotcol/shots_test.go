@@ -5,9 +5,12 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"net/url"
 	"testing"
 
+	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/types"
 )
 
 func pngOf(t *testing.T, draw func(x, y int) uint8) []byte {
@@ -24,23 +27,52 @@ func pngOf(t *testing.T, draw func(x, y int) uint8) []byte {
 	return b.Bytes()
 }
 
-func TestDHashGroupsLookAlikes(t *testing.T) {
-	gradient := func(x, y int) uint8 { return uint8(x + y/4) }
-	shifted := func(x, y int) uint8 { return uint8(x + y/4 + 3) } // same layout, a little brighter
-	stripes := func(x, y int) uint8 {
-		if (x/20)%2 == 0 {
-			return 230
+// page is a white 1440×900 viewport with boxes drawn on it, as a sparse
+// page is.
+func page(t *testing.T, boxes ...[5]int) []byte {
+	img := image.NewGray(image.Rect(0, 0, 1440, 900))
+	for i := range img.Pix {
+		img.Pix[i] = 255
+	}
+	for _, b := range boxes {
+		for y := b[1]; y < b[3]; y++ {
+			for x := b[0]; x < b[2]; x++ {
+				img.SetGray(x, y, color.Gray{Y: uint8(b[4])})
+			}
 		}
-		return 20
 	}
-	a, _ := DHash(pngOf(t, gradient))
-	b, _ := DHash(pngOf(t, shifted))
-	c, _ := DHash(pngOf(t, stripes))
-	if d := Distance(a, b); d > 6 {
-		t.Errorf("look-alikes %d bits apart", d)
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
 	}
-	if d := Distance(a, c); d < 16 {
-		t.Errorf("different pages only %d bits apart", d)
+	return buf.Bytes()
+}
+
+// A login form, a default page and a dashboard are three pages, and two
+// shots of one login form with a field's text changed are one.
+func TestHashSeparatesSparsePages(t *testing.T) {
+	login := page(t, [5]int{560, 220, 880, 520, 200}, [5]int{580, 300, 860, 330, 120}, [5]int{580, 350, 860, 380, 120}, [5]int{580, 420, 860, 460, 40})
+	loginB := page(t, [5]int{560, 220, 880, 520, 190}, [5]int{580, 300, 860, 330, 120}, [5]int{580, 350, 860, 380, 120}, [5]int{580, 420, 860, 460, 50})
+	nginx := page(t, [5]int{420, 60, 1020, 90, 30}, [5]int{420, 140, 1020, 150, 90}, [5]int{420, 180, 800, 190, 90})
+	admin := page(t, [5]int{0, 0, 220, 900, 40}, [5]int{240, 0, 1440, 50, 110}, [5]int{260, 90, 460, 210, 100}, [5]int{480, 90, 680, 210, 150}, [5]int{700, 90, 900, 210, 70})
+	h := map[string]string{}
+	for name, data := range map[string][]byte{"login": login, "loginB": loginB, "nginx": nginx, "admin": admin} {
+		v, ok := DHash(data)
+		if !ok || len(v) != 18 || v[:2] != HashPrefix {
+			t.Fatalf("%s: hash %q", name, v)
+		}
+		h[name] = v
+	}
+	if d := Distance(h["login"], h["loginB"]); d > 10 {
+		t.Errorf("one login form twice: %d bits apart", d)
+	}
+	for _, pair := range [][2]string{{"login", "nginx"}, {"login", "admin"}, {"nginx", "admin"}} {
+		if d := Distance(h[pair[0]], h[pair[1]]); d <= 10 {
+			t.Errorf("%s and %s only %d bits apart", pair[0], pair[1], d)
+		}
+	}
+	if d := Distance("0080800000000000", h["login"]); d != 64 {
+		t.Errorf("an earlier run's hash is %d bits from this one's, want 64", d)
 	}
 	if _, ok := DHash([]byte("not a png")); ok {
 		t.Error("garbage hashed")
@@ -60,5 +92,39 @@ func TestNotTakenSaysWhatThePageNeeds(t *testing.T) {
 	}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("notes %q, want %q", got, want)
+	}
+}
+
+func TestSkipKeepsWhatTheUserNamed(t *testing.T) {
+	c := &Collector{Dir: "d", Browser: &browser.Browser{}}
+	path := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://h/a/b?x=1"}}
+	if !c.Skip(path) {
+		t.Error("a URL a run found, with a path, was shot")
+	}
+	path.Keys[types.GivenKey] = "1"
+	if c.Skip(path) {
+		t.Error("a URL the user gave, with a path, was skipped")
+	}
+}
+
+func TestGuessesFollowThePorts(t *testing.T) {
+	c := &Collector{}
+	if g := c.guesses("h"); len(g) != 1 || g[0][0] != "https://h/" || g[0][1] != "http://h/" {
+		t.Errorf("no ports: %v", g)
+	}
+	c = &Collector{Ports: []int{80, 443, 8080}, Only: "http"}
+	g := c.guesses("[::1]")
+	if len(g) != 3 || g[0][0] != "http://[::1]/" || g[2][0] != "http://[::1]:8080/" || len(g[1]) != 1 {
+		t.Errorf("ports, http only: %v", g)
+	}
+}
+
+func TestBaseNameKeepsPagesApart(t *testing.T) {
+	a, _ := url.Parse("http://h:3000/")
+	b, _ := url.Parse("http://h:3000/a?x=1")
+	c, _ := url.Parse("http://h:3000/a?x=2")
+	na, nb, nc := baseName(a, a.String()), baseName(b, b.String()), baseName(c, c.String())
+	if na != "http_h_3000" || nb == na || nb == nc {
+		t.Errorf("names %q %q %q", na, nb, nc)
 	}
 }

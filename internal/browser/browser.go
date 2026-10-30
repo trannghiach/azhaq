@@ -9,8 +9,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +21,7 @@ import (
 	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
@@ -33,6 +36,19 @@ var ErrNoSandbox = errors.New("Chrome could not start its sandbox (set AZHAQ_CHR
 // Start launches Chrome now rather than on the first page, so a run can
 // report a Chrome that cannot start before it begins.
 func (b *Browser) Start() error { return b.start() }
+
+// chrome is the Chrome this browser runs.
+func (b *Browser) chrome() (string, error) {
+	if b.ChromePath != "" {
+		return b.ChromePath, nil
+	}
+	return Find()
+}
+
+// restrictedPorts are the ports Chrome refuses to open by default
+// (net::ERR_UNSAFE_PORT): ones whose protocols a page could be made to
+// speak to. A target that serves HTTP on one is still a target.
+const restrictedPorts = "1,7,9,11,13,15,17,19,20,21,22,23,25,37,42,43,53,69,77,79,87,95,101,102,103,104,109,110,111,113,115,117,119,123,135,137,139,143,161,179,389,427,465,512,513,514,515,526,530,531,532,540,548,554,556,563,587,601,636,989,990,993,995,1719,1720,1723,2049,3659,4045,4190,5060,5061,6000,6566,6665,6666,6667,6668,6669,6679,6697,10080"
 
 // Find returns the path of an installed Chrome or Chromium.
 func Find() (string, error) {
@@ -55,6 +71,17 @@ type Browser struct {
 	Timeout       time.Duration // per page; default 30 s
 	UserAgent     string
 	Header        map[string]any // added to every request (-cookie, -header)
+	// What a screenshot is, and when it is taken.
+	Format     string        // "png" (default) or "jpeg"
+	Quality    int           // jpeg quality, 1 to 100; default 80
+	FullPage   bool          // the whole page, not the viewport
+	Wait       time.Duration // after the load event, for scripts that draw after it: 0 is 1.5 s, negative none
+	Script     string        // run on the page before it is taken (-shot-js)
+	Codes      []int         // take only pages that answered with one of these statuses; empty: any
+	ChromePath string        // the Chrome to run; default AZHAQ_CHROME, else the first found
+	ProfileDir string        // a user data directory to keep, signed in sessions and all; default a temporary one
+	Proxy      string        // an http or socks5 proxy for Chrome's own connections; default the environment's
+	AllowPorts bool          // let Chrome open the ports it refuses by default (6000, 10080, ...)
 	// Writes lets pages and their scripts send what they send besides
 	// GET, HEAD and OPTIONS, as a user's browser would (-browser-writes):
 	// it changes data on the target. Otherwise only the sign-in does.
@@ -65,7 +92,7 @@ type Browser struct {
 	alloc  context.Context
 	cancel context.CancelFunc
 	root   context.Context
-	sem    chan struct{}
+	gate   gate
 
 	guard *guard
 	lost  atomic.Bool // Chrome's paused requests are no longer heard of
@@ -97,7 +124,7 @@ type Browser struct {
 
 func (b *Browser) start() error {
 	b.once.Do(func() {
-		path, err := Find()
+		path, err := b.chrome()
 		if err != nil {
 			b.err = err
 			return
@@ -111,7 +138,6 @@ func (b *Browser) start() error {
 		if b.Timeout <= 0 {
 			b.Timeout = 30 * time.Second
 		}
-		b.sem = make(chan struct{}, b.Tabs)
 		// The scope this Chrome is held to, as the run set it when Chrome
 		// started: a later fetch.Reset (a run ending, a test) does not move
 		// it under requests still being decided.
@@ -119,6 +145,15 @@ func (b *Browser) start() error {
 		if b.guard, err = newGuard(b.allowedHost); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
 			return
+		}
+		if b.Proxy != "" {
+			pu, err := url.Parse(b.Proxy)
+			if err != nil || pu.Host == "" {
+				b.err = fmt.Errorf("starting Chrome: -chrome-proxy wants a URL such as http://127.0.0.1:8080 or socks5://127.0.0.1:9050, got %q", b.Proxy)
+				b.guard.close()
+				return
+			}
+			b.guard.via = pu
 		}
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.ExecPath(path),
@@ -140,6 +175,12 @@ func (b *Browser) start() error {
 		}
 		if b.UserAgent != "" {
 			opts = append(opts, chromedp.UserAgent(b.UserAgent))
+		}
+		if b.ProfileDir != "" {
+			opts = append(opts, chromedp.UserDataDir(b.ProfileDir))
+		}
+		if b.AllowPorts {
+			opts = append(opts, chromedp.Flag("explicitly-allowed-ports", restrictedPorts))
 		}
 		b.alloc, b.cancel = chromedp.NewExecAllocator(context.Background(), opts...)
 		// The guard lives as long as this Chrome, and relays for it alone.
@@ -192,7 +233,9 @@ func (b *Browser) Close() {
 type Page struct {
 	URL       string // after redirects
 	Title     string
-	PNG       []byte
+	Image     []byte // the screenshot, in Format
+	Format    string // "png" or "jpeg"
+	Skipped   string // why no screenshot was taken of a page that answered
 	HTML      string
 	Asked     int      // how many requests the page made, images, fonts and media included: what its budget has to cover
 	Requests  []string // every URL the page asked for with GET, HEAD or OPTIONS while loading, sent or not; without its images, fonts and media
@@ -201,6 +244,12 @@ type Page struct {
 	Writes    []Write  // what else it sent in the scope, or was refused (WriteReason) without Browser.Writes
 	Left      string   // the page went there, outside the scope, and was stopped: what shows is Chrome's error
 	Capped    bool     // the request budget refused some of its requests; what it was refused is then in Leftover and LeftoverWrites, not Blocked and Writes
+	// Unloaded is how many of the images, styles, scripts, fonts and media
+	// the page asked for (of Resources) had not come back, or failed, when
+	// the picture was taken: the screenshot is then Partial.
+	Unloaded, Resources int
+	Partial             bool
+	Record              Record // what Chrome saw: answer, headers, TLS, requests, console
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -226,12 +275,11 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		return Page{}, err
 	}
 	b.visit(rawURL)
-	select {
-	case b.sem <- struct{}{}:
-	case <-ctx.Done():
-		return Page{}, ctx.Err()
+	if err := b.gate.enter(ctx, b.Tabs, b.Timeout); err != nil {
+		return Page{}, err
 	}
-	defer func() { <-b.sem }()
+	weight := 0 // what the page asked for, once it is known, for the next page's admission
+	defer func() { b.gate.leave(weight) }()
 	if b.lost.Load() {
 		return Page{}, errLost
 	}
@@ -239,7 +287,12 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	defer func() { watched() }() // once the tab is closed
 	tab, cancel := chromedp.NewContext(b.root)
 	defer cancel()
-	tab, cancelT := context.WithTimeout(tab, b.Timeout)
+	// With a pace the page's deadlines run from when it last moved.
+	var prog *progress
+	if fetch.Rate() > 0 {
+		prog = newProgress()
+	}
+	tab, cancelT := deadline(tab, prog, b.Timeout, 10*b.Timeout)
 	defer cancelT()
 	stop := context.AfterFunc(ctx, cancelT)
 	defer stop()
@@ -251,7 +304,8 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	// The page's requests, from the moment the tab opens, and the frames
 	// they came from: what Chrome refuses those is this page's.
 	main := cdp.FrameID(chromedp.FromContext(tab).Target.TargetID)
-	t := b.open(tab, main, false, !shot)
+	log := newPageLog(main, prog)
+	t := b.openTab(tab, main, false, !shot, prog, log)
 	defer func() { // a page not read: its refusals listed with none
 		b.leave(b.claim(t))
 		b.leaveWrites(b.writesOf(t))
@@ -289,28 +343,56 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}
 	// A page whose load event never fires (a stalled tracker, a long poll)
 	// is still captured as far as it got.
-	nav, cancelNav := context.WithTimeout(tab, min(b.Timeout/2, 15*time.Second))
+	prog.touch()
+	nav, cancelNav := deadline(tab, prog, min(b.Timeout/2, 15*time.Second), 10*b.Timeout)
 	err := chromedp.Do(nav, chromedp.Navigate(rawURL))
+	navLate := nav.Err() != nil && tab.Err() == nil
 	cancelNav()
-	if errors.Is(err, context.DeadlineExceeded) && tab.Err() == nil {
+	if (navLate || errors.Is(err, context.DeadlineExceeded)) && tab.Err() == nil {
 		err = nil
 	}
 	if err == nil {
-		err = chromedp.Do(tab, chromedp.Sleep(1500*time.Millisecond)) // scripts that render after load
+		if wait := b.wait(); wait > 0 {
+			err = chromedp.Do(tab, chromedp.Sleep(wait)) // scripts that render after load
+		}
+	}
+	waiting := 0
+	if err == nil && shot {
+		waiting = b.quiet(tab, t, log, prog)
 	}
 	if err == nil {
 		p.URL, _ = chromedp.Run(tab, chromedp.Location())
 		p.Title, _ = chromedp.Run(tab, chromedp.Title())
 		p.HTML, _ = chromedp.Run(tab, chromedp.OuterHTML(chromedp.CSS("html")))
 		if shot {
-			p.PNG, err = chromedp.Run(tab, chromedp.CaptureScreenshot())
+			rec, _, _ := log.snapshot()
+			switch {
+			case len(b.Codes) > 0 && !slices.Contains(b.Codes, rec.Status):
+				p.Skipped = fmt.Sprintf("answered %d, not one of the statuses asked for (-shot-codes)", rec.Status)
+			default:
+				if b.Script != "" {
+					await := true
+					_, _ = chromedp.Call(tab, runtime.Evaluate, runtime.EvaluateParams{Expression: b.Script, AwaitPromise: &await})
+				}
+				p.Image, err = b.capture(tab)
+				p.Format = b.format()
+			}
 		}
 	}
+	p.Record, p.Unloaded, p.Resources = log.snapshot()
+	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
+	p.Partial = p.Unloaded > 0
 	b.settle(t)
 	mu.Lock()
 	p.Requests = append([]string(nil), reqs...)
 	p.Asked = asked
 	mu.Unlock()
+	if shot && !p.Partial {
+		weight = p.Asked
+	}
+	if tab.Err() != nil && errors.Is(context.Cause(tab), context.DeadlineExceeded) && errors.Is(err, context.Canceled) {
+		err = context.DeadlineExceeded // the page stopped moving: a timeout
+	}
 	mine := b.claim(t)
 	writes := b.writesOf(t)
 	for _, r := range mine {
@@ -330,6 +412,56 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		p.Writes = writes
 	}
 	return p, err
+}
+
+// wait is how long Load waits after the load event.
+func (b *Browser) wait() time.Duration {
+	switch {
+	case b.Wait < 0:
+		return 0
+	case b.Wait == 0:
+		return 1500 * time.Millisecond
+	}
+	return b.Wait
+}
+
+func (b *Browser) format() string {
+	if strings.EqualFold(b.Format, "jpeg") || strings.EqualFold(b.Format, "jpg") {
+		return "jpeg"
+	}
+	return "png"
+}
+
+// maxShotHeight bounds a full-page picture: a page that scrolls for ever
+// would otherwise be an image of that size.
+const maxShotHeight = 16384
+
+// capture takes the screenshot, of the viewport or of the whole page.
+func (b *Browser) capture(tab context.Context) ([]byte, error) {
+	on := true
+	params := page.CaptureScreenshotParams{FromSurface: &on}
+	if b.format() == "jpeg" {
+		q := int64(b.Quality)
+		if q < 1 || q > 100 {
+			q = 80
+		}
+		params.Format, params.Quality = page.CaptureScreenshotFormatJpeg, &q
+	}
+	if b.FullPage {
+		m, err := chromedp.Call(tab, page.GetLayoutMetrics, cdp.Empty{})
+		if err != nil {
+			return nil, err
+		}
+		if c := m.CSSContentSize; c != nil && c.Width > 0 && c.Height > 0 {
+			params.Clip = &page.Viewport{Width: c.Width, Height: min(c.Height, maxShotHeight), Scale: 1}
+			params.CaptureBeyondViewport = &on
+		}
+	}
+	r, err := chromedp.Call(tab, page.CaptureScreenshot, params)
+	if err != nil {
+		return nil, err
+	}
+	return r.Data, nil
 }
 
 var errLost = errors.New("Chrome no longer reports the requests it holds: its pages are not loaded")

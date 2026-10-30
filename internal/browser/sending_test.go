@@ -2,11 +2,15 @@ package browser
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -130,5 +134,165 @@ func TestCacheHitsAreNotListed(t *testing.T) {
 	}
 	if n := fetch.Sent(); n != int64(len(got)) {
 		t.Errorf("counted %d requests, the server got %d: %v", n, len(got), got)
+	}
+}
+
+// A page of 22 requests at 4 a second takes longer than its tab's
+// wall-clock time would give, and is still taken whole: the pace is a
+// cap per second at the server, and the ledger, the count and the server
+// agree on what was sent.
+func TestPoliteShotIsWhole(t *testing.T) {
+	b := startChrome(t)
+	b.Timeout = 4 * time.Second // the page needs about 6 s at this pace
+	var mu sync.Mutex
+	var stamps []time.Time
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		stamps = append(stamps, time.Now())
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		switch {
+		case r.URL.Path == "/":
+			w.Header().Set("Content-Type", "text/html")
+			html := "<html><head><title>polite</title><link rel=stylesheet href=/a.css><script src=/a.js></script></head><body>"
+			for n := 0; n < 20; n++ {
+				html += fmt.Sprintf(`<img src="/i%d.png" width=10 height=10>`, n)
+			}
+			fmt.Fprint(w, html+"</body></html>")
+		case strings.HasSuffix(r.URL.Path, ".css"):
+			w.Header().Set("Content-Type", "text/css")
+		case strings.HasSuffix(r.URL.Path, ".js"):
+			w.Header().Set("Content-Type", "text/javascript")
+		default:
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(tinyPNG)
+		}
+	}))
+	defer srv.Close()
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	fetch.SetRate(4)
+	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	p, err := b.Load(ctx, srv.URL+"/", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Partial || p.Unloaded != 0 || p.Resources != 22 || len(p.Image) == 0 {
+		t.Errorf("page not whole: partial %v, %d of %d unloaded, %d bytes", p.Partial, p.Unloaded, p.Resources, len(p.Image))
+	}
+	time.Sleep(500 * time.Millisecond)
+	b.Close()
+	l.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	best := 0
+	for i := range stamps {
+		n := 0
+		for _, s := range stamps {
+			if d := s.Sub(stamps[i]); d >= 0 && d < time.Second {
+				n++
+			}
+		}
+		best = max(best, n)
+	}
+	if best > 4+2 {
+		t.Errorf("%d requests within a second at -rate 4", best)
+	}
+	var listed []string
+	_ = ledger.Read(path, func(e ledger.Entry) error {
+		u, _ := url.Parse(e.Target)
+		listed = append(listed, u.Path)
+		return nil
+	})
+	slices.Sort(listed)
+	got := slices.Clone(paths)
+	slices.Sort(got)
+	if !slices.Equal(listed, got) {
+		t.Errorf("ledger %d lines, server got %d", len(listed), len(got))
+	}
+	if n := fetch.Sent(); n != int64(len(got)) {
+		t.Errorf("counted %d requests, the server got %d", n, len(got))
+	}
+}
+
+// A picture taken while the page still waits for its images says so.
+func TestShotOfAStalledPageIsPartial(t *testing.T) {
+	b := startChrome(t)
+	b.Timeout = 4 * time.Second
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/slow.png" {
+			select {
+			case <-r.Context().Done():
+			case <-time.After(20 * time.Second):
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><img src="/slow.png"></body></html>`)
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	p, err := b.Load(context.Background(), srv.URL+"/", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Partial || p.Unloaded != 1 || len(p.Image) == 0 {
+		t.Errorf("want a partial picture, got partial %v, %d unloaded, %d bytes", p.Partial, p.Unloaded, len(p.Image))
+	}
+}
+
+var tinyPNG, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+// A page that asks for its images only after a script's request, as a
+// single-page app does, is taken once they are in, not when the load
+// event and the wait are over while that request still waits for its turn.
+func TestPoliteShotWaitsForWhatAScriptAsks(t *testing.T) {
+	b := startChrome(t)
+	b.Wait = 200 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<html><body><script>
+for (let i = 0; i < 6; i++) fetch('/data' + i).then(r => r.json()).then(d => { const im = new Image(); im.src = '/img' + i + '.png'; document.body.appendChild(im); });
+</script></body></html>`)
+		case strings.HasPrefix(r.URL.Path, "/data"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, "{}")
+		default:
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(tinyPNG)
+		}
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	fetch.SetRate(6)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	_ = fetch.SpendUnpaced(ctx)
+	p, err := b.Load(ctx, srv.URL+"/", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range p.Record.Network {
+		if e.Type == "Image" && e.Status == 200 {
+			n++
+		}
+	}
+	if n != 6 || p.Partial {
+		t.Errorf("%d of 6 images loaded when the picture was taken, partial %v (%d of %d unloaded)", n, p.Partial, p.Unloaded, p.Resources)
 	}
 }

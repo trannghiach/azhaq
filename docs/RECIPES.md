@@ -254,3 +254,12 @@ azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 
 ```
 
 `TOKEN` in `login.req` (body, header or path) is replaced by the value of the field `csrf` in the answer to `page.req`, asked again before each request (`-preflight-mode per-thread` asks once for each thread, for tokens that last). `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp from the body, then the headers; `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source (`form`, `meta`, `cookie`, `header`). The flight requests count against `-max-requests` and `-rate`, must be in scope, and say so in the summary (`4 preflight/postflight requests were sent`); one that fails is a `failed` entry (exit 3), and with `-preflight-error ignore` the request goes on without the value. A value that would move a request to another host is refused, always.
+
+## 18. Screenshots at a polite pace, for a report
+
+```
+azhaq shots -l services.txt -dir shots -rate 3 -json -o shots.jsonl -csv shots.csv -db shots.db
+azhaq export -db shots.db -format html > shots.html
+```
+
+Each page is taken whole, or marked `partial` with a note and exit 3: at `-rate 3` a page of 40 requests takes about 13 seconds, and its time runs from when it last moved, so the pace alone never blanks a picture. `-p small|medium|large` and address ranges (`-u 192.0.2.0/28`) find the services; `-nmap scan.xml` and `-nessus scan.nessus` take them from a scan; `-shot-format jpeg -shot-fullpage` makes smaller, taller pictures. `shots.html` is one file with its pictures embedded, grouped by how they look, and opens from any directory.
