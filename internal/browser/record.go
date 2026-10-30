@@ -281,3 +281,17 @@ func (r *pageLog) snapshot() (rec Record, unloaded, total int) {
 	}
 	return rec, unloaded, total
 }
+
+// unloaded is how many of the requests a screenshot shows have not come
+// back, or failed: the same count as snapshot's, without the copy.
+func (r *pageLog) unloaded() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.all {
+		if (counted(e.rt) || e.sub) && !e.blocked && (!e.done || e.Error != "") {
+			n++
+		}
+	}
+	return n
+}

@@ -253,3 +253,46 @@ func TestShotOfAStalledPageIsPartial(t *testing.T) {
 }
 
 var tinyPNG, _ = base64.StdEncoding.DecodeString("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==")
+
+// A page that asks for its images only after a script's request, as a
+// single-page app does, is taken once they are in, not when the load
+// event and the wait are over while that request still waits for its turn.
+func TestPoliteShotWaitsForWhatAScriptAsks(t *testing.T) {
+	b := startChrome(t)
+	b.Wait = 200 * time.Millisecond
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/":
+			w.Header().Set("Content-Type", "text/html")
+			fmt.Fprint(w, `<html><body><script>
+for (let i = 0; i < 6; i++) fetch('/data' + i).then(r => r.json()).then(d => { const im = new Image(); im.src = '/img' + i + '.png'; document.body.appendChild(im); });
+</script></body></html>`)
+		case strings.HasPrefix(r.URL.Path, "/data"):
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, "{}")
+		default:
+			w.Header().Set("Content-Type", "image/png")
+			_, _ = w.Write(tinyPNG)
+		}
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	fetch.SetRate(6)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	_ = fetch.SpendUnpaced(ctx)
+	p, err := b.Load(ctx, srv.URL+"/", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, e := range p.Record.Network {
+		if e.Type == "Image" && e.Status == 200 {
+			n++
+		}
+	}
+	if n != 6 || p.Partial {
+		t.Errorf("%d of 6 images loaded when the picture was taken, partial %v (%d of %d unloaded)", n, p.Partial, p.Unloaded, p.Resources)
+	}
+}

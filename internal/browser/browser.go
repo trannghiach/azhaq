@@ -356,6 +356,10 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 			err = chromedp.Do(tab, chromedp.Sleep(wait)) // scripts that render after load
 		}
 	}
+	waiting := 0
+	if err == nil && shot {
+		waiting = b.quiet(tab, t, log, prog)
+	}
 	if err == nil {
 		p.URL, _ = chromedp.Run(tab, chromedp.Location())
 		p.Title, _ = chromedp.Run(tab, chromedp.Title())
@@ -376,6 +380,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		}
 	}
 	p.Record, p.Unloaded, p.Resources = log.snapshot()
+	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
 	p.Partial = p.Unloaded > 0
 	b.settle(t)
 	mu.Lock()

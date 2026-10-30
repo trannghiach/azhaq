@@ -150,3 +150,54 @@ func counted(rt network.ResourceType) bool {
 	}
 	return false
 }
+
+// quiet waits until the page has stopped asking: nothing of
+// it waits for its turn and nothing it shows is still on its way, for
+// long enough that what a response draws has been asked for. A page whose
+// first screen comes from a script's request (a single-page app) asks for
+// its images only after that answer, at the pace; the picture is taken
+// when they are in. It returns how many requests of the page still wait
+// for their turn if it gave up: a page that never stops asking is shot
+// as it is, and said to be partial. Without a pace it waits a third of a
+// second and no more than 5 s.
+func (b *Browser) quiet(ctx context.Context, t *tab, log *pageLog, prog *progress) (waiting int) {
+	hold, limit := 300*time.Millisecond, 5*time.Second
+	if r := fetch.Rate(); r > 0 {
+		hold, limit = 700*time.Millisecond+time.Duration(float64(time.Second)/r), 3*b.Timeout
+	}
+	end := time.Now().Add(limit)
+	if dl, ok := ctx.Deadline(); ok {
+		end = minTime(end, dl.Add(-time.Second)) // the picture still has to be taken
+	}
+	var since time.Time
+	for time.Now().Before(end) {
+		if prog != nil && prog.idle() > b.Timeout/3 {
+			break // nothing moved for a while: as with the load event, it is taken as it is
+		}
+		b.refMu.Lock()
+		waiting = t.pending
+		b.refMu.Unlock()
+		if waiting == 0 && log.unloaded() == 0 {
+			if since.IsZero() {
+				since = time.Now()
+			} else if time.Since(since) >= hold {
+				return 0
+			}
+		} else {
+			since = time.Time{}
+		}
+		select {
+		case <-ctx.Done():
+			return waiting
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	return waiting
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
