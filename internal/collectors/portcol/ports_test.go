@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,6 +144,17 @@ func TestUDPFieldsInTheRow(t *testing.T) {
 		t.Errorf("row %s", obs[0].Payload)
 	}
 	if n := Notes(obs); len(n) != 1 || n[0][:8] != "udp: 1 o" {
+		t.Errorf("notes %q", n)
+	}
+}
+
+// An address whose open ports were not all asked what they serve, and a UDP
+// scan that left silent ports unpaced, say so in the summary.
+func TestNotesSayWhatWasNotProbed(t *testing.T) {
+	payload, _ := json.Marshal(map[string]any{"host": "h.example", "ip": "10.0.0.5", "unprobed": 7, "udp_limited": 90})
+	obs := []types.StoredObservation{{Observation: types.Observation{Collector: Name, Payload: payload}}}
+	n := Notes(obs)
+	if len(n) != 2 || !strings.Contains(n[0], "protocol was not probed") || !strings.Contains(n[0], "10.0.0.5: 7") || !strings.Contains(n[1], "90 silent ports") {
 		t.Errorf("notes %q", n)
 	}
 }
