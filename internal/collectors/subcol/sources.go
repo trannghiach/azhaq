@@ -384,8 +384,14 @@ func crtshSource() source {
 				NameValue  string `json:"name_value"`
 			}
 			var err error
-			for attempt, wait := 0, 2*time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
+			start := time.Now()
+			for attempt, wait := 0, time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
 				if err = getJSON(ctx, sess, "crtsh", u, nil, &rows); err == nil || !retry(err) {
+					break
+				}
+				// crt.sh is often down for a while: a few quick retries, not a
+				// minute of them, since every other source waits for this one.
+				if time.Since(start)+wait > crtshRetryBudget {
 					break
 				}
 				select {
@@ -406,6 +412,10 @@ func crtshSource() source {
 		},
 	}
 }
+
+// crtshRetryBudget is how long crt.sh may take, retries included, before
+// its failure is taken as the answer.
+const crtshRetryBudget = 12 * time.Second
 
 // retry: crt.sh's gateway errors and dropped connections pass (a 429 is
 // waited out in the transport).

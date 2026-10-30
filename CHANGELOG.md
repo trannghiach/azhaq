@@ -11,6 +11,7 @@
 - A source that answers 429 is asked again after its `Retry-After` (2, 4, 8 s when it gives none), up to three times; the summary says what the waiting cost, and a source that keeps refusing is listed as having given up.
 - Without `-live`, `subs` looks nothing up: a name only subdomain.center guessed, or only the name history held, is listed with `"unverified": true` and counted, and a guess is not added to the name history until a run has seen it resolve.
 - The summary's counts add up: `from sources`, `did not resolve`, `unverified`, `not checked`, `CNAME only`, and a `count:` note that writes the sum.
+- crt.sh is asked again after 1, 2 and 4 s and not past 12 s (it was 2, 4 and 8 s): a down crt.sh set the time of every run.
 - Cert Spotter pages with `after=` when a key is given, and says it read the first page only when it is not.
 - subfinder is v2.14.1-0.20261026103132-98ef8711acb9 (main), with its archive and windvane fixes.
 - subfinder's input and flags: `-d` takes comma lists, URLs and trailing dots (IP addresses are left out with a note); `-m`, `-f`, `-match-regex`, `-filter-regex`; `-ls` (`-json`); `-cs`, `-oI`, `-oD`; `-o` appends; `-recursive`; `-stats`; `-version`; `-nW` and `-oJ`; `-source-rate`, `-source-rates`, `-max-results`, `-max-time`, `-max-body`, `-source-proxy`; `$SOURCE_API_KEY` and `$VAR` in provider files; `-t` is `-parallel`. An unknown name in `-sources` is said, and alone is a usage error.
