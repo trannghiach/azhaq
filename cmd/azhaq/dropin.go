@@ -243,7 +243,11 @@ type writer struct {
 	n    int
 }
 
-func newWriter(c *common) (*writer, error) {
+func newWriter(c *common) (*writer, error) { return newWriterMode(c, false) }
+
+// newWriterMode is newWriter; appendOut adds to the -o file instead of
+// replacing it, as dnsx does.
+func newWriterMode(c *common, appendOut bool) (*writer, error) {
 	var dst io.Writer = os.Stdout
 	var f *os.File
 	if c.out != "" {
@@ -251,7 +255,11 @@ func newWriter(c *common) (*writer, error) {
 			return nil, usagef("-o %s is a directory: -o names the file the results are written to", c.out)
 		}
 		var err error
-		if f, err = os.Create(c.out); err != nil {
+		flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+		if appendOut {
+			flags = os.O_WRONLY | os.O_CREATE | os.O_APPEND
+		}
+		if f, err = os.OpenFile(c.out, flags, 0o644); err != nil {
 			return nil, err
 		}
 		dst = io.MultiWriter(os.Stdout, f)
@@ -263,6 +271,15 @@ func (w *writer) line(s string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.w.WriteString(s + "\n")
+	w.w.Flush()
+	w.n++
+}
+
+// lineRaw writes one line of JSON that is already encoded.
+func (w *writer) lineRaw(raw []byte) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.w.Write(append(raw, '\n'))
 	w.w.Flush()
 	w.n++
 }
@@ -1031,117 +1048,6 @@ func cmdURLs(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
-	return rep.finish(c.json, c.silent)
-}
-
-// cmdDNS is dnsx: the names that resolve, wildcard answers left out, as
-// they resolve.
-func cmdDNS(args []string) error {
-	fs := newFlags("dns")
-	var c common
-	c.register(fs)
-	var names stringsFlag
-	fs.Var(&names, "d", "name (repeatable)")
-	list := fs.String("l", "", "file of names (- for stdin)")
-	resp := fs.Bool("resp", false, "print the records after each name")
-	words := fs.String("w", "", "with -d DOMAIN: resolve WORD.DOMAIN for each word in this file instead, as dnsx -d -w (wildcard answers left out)")
-	given := inherit(fs, "resolvers", "dns-rate", "timeout", "v")
-	if err := parse(fs, args); err != nil {
-		return err
-	}
-	ns, err := inputs(names, *list)
-	if err != nil {
-		return err
-	}
-	if len(ns) == 0 {
-		return usagef("give -d NAME, -l FILE or names on stdin")
-	}
-	path, rm, err := tempList(ns)
-	if err != nil {
-		return err
-	}
-	defer rm()
-	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns")}
-	if *words != "" {
-		// The guesses are found by azhaq-dns-brute and resolved again by
-		// azhaq-dns for their records, one wave later.
-		run = []string{"-passive", "-depth", "2", "-skip", skipAllBut("azhaq-dns", "azhaq-dns-brute"), "-dns-brute", *words}
-		for _, d := range ns {
-			h := normalize.Hostname(d)
-			if h == "" || strings.ContainsAny(h, "/: ") {
-				return usagef("-w wants -d DOMAIN such as example.com, got %q", d)
-			}
-			run = append(run, "-domain", h, "-allow", h) // the domains given are the scope of the guesses
-		}
-	}
-	w, err := newWriter(&c)
-	if err != nil {
-		return err
-	}
-	var mu sync.Mutex
-	printed := map[string]bool{}
-	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector != "azhaq-dns" {
-			return
-		}
-		p := payloadOf(o)
-		name, _ := p["fqdn"].(string)
-		if name == "" || !live(p) {
-			return
-		}
-		mu.Lock()
-		dup := printed[name]
-		printed[name] = true
-		mu.Unlock()
-		if dup {
-			return
-		}
-		var a, aaaa []string
-		for _, ip := range strs(p["ips"]) {
-			if strings.Contains(ip, ":") {
-				aaaa = append(aaaa, ip)
-			} else {
-				a = append(a, ip)
-			}
-		}
-		cnames := strs(p["cnames"])
-		switch {
-		case w.json:
-			row := map[string]any{"host": name, "a": a, "aaaa": aaaa, "cname": cnames, "status_code": "NOERROR"}
-			if cdn, ok := p["cdn"].(string); ok {
-				row["cdn_name"] = cdn
-			}
-			w.obj(row)
-		case *resp:
-			w.line(name + " [" + strings.Join(append(append(a, aaaa...), cnames...), ",") + "]")
-		default:
-			w.line(name)
-		}
-	}
-	rep := newReport("dns")
-	rep.what = "live names"
-	_, done, err := runPreset(&c, append(run, given()...), rep, see)
-	if err != nil {
-		return err
-	}
-	defer done()
-	if err := w.close(); err != nil {
-		return err
-	}
-	rep.Results = w.count()
-	asked := map[string]bool{}
-	for _, n := range ns {
-		if h := normalize.Hostname(n); h != "" {
-			asked[h] = true
-		}
-	}
-	if *words != "" {
-		return rep.finish(c.json, c.silent) // the words are the asked names
-	}
-	rep.Counts = map[string]int{"asked": len(asked)}
-	if d := len(asked) - rep.Results; d > 0 {
-		rep.Counts["did not resolve"] = d // NXDOMAIN, no address, or a wildcard's answer
-	}
 	return rep.finish(c.json, c.silent)
 }
 

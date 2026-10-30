@@ -35,3 +35,13 @@
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
 
 **A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again.
+
+**`dns -json` prints rows for names that do not exist.** As dnsx does, `-json` gives a row for every name a resolver answered, with its `status_code` (`NXDOMAIN`, `SERVFAIL`, ...). Ask for a type (`-a -json`) to get only the names that have such a record, or select with `jq 'select(.status_code=="NOERROR")'`.
+
+**`dns -timeout 5s` did not stop the run after 5 seconds.** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx (3 s by default); `run` and the other commands use it as the time of the whole run. `dns -maxtime SECONDS` bounds the run: it exits 4 and says which `-start` to go on from.
+
+**`dns -dns-rate 5` still sent more than 5 queries a second.** `-dns-rate` paces each resolver, so the total is the rate times the resolvers (six by default). `-rl N` paces names over all resolvers, as dnsx's `-rl`; with one resolver, or with `-rl`, the total is the rate you gave (a name asked for several types sends one query per type). `-t N` bounds the names in flight.
+
+**`dns -d 192.0.2.0/24` printed nothing.** Addresses and ranges are looked up only with `-ptr` (reverse names) and are otherwise left out; the summary says so under `left out`. An AS number (`AS13335`) expands to the prefixes RIPEstat lists for it.
+
+**`dns -axfr` found no zone.** A name server that refuses a transfer is common. The summary's notes say, per server, whether it refused, did not answer, or was left alone because the scope does not allow it (`-allow` the server's name or address to ask it). Only the name servers of the name and the `-resolvers` you gave are asked.

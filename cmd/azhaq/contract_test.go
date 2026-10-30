@@ -256,8 +256,9 @@ func TestContractLiveNameFoundAsCNAMETarget(t *testing.T) {
 	}
 }
 
-// contract C4: dns asks each distinct name once, and what resolved plus
-// what did not is what was asked.
+// contract C4: dns asks each distinct name once. -json gives a row for
+// every name that was answered, as dnsx does (the one that does not exist
+// too, with its status); -a gives the rows of names with an address.
 func TestContractDNSCountsDistinctNames(t *testing.T) {
 	t.Chdir(t.TempDir())
 	resolvers := serveZone(t, fakeZone{a: map[string]string{"a.example.org": "192.0.2.1", "c.example.org": "192.0.2.3"}})
@@ -265,12 +266,19 @@ func TestContractDNSCountsDistinctNames(t *testing.T) {
 	if err := os.WriteFile(list, []byte("a.example.org\nA.example.org\nb.example.org\na.example.org\nc.example.org\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, rep, code := runContract(t, "dns", "-l", list, "-resolvers", resolvers)
+	out, rep, code := runContract(t, "dns", "-l", list, "-resolvers", resolvers)
 	if code != exitOK {
 		t.Fatalf("exit %d\n%+v", code, rep)
 	}
-	if rep.Counts["asked"] != 3 || rep.Results != 2 || rep.Results+rep.Counts["did not resolve"] != rep.Counts["asked"] {
-		t.Errorf("results %d, counts %v: want 3 asked, 2 results, 1 did not resolve", rep.Results, rep.Counts)
+	if rep.Counts["asked"] != 3 || rep.Results != 3 || rep.Counts["did not resolve"] != 1 {
+		t.Errorf("results %d, counts %v: want 3 asked, 3 rows, 1 that did not resolve", rep.Results, rep.Counts)
+	}
+	if !strings.Contains(out, `"host":"b.example.org","`) || !strings.Contains(out, `"status_code":"NXDOMAIN"`) {
+		t.Errorf("no NXDOMAIN row:\n%s", out)
+	}
+	out, rep, code = runContract(t, "dns", "-l", list, "-resolvers", resolvers, "-a")
+	if code != exitOK || rep.Results != 2 || rep.Counts["asked"] != 3 || rep.Counts["did not resolve"] != 1 {
+		t.Errorf("-a: exit %d results %d counts %v\n%s", code, rep.Results, rep.Counts, out)
 	}
 }
 

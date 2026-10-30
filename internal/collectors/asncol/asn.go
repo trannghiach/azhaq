@@ -100,6 +100,15 @@ func (a *ASN) Run(ctx context.Context, seed types.Seed, emit func(types.Observat
 	return meta, nil
 }
 
+// Prefixes are the prefixes asn (AS64500) announces, and its holder.
+func (a *ASN) Prefixes(ctx context.Context, asn string) ([]string, string, error) {
+	n, ok := NormalizeASN(asn)
+	if !ok {
+		return nil, "", fmt.Errorf("%q is not an AS number", asn)
+	}
+	return a.announced(ctx, n)
+}
+
 func (a *ASN) announced(ctx context.Context, asn string) ([]string, string, error) {
 	var data struct {
 		Data struct {

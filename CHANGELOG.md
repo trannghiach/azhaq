@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.10.0
+
+### DNS
+
+- `dns` asks any record type: `-a -aaaa -cname -ns -txt -srv -ptr -mx -soa -caa -any`, `-all` (every type, with `-e` to leave some out) and `-axfr`, and prints dnsx's rows: `-json` has dnsx's fields (`ttl`, `resolver`, `mx`, `soa`, `all`, `status_code_raw`, `cdn-name`, ...) and leaves empty ones out; `-resp`, `-resp-only`, `-output-template`, `-omit-raw` and `-raw` are dnsx's forms.
+- `dns -json` gives a row for every name a resolver answered, one that does not exist too, with its `status_code`; `-rcode` and `-response-type-filter` select by code and by missing record.
+- `dns` takes a CIDR range, an AS number, a comma list and `-d`/`-w` as a file, a list or stdin, and looks addresses up with `-ptr`; there is no cap of 20,000 names and names are read as they come (`-stream`). A 100,000-name list is asked in 2 s against dnsx's 7.7 s.
+- `-resolvers` (and `-r` in `dns`) takes a file or a comma list with `udp:`, `tcp:`, `dot:` and `doh:` prefixes, in every command; every question carries EDNS0 (4,096 bytes), and `dns -proxy socks5://` sends DNS through a proxy.
+- `dns -t`, `-rl`, `-retry` and `-timeout` mean what they do in dnsx (names in flight, names a second over all resolvers, attempts per question, wait for one answer); `-timeout` is no longer the run's time (`-maxtime` is, and exits 4 with the `-start` to go on from). `-dns-rate` stays per resolver.
+- `dns` no longer asks MX, TXT and NS for every apex name it never printed; `-w` accepts labels with an underscore (`_dmarc`) and prints hits as they come; `-o` appends; `-hf` reads the hosts file; `-trace` follows delegations from the roots; `-asn` names the autonomous system; `-no-wildcard` and `-wd` control the wildcard filter.
+- The DNS lab answers MX, TXT, NS, SRV, CAA, SOA and AAAA, has a reverse zone for 127.0.0.0/24 and a zone transfer, truncates long UDP answers, and counts what it was asked (`-stats`).
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.
