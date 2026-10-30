@@ -146,15 +146,25 @@ func Candidates(text string, page, src *url.URL, script bool) []Cand {
 	for _, s := range strs {
 		seen[s.Text] = true
 	}
+	nScript := len(strs)
 	for _, s := range BodyStrings(text) {
 		if !seen[s.Text] {
 			strs = append(strs, s)
 		}
 	}
 	out := make([]Cand, 0, len(strs))
-	for _, s := range strs {
+	for i, s := range strs {
 		c := Cand{Str: s}
 		c.Link, c.Reason = BareString(s.Text, page)
+		if script && c.Link != "" {
+			if i >= nScript && !anchored(s.Text) {
+				// Taken by the body pattern from unquoted code
+				// (a.number/t.doc), not from a string.
+				c.Link, c.Reason = "", ReasonCode
+			} else if searchedFor(text, s.Start) {
+				c.Link, c.Reason = "", ReasonSearched
+			}
+		}
 		c.Resolved = c.Link
 		if c.Resolved == "" {
 			if n, ok := resolve(page, strings.TrimSpace(s.Text)); ok {
@@ -169,4 +179,28 @@ func Candidates(text string, page, src *url.URL, script bool) []Cand {
 		out = append(out, c)
 	}
 	return out
+}
+
+// anchored says whether a string is a path a script could only mean as one:
+// absolute, relative with ./ or ../, or a whole URL.
+func anchored(s string) bool {
+	for _, p := range []string{"/", "./", "../", "http://", "https://"} {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
+}
+
+var searchCall = regexp.MustCompile(`\.(?:indexOf|lastIndexOf|includes|startsWith|endsWith|search|match|split|replace|replaceAll)\(\s*$`)
+
+// searchedFor says whether the string at start is the first argument of a
+// string search (ua.indexOf("Trident/"), url.replace("/v3/", …)): text a
+// script looks for, not a URL it requests.
+func searchedFor(text string, start int) bool {
+	i := start - 1 // the quote
+	if i < 0 || !strings.ContainsRune(`"'`+"`", rune(text[i])) {
+		return false
+	}
+	return searchCall.MatchString(text[max(0, i-24):i])
 }

@@ -91,3 +91,23 @@ func TestCandidatesKeepTheScriptRelativeReading(t *testing.T) {
 		t.Errorf("%+v", cs)
 	}
 }
+
+// Juice Shop's minified scripts: a division the page pattern reads as a
+// .do path, and user-agent strings searched for, are no URLs; a path
+// passed on is.
+func TestCandidatesLeaveCodeAndSearchedStrings(t *testing.T) {
+	page := &url.URL{Scheme: "http", Host: "h", Path: "/"}
+	src := `b=b*(h=="-"?-1:1)+a.number/t.doc.lines;(t.indexOf("Trident/")!==-1||t.indexOf( 'Edge/')!==-1);` +
+		`let o=i.url.replace("/api/old/","/api/new/");go("/rest/user/login.do");var p="admin/"`
+	got := map[string]string{}
+	for _, c := range Candidates(src, page, page, true) {
+		got[c.Text] = c.Reason
+	}
+	want := map[string]string{"a.number/t.do": ReasonCode, "Trident/": ReasonSearched, "Edge/": ReasonSearched,
+		"/api/old/": ReasonSearched, "/api/new/": "", "/rest/user/login.do": "", "admin/": ""}
+	for s, r := range want {
+		if g, ok := got[s]; !ok || g != r {
+			t.Errorf("%q: reason %q (found %v), want %q", s, g, ok, r)
+		}
+	}
+}
