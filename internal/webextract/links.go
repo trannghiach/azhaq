@@ -13,6 +13,7 @@ import (
 // method a script-driven tag sends it with (hx-post), "" for a GET.
 type PageRef struct {
 	URL, Tag, Attr, Method string
+	Raw                    string // the attribute as written
 }
 
 // Links are a page's links, iframes, images, GET form actions and the
@@ -44,7 +45,7 @@ func LinkRefs(body []byte, base *url.URL) []PageRef {
 			return
 		}
 		seen[u+"\x00"+method] = true
-		out = append(out, PageRef{URL: u, Tag: tag, Attr: attr, Method: method})
+		out = append(out, PageRef{URL: u, Tag: tag, Attr: attr, Method: method, Raw: raw})
 	}
 	z := html.NewTokenizer(bytes.NewReader(body))
 	inObject := 0
@@ -229,3 +230,7 @@ func splitLinkHeader(v string) []string {
 	}
 	return append(out, v[start:])
 }
+
+// ResolveRef is a reference as a browser resolves it against base, in the
+// form the map keeps; ok is false for one that is no web URL.
+func ResolveRef(base *url.URL, ref string) (string, bool) { return resolve(base, ref) }

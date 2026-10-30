@@ -541,7 +541,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			// Markup a script carries (an Angular template, a string of
 			// HTML): its links are the app's; one built from an expression
 			// (src="`+_(i[8])+`") is no URL.
-			for _, ref := range webextract.LinkRefs([]byte(s.body), base) {
+			for _, ref := range webextract.LinkRefs([]byte(s.body), s.url) {
 				if ref.Method != "" {
 					continue
 				}
@@ -659,6 +659,15 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			have[cd.Link] = true
 			found = append(found, cd.Link)
 			named.add(webextract.RouteKey(cd.Link), cd.s, cd.loc, cd.Start, cd.End, false)
+			if cd.Alt != "" && !have[cd.Alt] {
+				if k := cd.Alt + "\x00alt"; !rejSeen[k] {
+					rejSeen[k] = true
+					if err := emit(webextract.RejectedObs(Name, raw, cd.Text, webextract.ReasonScriptRel, "js", cd.Alt)); err != nil {
+						return meta, err
+					}
+					meta.EmitCount++
+				}
+			}
 			continue
 		}
 		if cd.Link != "" || cd.Resolved != "" {
@@ -918,17 +927,25 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	return meta, nil
 }
 
-// markupCand judges a URL read from markup inside a script.
+// markupCand judges a URL read from markup inside a script. A browser
+// resolves it against the page; the reading against the script's own file,
+// where it differs, is the Alt a crawler that resolves that way would ask.
 func markupCand(ref webextract.PageRef, page *url.URL) webextract.Cand {
-	c := webextract.Cand{Str: webextract.Str{Text: ref.URL}, Resolved: ref.URL}
-	dec, err := url.PathUnescape(ref.URL)
+	c := webextract.Cand{Str: webextract.Str{Text: ref.Raw}, Resolved: ref.URL}
+	if u, ok := webextract.ResolveRef(page, ref.Raw); ok {
+		c.Resolved = u
+		if u != ref.URL {
+			c.Alt = ref.URL
+		}
+	}
+	dec, err := url.PathUnescape(c.Resolved)
 	switch {
-	case err != nil || strings.ContainsAny(dec, "`()[]{}|+$\\<>") || webextract.JunkURL(ref.URL):
+	case err != nil || strings.ContainsAny(dec, "`()[]{}|+$\\<>'") || webextract.JunkURL(c.Resolved):
 		c.Reason = webextract.ReasonExpression
 	case ref.Attr == "handler":
 		c.Reason = webextract.ReasonNotPath
 	default:
-		c.Link = ref.URL
+		c.Link = c.Resolved
 	}
 	return c
 }

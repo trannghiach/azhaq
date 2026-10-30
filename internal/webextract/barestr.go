@@ -102,6 +102,8 @@ func BareString(s string, page *url.URL) (link, reason string) {
 	switch {
 	case numericPath.MatchString(p):
 		return "", ReasonNotPath
+	case ext == "" && len(path.Base(strings.TrimSuffix(p, "/"))) < 3:
+		return "", ReasonNotPath // a regex flag (/x./i), a one-letter variable
 	case ext != "" && !pageExt[ext]:
 		return "", ReasonAsset
 	}
