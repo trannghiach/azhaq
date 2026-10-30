@@ -56,7 +56,7 @@
 
 ### Screenshots and `gallery`
 
-- `-tabs` is 6 by default (it was 4), as gowitness runs 6 threads: five lab apps are shot in 3.4 s against gowitness's 4.2 s (4.4 s with `-tabs 4`'s second round of tabs).
+- `-tabs` is 6 by default (it was 4), as gowitness runs 6 threads: five lab apps are shot in 3.4 s against gowitness's 4.2 s; with 4 tabs the fifth page waited for a second round and the run took 5.1 s.
 - A screenshot at a polite `-rate` is no longer silently blank. Four pages of 42 requests at `-rate 2` gave four pictures with no images, exit 0 and no note. A page's deadlines now run from when it last moved, not from when it started, tabs open as the pace can fund them, and the tab's icon, which no screenshot shows, is not fetched. The same run gives four complete pictures (0.000% of pixels differ from the `-rate 0` ones), at most 3 requests in any second at the server, and the summary, the ledger and the server count the same requests.
 - A screenshot is taken once the page has stopped asking for what it shows: a single-page app (Juice Shop) asks for its product images only after a script's request is answered, which at `-rate 5` came after the picture was taken. A screenshot of Juice Shop at `-rate 2`, 5 and 10 is the one an unpaced run takes with `-shot-wait 5s` (0.000% of pixels differ); at the default wait the unpaced one lacks the last row of images (2.4%).
 - A screenshot taken before its page's images, styles or scripts were loaded is saved with `"partial":true`, says so in a note, and the run exits 3.
