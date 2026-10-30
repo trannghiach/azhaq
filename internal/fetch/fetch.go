@@ -748,6 +748,11 @@ func ApplyHeaders(req *http.Request) {
 			req.Header.Add(k, v)
 		}
 	}
+	// Go sends req.Host, not a Host header: -H 'Host: x' sets it.
+	if h := req.Header.Get("Host"); h != "" {
+		req.Host = h
+		req.Header.Del("Host")
+	}
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", UserAgent)
 	}

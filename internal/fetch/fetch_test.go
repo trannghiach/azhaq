@@ -299,3 +299,34 @@ func TestSameSiteScope(t *testing.T) {
 		t.Error("with a scope: its hosts")
 	}
 }
+
+// -H 'Host: x' is the Host the request goes with (virtual hosts).
+func TestHostHeaderIsTheRequestHost(t *testing.T) {
+	Reset()
+	defer Reset()
+	Extra = http.Header{"Host": {"vhost.lab.test"}}
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = r.Host }))
+	t.Cleanup(srv.Close)
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/"); err != nil {
+		t.Fatal(err)
+	}
+	if got != "vhost.lab.test" {
+		t.Errorf("Host %q", got)
+	}
+}
+
+// A pace that cannot be kept before the deadline waits for it: the work
+// is cut short, not failed.
+func TestPacePastTheDeadlineIsTheDeadline(t *testing.T) {
+	Reset()
+	defer Reset()
+	SetRate(1)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	_ = Pace(ctx)
+	err := Pace(ctx)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("err %v, want the deadline", err)
+	}
+}

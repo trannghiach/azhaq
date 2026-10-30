@@ -76,7 +76,17 @@ func Pace(ctx context.Context) error {
 	p := pace
 	paceMu.Unlock()
 	if p != nil {
-		return p.Wait(ctx)
+		if err := p.Wait(ctx); err != nil {
+			if ctx.Err() == nil {
+				// Too little time left to keep the pace: the work stops at
+				// the deadline, as a run's -timeout stops it, and is not
+				// a failure of the target.
+				<-ctx.Done()
+				return ctx.Err()
+			}
+			return err
+		}
+		return nil
 	}
 	return ctx.Err()
 }
