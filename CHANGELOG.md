@@ -142,8 +142,9 @@
 
 ### Notifications
 
-- A webhook URL no longer leaks. A transport error printed the whole URL, token included; errors now name the host and the cause, and no error holds a URL's path or query, a token, or text a server echoed back.
+- A webhook URL no longer leaks. A transport error printed the whole URL, token included; errors now name the host and the cause, and no error holds a URL's path or query or a token, even where a server echoed them back. The first 512 bytes of a failed answer are kept in the error (Slack's `channel_not_found`), with the URL's path and query and every key and header value of the provider file cut out of them.
 - `watch -notify @FILE` reads webhook URLs from a file and `AZHAQ_NOTIFY` holds more, so a URL need not stand on the command line where `ps` shows it.
+- `notify -v` names, on one line, the settings `config.yaml` changed; the file notify writes holds every flag at its default, and those are not listed.
 - Notifications are tried again on a 429 or a 5xx, honouring `Retry-After`, and a text longer than a service takes is sent in labelled parts, not cut (Discord's cut lost the rest of a change set).
 - `azhaq notify` is a drop-in for projectdiscovery/notify: its flags (`-pc`, `-p`, `-id`, `-bulk`, `-cl`, `-mf`, `-rl`, `-d`, `-proxy`, `-config`), its `provider-config.yaml` schema and its message boundaries, the same as notify's for the same input.
 - Providers: Slack (webhook, threads), Discord (webhook, threads), Telegram (parse mode, threads, preview), Pushover, SMTP, Microsoft Teams (connector and workflow), Google Chat, Gotify and custom webhooks with formats and Sprig templates.

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -228,6 +229,7 @@ func (o *notifyOpts) applyConfig(fs *flag.FlagSet) error {
 	for n := range set {
 		givenLong[long(n)] = true
 	}
+	var applied []string
 	for key, v := range kv {
 		name := long(strings.ReplaceAll(key, "_", "-"))
 		if name == "config" || name == "update" {
@@ -249,19 +251,24 @@ func (o *notifyOpts) applyConfig(fs *flag.FlagSet) error {
 		default:
 			vals = []string{fmt.Sprint(x)}
 		}
+		// notify writes every flag with its default into the file: those
+		// change nothing and are not reported.
+		if len(vals) == 0 || len(vals) == 1 && vals[0] == fs.Lookup(name).DefValue {
+			continue
+		}
 		for _, s := range vals {
 			if err := fs.Set(name, s); err != nil {
 				return usagef("%s: %s: %v", path, key, err)
 			}
 		}
-		if verboseConfig(o) {
-			fmt.Fprintf(os.Stderr, "azhaq notify: %s: %s\n", path, key)
-		}
+		applied = append(applied, key)
+	}
+	if o.verbose && len(applied) > 0 {
+		sort.Strings(applied)
+		fmt.Fprintf(os.Stderr, "azhaq notify: %s sets %s\n", path, strings.Join(applied, ", "))
 	}
 	return nil
 }
-
-func verboseConfig(o *notifyOpts) bool { return o.verbose }
 
 // build makes the provider set and the client the flags describe.
 func (o *notifyOpts) build() (*notify.Set, *notify.Client, error) {

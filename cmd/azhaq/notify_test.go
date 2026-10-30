@@ -141,6 +141,24 @@ func TestNotifyConfigFlagsAndPrecedence(t *testing.T) {
 	}
 }
 
+// notify writes every flag with its default into config.yaml; -v names only
+// the keys that change something.
+func TestNotifyConfigDefaultsAreQuiet(t *testing.T) {
+	rec := &recorder{}
+	srv := rec.server(200)
+	defer srv.Close()
+	pc := writeTemp(t, "pc.yaml", "custom:\n  - id: c\n    custom_webhook_url: "+srv.URL+"/in\n    custom_method: POST\n")
+	in := writeTemp(t, "in.txt", "a\n")
+	conf := writeTemp(t, "config.yaml", "silent: \"false\"\nnc: \"false\"\nid: []\nbulk: \"true\"\n")
+	_, errOut, err := captureAll(t, func() error { return cmdNotify([]string{"-config", conf, "-pc", pc, "-i", in, "-v"}) })
+	if err != nil {
+		t.Fatalf("%v %s", err, errOut)
+	}
+	if !strings.Contains(errOut, conf+" sets bulk\n") || strings.Contains(errOut, "silent") || strings.Contains(errOut, ": nc") {
+		t.Errorf("stderr: %s", errOut)
+	}
+}
+
 // The webhook's token is on no path out of watch: not the command line, not
 // stdout, stderr or the workspace. A hook that cannot be reached, answers
 // 500 and echoes the URL, or rate-limits all stay quiet about it, and the
