@@ -1,0 +1,77 @@
+# Network services for the service and version benchmark (`ports` against
+# nmap -sV). Most listen on ports that are not their usual one, so a name
+# has to come from what the service says, not from the port number. Every
+# port is on 127.0.0.1 only.
+#
+#   docker compose -f bench/services.yaml up -d
+name: azhaq-services
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: azq-svc-redis
+    ports: ["127.0.0.1:16379:6379"]
+  mariadb:
+    image: mariadb:11.4
+    container_name: azq-svc-mariadb
+    environment: {MARIADB_ROOT_PASSWORD: azq-lab-only}
+    ports: ["127.0.0.1:13306:3306"]
+  postgres:
+    image: postgres:16-alpine
+    container_name: azq-svc-postgres
+    environment: {POSTGRES_PASSWORD: azq-lab-only}
+    ports: ["127.0.0.1:15432:5432"]
+  mongo:
+    image: mongo:7.0
+    container_name: azq-svc-mongo
+    ports: ["127.0.0.1:17017:27017"]
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: azq-svc-mqtt
+    command: ["mosquitto", "-c", "/mosquitto-no-auth.conf"]
+    ports: ["127.0.0.1:11883:1883"]
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    container_name: azq-svc-amqp
+    ports: ["127.0.0.1:15672:5672"]
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: azq-svc-memcached
+    ports: ["127.0.0.1:21211:11211", "127.0.0.1:21211:11211/udp"]
+    command: ["memcached", "-U", "11211"]
+  openssh:
+    image: linuxserver/openssh-server:latest
+    container_name: azq-svc-ssh
+    environment: {PUID: "1000", PGID: "1000", USER_NAME: azq, PASSWORD_ACCESS: "false"}
+    ports: ["127.0.0.1:12222:2222"]
+  ftp:
+    image: delfer/alpine-ftp-server:latest
+    container_name: azq-svc-ftp
+    environment: {USERS: "azq|azq-lab-only"}
+    ports: ["127.0.0.1:10021:21"]
+  mail:
+    image: axllent/mailpit:v1.20
+    container_name: azq-svc-mail
+    ports: ["127.0.0.1:10025:1025", "127.0.0.1:18825:8025"]
+  ldap:
+    image: osixia/openldap:1.5.0
+    container_name: azq-svc-ldap
+    ports: ["127.0.0.1:10389:389"]
+  smb:
+    image: dperson/samba:latest
+    container_name: azq-svc-smb
+    command: ["-p", "-s", "public;/tmp;yes;no;yes"]
+    ports: ["127.0.0.1:10445:445"]
+  snmp:
+    image: polinux/snmpd:latest
+    container_name: azq-svc-snmp
+    ports: ["127.0.0.1:10161:161/udp"]
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: azq-svc-es
+    environment: {discovery.type: single-node, xpack.security.enabled: "false", ES_JAVA_OPTS: "-Xms256m -Xmx256m"}
+    ports: ["127.0.0.1:19200:9200"]
+  coredns:
+    image: coredns/coredns:1.11.3
+    container_name: azq-svc-dns
+    ports: ["127.0.0.1:10053:53/udp", "127.0.0.1:10053:53/tcp"]
