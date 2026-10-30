@@ -15,7 +15,6 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -241,6 +240,8 @@ type writer struct {
 	f    *os.File
 	json bool
 	n    int
+	// headed: the CSV header has been written.
+	headed bool
 }
 
 func newWriter(c *common) (*writer, error) {
@@ -1142,137 +1143,6 @@ func cmdDNS(args []string) error {
 	if d := len(asked) - rep.Results; d > 0 {
 		rep.Counts["did not resolve"] = d // NXDOMAIN, no address, or a wildcard's answer
 	}
-	return rep.finish(c.json, c.silent)
-}
-
-// cmdPorts is naabu (connect scan): host:port per open port, as each host
-// is scanned. The hosts given are the scope.
-func cmdPorts(args []string) error {
-	fs := newFlags("ports")
-	var c common
-	c.register(fs)
-	var hosts stringsFlag
-	fs.Var(&hosts, "host", "host or IP (repeatable)")
-	list := fs.String("l", "", "file of hosts (- for stdin)")
-	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full, none, or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888")
-	udp := fs.Bool("udp", false, "also ask the common UDP ports (about 20: dns, ntp, snmp, ssdp, mdns, ...)")
-	udpSpec := fs.String("pu", "", "UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp)")
-	given := inherit(fs, "rate=port-rate", "max-requests", "resolvers", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file")
-	if err := parse(fs, args); err != nil {
-		return err
-	}
-	hs, err := inputs(hosts, *list)
-	if err != nil {
-		return err
-	}
-	if len(hs) == 0 {
-		return usagef("give -host HOST, -l FILE or hosts on stdin")
-	}
-	path, rm, err := tempList(hs)
-	if err != nil {
-		return err
-	}
-	defer rm()
-	w, err := newWriter(&c)
-	if err != nil {
-		return err
-	}
-	var mu sync.Mutex
-	seen := map[string]bool{}
-	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector != "azhaq-ports" {
-			return
-		}
-		p := payloadOf(o)
-		host, _ := p["host"].(string)
-		ip, _ := p["ip"].(string)
-		services, _ := p["services"].([]any)
-		for _, s := range services {
-			svc, _ := s.(map[string]any)
-			port := fmt.Sprint(svc["port"])
-			key := host + ":" + port
-			if w.json {
-				key = ip + " " + key // a row per address, as naabu prints
-			}
-			mu.Lock()
-			dup := seen[key]
-			seen[key] = true
-			mu.Unlock()
-			if dup {
-				continue
-			}
-			if !w.json {
-				w.line(key)
-				continue
-			}
-			n, _ := strconv.Atoi(port)
-			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "tcp", "tls": svc["tls"] == true, "timestamp": time.Now().Format(time.RFC3339Nano)}
-			for _, k := range []string{"service", "product", "version", "title", "banner", "subject_cn", "subject_an"} {
-				if v, ok := svc[k]; ok {
-					row[k] = v
-				}
-			}
-			w.obj(row)
-		}
-		udpServices, _ := p["udp_services"].([]any)
-		for _, s := range udpServices {
-			svc, _ := s.(map[string]any)
-			port := fmt.Sprint(svc["port"])
-			key := host + ":" + port + "/udp"
-			if w.json {
-				key = ip + " " + key
-			}
-			mu.Lock()
-			dup := seen[key]
-			seen[key] = true
-			mu.Unlock()
-			if dup {
-				continue
-			}
-			if !w.json {
-				if svc["state"] == "open" { // open|filtered rows are in the JSON
-					w.line(host + ":" + port + "/udp")
-				}
-				continue
-			}
-			n, _ := strconv.Atoi(port)
-			row := map[string]any{"host": host, "ip": ip, "port": n, "protocol": "udp", "timestamp": time.Now().Format(time.RFC3339Nano)}
-			for _, k := range []string{"state", "service", "product", "version", "banner"} {
-				if v, ok := svc[k]; ok {
-					row[k] = v
-				}
-			}
-			w.obj(row)
-		}
-	}
-	rep := newReport("ports")
-	rep.what = "open ports"
-	run := []string{"-list", path, "-passive", "-depth", "0", "-skip", skipAllBut("azhaq-dns", "azhaq-ports"), "-ports", *spec}
-	if *udpSpec != "" {
-		run = append(run, "-ports-udp", *udpSpec)
-	} else if *udp {
-		run = append(run, "-ports-udp", "top")
-	}
-	extra := given()
-	if !hasFlag(extra, "allow", "scope") {
-		// The hosts given are the scope.
-		for _, h := range hs {
-			h = strings.TrimSpace(h)
-			if host, _, err := net.SplitHostPort(h); err == nil {
-				h = host
-			}
-			run = append(run, "-allow", h)
-		}
-	}
-	_, done, err := runPreset(&c, append(run, extra...), rep, see)
-	if err != nil {
-		return err
-	}
-	defer done()
-	if err := w.close(); err != nil {
-		return err
-	}
-	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
 }
 

@@ -46,6 +46,7 @@ type Options struct {
 	Ports      []int            // azhaq-ports: ports to scan (runs only with -ports)
 	UDPPorts   []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
 	PortRate   float64          // azhaq-ports: connection attempts per second
+	PortConfig portcol.Config   // azhaq-ports: timeouts, retries, order and the rest
 	Dirs       dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
 	Params     paramcol.Options // azhaq-params: parameter names (runs only with -params)
 	MaxIPs     int              // azhaq-prefix: addresses expanded from prefixes for the run
@@ -87,6 +88,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(&brutecol.Permute{Pool: pool, Wild: dnsc.Wild})
 	pc := portcol.New(pool, o.Ports, o.PortRate)
 	pc.UDPPorts = o.UDPPorts
+	pc.Apply(o.PortConfig)
 	cat.MustRegister(pc)
 	cat.MustRegister(dirscol.New(client, o.Dirs))
 	cat.MustRegister(paramcol.New(client, o.Params))
@@ -98,7 +100,9 @@ func Register(cat *catalog.Catalog, o Options) {
 		render.Browser = o.Browser
 	}
 	cat.MustRegister(render)
-	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs})
+	// A scan of the ports of a prefix asks its addresses itself, and the
+	// ones that answer go on; without one, the prefix is expanded.
+	cat.MustRegister(&asncol.Prefix{MaxIPs: o.MaxIPs, Scanned: len(o.Ports)+len(o.UDPPorts) > 0})
 	cat.MustRegister(&asncol.PTR{Pool: pool})
 	tlscol.Register(cat)
 	sub := o.Subdomains

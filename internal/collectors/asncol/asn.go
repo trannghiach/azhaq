@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -149,12 +150,19 @@ func (a *ASN) get(ctx context.Context, path string, v any) error {
 // Prefix turns a prefix into its addresses, up to a budget for the run.
 type Prefix struct {
 	MaxIPs int // across the run; default 4096
+	// Scanned: the run scans ports, which asks each address of a prefix
+	// itself, so the prefix is not expanded here (and no reverse lookup is
+	// made for addresses nothing answered on).
+	Scanned bool
 
 	mu   sync.Mutex
 	used int
 }
 
 func (p *Prefix) Name() string { return PrefixName }
+
+// prefixSize is the number of addresses in pf, as a float for IPv6.
+func prefixSize(pf netip.Prefix) float64 { return math.Ldexp(1, pf.Addr().BitLen()-pf.Bits()) }
 
 // Info: arithmetic only.
 func (p *Prefix) Info() catalog.Info { return catalog.Info{Kind: catalog.Passive} }
@@ -174,7 +182,10 @@ func (p *Prefix) Run(_ context.Context, seed types.Seed, emit func(types.Observa
 	pf = pf.Masked()
 	row := map[string]any{"prefix": pf.String()}
 	meta := types.RunMeta{Status: types.StatusOK, EmitCount: 1}
-	if !pf.Addr().Is4() {
+	if p.Scanned {
+		row["size"] = prefixSize(pf)
+		row["note"] = "its ports are scanned address by address; the ones that answer are followed"
+	} else if !pf.Addr().Is4() {
 		row["skipped"] = "IPv6 prefixes are not expanded"
 	} else {
 		size := 1 << (32 - pf.Bits())
@@ -318,4 +329,9 @@ func Generic(name string, ip net.IP) bool {
 		}
 	}
 	return normalize.SharedSuffix(name) != ""
+}
+
+// Prefixes are the prefixes asn announces (RIPEstat) and its holder.
+func (a *ASN) Prefixes(ctx context.Context, asn string) (prefixes []string, holder string, err error) {
+	return a.announced(ctx, asn)
 }

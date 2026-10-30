@@ -226,7 +226,25 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	permute := fs.Bool("permute", false, "resolve variations of found names (active; the targets given are the scope unless -allow)")
 	portsSpec := fs.String("ports", "", "scan TCP ports: top-100, top-1000, full or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888 (active; the targets given are the scope unless -allow)")
 	portsUDP := fs.String("ports-udp", "", "ask UDP ports (active): top (about 20 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open|filtered (-ports none: UDP only)")
-	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1000, as naabu, and 127.0.0.1 unpaced)")
+	portRate := fs.Float64("port-rate", 0, "port connection attempts per second (0: 1500, as naabu's connect scan, and 127.0.0.1 unpaced)")
+	portMinRate := fs.Float64("port-min-rate", 0, "port connection attempts per second at least: raises -port-rate to this when lower")
+	portTimeout := fs.Duration("port-timeout", 0, "wait this long for one port to accept or refuse a connect (0: 1.5s)")
+	portRetries := fs.Int("port-retries", -1, "more passes over the ports that neither accepted nor refused: n passes over all of them, 0 none (default: one, when few did not answer)")
+	portWorkers := fs.Int("port-workers", 0, "port connects in flight at once, over all hosts (0: as many as the rate allows, up to 20000)")
+	portOrder := fs.String("port-order", "random", "the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc")
+	portSeed := fs.Int64("port-seed", 0, "make the random port order repeat (0: a new one each run)")
+	portThreshold := fs.Int("port-threshold", 0, "stop asking a host after this many open ports: it answers every port (0: no limit)")
+	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS; up to 3 connections), banner (what it says on the one connection) or none (connect and close)")
+	portCDNFull := fs.Bool("port-cdn-full", false, "scan CDN and WAF addresses in full, not only their web ports")
+	portDiscover := fs.String("port-discover", "", "ask first whether an address is up, by a connect to 80 and 443: first (scan the ones that answer) or only (list them, scan nothing)")
+	portIP := fs.String("port-ip", "", "the address families of a name to scan: 4 or 6 (default both)")
+	portAllIPs := fs.Bool("port-all-ips", false, "scan every address of a name, not the first two of each family")
+	portSource := fs.String("port-source-ip", "", "connect from this local address")
+	portProxy := fs.String("port-proxy", "", "connect to TCP ports through this SOCKS5 proxy (host:port); a port is then asked its banner only, and UDP is not sent")
+	portProxyAuth := fs.String("port-proxy-auth", "", "user:password for -port-proxy")
+	portPayload := fs.String("port-payload", "", "send this to each open TCP port before reading what it says (\\r and \\n are CR and LF)")
+	var portsOn stringsFlag
+	fs.Var(&portsOn, "ports-on", "scan only these ports on a host: HOST=22,80 (repeatable)")
 	dirsFile := fs.String("dirs", "", "guess paths on each web service from this wordlist (active; the targets given are the scope unless -allow)")
 	dirsExt := fs.String("dirs-ext", "", "also try each word with these extensions, comma-separated (php,bak)")
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
@@ -257,6 +275,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if _, err := portscan.UDPPorts(*portsUDP); *portsUDP != "" && err != nil {
 		return usagef("-ports-udp: %v", err)
+	}
+	portCfg, err := portConfig(portFlags{minRate: *portMinRate, timeout: *portTimeout, retries: *portRetries, workers: *portWorkers,
+		order: *portOrder, seed: *portSeed, threshold: *portThreshold, detect: *portDetect, cdnFull: *portCDNFull, discover: *portDiscover,
+		ip: *portIP, allIPs: *portAllIPs, source: *portSource, payload: *portPayload, on: portsOn, proxy: *portProxy, proxyAuth: *portProxyAuth})
+	if err != nil {
+		return err
 	}
 
 	fetch.Reset()
@@ -355,7 +379,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if active && len(allow) == 0 {
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
 	}
-	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}
+	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}.Compile()
 	if !rules.Empty() {
 		// What the scope excludes is never touched, even when it was given
 		// as a target: it is listed in the summary instead.
@@ -579,6 +603,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return fmt.Errorf("-ports-udp: %w", err)
 		}
 	}
+	opts.PortConfig = portCfg
 	if *paramsFile != "" {
 		words, err := loadLines(*paramsFile)
 		if err != nil {
@@ -1481,6 +1506,14 @@ func loadList(path string) ([]types.Seed, []string, error) {
 var storedList []string
 
 func listSeed(line string) (types.Seed, error) {
+	if !strings.Contains(line, "://") {
+		if pf, err := netip.ParsePrefix(line); err == nil {
+			return types.Seed{Type: types.TypePrefix, Keys: map[string]string{"prefix": pf.Masked().String()}}, nil
+		}
+		if n, ok := asncol.NormalizeASN(line); ok && strings.HasPrefix(strings.ToUpper(line), "AS") {
+			return types.Seed{Type: types.TypeASN, Keys: map[string]string{"asn": n}}, nil
+		}
+	}
 	if strings.Contains(line, "://") {
 		u, err := parseCLIURL(line)
 		if err != nil {

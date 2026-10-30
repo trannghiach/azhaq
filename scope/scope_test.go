@@ -93,3 +93,21 @@ func TestMatchNamesTheAllowRule(t *testing.T) {
 		t.Errorf("no rules: %q", got)
 	}
 }
+
+// A compiled set of rules answers as the plain one does.
+func TestCompileMatchesPlainRules(t *testing.T) {
+	r := Rules{
+		Allow: []string{"example.com", "*.wild.test", "=api.exact.org", "10.0.0.0/24", "192.0.2.7", "127.0.0.1:8080"},
+		Deny:  []string{"admin.example.com", "10.0.0.9"},
+	}
+	c := r.Compile()
+	for _, h := range []string{"example.com", "a.example.com", "admin.example.com", "x.admin.example.com", "wild.test", "q.wild.test",
+		"api.exact.org", "x.api.exact.org", "exact.org", "10.0.0.5", "10.0.0.9", "10.0.1.5", "192.0.2.7", "192.0.2.8", "127.0.0.1", "other.net", "", "EXAMPLE.com."} {
+		if r.Allows(h) != c.Allows(h) || r.Match(h) != c.Match(h) && c.Match(h) == "" != (r.Match(h) == "") {
+			t.Errorf("%q: plain %v %q, compiled %v %q", h, r.Allows(h), r.Match(h), c.Allows(h), c.Match(h))
+		}
+	}
+	if (Rules{}).Compile().Allows("anything") != true {
+		t.Error("empty rules refuse")
+	}
+}

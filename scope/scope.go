@@ -19,6 +19,8 @@ import (
 type Rules struct {
 	Allow []string
 	Deny  []string
+
+	idx *index // from Compile: lookups that do not read every rule
 }
 
 func (r Rules) Empty() bool {
@@ -29,6 +31,12 @@ func (r Rules) Allows(host string) bool {
 	host = normalize.Hostname(host)
 	if host == "" {
 		return true
+	}
+	if r.idx != nil {
+		if r.idx.deny.match(host) {
+			return false
+		}
+		return len(r.Allow) == 0 || r.idx.allow.match(host)
 	}
 	for _, d := range r.Deny {
 		if hostMatch(host, d) {
@@ -52,6 +60,9 @@ func (r Rules) Allows(host string) bool {
 func (r Rules) Match(host string) string {
 	host = normalize.Hostname(host)
 	if host == "" || len(r.Allow) == 0 {
+		return ""
+	}
+	if r.idx != nil && !r.idx.allow.match(host) {
 		return ""
 	}
 	for _, d := range r.Deny {
@@ -122,4 +133,70 @@ func allDigits(s string) bool {
 		}
 	}
 	return true
+}
+
+// Compile is r with its rules indexed: a run over tens of thousands of
+// targets, each one an allow rule, asks about each host in constant time
+// instead of reading every rule. Rules built by hand work as before.
+func (r Rules) Compile() Rules {
+	r.idx = &index{allow: compileSet(r.Allow), deny: compileSet(r.Deny)}
+	return r
+}
+
+type index struct{ allow, deny ruleSet }
+
+// ruleSet holds rules by kind, to answer hostMatch for a host without
+// reading them all.
+type ruleSet struct {
+	exact  map[string]bool // a host or address, as written
+	suffix map[string]bool // a domain: it and everything under it
+	nets   []*net.IPNet
+}
+
+func compileSet(rules []string) ruleSet {
+	set := ruleSet{exact: map[string]bool{}, suffix: map[string]bool{}}
+	for _, rule := range rules {
+		rule = strings.TrimSpace(rule)
+		if strings.Contains(rule, "/") {
+			if _, n, err := net.ParseCIDR(rule); err == nil {
+				set.nets = append(set.nets, n)
+			}
+			continue
+		}
+		exact := strings.HasPrefix(rule, "=")
+		rule = strings.TrimPrefix(strings.TrimPrefix(rule, "="), "*.")
+		if h, p, err := net.SplitHostPort(rule); err == nil && allDigits(p) {
+			rule = h
+		}
+		rule = normalize.Hostname(rule)
+		if rule == "" {
+			continue
+		}
+		set.exact[rule] = true
+		if !exact && net.ParseIP(rule) == nil {
+			set.suffix[rule] = true
+		}
+	}
+	return set
+}
+
+func (s ruleSet) match(host string) bool {
+	if s.exact[host] {
+		return true
+	}
+	for i := 0; i < len(host); i++ {
+		if host[i] == '.' && s.suffix[host[i+1:]] {
+			return true
+		}
+	}
+	if len(s.nets) > 0 {
+		if ip := net.ParseIP(host); ip != nil {
+			for _, n := range s.nets {
+				if n.Contains(ip) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
