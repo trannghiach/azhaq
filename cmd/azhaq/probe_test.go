@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -239,5 +240,21 @@ func TestKeptArgsRedactsRawRequestSecrets(t *testing.T) {
 	got := keptArgs([]string{"-probe-opts", raw, "-db", "w.db"})
 	if len(got) != 1 || strings.Contains(got[0], "Bearer") || !strings.Contains(got[0], `"X-A"`) {
 		t.Errorf("kept %v", got)
+	}
+}
+
+// A name that does not resolve is one row, its URL's, with what DNS said;
+// not a second row for the bare name, and not "no failure recorded".
+func TestProbeUnresolvedNameIsOneRow(t *testing.T) {
+	t.Chdir(t.TempDir())
+	out, rep, _ := runContract(t, "probe", "-u", "http://nosuch-zq81x.invalid")
+	rows := probeRows(t, out)
+	if len(rows) != 1 || rows[0]["failed"] != true || !strings.Contains(fmt.Sprint(rows[0]["error"]), "special-use name") {
+		t.Fatalf("rows %s", out)
+	}
+	for _, f := range rep.Failed {
+		if f.Error == "no answer and no failure recorded" {
+			t.Errorf("gap %+v", f)
+		}
 	}
 }

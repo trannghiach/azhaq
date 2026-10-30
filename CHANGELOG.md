@@ -31,6 +31,7 @@
 
 ### `probe`
 
+- A target whose name does not resolve says what DNS said (`no such host`, `the name has no address`, a special-use name such as `.invalid`) and is one row: before, a name with no record was `no answer and no failure recorded`, and a URL's name that DNS refused was listed again as a target of its own.
 - `probe` follows no redirect unless given `-fr` (with `-maxr`, `-fhr`, `-rhsts`), as httpx does. A row's status, title, length and content type all come from one answer; with `-fr` they are the last answer's and the chain is in `chain_status_codes` and `final_url`. `run` keeps following.
 - `probe` takes httpx's matchers and filters over the response as sent: `-mc/-fc`, `-ml/-fl`, `-mlc/-flc`, `-mwc/-fwc`, `-mfc/-ffc`, `-ms/-fs`, `-mr/-fe`, `-mcdn/-fcdn`, `-mrt/-frt`, `-mdc/-fdc`, `-fd`, `-fpt/-fep`. The summary says how many rows they left out and which conditions could not be judged.
 - A target that is dropped for a wildcard answer, or that gets no answer, is a row with `failed: true` and an `error` (`-probe` prints `[FAILED]`), and the summary counts it. A name that resolves only through a wildcard is probed, not dropped.

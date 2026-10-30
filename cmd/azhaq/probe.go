@@ -612,10 +612,19 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 		if w, _ := m["wildcard"].(bool); w {
 			wild++
 		}
-		if e, _ := m["error"].(string); e != "" {
-			if e == "nxdomain" {
-				e = "no such host"
+		e, _ := m["error"].(string)
+		if e == "" {
+			switch r, _ := m["result"].(string); r {
+			case "nodata":
+				e = "the name has no address (no A or AAAA record)"
+			case "reserved":
+				e = "a special-use name (.invalid, .test, .local) the system resolver and /etc/hosts do not know"
 			}
+		}
+		if e == "nxdomain" {
+			e = "no such host"
+		}
+		if e != "" {
 			dnsErr[host] = e
 		}
 	}
@@ -640,6 +649,7 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 	inOrder := map[string]bool{}
 	for _, in := range o.order {
 		inOrder[in] = true
+		inOrder[normalize.HostFromURL(in)] = true // its name is not a target of its own
 	}
 	order := append([]string(nil), o.order...)
 	var found []string
