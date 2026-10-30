@@ -34,4 +34,12 @@
 
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
 
-**A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again.
+**A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again. `-retries 3` asks the silent ones three more times, `-connect-timeout 3s` waits longer for a far host.
+
+**`ports -timeout 500` is refused.** `-timeout` is how long the whole run may take (`90s`); the wait for one connect is `-connect-timeout` (`500` is milliseconds there).
+
+**`ports` on a CDN name scans four ports.** An address in a CDN or WAF range is asked 80, 443, 8080 and 8443 only (the row has `cdn`, the summary says so). `-cdn-full` scans it in full.
+
+**`ports` on a range says addresses "answered neither a connect to 80 nor to 443".** That is `-wn`: an address is up when 80 or 443 accepts or refuses. A host that drops both reads as down; scan without `-wn` to ask every address.
+
+**`ports -T4` or a high `-rate` finds fewer ports than before.** A short connect timeout and few retries lose ports on a lossy path; the summary lists the ports that stayed silent. Raise `-connect-timeout` or `-retries`.
