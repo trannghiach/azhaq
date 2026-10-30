@@ -181,7 +181,7 @@ func cmdParams(args []string) error {
 			w.line(u + " " + strings.Join(names, ","))
 		}
 	}
-	run = []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-params"),
+	run = []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-params"),
 		"-params", listFile, "-params-per-host", fmt.Sprint(len(targets)), "-params-threads", fmt.Sprint(*threads), "-params-method", m,
 		"-params-timeout", fmt.Sprintf("%gs", *timeout)}
 	if *chunk > 0 {

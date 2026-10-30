@@ -225,6 +225,9 @@ func (s *search) give(page string, emit func(types.Observation) error, found map
 	var fail error
 	s.mu.Lock()
 	stopped, lost, lostWhy := s.stopped, s.lost, s.lostWhy
+	if s.note != "" && len(found) == 0 {
+		notes = append(notes, page+": "+s.note)
+	}
 	s.mu.Unlock()
 	switch {
 	case stopped != nil:
@@ -232,7 +235,11 @@ func (s *search) give(page string, emit func(types.Observation) error, found map
 		notes = append(notes, fmt.Sprintf("%s: %s, so the page was not fully searched (lower -rate, or wait and run again)", page, stopped))
 	case lost > 0:
 		fail = fmt.Errorf("%d requests got no answer (%s)", lost, lostWhy)
-		notes = append(notes, fmt.Sprintf("%s: %d of %d requests got no answer (%s); the names in those groups were not judged", page, lost, s.requests.Load(), lostWhy))
+		if int64(lost) >= s.requests.Load() {
+			notes = append(notes, fmt.Sprintf("%s: did not answer (%s); nothing was searched", page, lostWhy))
+		} else {
+			notes = append(notes, fmt.Sprintf("%s: %d of %d requests got no answer (%s); the names in those groups were not judged", page, lost, s.requests.Load(), lostWhy))
+		}
 	}
 	if s.method != GET {
 		row["writes"] = s.requests.Load()

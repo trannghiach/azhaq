@@ -73,10 +73,13 @@ type search struct {
 	sem     chan struct{}
 	session bool // the run or the page's own headers carry a session
 
-	ref        answer
-	slack      int // size difference the page shows between identical requests
-	lineSlack  int // and in lines
-	hdrNoise   map[string]bool
+	ref       answer
+	slack     int // size difference the page shows between identical requests
+	lineSlack int // and in lines
+	hdrNoise  map[string]bool
+	// exact: three identical requests got the same body, so any other body,
+	// by one byte, is a change (a page of one error message among several).
+	exact      bool
 	refWords   map[string]bool // the words of the reference answers
 	noEcho     bool            // the page prints any name it gets: no name is evidence
 	controlled bool            // see calibrate
@@ -96,8 +99,9 @@ type search struct {
 	lost    int
 	lostWhy string
 	skip    string
-	floodAt int // the first chunk of a page that answers any name
-	badXML  int // names that cannot be XML elements
+	note    string // said in the page's row
+	floodAt int    // the first chunk of a page that answers any name
+	badXML  int    // names that cannot be XML elements
 }
 
 func newSearch(c *Collector, ctx context.Context, u *url.URL, tg Target) *search {
@@ -207,7 +211,16 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 		}
 	}
 	chunks := s.plan(names)
+	// The toggle names are asked beside the list, to spend no time after it.
+	var toggled []toggleAnswer
+	var tw sync.WaitGroup
+	tw.Add(1)
+	go func() {
+		defer tw.Done()
+		toggled = s.askToggles()
+	}()
 	s.searchChunks(chunks)
+	tw.Wait()
 	if s.ctx.Err() != nil {
 		return types.RunMeta{Status: types.StatusCancelled}, s.ctx.Err()
 	}
@@ -238,7 +251,7 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 	}
 	values := map[string]string{}
 	if floodAt == math.MaxInt && !s.halted() {
-		s.toggles(found, values)
+		s.toggles(toggled, found, values)
 	}
 	s.mu.Lock()
 	bad := s.badXML
@@ -603,12 +616,17 @@ func refusedConn(err error) bool {
 // group.
 func (s *search) calibrate(words []string) bool {
 	one := randomPairs(1)
-	a, ok := s.get(one)
-	if !ok {
-		return false
-	}
-	b, ok := s.get(randomPairs(1))
-	if !ok {
+	// The two baselines and the crowd are independent: one round trip.
+	crowd := s.crowd(words)
+	var a, b, c answer
+	var okA, okB, okC bool
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); a, okA = s.get(one) }()
+	go func() { defer wg.Done(); b, okB = s.get(randomPairs(1)) }()
+	c, okC = s.ask(crowd, true)
+	wg.Wait()
+	if !okA || !okB {
 		return false
 	}
 	if a.status != b.status {
@@ -626,6 +644,10 @@ func (s *search) calibrate(words []string) bool {
 	s.mu.Lock()
 	s.ref = a
 	s.mu.Unlock()
+	if a.status >= 500 {
+		// The page may be failing for every request, not reading names.
+		s.note = fmt.Sprintf("the page answers %d to a request with one unknown name; a failing page hides parameters", a.status)
+	}
 	s.slack = abs(a.length - b.length)
 	if s.slack >= a.length/2+64 {
 		s.skip = fmt.Sprintf("the page changes by itself (%d and %d bytes for the same request)", a.length, b.length)
@@ -640,9 +662,7 @@ func (s *search) calibrate(words []string) bool {
 	if len(echoed(a.body, pairNames(one), nil)) > 0 {
 		s.noEcho = true
 	}
-	crowd := s.crowd(words)
-	c, ok := s.ask(crowd, true)
-	if !ok {
+	if !okC {
 		s.mu.Lock()
 		hard := s.stopped != nil || s.err != nil
 		s.mu.Unlock()
@@ -650,9 +670,10 @@ func (s *search) calibrate(words []string) bool {
 			return false
 		}
 	}
-	if !ok || c.status != a.status {
+	if !okC || c.status != a.status {
 		// The server took one name but not this many.
 		var fit []pair
+		var ok bool
 		fit, c, ok = s.fit(crowd, a)
 		if !ok {
 			return false
@@ -663,6 +684,7 @@ func (s *search) calibrate(words []string) bool {
 		s.noEcho = true
 	}
 	s.controlled = len(tokens(a.body, one)) > 0 || s.differs(c, s.ref, crowd)
+	s.exact = !s.controlled && bytes.Equal(a.body, b.body) && bytes.Equal(strip(c, crowd).body, a.body)
 	return true
 }
 
@@ -765,6 +787,8 @@ func (s *search) judge(a, ref answer) string {
 		return "location"
 	case abs(a.lines-ref.lines) > s.lineSlack:
 		return "lines"
+	case s.exact && !bytes.Equal(a.body, ref.body):
+		return "body"
 	}
 	return ""
 }
@@ -937,6 +961,13 @@ func (s *search) process(ck *chunk, group []string, v verdict, inferred bool) {
 	s.halves(ck, group, &v)
 }
 
+// parallelHalves is the group size from which the halves go side by side;
+// unpaced is the rate that means no pace.
+const (
+	parallelHalves = 4
+	unpaced        = 1e6
+)
+
 // halves narrows each half of group, in turn, not at the same time:
 // reaching single names early is what stops the search on a page that
 // answers any name (groups of a list run side by side instead). When the
@@ -946,6 +977,20 @@ func (s *search) process(ck *chunk, group []string, v verdict, inferred bool) {
 func (s *search) halves(ck *chunk, group []string, v *verdict) {
 	half := len(group) / 2
 	first, second := group[:half], group[half:]
+	if len(group) >= parallelHalves && s.c.Opts.Rate >= unpaced {
+		// With no pace to keep, big halves are asked at the same time: the
+		// time it takes is the depth, not the count. (With a pace, requests
+		// are the cost, and the second half is inferred.)
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.narrow(ck, first)
+		}()
+		s.narrow(ck, second)
+		wg.Wait()
+		return
+	}
 	if v == nil || v.why == "" || v.crowd || len(v.reflected) > 0 || len(v.named) > 0 {
 		s.narrow(ck, first)
 		s.narrow(ck, second)

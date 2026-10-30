@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -58,10 +59,10 @@ func TestFindsHiddenParameters(t *testing.T) {
 
 func TestSkipsNoisyPages(t *testing.T) {
 	fetch.Reset()
-	n := 0
+	var count atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n++
-		fmt.Fprint(w, strings.Repeat("x", n*500)) // a different size every time
+		n := int(count.Add(1))
+		fmt.Fprint(w, strings.Repeat("x", []int{100, 5000, 50000}[n%3])) // another size for each of three requests
 	}))
 	defer srv.Close()
 	c := New(srv.Client(), Options{Words: []string{"a", "b"}, Rate: 10000})

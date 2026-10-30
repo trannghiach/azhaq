@@ -314,3 +314,28 @@ func TestRecase(t *testing.T) {
 		t.Error("unknown style accepted")
 	}
 }
+
+// A page that answers each way with one short message: a one-byte change
+// is a change when the page never varies by itself, and a name another name
+// hides is found once the groups are small.
+func TestOneByteChange(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		w.WriteHeader(http.StatusBadRequest)
+		switch {
+		case q.Has("variables"):
+			fmt.Fprint(w, `{"errors":["Variables are invalid JSON."]}`)
+		case q.Has("query"):
+			fmt.Fprint(w, `{"errors":["Syntax Error here"]}`)
+		default:
+			fmt.Fprint(w, `{"errors":["Must provide query string."]}`)
+		}
+	}))
+	defer srv.Close()
+	words := append(noise(60), "variables", "query")
+	got := runOn(t, New(srv.Client(), Options{Words: words, Rate: 10000}), srv.URL+"/graphql")
+	if !slices.Equal(found(got), []string{"query", "variables"}) {
+		t.Errorf("found %v", got)
+	}
+}
