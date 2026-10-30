@@ -126,6 +126,8 @@
 - A page's own request waits for the pace when Chrome sends it, not when it is counted, so four tabs no longer send four pages' documents together.
 - `shots` and `run -screenshots` no longer fetch the favicon for the map (one request less per page), and Chrome no longer fetches `/favicon.ico` for a screenshot.
 - A page that calls `alert()`, `confirm()` or `beforeunload` on load is accepted and shot in the normal time instead of timing out after 31 s with nothing.
+- `azhaq gallery -db FILE` serves a workspace's screenshots to a browser on this machine: a grid of thumbnails with URL, title, status and technologies, filters (status, technology, host, title, partial, look-alike group), one tile per group of look-alikes, search of URL, title and kept page text (`title:`, `body:`, `tech:`, `header:`, `status:`, `p:`, `-term`), a page per shot (picture, headers, cookies, TLS, network, console, the `azhaq show` command) and the pages that gave no picture. It is embedded, works offline, reads the workspace read-only and sends nothing to any target (a test asserts it). 5,000 pages page and filter in under 10 ms, and `/api/` gives the same data as JSON.
+- `gallery -workspace DIR` merges the workspaces of a directory in one view; a database that is not a workspace is skipped with a note, one that cannot be read is skipped and exits 3, as do pictures missing from disk.
 
 ### Crawl
 

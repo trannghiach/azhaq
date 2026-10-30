@@ -264,6 +264,16 @@ azhaq export -db shots.db -format html > shots.html
 
 Each page is taken whole, or marked `partial` with a note and exit 3: at `-rate 3` a page of 40 requests takes about 13 seconds, and its time runs from when it last moved, so the pace alone never blanks a picture. `-p small|medium|large` and address ranges (`-u 192.0.2.0/28`) find the services; `-nmap scan.xml` and `-nessus scan.nessus` take them from a scan; `-shot-format jpeg -shot-fullpage` makes smaller, taller pictures. `shots.html` is one file with its pictures embedded, grouped by how they look, and opens from any directory.
 
+To go through thousands of pictures, open the workspace in the gallery instead:
+
+```
+azhaq shots -l services.txt -dir shots -db shots.db -shot-html
+azhaq gallery -db shots.db            # http://127.0.0.1:7180/
+azhaq gallery -workspace ./recon      # every *.db of a directory, merged
+```
+
+The gallery is a local page that reads the workspace and sends nothing to any target. It shows a grid of thumbnails with each page's URL, title, status and technologies; filters by status, technology, host, title, partial and look-alike group; one picture for each group of look-alikes (so thirty copies of a login portal are one tile); and searches URL, title and, with `-shot-html`, page text (`title:login tech:nginx body:"sign in" -status:404`). A page opens to its picture, headers, cookies, TLS, network log, console and the `azhaq show` command for its URL. The same data is at `/api/` for scripts: `curl -s 'http://127.0.0.1:7180/api/shots?status=200&collapse=1&limit=20'`. It does not take pictures or submit URLs; run `shots` for that.
+
 ## 19. Crawl an app the way katana does
 
 ```

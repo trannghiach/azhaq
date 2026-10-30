@@ -78,6 +78,15 @@
 
 **`shots` says `screenshot … is partial` and exits 3.** The picture was taken while some of the page's images, styles or scripts had not loaded (the row has `"partial":true`, `unloaded` and `resources`). The page was slow, or `-rate` is low for it: a page of 40 requests at `-rate 2` needs 20 seconds, and its time runs from when it last moved, so a slow pace alone does not cut it short; a server that stops answering does. Raise `-rate`, or give the page more time.
 
+**`gallery` says `N of M pages: the picture file is not on disk` and exits 3.** The workspace names a picture file that is no longer where the run wrote it (`file_path`) or beside the database. Keep the `-dir` folder with the workspace, or copy it back; the page still lists those pages, with their headers and record, and no picture.
+
+**`gallery` finds no pictures in a workspace, or no groups.** It lists only what `shots` and `run -screenshots` took (`azhaq-shots` rows). A workspace made by an older azhaq has no perceptual hash (no look-alike groups) or no status (a status filter does not list the page); a banner says how many. Take the pages again.
+
+**`gallery`: a `body:` search finds nothing.** Page text is searched only for pages taken with `-shot-html`; the banner and Statistics say for how many it was kept. A free word still matches the URL and the title.
+
+**`gallery` does not show a page taken after it started.** It reads the workspace once at start. Stop it (Ctrl-C) and start it again.
+
+
 **`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
 
 **An open TCP port has no `service` or `product`.** The port said nothing and none of the protocols azhaq asks (about 30, one request each, at most 24 connects per port) answered, or it answered in a protocol azhaq does not know. The row keeps the first bytes of any answer in `banner`. A port that accepts a connection and closes it without a word is `tcpwrapped`. When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports and the list was not run for the rest.
