@@ -105,6 +105,12 @@ func printReport() {
 		fmt.Fprintf(w, "kill -9, resumed\t%v\tkilled after %.1fs\n", s.KilledSame, s.KilledAfter)
 		fmt.Fprintf(w, "two workers\t%v\t%d tasks on the workers, %.1fs (one process %.1fs)\n", s.WorkersSame, s.WorkerTasks, s.Seconds, s.OneSeconds)
 	}
+	if cl := rec.Claims; cl != nil {
+		fmt.Fprintf(w, "\nclaims (%.0fs)\tpace\tsummary\tledger\tcounter\tpass\n", cl.Seconds)
+		for _, r := range cl.Rows {
+			fmt.Fprintf(w, "%s\t%s\t%d\t%d\t%d\t%v\n", r.Case, r.Pace, r.Summary, r.Ledger, r.Counter, r.Pass)
+		}
+	}
 	if t := rec.Tenants; t != nil {
 		fmt.Fprintln(w, "\nroles (multi-tenant fixture)\trows as expected\twrong\textra\tsigned-in logouts\ttime")
 		fmt.Fprintf(w, "anon → member → owner\t%d/%d\t%d\t%d\t%d\t%.1fs\n", t.Matched, t.Expected, len(t.Wrong), len(t.Extra), t.Logouts, t.Seconds)
