@@ -21,7 +21,7 @@ If you know subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowit
 - A flag may have one dash or two (`-silent` or `--silent`). A flag a command does not have stops it with exit 2 before anything is sent, and `azhaq help COMMAND` lists the flags it has. `azhaq help -json` lists them for a program.
 - Results go to stdout, one per line, as the tool prints them. A summary goes to stderr: what failed, what was left alone, which limit stopped it. With `-json` the results are JSON lines and the summary is one JSON object.
 - Exit codes are the same everywhere: `0` complete, `1` error, `2` usage, `3` finished with failures, `4` stopped by a limit or the kill file. The tools above exit 0 after most of these; a script that checks `$?` sees more than it did.
-- Every command that sends to a target takes `-allow`, `-deny` and `-scope` (a program's scope), `-max-requests`, `-kill-file` and `-ledger`, and a few of them `-rate`. Nothing is sent to a host outside the scope.
+- `probe`, `crawl`, `ports`, `dirs`, `fuzz`, `params` and `shots` take `-allow`, `-deny` and `-scope` (a program's scope), `-max-requests`, `-kill-file`, `-ledger` and `-rate`; `dns` takes the three scope flags. `subs`, `urls` and `notify` send nothing to a target, so they have none of these. Nothing is sent to a host outside the scope.
 - `-db FILE` keeps what a command found in a workspace, so that `query`, `show`, `export`, `diff`, `watch` and `resume` can work on it. Without it the command uses a temporary one.
 - The output of one command feeds the next: `azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json`.
 
@@ -166,7 +166,7 @@ On top: a page that answers like an unknown path is marked `catchall`, a CNAME o
 | `-jc`, `-jsl` | `-jc`, `-jsl` | Accepted. Scripts are always read: routes, calls with their methods and body names, router tables, source maps, API descriptions. |
 | `-kb`, `-td`, `-duc` | the same | Accepted and always on. Forms and technologies are always read. |
 | `-headless` | `-browser` | Pages are also loaded in Chrome. `-interact` clicks the buttons and menus. |
-| `-fs rdn` | `-fs rdn` | The hosts a crawl follows: `rdn`, `fqdn`, `dn` or a regex. The default is the start page's origin. |
+| `-fs rdn` | `-fs rdn` | The hosts a crawl follows: `rdn`, `fqdn`, `dn` or a regex. Without it a crawl of a name follows its registrable domain and subdomains (`rdn`), and a crawl of an address stays on that address and port. |
 | `-ns` | `-ns` | Follow links to any host, still held to `-allow` and `-deny`. |
 | `-cs`, `-cos` | `-cs`, `-cos` | Regexes of the URLs to follow or never follow. |
 | `-do` | `-do` | Also list the URLs found and left out of scope (never requested). |
@@ -410,7 +410,7 @@ Only the part of nmap that finds open ports and names their service is covered. 
 
 What differs on purpose:
 
-- **UDP needs no root.** Each port gets one datagram on a connected socket: a reply is `open` (with the service, product and version it gives), an ICMP "port unreachable" is `closed`, and silence twice is `open|filtered`. The request is the harmless one of the protocol the port usually carries, and on a port with no known protocol a DNS query, an SNMP get with community `public`, memcached's version, then an empty datagram. Nothing logs in, guesses a credential or changes state.
+- **UDP needs no root.** Each port gets one datagram on a connected socket: a reply is `open` (with the service, product and version it gives), an ICMP "port unreachable" is `closed`, and silence after every request its protocol has is `open|filtered`. The request is the harmless one of the protocol the port usually carries, and on a port with no known protocol a DNS query, an SNMP get with community `public`, memcached's version, then an empty datagram. Nothing logs in, guesses a credential or changes state.
 - **Versions come from a few connections.** A port that speaks first is named from what it says, on the one connection. One that waits is asked HTTP and TLS, then one harmless request of each protocol that waits to be asked (Redis, PostgreSQL, MongoDB, MQTT, AMQP, memcached, LDAP, SMB, Kafka, and others listed in [OUTPUT.md](OUTPUT.md#ports-udp-products-and-versions)), each on a connection of its own; an open port costs at most 24 more connects, all counted, paced and in the ledger. nmap's `-sV` can send many more probes to one port.
 - **Open ports are what is printed.** Ports that neither accepted nor refused a connect are named in the summary (and in the workspace row's `filtered_ports`), since an open port may hide among them.
 
