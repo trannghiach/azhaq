@@ -81,7 +81,18 @@ A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where 
 azhaq watch -db acme.db -every 24h -notify https://hooks.slack.com/services/… -- -scope hackerone -program acme
 ```
 
+A webhook URL is a secret, and `ps` shows a command line to every user: put it in a file (`-notify @hooks.txt`, one URL a line) or in `AZHAQ_NOTIFY`. Several providers, or Teams, Pushover, e-mail, Google Chat, Gotify and a custom endpoint, come from notify's `provider-config.yaml`: `-notify-config provider-config.yaml`. A message that did not arrive is exit 3.
+
 It reports new names, services, URLs, open ports, pages whose status or title changed, and API listings that grew or shrank. It also reports the API routes a deploy changed, each tied to the script that calls it (`+ POST /api/v2/export {format, userId}  (main.js)`: a new route; `~ /api/orders/{id}: +DELETE`: a method added; `~ PUT /api/profile: +role`: a body name added; `- /api/legacy/report`: a route gone from its script). No change, no message.
+
+## 8b. Send any output to chat or e-mail
+
+```
+azhaq subs -d example.com -live | azhaq notify -bulk -pc provider-config.yaml
+azhaq notify -i findings.txt -p slack,smtp -id recon -mf 'recon {{date}}:\n{{data}}'
+```
+
+The flags and the config are [notify's](https://github.com/projectdiscovery/notify): a file written for it works. One message goes out per line, or with `-bulk` as many lines as fit in `-cl` characters; a longer line goes in pieces. `-rl` paces the requests (default 1 a second) and a 429 is waited out. The tokens are in the config, not on the command line; `$NAME` in it is that environment variable. The summary lists each entry a message did not reach, and the exit code is then 3.
 
 ## 9. Feed other tools, and take their results in
 

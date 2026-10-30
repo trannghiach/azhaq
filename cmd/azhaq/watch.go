@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/notify"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -47,7 +46,15 @@ func cmdWatch(args []string) error {
 	db := fs.String("db", "", "workspace database (required)")
 	every := fs.Duration("every", 0, "run again after this long (default: run once, for cron)")
 	var hooks stringsFlag
-	fs.Var(&hooks, "notify", "webhook for changes: Slack, Discord, Telegram (…/sendMessage?chat_id=…) or any JSON endpoint (repeatable)")
+	fs.Var(&hooks, "notify", "webhook for changes: Slack, Discord, Telegram (…/sendMessage?chat_id=…) or any JSON endpoint (repeatable); @FILE reads URLs from a file, one a line, and $AZHAQ_NOTIFY holds more (comma-separated), so a token need not stand on the command line where ps shows it")
+	notifyConfig := fs.String("notify-config", "", "notify's provider-config.yaml: send the changes to the providers it lists (Slack, Discord, Telegram, Teams, Google Chat, Pushover, Gotify, SMTP, custom)")
+	var notifyProviders, notifyIDs stringsFlag
+	fs.Var(&notifyProviders, "notify-provider", "with -notify-config, only these providers (repeatable or comma-separated)")
+	fs.Var(&notifyIDs, "notify-id", "with -notify-config, only the entries with these ids (repeatable or comma-separated)")
+	notifyFormat := fs.String("notify-format", "", "format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}}")
+	notifyRate := fs.Float64("notify-rate", 1, "requests per second to the webhooks and providers (0: no limit)")
+	notifyProxy := fs.String("notify-proxy", "", "proxy URL for the notification requests (default: the environment's)")
+	notifyLines := fs.Int("notify-lines", 100, "lines per kind of change in a message, the rest counted (0: all); a message longer than the service takes is sent in parts")
 	notifyCmd := fs.String("notify-cmd", "", "command that gets the change set as JSON on stdin")
 	always := fs.Bool("always", false, "notify after every run, the first (the baseline) included, not only when something changed")
 	jsonOut := fs.Bool("json", false, "print the change set as JSON")
@@ -60,6 +67,14 @@ func cmdWatch(args []string) error {
 	}
 	if *db == "" || len(runArgs) == 0 {
 		return fmt.Errorf("usage: azhaq watch -db WORKSPACE.db [-every 24h] [-notify URL] -- RUN OPTIONS")
+	}
+	urls, err := hooksFrom(hooks, os.Getenv("AZHAQ_NOTIFY"))
+	if err != nil {
+		return err
+	}
+	nt, err := newNotifier(urls, *notifyConfig, notifyProviders, notifyIDs, *notifyFormat, *notifyRate, *notifyProxy, *notifyLines)
+	if err != nil {
+		return err
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -78,11 +93,11 @@ func cmdWatch(args []string) error {
 			fmt.Print(ch.text())
 		}
 		// The first run is the baseline, not a change: -always sends it too.
+		lost := false
 		if (ch.any() && !ch.Baseline) || *always {
-			for _, h := range hooks {
-				if err := notify.Send(ctx, h, ch.text(), ch); err != nil {
-					fmt.Fprintf(os.Stderr, "azhaq watch: %v\n", err)
-				}
+			for _, msg := range nt.send(ctx, ch) {
+				fmt.Fprintf(os.Stderr, "azhaq watch: %s\n", msg)
+				lost = true
 			}
 			if *notifyCmd != "" {
 				raw, _ := json.Marshal(ch)
@@ -91,13 +106,18 @@ func cmdWatch(args []string) error {
 				cmd.Stdout, cmd.Stderr = os.Stderr, os.Stderr
 				if err := cmd.Run(); err != nil {
 					fmt.Fprintf(os.Stderr, "azhaq watch: -notify-cmd: %v\n", err)
+					lost = true
 				}
 			}
 		}
 		if *every <= 0 {
 			// The run's exit code: 3 when something failed, 4 when a
-			// limit stopped it, whatever changed.
-			return rep.err()
+			// limit stopped it, whatever changed. A notification that did
+			// not arrive is a failure too: exit 3.
+			if err := rep.err(); err != nil || !lost {
+				return err
+			}
+			return exitErr{code: exitPartial}
 		}
 		select {
 		case <-ctx.Done():
@@ -277,7 +297,13 @@ func isFront(raw string) bool {
 	return err == nil && (u.Path == "" || u.Path == "/")
 }
 
-func (c changes) text() string {
+// text is the change set as the terminal shows it: at most 20 lines per
+// kind of change.
+func (c changes) text() string { return c.notifyText(20) }
+
+// notifyText is the same text with at most lines lines per kind of change
+// (0: every one); what is left out is counted.
+func (c changes) notifyText(lines int) string {
 	var b strings.Builder
 	when := c.Run.Local().Format("2006-01-02 15:04:05")
 	if c.Baseline {
@@ -295,8 +321,8 @@ func (c changes) text() string {
 		}
 		fmt.Fprintf(&b, "%s %d %s\n", sign, len(xs), what)
 		for i, x := range xs {
-			if i == 20 {
-				fmt.Fprintf(&b, "    … and %d more\n", len(xs)-20)
+			if lines > 0 && i == lines {
+				fmt.Fprintf(&b, "    … and %d more\n", len(xs)-lines)
 				break
 			}
 			fmt.Fprintf(&b, "    %s\n", x)

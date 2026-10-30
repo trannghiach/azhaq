@@ -10,7 +10,7 @@ Azhaq maps what an application or a bug bounty program exposes, and who may read
 - **A finding as a submission.** `azhaq report` writes each cross-role finding `roles` listed as a Markdown report: steps with curl, the evidence, the control, impact and remediation.
 - **Safe to hand to an assistant.** `azhaq mcp` locks the scope, the request budget and the pace when it starts; no tool argument can widen them.
 - **Takeover candidates flagged.** A CNAME to a cloud name that no longer exists, a domain nobody holds, or a hosting service's page for an unclaimed name is listed with its evidence. Even a plain `subs -live` flags them.
-- **The usual chain, at parity or faster.** `subs`, `probe`, `ports`, `dirs`, `params` and `urls` stand in for subfinder, httpx, naabu, ffuf, arjun and gau, with their JSON field names.
+- **The usual chain, at parity or faster.** `subs`, `probe`, `ports`, `dirs`, `params`, `urls` and `notify` stand in for subfinder, httpx, naabu, ffuf, arjun, gau and notify, with their JSON field names and flags.
 
 ## At a glance
 
@@ -29,6 +29,7 @@ Azhaq maps what an application or a bug bounty program exposes, and who may read
 | A finding written up to submit | `azhaq report -dir DIR` | a report template filled by hand |
 | What a run sent, provably | `azhaq ledger -verify app.db.ledger.jsonl` | |
 | What changed since the last run, including the API routes a deploy added | `azhaq watch -db prog.db -- RUN FLAGS` | cron and diff |
+| Text from a pipe or a file sent to Slack, Discord, Telegram, Teams, Google Chat, Pushover, Gotify, e-mail or any URL | `azhaq subs -d example.com \| azhaq notify -bulk` | notify |
 | An assistant doing the recon | `azhaq mcp -allow example.com -max-requests 5000` | |
 | What a run would send, before it sends anything | `azhaq plan` with the run's flags | |
 
@@ -189,6 +190,19 @@ Runs into the same workspace add to it; `diff` and `watch` say what changed. `in
 ```
 
 `+` is a new route with its methods and the names it sends. `~ /route: +DELETE` is a method added to a known route; `~ PUT /route: +role` a name its call now sends. `-` is a route the previous run's scripts or API description named and no source names now. Routes are compared where a script or an API description names them: one only a crawl or a guess finds is not reported new, and one found only by guessing or in an archive is never reported gone. Placeholder names (`{id}` or `{orderId}`), identifiers, ordering and case are not changes, so the same app mapped twice reports no route change. The first run of a workspace lists none. The same text goes to Slack, Discord and Telegram, and the JSON of `-json`, `-notify-cmd` and generic hooks has a `routes` field ([docs/OUTPUT.md](docs/OUTPUT.md#watch)).
+
+## Notifications
+
+`watch -notify` takes a webhook URL, and `azhaq notify` sends any text the way [notify](https://github.com/projectdiscovery/notify) does, with its flags and its `provider-config.yaml`:
+
+```
+azhaq subs -d example.com -live | azhaq notify -bulk -pc ~/.config/notify/provider-config.yaml
+azhaq watch -db h1.db -every 24h -notify-config provider-config.yaml -- -scope hackerone -program acme
+```
+
+A webhook URL is a secret. Azhaq never prints it: an error from a hook names the host and what went wrong, not the path or query, and not a token a server echoes back. So that it need not stand on the command line, where `ps` shows it to every user, `-notify @FILE` reads URLs from a file (one a line) and `AZHAQ_NOTIFY` holds them too (comma-separated); a provider config keeps its tokens in the file, and a word that starts with `$` in it is replaced by that environment variable.
+
+A 429 or a 5xx is tried again (three tries, `Retry-After` honoured); a message longer than a service takes is sent in parts, not cut. A delivery that did not arrive is named in the summary and the exit code is 3: `azhaq notify` and `azhaq watch` do not exit 0 over a lost message. [docs/OUTPUT.md](docs/OUTPUT.md#notify) lists the providers and what each one sends.
 
 ## Where to look first
 
