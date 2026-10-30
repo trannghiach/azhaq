@@ -206,6 +206,7 @@ func main() {
 	statsAddr := flag.String("stats", "", "serve what was asked as JSON on this address: /stats, /stats?names=1, /reset")
 	delay := flag.Duration("delay", 0, "wait this long before each answer (makes queries in flight measurable)")
 	axfr := flag.Bool("axfr", true, "allow zone transfers of azqlab.lan over TCP")
+	cymru := flag.Bool("cymru", false, "answer Team Cymru's address-to-AS lookups for 127.0.0.0/24 (AS64500) instead of forwarding them")
 	flag.Parse()
 	client := &dns.Client{Timeout: 3 * time.Second}
 	stats := newCounters()
@@ -258,6 +259,17 @@ func main() {
 		}
 		inLab := name == "azqlab.lan." || strings.HasSuffix(name, ".azqlab.lan.")
 		inPTR := name == ptrZone || strings.HasSuffix(name, "."+ptrZone)
+		if *cymru && q.Qtype == dns.TypeTXT && (strings.HasSuffix(name, ".0.0.127.origin.asn.cymru.com.") || name == "as64500.asn.cymru.com.") {
+			m := new(dns.Msg)
+			m.SetReply(r)
+			txt := "64500 | 127.0.0.0/24 | ZZ | lab | 2026-01-01"
+			if name == "as64500.asn.cymru.com." {
+				txt = "64500 | ZZ | lab | 2026-01-01 | AZQ-LAB Lab network, ZZ"
+			}
+			m.Answer = append(m.Answer, rr(name, `TXT "`+txt+`"`))
+			reply(m)
+			return
+		}
 		if q.Qtype == dns.TypeAXFR || q.Qtype == dns.TypeIXFR {
 			transfer(w, r, name, network, *axfr)
 			return
