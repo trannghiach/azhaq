@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 // outside it, and that watching an unchanged target reports nothing.
 type scopeRow struct {
 	TrapRequests int64    `json:"trap_requests"`
+	ChromeTrap   int64    `json:"chrome_trap_requests"`
 	InScopeFound int      `json:"in_scope_found"`
 	WatchRuns    int      `json:"watch_runs"`
 	WatchNoise   []string `json:"watch_noise,omitempty"`
@@ -44,6 +46,8 @@ func benchScope(app string) *scopeRow {
 		case "/":
 			fmt.Fprintf(w, `<html><title>in scope</title><script src="%[1]s/app.js"></script><script>fetch("%[1]s/api/v1/users")</script>
 <a href="%[1]s/out">out</a><a href="/go">go</a><a href="/search?q=1">search</a><form action="%[1]s/submit"><input name="x"></form></html>`, trap)
+		case "/login":
+			fmt.Fprintf(w, `<html><title>sign in</title><script src="%[1]s/login.js"></script><img src="%[1]s/pixel.png"><form action="%[1]s/submit" method="post"><input name="user"><input type="password" name="pass"><button>Sign in</button></form><a href="%[1]s/after">after</a></html>`, trap)
 		case "/go":
 			http.Redirect(w, r, trap+"/landing", http.StatusFound)
 		case "/robots.txt":
@@ -74,6 +78,22 @@ func benchScope(app string) *scopeRow {
 	addCheck("scope: no request leaves the program's scope", row.TrapRequests == 0 && row.InScopeFound >= 4,
 		"%d requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); %d in-scope URLs mapped",
 		row.TrapRequests, row.InScopeFound)
+
+	// Chrome: -browser, -login and shots against the same page, with the trap
+	// behind links, scripts, images, a redirect, a form post and the sign-in form.
+	if _, err := exec.LookPath("google-chrome"); err != nil {
+		if _, err = exec.LookPath("chromium"); err != nil {
+			addCheck("scope: no request leaves the program's scope with Chrome (-browser, -login, shots)", false, "no Chrome in PATH")
+		}
+	}
+	before := trapped.Load()
+	cdb := filepath.Join(dir, "scope-chrome-"+time.Now().Format("150405")+".db")
+	rb := azRun("scope", 5*time.Minute, dir, "run", "-scope", scopeFile, "-browser", "-login", site+"/login", "-login-user", "bench", "-login-pass", "bench", "-db", cdb, "-quiet")
+	rs := azRun("scope", 5*time.Minute, dir, "shots", "-u", site+"/", "-u", site+"/login", "-scope", scopeFile, "-dir", filepath.Join(dir, "shots"), "-silent")
+	rc := azRun("scope", 5*time.Minute, dir, "crawl", "-u", site+"/", "-browser", "-scope", scopeFile, "-silent")
+	row.ChromeTrap = trapped.Load() - before
+	addCheck("scope: no request leaves the program's scope with Chrome (-browser, -login, shots)", row.ChromeTrap == 0,
+		"%d requests to the out-of-scope host from run -browser -login (exit %d), shots (exit %d) and crawl -browser (exit %d)", row.ChromeTrap, rb.exit, rs.exit, rc.exit)
 
 	// Watching an unchanged app: after the first run, nothing to report.
 	ws := filepath.Join(dir, "watch-"+time.Now().Format("150405")+".db")

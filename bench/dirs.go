@@ -4,17 +4,22 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
 
 // dirsRow compares the path sweep with ffuf -ac on the local apps, with
-// the same wordlist and rate.
+// the same wordlist and settings: the default flags of both, or both at
+// -rate 5.
 type dirsRow struct {
+	Profile    string   `json:"profile,omitempty"`
 	Words      int      `json:"words"`
 	Apps       []string `json:"apps"`
 	AzhaqHits  int      `json:"azhaq_hits"`
@@ -25,46 +30,113 @@ type dirsRow struct {
 	AzhaqSecs  float64  `json:"azhaq_seconds"`
 	FfufSecs   float64  `json:"ffuf_seconds"`
 	FfufOnly   []string `json:"ffuf_only,omitempty"`
+	AzhaqOnly  []string `json:"azhaq_only,omitempty"`
 }
 
-const dirsRate = "300"
+// realPaths are paths the bench apps serve, kept in a polite sweep's short
+// list so it has something to find.
+var realPaths = []string{"ftp", "api", "rest", "assets", "robots.txt", "users", "books", "admin", "login", "metrics", "createdb",
+	"openapi.json", "profile", "redirect", "promotion", "video", "snippets", "encryptionkeys", "support", "logs"}
+
+// sweepList is the wordlist for a sweep: the whole file by default, and in
+// the polite profile every Nth word plus realPaths, politeWords in all.
+func sweepList(src, name string) (string, int) {
+	all := lines(must1(os.ReadFile(src)))
+	if !polite() {
+		return src, len(all)
+	}
+	step := max(1, len(all)/max(1, politeWords-len(realPaths)))
+	seen := map[string]bool{}
+	var words []string
+	for i := 0; i < len(all); i += step {
+		if !seen[all[i]] {
+			seen[all[i]] = true
+			words = append(words, all[i])
+		}
+	}
+	for _, w := range realPaths {
+		if !seen[w] {
+			seen[w] = true
+			words = append(words, w)
+		}
+	}
+	p := filepath.Join(work, name+"-polite.txt")
+	must(os.WriteFile(p, []byte(strings.Join(words, "\n")+"\n"), 0o644))
+	return p, len(words)
+}
 
 func benchDirs(apps []string) *dirsRow {
-	words, err := fetchWordlist(webWords)
+	src, err := fetchWordlist(webWords)
 	must(err)
-	row := &dirsRow{Words: len(lines(must1(readFile(words)))), Apps: apps}
+	words, n := sweepList(src, "dirs")
+	row := &dirsRow{Profile: prof, Words: n, Apps: apps}
+	rate := pick([]string(nil), []string{"-rate", politeHTTP})
 	az, ff := map[string]bool{}, map[string]bool{}
+	var azCmd, ffCmd, azBad string
 	for _, app := range apps {
-		out, m := run(app, 20*time.Minute, work, azhaq, "dirs", "-u", app, "-w", words, "-rate", dirsRate, "-silent")
+		aa := append([]string{"dirs", "-u", app, "-w", words, "-silent"}, rate...)
+		out, m := timed(app, 40*time.Minute, work, azhaq, aa...)
 		row.AzhaqSecs += m.Seconds
-		for _, l := range lines(out) {
-			az[l] = true
+		azCmd = cmdLine(azhaq, aa...)
+		if f := azFail(m); f != "" {
+			azBad += f
 		}
-		out, m = run(app, 20*time.Minute, work, ref("ffuf"), "-u", app+"FUZZ", "-w", words, "-ac", "-rate", dirsRate, "-s")
+		for _, l := range lines(out) {
+			az[firstField(l)] = true
+		}
+		fa := append([]string{"-u", app + "FUZZ", "-w", words, "-ac", "-s"}, pick([]string(nil), []string{"-rate", politeHTTP})...)
+		out, m = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
 		row.FfufSecs += m.Seconds
+		ffCmd = cmdLine("ffuf", fa...)
 		for _, l := range lines(out) {
 			ff[app+l] = true
 		}
 	}
 	row.AzhaqHits, row.FfufHits, row.Shared = len(az), len(ff), overlap(az, ff)
+	azOK, ffOK := 0, 0
 	for u := range az {
 		if softHit(u) {
 			row.AzhaqFalse++
+		} else {
+			azOK++
+		}
+		if !ff[u] {
+			row.AzhaqOnly = append(row.AzhaqOnly, u)
 		}
 	}
 	for u := range ff {
 		if softHit(u) {
 			row.FfufFalse++
+		} else {
+			ffOK++
 		}
 		if !az[u] {
 			row.FfufOnly = append(row.FfufOnly, u)
 		}
 	}
-	addCheck("dirs: ≥ 95% of ffuf -ac's hits, same wordlist and rate", row.FfufHits > 0 && float64(row.Shared) >= 0.95*float64(row.FfufHits),
-		"azhaq %d, ffuf %d, shared %d (%d words, %d apps)", row.AzhaqHits, row.FfufHits, row.Shared, row.Words, len(apps))
+	sort.Strings(row.FfufOnly)
+	sort.Strings(row.AzhaqOnly)
+	note := fmt.Sprintf("%s; hits azhaq %d, ffuf %d, shared %d; %d words, %d apps; %s; ffuf only %v", share(row.Shared, row.FfufHits), row.AzhaqHits, row.FfufHits,
+		row.Shared, row.Words, len(apps), ratio(row.AzhaqSecs, row.FfufSecs), clipList(row.FfufOnly, 6)) + azBad
+	barOne("dirs", azOK, ffOK, row.AzhaqSecs, row.FfufSecs, "a request that is not the app's catch-all answer", azCmd+" vs "+ffCmd, note)
 	addCheck("dirs: no more false positives than ffuf", row.AzhaqFalse <= row.FfufFalse,
 		"hits that answer like a missing path: azhaq %d, ffuf %d", row.AzhaqFalse, row.FfufFalse)
 	return row
+}
+
+// firstField is the URL of a result line (azhaq dirs prints more after it).
+func firstField(l string) string {
+	if f := strings.Fields(l); len(f) > 0 {
+		return f[0]
+	}
+	return l
+}
+
+func clipList(xs []string, n int) string {
+	if len(xs) <= n {
+		return fmt.Sprint(xs)
+	}
+	return fmt.Sprintf("%v … %d more", xs[:n], len(xs)-n)
 }
 
 // softHit is true when u answers exactly like a sibling path that cannot

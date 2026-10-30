@@ -26,16 +26,20 @@ const (
 )
 
 type appResult struct {
-	Name    string      `json:"name"`
-	URL     string      `json:"url"`
-	Azhaq   toolScore   `json:"azhaq"`
-	Katana  toolScore   `json:"katana"`
-	Jsluice toolScore   `json:"jsluice"`
-	Union   toolScore   `json:"katana_jsluice"` // routes either found
-	Grep    toolScore   `json:"bundle_grep"`    // quoted paths in the scripts katana fetched
-	Ffuf    *ffufRow    `json:"ffuf,omitempty"`
-	Roles   *rolesRow   `json:"roles,omitempty"`
-	Browser *browserRow `json:"browser,omitempty"`
+	Name    string    `json:"name"`
+	URL     string    `json:"url"`
+	Azhaq   toolScore `json:"azhaq"`
+	Katana  toolScore `json:"katana"`
+	Jsluice toolScore `json:"jsluice"`
+	Union   toolScore `json:"katana_jsluice"` // routes either found
+	Grep    toolScore `json:"bundle_grep"`    // quoted paths in the scripts katana fetched
+	Profile string    `json:"profile,omitempty"`
+	// The drop-in crawler against katana, same depth and pace.
+	Crawl       *toolScore  `json:"crawl,omitempty"`
+	CrawlKatana *toolScore  `json:"crawl_katana,omitempty"`
+	Ffuf        *ffufRow    `json:"ffuf,omitempty"`
+	Roles       *rolesRow   `json:"roles,omitempty"`
+	Browser     *browserRow `json:"browser,omitempty"`
 }
 
 // browserRow is the crawl that runs the app's scripts: azhaq -browser
@@ -99,6 +103,8 @@ func startApps() error {
 	return nil
 }
 
+// stopApps takes down the bench's own two containers (-down only): other
+// streams use the shared azq-* ones, which the bench never stops.
 func stopApps() {
 	_ = exec.Command("docker", "compose", "-f", "bench/compose.yaml", "down").Run()
 }
@@ -121,6 +127,9 @@ func waitUp(u string, max time.Duration) error {
 func benchApps() []appResult {
 	dir, _ := filepath.Abs(filepath.Join(work, "apps"))
 	must(os.MkdirAll(dir, 0o755))
+	if polite() {
+		return benchAppsPolite()
+	}
 	stamp := time.Now().Format("150405")
 	db := func(name string) string { return filepath.Join(dir, name+"-"+stamp+".db") }
 
@@ -137,6 +146,7 @@ func benchApps() []appResult {
 	addCheck("juice-shop: ≥ 90% of the server routes its frontend calls", juice.Azhaq.Truth*10 >= len(truth)*9, "azhaq %d/%d, katana %d/%d, jsluice %d/%d",
 		juice.Azhaq.Truth, len(truth), juice.Katana.Truth, len(truth), juice.Jsluice.Truth, len(truth))
 	addCheck("juice-shop: no catch-all page reported as visited", juice.Azhaq.Shell == 0, "%d visited URLs return the SPA index", juice.Azhaq.Shell)
+	crawlCompare(&juice, truth, shell)
 	juice.Roles = benchRoles(juiceURL, dir)
 	juice.Browser = compareBrowsers(juiceURL, db("juice-browser"), truth, shell)
 	addCheck("juice-shop: -browser finds the known routes katana -headless finds", juice.Browser.Azhaq.Truth >= juice.Browser.Katana.Truth,
@@ -155,6 +165,7 @@ func benchApps() []appResult {
 	g, _, m = runAzhaq(vampiURL, db("vampi"))
 	vampi.Azhaq = scoreAzhaq(g, vampiURL, vtruth, shellHash(vampiURL), m)
 	runKatanaJsluice(&vampi, vtruth, shellHash(vampiURL))
+	crawlCompare(&vampi, vtruth, shellHash(vampiURL))
 	res = append(res, vampi)
 	addCheck("vampi: paths from /openapi.json", vampi.Azhaq.Truth == len(vtruth) && len(vtruth) > 0, "azhaq %d/%d, katana %d/%d", vampi.Azhaq.Truth, len(vtruth), vampi.Katana.Truth, len(vtruth))
 
@@ -178,6 +189,7 @@ func benchApps() []appResult {
 		}
 	}
 	runKatanaJsluice(&gin, gtruth, shellHash(ginURL))
+	crawlCompare(&gin, gtruth, shellHash(ginURL))
 	res = append(res, gin)
 	scripts := 0
 	for _, s := range []string{"stockCheck.js", "searchLogger.js", "subscribeNow.js", "xmlStockCheckPayload.js"} {
@@ -197,8 +209,26 @@ func benchApps() []appResult {
 	return res
 }
 
+// slowTarget: a public site is only ever asked at 5 requests per second,
+// and every target is in the polite profile.
+func slowTarget(target string) bool { return polite() || strings.HasPrefix(target, "https://") }
+
+func azPace(target string) []string {
+	if slowTarget(target) {
+		return []string{"-rate", politeHTTP}
+	}
+	return nil
+}
+
+func katanaPace(target string) []string {
+	if slowTarget(target) {
+		return []string{"-rl", politeHTTP}
+	}
+	return nil
+}
+
 func runAzhaq(target, db string) (graph, []byte, runMeasure) {
-	mapOut, m := run(target, 10*time.Minute, filepath.Dir(db), azhaq, "run", "-url", target, "-db", db)
+	mapOut, m := run(target, 30*time.Minute, filepath.Dir(db), azhaq, append([]string{"run", "-url", target, "-db", db}, azPace(target)...)...)
 	out, _ := exec.Command(azhaq, "export", "-db", db).Output()
 	return readExport(out), mapOut, m
 }
@@ -299,6 +329,7 @@ func runKatana(target string, truth map[string]bool, shell string) (toolScore, [
 
 func runKatanaWith(target string, truth map[string]bool, shell string, limit time.Duration, extra ...string) (toolScore, []string, runMeasure) {
 	args := append([]string{"-u", target, "-d", "3", "-jc", "-silent", "-nc", "-timeout", "10", "-c", "10"}, extra...)
+	args = append(args, katanaPace(target)...)
 	out, m := run(target, limit, work, ref("katana"), args...)
 	urls := lines(out)
 	found := routes(urls, strings.TrimSuffix(target, "/"))
@@ -521,4 +552,49 @@ func appChecks(apps []appResult) {
 	}
 	addCheck("known routes ≥ katana ∪ jsluice on every app", ok, "%s", strings.Join(parts, ", "))
 	addCheck("no catch-all page reported as visited on any app", clean, "%d apps", len(apps))
+}
+
+// benchAppsPolite is the crawl comparison at 5 requests per second: azhaq
+// crawl against katana -jc -jsl -rl 5 on Juice Shop, VAmPI and ginandjuice.shop.
+func benchAppsPolite() []appResult {
+	var res []appResult
+	juice := appResult{Name: "juice-shop", URL: juiceURL, Profile: prof}
+	truth := readTruth("bench/truth/juice-shop-v20.3.0-routes.txt")
+	crawlCompare(&juice, truth, shellHash(juiceURL))
+	res = append(res, juice)
+	vampi := appResult{Name: "vampi", URL: vampiURL, Profile: prof}
+	vtruth := specPaths(vampiURL + "openapi.json")
+	crawlCompare(&vampi, vtruth, shellHash(vampiURL))
+	res = append(res, vampi)
+	gin := appResult{Name: "ginandjuice.shop", URL: ginURL, Profile: prof}
+	gtruth := map[string]bool{"/logger": true, "/catalog/subscribe": true, "/catalog/product/stock": true}
+	crawlCompare(&gin, gtruth, shellHash(ginURL))
+	res = append(res, gin)
+	return res
+}
+
+// crawlCompare runs azhaq crawl and katana to the same depth and pace and
+// scores the routes each found against the app's own list of routes.
+func crawlCompare(a *appResult, truth map[string]bool, shell string) {
+	origin := strings.TrimSuffix(a.URL, "/")
+	aa := append([]string{"crawl", "-u", a.URL, "-depth", "3", "-silent"}, azPace(a.URL)...)
+	run1 := timed
+	if strings.HasPrefix(a.URL, "https://") {
+		run1 = run // a public site: one run
+	}
+	out, m := run1(a.URL, 30*time.Minute, work, azhaq, aa...)
+	var urls []string
+	for _, l := range lines(out) {
+		urls = append(urls, firstField(l))
+	}
+	found := routes(urls, origin)
+	az := toolScore{Routes: len(found), Truth: matched(found, truth), TruthOf: len(truth), Seconds: m.Seconds, RSSMB: m.RSSMB}
+	ka := append([]string{"-u", a.URL, "-d", "3", "-jc", "-jsl", "-silent", "-nc", "-timeout", "10", "-c", "10"}, katanaPace(a.URL)...)
+	kout, km := run1(a.URL, 30*time.Minute, work, ref("katana"), ka...)
+	kfound := routes(lines(kout), origin)
+	kt := toolScore{Routes: len(kfound), Truth: matched(kfound, truth), TruthOf: len(truth), Seconds: km.Seconds, RSSMB: km.RSSMB}
+	a.Crawl, a.CrawlKatana = &az, &kt
+	barOne("crawl "+a.Name, az.Truth, kt.Truth, az.Seconds, kt.Seconds, "the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+		cmdLine(azhaq, aa...)+" vs "+cmdLine("katana", ka...),
+		fmt.Sprintf("routes found azhaq %d, katana %d; known %d and %d of %d; %s%s", az.Routes, kt.Routes, az.Truth, kt.Truth, len(truth), ratio(az.Seconds, kt.Seconds), azErr(m)))
 }

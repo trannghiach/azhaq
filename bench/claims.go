@@ -1175,9 +1175,25 @@ func (c *claims) caseMCP() {
 	if !strings.Contains(text2, "spent") {
 		t2.extra = append(t2.extra, "its result does not say the budget is spent: "+clip(text2, 200))
 	}
+	// A port scan after the budget is spent: refused, and nothing connects
+	// (the scan used to run in full once the budget was gone).
+	tl := startTCP("silent")
+	pid := m.write("tools/call", map[string]any{"name": "azhaq_ports", "arguments": map[string]any{"hosts": []string{"127.0.0.1"}, "ports": "full"}}, false)
+	pres := m.read(pid)
+	settle()
+	_, ptext := mcpSummary(pres[pid])
+	t3 := tally{label: "azhaq_ports after the budget is spent", summary: 0, skipCounterEqual: true}
+	if n := tl.accepts.Load(); n != 0 {
+		t3.extra = append(t3.extra, fmt.Sprintf("the listener took %d connections after the budget was spent", n))
+	}
+	if !strings.Contains(ptext, "spent") && !strings.Contains(strings.ToLower(ptext), "refus") && !strings.Contains(strings.ToLower(ptext), "budget") {
+		t3.extra = append(t3.extra, "its result does not say it was refused: "+clip(ptext, 200))
+	}
+	t3.note = "result: " + clip(ptext, 160)
+	tl.ln.Close()
 	m.stop()
 	px.close()
-	c.finish("mcp budget 60", "unpaced", t, t2)
+	c.finish("mcp budget 60", "unpaced", t, t2, t3)
 
 	// A budget of 2, two calls at once.
 	px, err = newCountProxy(claimJuice)

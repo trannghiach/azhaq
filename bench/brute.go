@@ -9,18 +9,20 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
-
-	"github.com/trannghiach/azhaq/internal/dnsr"
 )
 
-// bruteRow compares active subdomain techniques with the reference tools
-// on vulnweb.com, the one public zone the bench may send guesses to.
+// bruteRow compares active subdomain techniques with dnsx on the DNS lab
+// (zone azqlab.lan: real names, a wildcard subzone, dangling CNAMEs), so it
+// needs no public zone and no docker.
 type bruteRow struct {
+	Profile      string  `json:"profile,omitempty"`
 	Domain       string  `json:"domain"`
 	Words        int     `json:"words"`
 	AzhaqFound   int     `json:"azhaq_found"`
 	DnsxFound    int     `json:"dnsx_found"`
 	Shared       int     `json:"shared"`
+	AzhaqOK      int     `json:"azhaq_confirmed"`
+	DnsxOK       int     `json:"dnsx_confirmed"`
 	AzhaqSeconds float64 `json:"azhaq_seconds"`
 	DnsxSeconds  float64 `json:"dnsx_seconds"`
 
@@ -40,47 +42,50 @@ const bruteDomain = "vulnweb.com"
 func benchBrute() *bruteRow {
 	dir, _ := filepath.Abs(filepath.Join(work, "brute"))
 	must(os.MkdirAll(dir, 0o755))
-	words, err := fetchWordlist(subdomainWords)
+	src, err := fetchWordlist(subdomainWords)
 	must(err)
+	// The lab's real labels are in the top 5,000; a polite run keeps the
+	// first words and adds them.
+	words := src
+	if polite() {
+		words = firstWords(src, 300, filepath.Join(dir, "words-polite.txt"))
+		f, _ := os.OpenFile(words, os.O_APPEND|os.O_WRONLY, 0o644)
+		fmt.Fprintln(f, strings.Join(labLabels, "\n"))
+		f.Close()
+	}
+	lab, stop := labAddr()
+	defer stop()
 	resolvers := filepath.Join(dir, "resolvers.txt")
-	must(os.WriteFile(resolvers, []byte(strings.Join(dnsr.DefaultResolvers, "\n")+"\n"), 0o644))
-	stamp := time.Now().Format("150405")
-	row := &bruteRow{Domain: bruteDomain, Words: len(lines(must1(os.ReadFile(words))))}
+	must(os.WriteFile(resolvers, []byte(lab+"\n"), 0o644))
+	row := &bruteRow{Profile: prof, Domain: labDomain, Words: len(lines(must1(os.ReadFile(words))))}
 
-	// Brute force: the same words and resolvers for both tools.
-	db := filepath.Join(dir, "brute-"+stamp+".db")
-	_, m := run(bruteDomain, 15*time.Minute, dir, azhaq, "run", "-domain", bruteDomain, "-passive", "-sources", "none",
-		"-skip", "azhaq-cdx,azhaq-rdap", "-dns-brute", words, "-allow", bruteDomain, "-resolvers", resolvers, "-db", db, "-json")
+	// The same words and resolver for both: azhaq dns -d D -w against dnsx -d D -w.
+	aa := append([]string{"dns", "-d", labDomain, "-w", words, "-resolvers", resolvers, "-silent"}, pick([]string(nil), []string{"-dns-rate", politeDNS})...)
+	da := append([]string{"-d", labDomain, "-w", words, "-r", lab, "-silent"}, pick([]string(nil), []string{"-rl", politeDNS})...)
+	out, m := timed(labDomain, 15*time.Minute, dir, azhaq, aa...)
 	row.AzhaqSeconds = m.Seconds
-	az := namesFrom(db, "azhaq-dns-brute")
-	out, dm := run(bruteDomain, 15*time.Minute, dir, ref("dnsx"), "-d", bruteDomain, "-w", words, "-r", resolvers, "-silent", "-wd", bruteDomain)
+	az := hostSet(lines(out))
+	out, dm := timed(labDomain, 15*time.Minute, dir, ref("dnsx"), da...)
 	row.DnsxSeconds = dm.Seconds
 	dx := hostSet(lines(out))
 	row.AzhaqFound, row.DnsxFound, row.Shared = len(az), len(dx), overlap(az, dx)
-	addCheck("dns-brute: ≥ 95% of dnsx with the same words and resolvers", row.DnsxFound > 0 && float64(row.Shared) >= 0.95*float64(row.DnsxFound),
-		"azhaq %d, dnsx %d, shared %d (%d words on %s)", row.AzhaqFound, row.DnsxFound, row.Shared, row.Words, bruteDomain)
-	addCheck("dns-brute: within 2× dnsx's time", row.AzhaqSeconds <= 2*row.DnsxSeconds+1,
-		"azhaq %.1fs, dnsx %.1fs", row.AzhaqSeconds, row.DnsxSeconds)
-
-	wildcardCheck(dir, stamp, row)
-
-	// Permutations of the live names, against alterx's patterns resolved by dnsx.
-	pdb := filepath.Join(dir, "permute-"+stamp+".db")
-	run(bruteDomain, 15*time.Minute, dir, azhaq, "run", "-domain", bruteDomain, "-passive", "-skip", "azhaq-cdx,azhaq-rdap",
-		"-permute", "-allow", bruteDomain, "-resolvers", resolvers, "-db", pdb, "-json")
-	ap := namesFrom(pdb, "azhaq-permute")
-	live := liveNames(pdb, bruteDomain)
-	liveFile := filepath.Join(dir, "live.txt")
-	must(os.WriteFile(liveFile, []byte(strings.Join(sortedKeys(live), "\n")+"\n"), 0o644))
-	cands, _ := run(bruteDomain, 5*time.Minute, dir, ref("alterx"), "-l", liveFile, "-silent")
-	candFile := filepath.Join(dir, "alterx.txt")
-	must(os.WriteFile(candFile, cands, 0o644))
-	found, _ := run(bruteDomain, 15*time.Minute, dir, ref("dnsx"), "-l", candFile, "-r", resolvers, "-silent", "-wd", bruteDomain)
-	ax := hostSet(lines(found))
-	for n := range live {
-		delete(ax, n)
+	for n := range az {
+		if answersAt(lab, n) {
+			row.AzhaqOK++
+		}
 	}
-	row.PermuteAzhaq, row.PermuteAlterx, row.PermuteShared = len(ap), len(ax), overlap(ap, ax)
+	for n := range dx {
+		if answersAt(lab, n) {
+			row.DnsxOK++
+		}
+	}
+	barOne("dns brute force", row.AzhaqOK, row.DnsxOK, row.AzhaqSeconds, row.DnsxSeconds, "the lab resolver, asked directly by the bench (A, AAAA or CNAME)",
+		cmdLine(azhaq, aa...)+" vs "+cmdLine("dnsx", da...),
+		fmt.Sprintf("%s; azhaq %v, dnsx %v; %d words on %s; %s%s", share(row.Shared, row.DnsxFound), clipList(sortedKeys(az), 12), clipList(sortedKeys(dx), 12), row.Words, labDomain,
+			ratio(row.AzhaqSeconds, row.DnsxSeconds), azErr(m)))
+	if !polite() {
+		wildcardCheck(dir, time.Now().Format("150405"), row)
+	}
 	return row
 }
 
