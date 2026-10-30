@@ -140,7 +140,7 @@ func readmeBlock(r *record, version string) string {
 		}
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Latest run (%s, v%s, commit %s; profile: %s; %d of %d checks pass). **Default** is the default flags of both tools; **polite** is `-rate %s` (HTTP), `-dns-rate %s` (DNS) and `-rate %s` (ports), with the reference tool at the same rate. A result counts only when something other than azhaq confirms it, and a row is a win only when azhaq has at least the reference's results in at most 1.05 times its time. The record, with every check and the commands, is `bench/history/*.json`.\n\n",
+	fmt.Fprintf(&b, "Latest run (%s, v%s, commit %s; profile: %s; %d of %d checks pass). **Default** is the default flags of both tools; **polite** is `-rate %s` (HTTP; `probe -rl`, as httpx counts), `-dns-rate %s` (DNS; `dns -rl`, as dnsx counts) and `-rate %s` (ports), with the reference tool at the same rate. A result counts only when something other than azhaq confirms it, and a row is a win only when azhaq has at least the reference's results in at most 1.05 times its time. The record, with every check and the commands, is `bench/history/*.json`.\n\n",
 		day, version, r.Commit, r.Profile, pass, len(r.Checks), politeHTTP, politeDNS, politePort)
 	b.WriteString("| Job | Replaces | Profile | Azhaq | Reference |\n| --- | --- | --- | --- | --- |\n")
 	for _, set := range []struct {
