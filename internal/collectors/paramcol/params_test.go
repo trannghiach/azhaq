@@ -10,7 +10,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/types"
@@ -57,20 +59,84 @@ func TestFindsHiddenParameters(t *testing.T) {
 
 func TestSkipsNoisyPages(t *testing.T) {
 	fetch.Reset()
-	n := 0
+	var count atomic.Int64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n++
-		fmt.Fprint(w, strings.Repeat("x", n*500)) // a different size every time
+		n := int(count.Add(1))
+		fmt.Fprint(w, strings.Repeat("x", []int{100, 5000, 50000}[n%3])) // another size for each of three requests
 	}))
 	defer srv.Close()
 	c := New(srv.Client(), Options{Words: []string{"a", "b"}, Rate: 10000})
-	emitted := 0
-	_, _ = c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(types.Observation) error {
-		emitted++
-		return nil
+	got := runOn(t, c, srv.URL+"/")
+	// Said in a note, not left out silently.
+	if note, _ := got["note"].(string); !strings.Contains(note, "changes by itself") || len(got["params"].([]any)) != 0 {
+		t.Errorf("a page that changes by itself must be skipped with a reason, got %v", got)
+	}
+}
+
+// A server that answers 429 after the first requests: the page fails, the
+// row says why, and nothing is reported as "no parameters".
+func TestRateLimitedPageFails(t *testing.T) {
+	fetch.Reset()
+	var mu sync.Mutex
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		n++
+		limited := n > 2
+		mu.Unlock()
+		if limited {
+			w.Header().Set("Retry-After", "0")
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		fmt.Fprint(w, "ok page")
+	}))
+	defer srv.Close()
+	var words []string
+	for i := 0; i < 600; i++ {
+		words = append(words, fmt.Sprintf("name%d", i))
+	}
+	c := New(srv.Client(), Options{Words: words, Rate: 10000, Backoff: []time.Duration{time.Millisecond, time.Millisecond}})
+	var got map[string]any
+	meta, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {
+		return json.Unmarshal(o.Payload, &got)
 	})
-	if emitted != 0 {
-		t.Error("a page that changes by itself must not report parameters")
+	if err == nil || !strings.Contains(err.Error(), "429") || meta.Status != types.StatusError {
+		t.Fatalf("a rate-limited page must fail: %v %v", meta, err)
+	}
+	if note, _ := got["note"].(string); !strings.Contains(note, "not fully searched") {
+		t.Errorf("note %v", got)
+	}
+}
+
+// A server that stops answering partway: the requests that got nothing
+// are counted and said.
+func TestLostRequestsAreSaid(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Has("name300") {
+			hj, _ := w.(http.Hijacker)
+			c, _, _ := hj.Hijack()
+			c.Close()
+			return
+		}
+		fmt.Fprint(w, "ok page")
+	}))
+	defer srv.Close()
+	var words []string
+	for i := 0; i < 600; i++ {
+		words = append(words, fmt.Sprintf("name%d", i))
+	}
+	c := New(srv.Client(), Options{Words: words, Rate: 10000})
+	var got map[string]any
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {
+		return json.Unmarshal(o.Payload, &got)
+	})
+	if err == nil {
+		t.Fatalf("requests that got no answer must fail the page: %v", got)
+	}
+	if note, _ := got["note"].(string); !strings.Contains(note, "got no answer") {
+		t.Errorf("note %v", got)
 	}
 }
 
@@ -150,7 +216,7 @@ func TestPageAnsweringEveryNameIsNoted(t *testing.T) {
 	if note, _ := got["note"].(string); !strings.Contains(note, "answers names it does not read") {
 		t.Fatalf("no note: %v", got)
 	}
-	if n := got["requests"].(float64); n > 100 {
+	if n := got["requests"].(float64); n > 250 {
 		t.Errorf("%v requests before giving up on the page", n)
 	}
 }
@@ -216,12 +282,19 @@ func TestFloodKeepsEarlierGroups(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		words = append(words, fmt.Sprintf("flood%d", i))
 	}
-	got := runOn(t, New(srv.Client(), Options{Words: words, Chunk: 10, Rate: 10000}), srv.URL+"/catalog")
+	var got map[string]any
+	c := New(srv.Client(), Options{Words: words, Chunk: 10, Rate: 10000, Threads: 1, Backoff: []time.Duration{time.Millisecond}})
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/catalog"}}, func(o types.Observation) error {
+		return json.Unmarshal(o.Payload, &got)
+	})
+	if err == nil {
+		t.Error("a page that limits requests must fail")
+	}
 	why, _ := got["why"].(map[string]any)
 	if len(why) != 1 || why["category"] != "size" {
 		t.Errorf("found %v", got)
 	}
-	if note, _ := got["note"].(string); !strings.Contains(note, "answers names it does not read") || !strings.Contains(note, "not searched further") {
+	if note, _ := got["note"].(string); !strings.Contains(note, "not fully searched") {
 		t.Errorf("note %q", note)
 	}
 }

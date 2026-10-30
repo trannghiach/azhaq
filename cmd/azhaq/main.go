@@ -279,9 +279,18 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	dirsDepth := fs.Int("dirs-depth", 1, "directory levels to sweep; 2 also sweeps directories found")
 	dirsThreads := fs.Int("dirs-threads", 40, "path guesses in flight per service (as ffuf)")
 	dirsRate := fs.Float64("dirs-rate", 0, "path guesses per second per host (0: no limit but -dirs-threads, as ffuf)")
-	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist (active; the targets given are the scope unless -allow)")
+	paramsFile := fs.String("params", "", "find query parameters pages read, from this wordlist or small, medium or large for a built-in one (active; the targets given are the scope unless -allow)")
 	paramsPerHost := fs.Int("params-per-host", 20, "pages searched for parameters per host")
 	paramsRate := fs.Float64("params-rate", 0, "parameter requests per second per host (0: no limit, as arjun)")
+	paramsThreads := fs.Int("params-threads", 5, "parameter requests in flight per page (as arjun -t); 1 with -params-delay and -params-stable")
+	paramsChunk := fs.Int("params-chunk", 0, "names per parameter request at most (0: 500, and about 7.6 KB in a query; fewer where the server refuses a long query)")
+	paramsMethod := fs.String("params-method", "GET", "how names are sent: GET (query), POST (form body), JSON or XML. A body sends requests that may change data on the target: -params-writes must say it is wanted")
+	paramsWrites := fs.Bool("params-writes", false, "let -params-method POST, JSON or XML send bodies (they may change data on the target); needs -allow or -scope, or a single target")
+	paramsInclude := fs.String("params-include", "", "sent with every parameter request: a query for GET; for a body a form, a JSON object or XML, or a template with $arjun$ where the names go")
+	paramsDelay := fs.Duration("params-delay", 0, "wait before each parameter request, one at a time (arjun -d)")
+	paramsStable := fs.Bool("params-stable", false, "one parameter request at a time, 3 to 9 s apart, and 30 s after a refused connection (arjun --stable)")
+	paramsTimeout := fs.Duration("params-timeout", 15*time.Second, "wait for each parameter request; one that times out is asked again with 5 s more, up to 20 s (arjun -T)")
+	paramsTargets := fs.String("params-targets", "", "file of JSON: pages that are asked otherwise ({\"URL\":{\"method\":\"POST\",\"include\":\"a=1\",\"header\":[\"Name: value\"]}}), as params -i writes it")
 	dirsMatch := fs.String("dirs-mc", "", "statuses to report (default ffuf's: 200-299,301,302,307,401,403,405,500)")
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow)")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
@@ -398,7 +407,22 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	// Everything that can make this a usage error is checked before a
 	// database is created.
+	scopeNamed := len(allow) > 0
 	active := *bruteFile != "" || *permute || *graphql || *portsSpec != "" || *portsUDP != "" || *dirsFile != "" || *paramsFile != ""
+	if *paramsFile != "" {
+		switch m := strings.ToUpper(*paramsMethod); m {
+		case "GET":
+		case "POST", "JSON", "XML":
+			if !*paramsWrites {
+				return usagef("-params-method %s sends bodies that may change data on the target: add -params-writes to say that is wanted", m)
+			}
+			if !scopeNamed && len(seeds) != 1 {
+				return usagef("-params-method %s needs the targets named: give -allow or -scope, or run on one target", m)
+			}
+		default:
+			return usagef("-params-method %q: use GET, POST, JSON or XML", *paramsMethod)
+		}
+	}
 	if active && len(allow) == 0 {
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
 	}
@@ -627,11 +651,32 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	if *paramsFile != "" {
-		words, err := loadLines(*paramsFile)
-		if err != nil {
-			return err
+		words, ok := paramcol.Builtin(*paramsFile)
+		if !ok {
+			var err error
+			if words, err = loadLines(*paramsFile); err != nil {
+				return err
+			}
 		}
-		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate, AllGets: *allGets}
+		method := strings.ToUpper(*paramsMethod)
+		var targets map[string]paramcol.Target
+		if *paramsTargets != "" {
+			raw, err := os.ReadFile(*paramsTargets)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(raw, &targets); err != nil {
+				return fmt.Errorf("-params-targets %s: %w", *paramsTargets, err)
+			}
+			for u, t := range targets {
+				if m := strings.ToUpper(t.Method); m != "" && m != "GET" && !*paramsWrites {
+					return usagef("-params-targets %s: %s asks with %s, which may change data: add -params-writes", *paramsTargets, u, m)
+				}
+			}
+		}
+		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate, AllGets: *allGets,
+			Threads: *paramsThreads, Chunk: *paramsChunk, Method: method, Writes: *paramsWrites, Include: *paramsInclude,
+			Delay: *paramsDelay, Stable: *paramsStable, Timeout: *paramsTimeout, Targets: targets}
 	}
 	if *dirsFile != "" {
 		words, err := loadLines(*dirsFile)

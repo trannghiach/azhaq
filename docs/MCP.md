@@ -51,7 +51,7 @@ Any client that takes a JSON configuration:
 | `azhaq_diff` | what the last run into a workspace added and lost |
 | `azhaq_workspaces` | the workspaces written so far |
 
-What the tools do not start, on purpose: anything that sends a write or a body the client chooses (`roles -replay-writes`, `-browser-writes`, `fuzz`), path and parameter wordlists (`-dirs`, `-params`), DNS brute force and permutations, and UDP scans. Run those from the command line, where the person running them sees the flags.
+What the tools do not start, on purpose: anything that sends a write or a body the client chooses (`roles -replay-writes`, `-browser-writes`, `fuzz`), path and parameter wordlists (`-dirs`, `-params`, which can also send bodies with `-params-method`), DNS brute force and permutations, and UDP scans. Run those from the command line, where the person running them sees the flags.
 
 Results are one text block of compact JSON (not repeated as `structuredContent`). A result carries at most `limit` rows (100 by default, never more than 1000) and says when there are more, so one call does not fill a client's context: ask `azhaq_query` the next question instead. A summary names its next steps as tool calls rather than shell commands: a run a limit stopped says `"resume":"azhaq_resume {\"workspace\":\"juice\"} continues it"`, and its `next` entries are `azhaq_query` and `azhaq_export` calls.
 

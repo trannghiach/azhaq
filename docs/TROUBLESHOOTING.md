@@ -30,6 +30,12 @@
 
 **`notify: provider config: … field … not found`.** The config has a key the schema does not (`slack_webhok_url`). Fix the spelling; azhaq does not skip it silently.
 
+**`params` exits 3 with `HTTP 429 from the target: it limits requests`.** The page (or a firewall before it) limits requests, and kept doing so after Azhaq waited as its `Retry-After` or 1, 2 and 4 s said. The names found before stay in the result; the rest of the list was not tried. Lower `-rate` (`-rate 2`), use `-stable`, or run it again later. The same exit and a note say requests got no answer (a server that drops connections under a long query: try `-c 100`).
+
+**`params` says `not searched, the page changes by itself`.** The page answers the same request with bodies of very different sizes, or with another status, so a change caused by a name could not be told from its own. Give the URL of a page that is stable (a search route, an API route).
+
+**The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. The summary lists them as failures; the other archives still count. Run again later, or from another network.
+
 **Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
 **A UDP port is `open|filtered`.** The port stayed silent when asked every way its protocol has (a port with no known protocol is asked four ways) and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`; a host that rate-limits its ICMP replies leaves closed ports silent too, and the summary says when that may be the case (`udp: N silent ports on a host that refused others …`). `ports -json` lists them; the plain output lists only the open ones.

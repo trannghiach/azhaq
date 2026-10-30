@@ -24,6 +24,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -59,7 +60,7 @@ func isFile(s string) bool {
 }
 
 // File options: the worker gets the file's contents.
-var fileOptions = map[string]bool{"dirs": true, "params": true, "paths": true, "dns-brute": true, "resolvers": true}
+var fileOptions = map[string]bool{"dirs": true, "params": true, "params-targets": true, "paths": true, "dns-brute": true, "resolvers": true}
 
 // forWorkers builds the configuration workers get from the run's own
 // options, its scope (as -allow and -deny rules) and its session.
@@ -87,6 +88,8 @@ func forWorkers(fs *flag.FlagSet, args, allow, deny []string) (workerConfig, err
 		case coordinatorOnly[name]:
 		case name == "resolvers" && !isFile(val):
 			cfg.Args = append(cfg.Args, "-"+name+"="+val) // a list of resolvers, not a file of them
+		case name == "params" && builtinNames(val):
+			cfg.Args = append(cfg.Args, "-params="+val)
 		case fileOptions[name]:
 			raw, err := os.ReadFile(val)
 			if err != nil {
@@ -324,4 +327,11 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	case <-ctx.Done():
 	case <-t.C:
 	}
+}
+
+// builtinNames says a -params value names a built-in list (small, medium,
+// large), not a file.
+func builtinNames(v string) bool {
+	_, ok := paramcol.Builtin(v)
+	return ok
 }

@@ -73,6 +73,16 @@
 - UDP: TFTP, rpcbind, the SQL Server Browser, SIP, NAT-PMP, Ubiquiti discovery and IPMI/ASF-RMCP are asked on their ports, the default list is 25 ports, and a port with no known protocol is asked DNS, then SNMP (v1; v3 engine id on 161), then memcached's version, then an empty datagram. A sysDescr names Linux, Cisco IOS, JUNOS or Windows as `product`.
 - A host that refuses some UDP ports but leaves others silent may be rate-limiting its ICMP replies: up to 80 such ports are asked again one at a time at its pace, and more are left `open|filtered` and counted in `udp_limited` and the summary. Only an ICMP unreachable for the port makes it `closed`.
 
+### Parameters
+
+- `params` no longer says `0 pages` and exits 0 for a server that rate-limits it. A 429, 418 or 503 the page did not give before is waited out (its `Retry-After`, else 1, 2 and 4 s); if it persists the page fails, exit 3, with the names found so far kept and a note. Requests that got no answer fail the page too, and a page left alone (it changes between identical requests, is not text, HTML, JSON or XML, or is past `-params-per-host`) says why in a note.
+- `params` has a built-in list: `azhaq params -u URL` needs no `-w`. `-w small|medium|large` are 1,000, 3,000 and 6,500 names, from SecLists' `burp-parameter-names.txt` (MIT) and names Azhaq's own passes found.
+- `params` takes the names a page's own form fields, scripts and short replies hold first, and asks `debug`, `test`, `admin` and about 70 more with the values `1`, `true`, `yes` and `on`.
+- `params` finds names by a changed header set, a changed `Location`, a changed line count, and a name the page prints back, as well as status, size and a reflected value. The `why` of each name says which.
+- `params` sends 5 groups at once (`-t`), and finds the longest query a server takes (nginx's 8 KB, a 2 KB proxy) instead of failing on it; a group of 500 names or 7.6 KB is the most it sends first. Requests per page are fewer than arjun's on the same list.
+- `params -X POST|JSON|XML` sends names in a form, JSON or XML body. It needs `-allow` or `-scope` to name the targets, or a single page; every request is counted in the budget, paced and in the ledger; the row and the summary say writes were sent.
+- `params` takes `-i` (a Burp XML export or a raw request, with its method, body and headers), `-include`, `-casing`, `-passive`, `-c`, `-d`, `-stable`, `-T`, and writes `-oJ` (arjun's file), `-oT` (`URL?name=1234&…`) and `-oB HOST:PORT` (replay through Burp).
+
 ## v0.9.1
 
 Fixes from two independent reviews of v0.9.0.

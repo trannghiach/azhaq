@@ -285,17 +285,24 @@ func Client(c *http.Client) *http.Client {
 	if c != nil {
 		return recorded(c)
 	}
+	return Patient(10*time.Second, 30*time.Second)
+}
+
+// Patient is Client(nil) with its own waits: header for the first byte of
+// the answer, total for the whole request. A page that answers slowly (an
+// -params -T of 15 s) needs both longer than the run's default.
+func Patient(header, total time.Duration) *http.Client {
 	// InsecureSkipVerify: we are observing whatever cert is presented (same as azhaq-tls).
 	// Headers within 10 s, like httpx: CDN edges and bot managers often
 	// answer slowly. The body gets longer: a 1 MB bundle on a slow link
 	// is not a dead host.
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: total,
 		Transport: ledger.Wrap(&http.Transport{
 			Proxy:                 http.ProxyFromEnvironment,
 			DialContext:           dial,
 			TLSHandshakeTimeout:   5 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
+			ResponseHeaderTimeout: header,
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
 				MinVersion:         tls.VersionTLS12,
@@ -307,8 +314,6 @@ func Client(c *http.Client) *http.Client {
 	}
 }
 
-// recorded is c with its requests entered in the run's ledger: c itself when
-// it already is, else a copy.
 func recorded(c *http.Client) *http.Client {
 	if _, ok := c.Transport.(*ledger.Transport); ok {
 		return c
@@ -898,21 +903,34 @@ var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out"
 // or a key.
 func HasSession() bool {
 	for k, vs := range Extra {
-		if len(vs) == 0 || vs[0] == "" {
-			continue
-		}
-		k = strings.ToLower(k)
-		for _, w := range []string{"cookie", "auth", "token", "session", "key", "secret", "csrf", "xsrf"} {
-			if strings.Contains(k, w) {
-				return true
-			}
+		if len(vs) > 0 && SessionHeader(k, vs[0]) {
+			return true
 		}
 	}
 	return false
 }
 
-func EndsSession(raw string) bool {
-	if !HasSession() {
+// SessionHeader says a header with this value carries a session: a cookie,
+// an authorization, a token.
+func SessionHeader(k, v string) bool {
+	if v == "" {
+		return false
+	}
+	k = strings.ToLower(k)
+	for _, w := range []string{"cookie", "auth", "token", "session", "key", "secret", "csrf", "xsrf"} {
+		if strings.Contains(k, w) {
+			return true
+		}
+	}
+	return false
+}
+
+func EndsSession(raw string) bool { return EndsSessionWith(raw, HasSession()) }
+
+// EndsSessionWith is EndsSession for a request that carries a session of
+// its own (session) besides the run's.
+func EndsSessionWith(raw string, session bool) bool {
+	if !session {
 		return false
 	}
 	u, err := url.Parse(raw)
