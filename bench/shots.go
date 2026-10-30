@@ -63,6 +63,10 @@ func benchShots() *shotsRow {
 	base, stop := shotPages()
 	defer stop()
 	targets := []string{juiceURL, vampiURL, "http://127.0.0.1:5013/", "http://127.0.0.1:5020/", "http://127.0.0.1:5030/", base + "/login", base + "/nginx", base + "/admin"}
+	if polite() {
+		// At 5 requests per second the eight pages took over seven minutes a tool.
+		targets = []string{juiceURL, base + "/login", base + "/nginx", base + "/admin"}
+	}
 	dir, _ := filepath.Abs(filepath.Join(work, "shots-"+time.Now().Format("150405")+"-"+prof))
 	must(os.MkdirAll(dir, 0o755))
 	list := filepath.Join(dir, "targets.txt")
@@ -73,10 +77,10 @@ func benchShots() *shotsRow {
 		a := []string{"shots", "-l", list, "-dir", filepath.Join(dir, fmt.Sprintf("azhaq%d", i)), "-silent"}
 		return append(a, pick([]string(nil), []string{"-rate", politeHTTP})...)
 	}
-	// gowitness has no rate: the polite run asks for one page at a time.
+	// gowitness has no rate option, so it runs with its defaults in both
+	// profiles (with -t 1 it shoots the first page and times out on the rest).
 	gwArgs := func(i int) []string {
-		a := []string{"scan", "file", "-f", list, "--chrome-path", chrome, "-s", filepath.Join(dir, fmt.Sprintf("gowitness%d", i)), "-q"}
-		return append(a, pick([]string(nil), []string{"-t", "1"})...)
+		return []string{"scan", "file", "-f", list, "--chrome-path", chrome, "-s", filepath.Join(dir, fmt.Sprintf("gowitness%d", i)), "-q"}
 	}
 	out, m := timedArgs("shots", 20*time.Minute, dir, azhaq, azArgs)
 	row.Azhaq, row.AzhaqSeconds = len(lines(out)), m.Seconds

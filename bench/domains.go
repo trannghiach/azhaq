@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -113,6 +114,9 @@ func benchDomains() []domainRow {
 	var out []domainRow
 	silent := true
 	for _, d := range lines(raw) {
+		if polite() && !slices.Contains(politeDomains, d) {
+			continue // at 10 DNS queries per second tesla.com alone takes minutes a tool
+		}
 		logf("domain %s", d)
 		row := domainRow{Domain: d, Profile: prof}
 

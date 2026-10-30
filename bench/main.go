@@ -100,6 +100,7 @@ func main() {
 	only := flag.String("only", "", "run only these sections, comma-separated: "+strings.Join(sections, ", ")+"; the default runs them all")
 	profile := flag.String("profile", "both", "default, polite or both: every comparison runs with the default flags of both tools and at a polite rate (HTTP "+politeHTTP+"/s, DNS "+politeDNS+"/s, ports "+politePort+"/s)")
 	flag.IntVar(&politeWords, "polite-words", 250, "words a polite path or fuzz sweep sends (at 5 requests per second the whole list takes 16 minutes a tool and app)")
+	pd := flag.String("polite-domains", "hackerone.com,vulnweb.com", "domains the polite profile looks up (at 10 DNS queries per second each takes minutes; the default profile runs bench/domains.txt)")
 	flag.StringVar(&refBin, "refbin", os.Getenv("AZHAQ_REFBIN"), "a folder of reference tool binaries to use before bench/.work/bin (env AZHAQ_REFBIN)")
 	flag.StringVar(&nmapAt, "nmap", os.Getenv("AZHAQ_NMAP"), "nmap, or a script that runs an unpacked one (env AZHAQ_NMAP; else nmap in PATH)")
 	readme := flag.Bool("readme", false, "rewrite the benchmark table in README.md from the newest record in -out, and exit")
@@ -115,6 +116,7 @@ func main() {
 		must(writeReadme(*out))
 		return
 	}
+	politeDomains = strings.Split(*pd, ",")
 	var profiles []string
 	switch *profile {
 	case "both":
@@ -212,7 +214,7 @@ func main() {
 			if *crapi && !polite() {
 				cur.Apps = append(cur.Apps, benchCrapi())
 			}
-			if len(cur.Apps) > 0 {
+			if len(cur.Apps) > 0 && !polite() {
 				appChecks(cur.Apps)
 			}
 		}},

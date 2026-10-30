@@ -107,6 +107,11 @@ func benchParams() *paramsRow {
 	pages := []string{base + "/search", base + "/item", juiceURL + "rest/products/search", juiceURL + "rest/user/whoami", vampiURL + "users/v1"}
 	ginWords := firstWords(words, 1000, filepath.Join(dir, "gin-words.txt"))
 	gin := []string{ginURL + "catalog", ginURL + "blog/"}
+	if polite() {
+		// At 5 requests per second every page costs minutes: the planted pages and Juice Shop's
+		// search; the public site is asked at 5 per second in the default profile already.
+		pages, gin = pages[:3], nil
+	}
 	row := &paramsRow{Profile: prof, Pages: append(append([]string(nil), pages...), gin...), Words: len(lines(must1(os.ReadFile(words))))}
 	for _, t := range truth {
 		row.PlantedTruth += len(t)
@@ -203,9 +208,11 @@ func benchParams() *paramsRow {
 	cmds := azCmd + " vs " + ajCmd
 	note := fmt.Sprintf("%s; planted pages: azhaq %d right %d wrong, arjun %d right %d wrong, of %d; all pages azhaq %d, arjun %d, shared %d; %s", share(row.Shared, len(aj)),
 		row.AzhaqPlanted, row.AzhaqWrong, row.ArjunPlanted, row.ArjunWrong, row.PlantedTruth, len(az), len(aj), row.Shared, ratio(row.AzhaqSecs, row.ArjunSecs)) + azFailed
+	if len(gin) > 0 {
+		addCheck("params: ginandjuice.shop (2 pages, 1,000 names, 5 requests per second) time ≤ 1.05× arjun's", row.GinAzhaqSecs <= row.GinArjunSecs*1.05,
+			"azhaq %.1fs, arjun %.1fs", row.GinAzhaqSecs, row.GinArjunSecs)
+	}
 	barOne("params", row.AzhaqPlanted-row.AzhaqWrong, row.ArjunPlanted-row.ArjunWrong, row.AzhaqSecs, row.ArjunSecs, "the planted server's own list of the parameters it reads (wrong names count against)", cmds, note)
-	addCheck("params: ginandjuice.shop (2 pages, 1,000 names, 5 requests per second) time ≤ 1.05× arjun's", row.GinAzhaqSecs <= row.GinArjunSecs*1.05,
-		"azhaq %.1fs, arjun %.1fs", row.GinAzhaqSecs, row.GinArjunSecs)
 	return row
 }
 

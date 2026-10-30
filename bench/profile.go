@@ -52,6 +52,8 @@ var (
 	// politeWords is how many words a polite sweep sends: at 5 requests per
 	// second the whole 4,750-word list is 16 minutes for each tool and app.
 	politeWords int
+	// politeDomains are the domains the polite profile looks up.
+	politeDomains []string
 )
 
 func polite() bool { return prof == profPolite }

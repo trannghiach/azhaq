@@ -20,10 +20,11 @@ Every comparison section runs azhaq and its reference tool with the same inputs 
 
 | | default | polite |
 | --- | --- | --- |
-| HTTP | the default flags of both tools | azhaq `-rate 5`; the reference at 5 (`-rl 5` httpx, katana and ffuf; arjun `--rate-limit 5`, which caps requests per second where its `-d` is a delay per thread; gowitness has no rate and gets one thread; notify `-rl 5`; gau one thread) |
+| HTTP | the default flags of both tools | azhaq `-rate 5`; the reference at 5 (`-rl 5` httpx, katana and ffuf; arjun `--rate-limit 5`, which caps requests per second where its `-d` is a delay per thread; gowitness has no rate option and runs with its defaults, since with `-t 1` it shoots the first page and times out on the rest; notify `-rl 5`; gau one thread) |
 | DNS | azhaq and dnsx defaults, the same two resolvers | azhaq `-dns-rate 10`; dnsx `-rl 10`, the same two resolvers |
 | ports | the defaults, `-scan-type c` for naabu | azhaq `-rate 100`; naabu `-rate 100`; nmap `--max-rate 100` |
 | path and fuzz lists | all 4,750 words of SecLists `common.txt` | about 250 words (`-polite-words`): every Nth word and twenty paths the apps serve. At 5 requests per second the whole list is 16 minutes a tool and app, which does not fit a run under 90 minutes |
+| what else is smaller | everything | screenshots of four targets, parameters on three pages, domains `hackerone.com` and `vulnweb.com` (`-polite-domains`), DNS brute force with 300 words, no katana `-headless`, roles or scale |
 
 Public test sites (ginandjuice.shop, testphp.vulnweb.com, demo.testfire.net) are always asked at 5 requests per second, in both profiles.
 
