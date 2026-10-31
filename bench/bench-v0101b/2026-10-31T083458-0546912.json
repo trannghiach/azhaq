@@ -1,0 +1,5214 @@
+{
+  "date": "2026-10-31T07:21:14Z",
+  "commit": "0546912",
+  "version": "azhaq 0.10.1-0.20261031072033-054691250efe+dirty",
+  "go": "go1.27.3",
+  "tools": [
+    {
+      "name": "katana",
+      "version": "1.8.0"
+    },
+    {
+      "name": "subfinder",
+      "version": "2.17.0"
+    },
+    {
+      "name": "httpx",
+      "version": "1.12.0"
+    },
+    {
+      "name": "dnsx",
+      "version": "1.3.1"
+    },
+    {
+      "name": "naabu",
+      "version": "2.6.1"
+    },
+    {
+      "name": "gau",
+      "version": "2.2.4"
+    },
+    {
+      "name": "ffuf",
+      "version": "2.3.0"
+    },
+    {
+      "name": "alterx",
+      "version": "0.1.0"
+    },
+    {
+      "name": "gowitness",
+      "version": "3.2.2"
+    },
+    {
+      "name": "jsluice",
+      "version": "v0.0.0-20240110145140-0ddfab153e06"
+    },
+    {
+      "name": "notify",
+      "version": "v1.0.7"
+    }
+  ],
+  "profile": "both",
+  "apps": [
+    {
+      "name": "juice-shop",
+      "url": "http://127.0.0.1:3101/",
+      "azhaq": {
+        "routes": 102,
+        "truth": 70,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 2.573078722,
+        "rss_mb": 87.6875
+      },
+      "katana": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 13.991570737,
+        "rss_mb": 1298.94140625
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 1.180740619,
+        "rss_mb": 165.4609375
+      },
+      "katana_jsluice": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 3,
+        "seconds": 15.172311356,
+        "rss_mb": 1298.94140625
+      },
+      "bundle_grep": {
+        "routes": 101,
+        "truth": 37,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "crawl": {
+        "routes": 61,
+        "truth": 53,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 2.16011269,
+        "rss_mb": 82.046875
+      },
+      "crawl_katana": {
+        "routes": 5,
+        "truth": 1,
+        "truth_of": 77,
+        "shell": 0,
+        "seconds": 13.807286415,
+        "rss_mb": 1189.06640625
+      },
+      "ffuf": {
+        "words": 32,
+        "azhaq_hits": 3,
+        "ffuf_hits": 3,
+        "shared": 3,
+        "azhaq_shell": 0,
+        "ffuf_shell": 0,
+        "seconds": 0.147510951
+      },
+      "roles": {
+        "rows": 38,
+        "expected": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "seconds": 5.918385657,
+        "chrome_rows": 40,
+        "chrome_found": [
+          "/api/Users",
+          "/rest/user/authentication-details"
+        ],
+        "chrome_seconds": 16.278662362
+      },
+      "browser": {
+        "azhaq": {
+          "routes": 103,
+          "truth": 70,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 11.4319224,
+          "rss_mb": 93.625
+        },
+        "katana": {
+          "routes": 30,
+          "truth": 6,
+          "truth_of": 77,
+          "shell": 4,
+          "seconds": 8.274496826,
+          "rss_mb": 94.80078125
+        },
+        "limit_seconds": 300
+      }
+    },
+    {
+      "name": "vampi",
+      "url": "http://127.0.0.1:5102/",
+      "azhaq": {
+        "routes": 13,
+        "truth": 12,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0.394809076,
+        "rss_mb": 63.984375
+      },
+      "katana": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.517132795,
+        "rss_mb": 62.7734375
+      },
+      "jsluice": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "katana_jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.517132795,
+        "rss_mb": 62.7734375
+      },
+      "bundle_grep": {
+        "routes": 0,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "crawl": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 0.249476708,
+        "rss_mb": 56.80859375
+      },
+      "crawl_katana": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 12,
+        "shell": 0,
+        "seconds": 10.659782851,
+        "rss_mb": 62.828125
+      }
+    },
+    {
+      "name": "ginandjuice.shop",
+      "url": "https://ginandjuice.shop/",
+      "azhaq": {
+        "routes": 39,
+        "truth": 3,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 20.517729803,
+        "rss_mb": 87.09765625
+      },
+      "katana": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 20.640644991,
+        "rss_mb": 752.11328125
+      },
+      "jsluice": {
+        "routes": 1,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0.256279556,
+        "rss_mb": 48.66796875
+      },
+      "katana_jsluice": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 20.896924546999998,
+        "rss_mb": 752.11328125
+      },
+      "bundle_grep": {
+        "routes": 3,
+        "truth": 1,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 0,
+        "rss_mb": 0
+      },
+      "crawl": {
+        "routes": 11,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 10.510572308,
+        "rss_mb": 81.6171875
+      },
+      "crawl_katana": {
+        "routes": 14,
+        "truth": 2,
+        "truth_of": 3,
+        "shell": 0,
+        "seconds": 20.765735715,
+        "rss_mb": 760.2421875
+      }
+    }
+  ],
+  "domains": [
+    {
+      "domain": "hackerone.com",
+      "azhaq_names": 14,
+      "subfinder_names": 33,
+      "live": 14,
+      "azhaq_live": 14,
+      "subfinder_live": 12,
+      "shared_live": 12,
+      "azhaq_seconds": 2.71577081,
+      "azhaq_subs_seconds": 2.71577081,
+      "subfinder_seconds": 5.457419796,
+      "gau_seconds": 0,
+      "ct": "6 answered (failed_sources 0, asked 0, answered 0), 0 failed",
+      "azhaq_urls": 0,
+      "gau_urls": 0,
+      "gau_shared": 0,
+      "archives": "",
+      "profile": "default",
+      "reference_seconds": 6.21960353
+    },
+    {
+      "domain": "tesla.com",
+      "azhaq_names": 519,
+      "subfinder_names": 1814,
+      "live": 532,
+      "azhaq_live": 519,
+      "subfinder_live": 429,
+      "shared_live": 416,
+      "azhaq_seconds": 17.070515494,
+      "azhaq_subs_seconds": 17.070515494,
+      "subfinder_seconds": 13.739484185,
+      "gau_seconds": 0,
+      "ct": "6 answered (answered 0, failed 0, names 0), 0 failed",
+      "azhaq_urls": 0,
+      "gau_urls": 0,
+      "gau_shared": 0,
+      "archives": "",
+      "profile": "default",
+      "reference_seconds": 65.434381657,
+      "gaps": [
+        "akamai-apigateway-gallagher-external-api.tesla.com",
+        "akamai-apigateway-mfs-stg.de.tesla.com",
+        "akamai-apigateway-mytcore-prdsvc.tesla.com",
+        "akamai-apigateway-sandbox-automation-billing.tesla.com",
+        "akamai-apigateway-suppliers-rfq-stg.tesla.com",
+        "apigateway-energy-fulfillment-cx-bff-prd.tesla.com",
+        "apigateway-logisticsportalapi.tesla.com",
+        "charging-guest-ownership.tesla.com",
+        "cx.tesla.com",
+        "gigalife.tesla.com",
+        "origin-apigateway-warptmsapiserver.tesla.com",
+        "origin-myapps.tesla.com",
+        "recycling.tesla.com"
+      ]
+    },
+    {
+      "domain": "vulnweb.com",
+      "azhaq_names": 7,
+      "subfinder_names": 19,
+      "live": 7,
+      "azhaq_live": 7,
+      "subfinder_live": 6,
+      "shared_live": 6,
+      "azhaq_seconds": 16.377948408,
+      "azhaq_subs_seconds": 16.377948408,
+      "subfinder_seconds": 6.630857766,
+      "gau_seconds": 0,
+      "ct": "5 answered (answered 0, failed 0, names 0), 0 failed",
+      "azhaq_urls": 0,
+      "gau_urls": 0,
+      "gau_shared": 0,
+      "archives": "",
+      "profile": "default",
+      "reference_seconds": 7.308925307
+    }
+  ],
+  "brute": {
+    "profile": "default",
+    "domain": "azqlab.lan",
+    "words": 5000,
+    "azhaq_found": 9,
+    "dnsx_found": 9,
+    "shared": 9,
+    "azhaq_confirmed": 9,
+    "dnsx_confirmed": 9,
+    "azhaq_seconds": 0.115187617,
+    "dnsx_seconds": 0.701067161,
+    "wildcard_words": 50,
+    "wildcard_real": 3,
+    "wildcard_azhaq": 3,
+    "wildcard_fake": 0,
+    "wildcard_dnsx_unfiltered": 50,
+    "permute_azhaq": 0,
+    "permute_alterx": 0,
+    "permute_shared": 0
+  },
+  "probe": {
+    "profile": "default",
+    "hosts": 107,
+    "azhaq_answered": 107,
+    "httpx_answered": 107,
+    "azhaq_confirmed": 107,
+    "httpx_confirmed": 107,
+    "shared": 107,
+    "offsite": 0,
+    "status_agree": 107,
+    "title_agree": 107,
+    "tech_agree": 106,
+    "all_agree": 106,
+    "favicon_both": 104,
+    "favicon_agree": 104,
+    "cdn_httpx": 0,
+    "cdn_agree": 0,
+    "azhaq_seconds": 0.878979984,
+    "httpx_seconds": 1.6215700320000002,
+    "public_azhaq": 3,
+    "public_httpx": 2,
+    "public_azhaq_seconds": 10.419749209999999,
+    "public_httpx_seconds": 21.530515581,
+    "disagree": [
+      "127.0.0.1:5020: status 200/200 title \"Damn Vulnerable NodeJS Application\"/\"Damn Vulnerable NodeJS Application\" tech [Bootstrap:3.3.7 BootstrapCDN:3.3.7 Express Node.js Showdown cdnjs jQuery:3.2.1]/[Bootstrap:3.3.7 BootstrapCDN:3.3.7 Cloudflare Express Node.js Showdown cdnjs jQuery:3.2.1]"
+    ],
+    "accounting": "6 distinct inputs: 6 rows, 0 failed or skipped in the summary, unaccounted []"
+  },
+  "ports": {
+    "profile": "default",
+    "hosts": [
+      "scanme.nmap.org",
+      "127.0.0.1",
+      "127.0.0.0/28"
+    ],
+    "azhaq_open": 16,
+    "naabu_open": 16,
+    "shared": 4,
+    "azhaq_seconds": 6.5184722939999995,
+    "naabu_seconds": 141.80045786,
+    "legs": [
+      {
+        "target": "scanme.nmap.org",
+        "ports": "top-1000",
+        "azhaq": 3,
+        "naabu": 3,
+        "azhaq_confirmed": 3,
+        "naabu_confirmed": 3,
+        "azhaq_seconds": 1.8418652039999999,
+        "naabu_seconds": 5.765833009
+      },
+      {
+        "target": "127.0.0.1",
+        "ports": "1-65535",
+        "azhaq": 9,
+        "naabu": 9,
+        "azhaq_confirmed": 9,
+        "naabu_confirmed": 9,
+        "azhaq_seconds": 4.615883234,
+        "naabu_seconds": 133.518392251
+      },
+      {
+        "target": "127.0.0.0/28",
+        "ports": "35577,35021,46789,41039,37259,34393",
+        "azhaq": 4,
+        "naabu": 4,
+        "azhaq_confirmed": 4,
+        "naabu_confirmed": 4,
+        "azhaq_seconds": 0.060723856,
+        "naabu_seconds": 2.5162326
+      }
+    ]
+  },
+  "dirs": {
+    "profile": "default",
+    "words": 4750,
+    "apps": [
+      "http://127.0.0.1:3101/",
+      "http://127.0.0.1:5102/"
+    ],
+    "azhaq_hits": 22,
+    "ffuf_hits": 22,
+    "shared": 22,
+    "azhaq_false": 2,
+    "ffuf_false": 2,
+    "azhaq_seconds": 25.369978775999996,
+    "ffuf_seconds": 25.028791704
+  },
+  "params": {
+    "profile": "default",
+    "pages": [
+      "http://127.0.0.1:36103/search",
+      "http://127.0.0.1:36103/item",
+      "http://127.0.0.1:3101/rest/products/search",
+      "http://127.0.0.1:3101/rest/user/whoami",
+      "http://127.0.0.1:5102/users/v1",
+      "https://ginandjuice.shop/catalog",
+      "https://ginandjuice.shop/blog/"
+    ],
+    "words": 6453,
+    "azhaq": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback",
+      "http://127.0.0.1:36103/item debug",
+      "http://127.0.0.1:36103/item format",
+      "http://127.0.0.1:36103/item id",
+      "http://127.0.0.1:36103/search lang",
+      "http://127.0.0.1:36103/search limit",
+      "http://127.0.0.1:36103/search page",
+      "http://127.0.0.1:36103/search q",
+      "http://127.0.0.1:36103/search sort",
+      "https://ginandjuice.shop/blog search",
+      "https://ginandjuice.shop/catalog searchTerm"
+    ],
+    "arjun": [
+      "http://127.0.0.1:3101/rest/products/search q",
+      "http://127.0.0.1:3101/rest/user/whoami callback",
+      "http://127.0.0.1:36103/item debug",
+      "http://127.0.0.1:36103/item format",
+      "http://127.0.0.1:36103/item id",
+      "http://127.0.0.1:36103/search lang",
+      "http://127.0.0.1:36103/search limit",
+      "http://127.0.0.1:36103/search page",
+      "http://127.0.0.1:36103/search q",
+      "http://127.0.0.1:36103/search sort",
+      "https://ginandjuice.shop/blog search"
+    ],
+    "shared": 11,
+    "azhaq_seconds": 1.0943028780000001,
+    "arjun_seconds": 5.426747804,
+    "planted_truth": 8,
+    "azhaq_planted": 8,
+    "arjun_planted": 8,
+    "azhaq_wrong": 0,
+    "arjun_wrong": 0,
+    "gin_azhaq_seconds": 10.254385554,
+    "gin_arjun_seconds": 14.196584129
+  },
+  "shots": {
+    "profile": "default",
+    "targets": 8,
+    "azhaq": 8,
+    "gowitness": 6,
+    "azhaq_confirmed": 8,
+    "gowitness_confirmed": 6,
+    "azhaq_seconds": 6.290518318,
+    "gowitness_seconds": 64.457035262
+  },
+  "fuzz": {
+    "profile": "default",
+    "words": 4750,
+    "legs": [
+      {
+        "app": "http://127.0.0.1:3101/",
+        "variant": "calibrated (-ac)",
+        "azhaq_hits": 20,
+        "ffuf_hits": 20,
+        "shared": 20,
+        "azhaq_confirmed": 18,
+        "ffuf_confirmed": 18,
+        "azhaq_seconds": 20.312482664,
+        "ffuf_seconds": 19.588418938,
+        "report_equal": true,
+        "report_problem": "20 results equal"
+      },
+      {
+        "app": "http://127.0.0.1:3101/",
+        "variant": "filtered (-fs 9984)",
+        "azhaq_hits": 20,
+        "ffuf_hits": 20,
+        "shared": 20,
+        "azhaq_confirmed": 18,
+        "ffuf_confirmed": 18,
+        "azhaq_seconds": 19.465900905,
+        "ffuf_seconds": 20.223192104
+      },
+      {
+        "app": "http://127.0.0.1:5102/",
+        "variant": "calibrated (-ac)",
+        "azhaq_hits": 2,
+        "ffuf_hits": 2,
+        "shared": 2,
+        "azhaq_confirmed": 2,
+        "ffuf_confirmed": 2,
+        "azhaq_seconds": 5.414038726,
+        "ffuf_seconds": 5.525000858,
+        "report_equal": true,
+        "report_problem": "2 results equal"
+      },
+      {
+        "app": "http://127.0.0.1:5102/",
+        "variant": "filtered (-fs 205)",
+        "azhaq_hits": 2,
+        "ffuf_hits": 2,
+        "shared": 2,
+        "azhaq_confirmed": 2,
+        "ffuf_confirmed": 2,
+        "azhaq_seconds": 5.583723667,
+        "ffuf_seconds": 4.894991208
+      }
+    ]
+  },
+  "dns": {
+    "profile": "default",
+    "names": 32,
+    "azhaq_confirmed": 12,
+    "dnsx_confirmed": 12,
+    "azhaq_seconds": 0.01876965,
+    "dnsx_seconds": 0.499644615,
+    "azhaq_queries": 290,
+    "dnsx_queries": 523,
+    "azhaq_peak_per_second": 290,
+    "dnsx_peak_per_second": 406
+  },
+  "urls": {
+    "profile": "default",
+    "domain": "vulnweb.com",
+    "azhaq": 119,
+    "gau": 150,
+    "shared": 116,
+    "azhaq_seconds": 17.662588426,
+    "gau_seconds": 169.75557844,
+    "gau_only": [
+      "http://testphp.vulnweb.com/7zSo1DIz.exe",
+      "http://testphp.vulnweb.com/NhYzAp8A.exe",
+      "http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl",
+      "http://testphp.vulnweb.com/cart.php.[",
+      "http://testphp.vulnweb.com/login.ph%E2%80%A6",
+      "http://testphp.vulnweb.com/login.php).",
+      "http://vulnweb.com/FUZZ********************************************************",
+      "http://vulnweb.com/FUZZ*********************************************************",
+      "http://www.vulnweb.com/%5C",
+      "http://www.vulnweb.com/2014/04/get-freedownloadidm517patchkeygen-program.html",
+      "http://www.vulnweb.com/?ref=hackernoon.com",
+      "http://www.vulnweb.com/?rev=23",
+      "http://www.vulnweb.com/?rev=43",
+      "http://www.vulnweb.com/acunetix-logo.png%E2%80%99",
+      "http://www.vulnweb.com/admin",
+      "http://www.vulnweb.com/hackpanel",
+      "http://www.vulnweb.com/home",
+      "http://www.vulnweb.com/https://torproject.org/https://en.wikipedia.org/wiki/.onionhttps://security.stackexchange.com/questions/78682/https://www.torproject.org/projects/torbrowser.html.enhttps://tails.boum.org/https://www.whonix.org/https://www.whonix.org/wiki/VirtualBoxhttps://www.virtualbox.org/https://www.whonix.org/wiki/Downloadhttps://panopticlick.eff.org/http://maill4dnx45yrtsy.onion/https://www.torproject.org/docs/hidden-services.html.enhttps://security.stackexchange.com/questions/79438/https://en.wikipedia.org/wiki/Forward_secrecyhttps://en.wikipedia.org/wiki/Off-the-Record_Messaginghttps://whispersystems.org/blog/asynchronous-security/https://f5.com/glossary/ssl-offloadinghttp://en.wikipedia.org/wiki/SSL_accelerationhttp://nginx.com/blog/nginx-ssl/http://www.pcgamer.com/dota-2-esports-league-suspended-after-players-hit-by-ddos-attacks/https://security.stackexchange.com/a/79363/12https://security.stackexchange.com/a/31846/39623https://hashcat.net/oclhashcat/https://security.stackexchange.com/a/51080/39623https://www.ietf.org/rfc/rfc2898.txthttps://www.ietf.org/rfc/rfc2104.txthttps://hashcat.net/oclhashcat/https://hashcat.net/wiki/doku.php?id=rule_based_attackhttps://hashcat.net/wiki/doku.php?id=dictionary_attackhttps://security.stackexchange.com/a/7701/39623https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/http://hynek.mehttp://wiki.apache.org/tomcat/HowTo/SSLCiphershttp://markmail.org/message/zn4namfhypyxum23https://security.stackexchange.com/a/77018/39623http://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-52r1.pdfhttps://ssllabs.comhttp://webstersprodigy.net/2012/02/04/serving-back-xml-for-xss/http://azure.microsoft.com/en-us/documentation/articles/cache-dotnet-how-to-use-azure-redis-cache/",
+      "http://www.vulnweb.com/index.php",
+      "http://www.vulnweb.com/login.php",
+      "http://www.vulnweb.com/mobile/",
+      "http://www.vulnweb.com/myimages.php",
+      "http://www.vulnweb.com/news/story/0ap3000000944680/article/ravens-activate-guard-marshal-yanda-from-pup-list",
+      "http://www.vulnweb.com/plugins/seo",
+      "http://www.vulnweb.com/premier-edition-bundle",
+      "http://www.vulnweb.com/redir.php",
+      "http://www.vulnweb.com/redir.php?r=http://bulknearme.com/index.gif",
+      "http://www.vulnweb.com/table-images/",
+      "http://www.vulnweb.com/updateif.php",
+      "http://www.vulnweb.com/updateif.php%E2%80%9D%E2%80%9D",
+      "http://www.vulnweb.com/updateif.php%E2%80%9D\u0026",
+      "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/gazeimg.js",
+      "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/lanstarApp.js",
+      "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/page.js"
+    ]
+  },
+  "services": {
+    "profile": "default",
+    "ports": 15,
+    "azhaq_named": 15,
+    "nmap_named": 12,
+    "azhaq_with_product": 13,
+    "nmap_with_product": 11,
+    "azhaq_seconds": 2.818197786,
+    "nmap_seconds": 145.302490078,
+    "rows": [
+      {
+        "port": 16379,
+        "truth": "redis",
+        "azhaq": "redis",
+        "nmap": "redis",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "Redis 7.4.12"
+      },
+      {
+        "port": 13306,
+        "truth": "mariadb",
+        "azhaq": "mysql",
+        "nmap": "mysql",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "MariaDB 11.4.13"
+      },
+      {
+        "port": 15432,
+        "truth": "postgres",
+        "azhaq": "postgresql",
+        "nmap": "postgresql",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "PostgreSQL 14 - 17"
+      },
+      {
+        "port": 17017,
+        "truth": "mongo",
+        "azhaq": "mongodb",
+        "nmap": "mongodb",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "MongoDB 7.0.45"
+      },
+      {
+        "port": 11883,
+        "truth": "mosquitto (mqtt)",
+        "azhaq": "mqtt",
+        "nmap": "",
+        "azhaq_ok": true,
+        "nmap_ok": false,
+        "azhaq_product": "Mosquitto 2.0.22"
+      },
+      {
+        "port": 15682,
+        "truth": "rabbitmq (amqp)",
+        "azhaq": "amqp",
+        "nmap": "amqp",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "RabbitMQ 3.13.7"
+      },
+      {
+        "port": 21211,
+        "truth": "memcached",
+        "azhaq": "memcached",
+        "nmap": "unknown",
+        "azhaq_ok": true,
+        "nmap_ok": false,
+        "azhaq_product": "memcached 1.6.45"
+      },
+      {
+        "port": 12222,
+        "truth": "openssh",
+        "azhaq": "ssh",
+        "nmap": "ssh",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "OpenSSH 10.3"
+      },
+      {
+        "port": 10021,
+        "truth": "ftp",
+        "azhaq": "ftp",
+        "nmap": "ftp",
+        "azhaq_ok": true,
+        "nmap_ok": true
+      },
+      {
+        "port": 10025,
+        "truth": "mailpit smtp",
+        "azhaq": "smtp",
+        "nmap": "smtp",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "Mailpit"
+      },
+      {
+        "port": 18825,
+        "truth": "mailpit web",
+        "azhaq": "http",
+        "nmap": "http",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "Mailpit 1.20.7"
+      },
+      {
+        "port": 10389,
+        "truth": "openldap",
+        "azhaq": "ldap",
+        "nmap": "ldap",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "OpenLDAP"
+      },
+      {
+        "port": 10445,
+        "truth": "samba",
+        "azhaq": "smb",
+        "nmap": "netbios-ssn",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "Samba smbd"
+      },
+      {
+        "port": 19200,
+        "truth": "elasticsearch",
+        "azhaq": "http",
+        "nmap": "http",
+        "azhaq_ok": true,
+        "nmap_ok": true,
+        "azhaq_product": "Elasticsearch 8.15.3"
+      },
+      {
+        "port": 10053,
+        "truth": "coredns (tcp)",
+        "azhaq": "dns",
+        "nmap": "tcpwrapped",
+        "azhaq_ok": true,
+        "nmap_ok": false
+      }
+    ],
+    "azhaq_udp": {
+      "10053 open dns": true,
+      "10161 open snmp": true,
+      "21211 open memcached": true
+    }
+  },
+  "notify": {
+    "profile": "default",
+    "messages": 6,
+    "azhaq_confirmed": 6,
+    "notify_confirmed": 6,
+    "azhaq_seconds": 5.013715618,
+    "notify_seconds": 5.021513772,
+    "same_bodies": true,
+    "token_leak": false
+  },
+  "polite": {
+    "apps": [
+      {
+        "name": "juice-shop",
+        "url": "http://127.0.0.1:3101/",
+        "azhaq": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana_jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "bundle_grep": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "profile": "polite",
+        "crawl": {
+          "routes": 61,
+          "truth": 53,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 16.645451752,
+          "rss_mb": 78.296875
+        },
+        "crawl_katana": {
+          "routes": 5,
+          "truth": 1,
+          "truth_of": 77,
+          "shell": 0,
+          "seconds": 17.62780011,
+          "rss_mb": 1933.61328125
+        }
+      },
+      {
+        "name": "vampi",
+        "url": "http://127.0.0.1:5102/",
+        "azhaq": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana_jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "bundle_grep": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "profile": "polite",
+        "crawl": {
+          "routes": 1,
+          "truth": 1,
+          "truth_of": 12,
+          "shell": 0,
+          "seconds": 0.122194094,
+          "rss_mb": 48.73828125
+        },
+        "crawl_katana": {
+          "routes": 1,
+          "truth": 1,
+          "truth_of": 12,
+          "shell": 0,
+          "seconds": 10.497341292,
+          "rss_mb": 62.78125
+        }
+      },
+      {
+        "name": "ginandjuice.shop",
+        "url": "https://ginandjuice.shop/",
+        "azhaq": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "katana_jsluice": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "bundle_grep": {
+          "routes": 0,
+          "shell": 0,
+          "seconds": 0,
+          "rss_mb": 0
+        },
+        "profile": "polite",
+        "crawl": {
+          "routes": 11,
+          "truth": 2,
+          "truth_of": 3,
+          "shell": 0,
+          "seconds": 10.500214645,
+          "rss_mb": 77.79296875
+        },
+        "crawl_katana": {
+          "routes": 14,
+          "truth": 2,
+          "truth_of": 3,
+          "shell": 0,
+          "seconds": 20.765735715,
+          "rss_mb": 760.2421875
+        }
+      }
+    ],
+    "domains": [
+      {
+        "domain": "hackerone.com",
+        "azhaq_names": 14,
+        "subfinder_names": 33,
+        "live": 14,
+        "azhaq_live": 14,
+        "subfinder_live": 12,
+        "shared_live": 12,
+        "azhaq_seconds": 12.559610382,
+        "azhaq_subs_seconds": 12.559610382,
+        "subfinder_seconds": 5.457419796,
+        "gau_seconds": 0,
+        "ct": "6 answered (asked 0, answered 0, failed 0), 0 failed",
+        "azhaq_urls": 0,
+        "gau_urls": 0,
+        "gau_shared": 0,
+        "archives": "",
+        "profile": "polite",
+        "reference_seconds": 9.294291716
+      },
+      {
+        "domain": "vulnweb.com",
+        "azhaq_names": 7,
+        "subfinder_names": 19,
+        "live": 7,
+        "azhaq_live": 7,
+        "subfinder_live": 6,
+        "shared_live": 6,
+        "azhaq_seconds": 10.138641069,
+        "azhaq_subs_seconds": 10.138641069,
+        "subfinder_seconds": 6.630857766,
+        "gau_seconds": 0,
+        "ct": "6 answered (failed 0, names 0, seconds 0), 0 failed",
+        "azhaq_urls": 0,
+        "gau_urls": 0,
+        "gau_shared": 0,
+        "archives": "",
+        "profile": "polite",
+        "reference_seconds": 8.371360079
+      }
+    ],
+    "brute": {
+      "profile": "polite",
+      "domain": "azqlab.lan",
+      "words": 310,
+      "azhaq_found": 9,
+      "dnsx_found": 9,
+      "shared": 9,
+      "azhaq_confirmed": 9,
+      "dnsx_confirmed": 9,
+      "azhaq_seconds": 29.32731064,
+      "dnsx_seconds": 30.468774821,
+      "wildcard_words": 0,
+      "wildcard_real": 0,
+      "wildcard_azhaq": 0,
+      "wildcard_fake": 0,
+      "wildcard_dnsx_unfiltered": 0,
+      "permute_azhaq": 0,
+      "permute_alterx": 0,
+      "permute_shared": 0
+    },
+    "probe": {
+      "profile": "polite",
+      "hosts": 107,
+      "azhaq_answered": 107,
+      "httpx_answered": 107,
+      "azhaq_confirmed": 107,
+      "httpx_confirmed": 107,
+      "shared": 107,
+      "offsite": 0,
+      "status_agree": 107,
+      "title_agree": 107,
+      "tech_agree": 106,
+      "all_agree": 106,
+      "favicon_both": 104,
+      "favicon_agree": 104,
+      "cdn_httpx": 0,
+      "cdn_agree": 0,
+      "azhaq_seconds": 21.295909876,
+      "httpx_seconds": 21.89982169,
+      "public_azhaq": 3,
+      "public_httpx": 2,
+      "public_azhaq_seconds": 10.706902596,
+      "public_httpx_seconds": 21.530515581,
+      "disagree": [
+        "127.0.0.1:5020: status 200/200 title \"Damn Vulnerable NodeJS Application\"/\"Damn Vulnerable NodeJS Application\" tech [Bootstrap:3.3.7 BootstrapCDN:3.3.7 Express Node.js Showdown cdnjs jQuery:3.2.1]/[Bootstrap:3.3.7 BootstrapCDN:3.3.7 Cloudflare Express Node.js Showdown cdnjs jQuery:3.2.1]"
+      ]
+    },
+    "ports": {
+      "profile": "polite",
+      "hosts": [
+        "scanme.nmap.org",
+        "127.0.0.1",
+        "127.0.0.0/28"
+      ],
+      "azhaq_open": 13,
+      "naabu_open": 13,
+      "shared": 4,
+      "azhaq_seconds": 21.115079103,
+      "naabu_seconds": 97.735458471,
+      "legs": [
+        {
+          "target": "scanme.nmap.org",
+          "ports": "top-1000",
+          "azhaq": 3,
+          "naabu": 3,
+          "azhaq_confirmed": 3,
+          "naabu_confirmed": 3,
+          "azhaq_seconds": 10.18357651,
+          "naabu_seconds": 61.709079136
+        },
+        {
+          "target": "127.0.0.1",
+          "ports": "top-1000",
+          "azhaq": 6,
+          "naabu": 6,
+          "azhaq_confirmed": 6,
+          "naabu_confirmed": 6,
+          "azhaq_seconds": 9.971286817,
+          "naabu_seconds": 31.500090286
+        },
+        {
+          "target": "127.0.0.0/28",
+          "ports": "37785,41705,36297,46009,33839,45181",
+          "azhaq": 4,
+          "naabu": 4,
+          "azhaq_confirmed": 4,
+          "naabu_confirmed": 4,
+          "azhaq_seconds": 0.960215776,
+          "naabu_seconds": 4.526289049
+        }
+      ]
+    },
+    "dirs": {
+      "profile": "polite",
+      "words": 257,
+      "apps": [
+        "http://127.0.0.1:3101/",
+        "http://127.0.0.1:5102/"
+      ],
+      "azhaq_hits": 13,
+      "ffuf_hits": 13,
+      "shared": 13,
+      "azhaq_false": 0,
+      "ffuf_false": 0,
+      "azhaq_seconds": 104.068284732,
+      "ffuf_seconds": 102.906022514
+    },
+    "params": {
+      "profile": "polite",
+      "pages": [
+        "http://127.0.0.1:33527/search",
+        "http://127.0.0.1:33527/item",
+        "http://127.0.0.1:3101/rest/products/search"
+      ],
+      "words": 6453,
+      "azhaq": [
+        "http://127.0.0.1:3101/rest/products/search q",
+        "http://127.0.0.1:33527/item debug",
+        "http://127.0.0.1:33527/item format",
+        "http://127.0.0.1:33527/item id",
+        "http://127.0.0.1:33527/search lang",
+        "http://127.0.0.1:33527/search limit",
+        "http://127.0.0.1:33527/search page",
+        "http://127.0.0.1:33527/search q",
+        "http://127.0.0.1:33527/search sort"
+      ],
+      "arjun": [
+        "http://127.0.0.1:3101/rest/products/search q",
+        "http://127.0.0.1:33527/item debug",
+        "http://127.0.0.1:33527/item format",
+        "http://127.0.0.1:33527/item id",
+        "http://127.0.0.1:33527/search lang",
+        "http://127.0.0.1:33527/search limit",
+        "http://127.0.0.1:33527/search page",
+        "http://127.0.0.1:33527/search q",
+        "http://127.0.0.1:33527/search sort"
+      ],
+      "shared": 9,
+      "azhaq_seconds": 36.887789053,
+      "arjun_seconds": 44.417857647000005,
+      "planted_truth": 8,
+      "azhaq_planted": 8,
+      "arjun_planted": 8,
+      "azhaq_wrong": 0,
+      "arjun_wrong": 0
+    },
+    "shots": {
+      "profile": "polite",
+      "targets": 4,
+      "azhaq": 4,
+      "gowitness": 4,
+      "azhaq_confirmed": 4,
+      "gowitness_confirmed": 4,
+      "azhaq_seconds": 13.409944981,
+      "gowitness_seconds": 4.615502605,
+      "gowitness_unpaced": true
+    },
+    "fuzz": {
+      "profile": "polite",
+      "words": 257,
+      "legs": [
+        {
+          "app": "http://127.0.0.1:3101/",
+          "variant": "calibrated (-ac)",
+          "azhaq_hits": 11,
+          "ffuf_hits": 11,
+          "shared": 11,
+          "azhaq_confirmed": 11,
+          "ffuf_confirmed": 11,
+          "azhaq_seconds": 52.419879061,
+          "ffuf_seconds": 51.413841198
+        },
+        {
+          "app": "http://127.0.0.1:5102/",
+          "variant": "calibrated (-ac)",
+          "azhaq_hits": 2,
+          "ffuf_hits": 2,
+          "shared": 2,
+          "azhaq_confirmed": 2,
+          "ffuf_confirmed": 2,
+          "azhaq_seconds": 52.417378464,
+          "ffuf_seconds": 51.491074402
+        }
+      ]
+    },
+    "dns": {
+      "profile": "polite",
+      "names": 32,
+      "azhaq_confirmed": 12,
+      "dnsx_confirmed": 12,
+      "azhaq_seconds": 3.015216344,
+      "dnsx_seconds": 3.509017198,
+      "azhaq_queries": 290,
+      "dnsx_queries": 523,
+      "azhaq_peak_per_second": 92,
+      "dnsx_peak_per_second": 180
+    },
+    "urls": {
+      "profile": "polite",
+      "domain": "vulnweb.com",
+      "azhaq": 119,
+      "gau": 150,
+      "shared": 116,
+      "azhaq_seconds": 17.979178867999998,
+      "gau_seconds": 58.011977423,
+      "gau_only": [
+        "http://testphp.vulnweb.com/7zSo1DIz.exe",
+        "http://testphp.vulnweb.com/NhYzAp8A.exe",
+        "http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl",
+        "http://testphp.vulnweb.com/cart.php.[",
+        "http://testphp.vulnweb.com/login.ph%E2%80%A6",
+        "http://testphp.vulnweb.com/login.php).",
+        "http://vulnweb.com/FUZZ********************************************************",
+        "http://vulnweb.com/FUZZ*********************************************************",
+        "http://www.vulnweb.com/%5C",
+        "http://www.vulnweb.com/2014/04/get-freedownloadidm517patchkeygen-program.html",
+        "http://www.vulnweb.com/?ref=hackernoon.com",
+        "http://www.vulnweb.com/?rev=23",
+        "http://www.vulnweb.com/?rev=43",
+        "http://www.vulnweb.com/acunetix-logo.png%E2%80%99",
+        "http://www.vulnweb.com/admin",
+        "http://www.vulnweb.com/hackpanel",
+        "http://www.vulnweb.com/home",
+        "http://www.vulnweb.com/https://torproject.org/https://en.wikipedia.org/wiki/.onionhttps://security.stackexchange.com/questions/78682/https://www.torproject.org/projects/torbrowser.html.enhttps://tails.boum.org/https://www.whonix.org/https://www.whonix.org/wiki/VirtualBoxhttps://www.virtualbox.org/https://www.whonix.org/wiki/Downloadhttps://panopticlick.eff.org/http://maill4dnx45yrtsy.onion/https://www.torproject.org/docs/hidden-services.html.enhttps://security.stackexchange.com/questions/79438/https://en.wikipedia.org/wiki/Forward_secrecyhttps://en.wikipedia.org/wiki/Off-the-Record_Messaginghttps://whispersystems.org/blog/asynchronous-security/https://f5.com/glossary/ssl-offloadinghttp://en.wikipedia.org/wiki/SSL_accelerationhttp://nginx.com/blog/nginx-ssl/http://www.pcgamer.com/dota-2-esports-league-suspended-after-players-hit-by-ddos-attacks/https://security.stackexchange.com/a/79363/12https://security.stackexchange.com/a/31846/39623https://hashcat.net/oclhashcat/https://security.stackexchange.com/a/51080/39623https://www.ietf.org/rfc/rfc2898.txthttps://www.ietf.org/rfc/rfc2104.txthttps://hashcat.net/oclhashcat/https://hashcat.net/wiki/doku.php?id=rule_based_attackhttps://hashcat.net/wiki/doku.php?id=dictionary_attackhttps://security.stackexchange.com/a/7701/39623https://hynek.me/articles/hardening-your-web-servers-ssl-ciphers/http://hynek.mehttp://wiki.apache.org/tomcat/HowTo/SSLCiphershttp://markmail.org/message/zn4namfhypyxum23https://security.stackexchange.com/a/77018/39623http://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-52r1.pdfhttps://ssllabs.comhttp://webstersprodigy.net/2012/02/04/serving-back-xml-for-xss/http://azure.microsoft.com/en-us/documentation/articles/cache-dotnet-how-to-use-azure-redis-cache/",
+        "http://www.vulnweb.com/index.php",
+        "http://www.vulnweb.com/login.php",
+        "http://www.vulnweb.com/mobile/",
+        "http://www.vulnweb.com/myimages.php",
+        "http://www.vulnweb.com/news/story/0ap3000000944680/article/ravens-activate-guard-marshal-yanda-from-pup-list",
+        "http://www.vulnweb.com/plugins/seo",
+        "http://www.vulnweb.com/premier-edition-bundle",
+        "http://www.vulnweb.com/redir.php",
+        "http://www.vulnweb.com/redir.php?r=http://bulknearme.com/index.gif",
+        "http://www.vulnweb.com/table-images/",
+        "http://www.vulnweb.com/updateif.php",
+        "http://www.vulnweb.com/updateif.php%E2%80%9D%E2%80%9D",
+        "http://www.vulnweb.com/updateif.php%E2%80%9D\u0026",
+        "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/gazeimg.js",
+        "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/lanstarApp.js",
+        "http://www.vulnweb.com/usr/themes/lanstar-master/assets/js/page.js"
+      ]
+    },
+    "services": {
+      "profile": "polite",
+      "ports": 15,
+      "azhaq_named": 15,
+      "nmap_named": 12,
+      "azhaq_with_product": 13,
+      "nmap_with_product": 11,
+      "azhaq_seconds": 2.931801556,
+      "nmap_seconds": 145.425040564,
+      "rows": [
+        {
+          "port": 16379,
+          "truth": "redis",
+          "azhaq": "redis",
+          "nmap": "redis",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "Redis 7.4.12"
+        },
+        {
+          "port": 13306,
+          "truth": "mariadb",
+          "azhaq": "mysql",
+          "nmap": "mysql",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "MariaDB 11.4.13"
+        },
+        {
+          "port": 15432,
+          "truth": "postgres",
+          "azhaq": "postgresql",
+          "nmap": "postgresql",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "PostgreSQL 14 - 17"
+        },
+        {
+          "port": 17017,
+          "truth": "mongo",
+          "azhaq": "mongodb",
+          "nmap": "mongodb",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "MongoDB 7.0.45"
+        },
+        {
+          "port": 11883,
+          "truth": "mosquitto (mqtt)",
+          "azhaq": "mqtt",
+          "nmap": "",
+          "azhaq_ok": true,
+          "nmap_ok": false,
+          "azhaq_product": "Mosquitto 2.0.22"
+        },
+        {
+          "port": 15682,
+          "truth": "rabbitmq (amqp)",
+          "azhaq": "amqp",
+          "nmap": "amqp",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "RabbitMQ 3.13.7"
+        },
+        {
+          "port": 21211,
+          "truth": "memcached",
+          "azhaq": "memcached",
+          "nmap": "unknown",
+          "azhaq_ok": true,
+          "nmap_ok": false,
+          "azhaq_product": "memcached 1.6.45"
+        },
+        {
+          "port": 12222,
+          "truth": "openssh",
+          "azhaq": "ssh",
+          "nmap": "ssh",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "OpenSSH 10.3"
+        },
+        {
+          "port": 10021,
+          "truth": "ftp",
+          "azhaq": "ftp",
+          "nmap": "ftp",
+          "azhaq_ok": true,
+          "nmap_ok": true
+        },
+        {
+          "port": 10025,
+          "truth": "mailpit smtp",
+          "azhaq": "smtp",
+          "nmap": "smtp",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "Mailpit"
+        },
+        {
+          "port": 18825,
+          "truth": "mailpit web",
+          "azhaq": "http",
+          "nmap": "http",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "Mailpit 1.20.7"
+        },
+        {
+          "port": 10389,
+          "truth": "openldap",
+          "azhaq": "ldap",
+          "nmap": "ldap",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "OpenLDAP"
+        },
+        {
+          "port": 10445,
+          "truth": "samba",
+          "azhaq": "smb",
+          "nmap": "netbios-ssn",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "Samba smbd"
+        },
+        {
+          "port": 19200,
+          "truth": "elasticsearch",
+          "azhaq": "http",
+          "nmap": "http",
+          "azhaq_ok": true,
+          "nmap_ok": true,
+          "azhaq_product": "Elasticsearch 8.15.3"
+        },
+        {
+          "port": 10053,
+          "truth": "coredns (tcp)",
+          "azhaq": "dns",
+          "nmap": "tcpwrapped",
+          "azhaq_ok": true,
+          "nmap_ok": false
+        }
+      ]
+    },
+    "notify": {
+      "profile": "polite",
+      "messages": 6,
+      "azhaq_confirmed": 6,
+      "notify_confirmed": 6,
+      "azhaq_seconds": 1.014221739,
+      "notify_seconds": 1.022432925,
+      "same_bodies": true,
+      "token_leak": false
+    }
+  },
+  "dropin": {
+    "crawl_known": 69,
+    "crawl_of": 77,
+    "probe_rows": 2,
+    "probe_fields": true,
+    "openapi_vampi": 12,
+    "openapi_crapi": 0,
+    "subs_live": 0,
+    "subfinder_live": 0,
+    "subs_shared": 0,
+    "urls": 0,
+    "targets": 2,
+    "html_ok": true,
+    "html_bytes": 6382
+  },
+  "scope": {
+    "trap_requests": 0,
+    "chrome_trap_requests": 0,
+    "in_scope_found": 6,
+    "watch_runs": 3
+  },
+  "network": {
+    "asn": "AS394161",
+    "azhaq_prefixes": 102,
+    "radb_routes": 39,
+    "shared": 31,
+    "cidr": "45.33.32.128/25",
+    "azhaq_ptr": 36,
+    "dnsx_ptr": 36,
+    "shared_ptr": 36
+  },
+  "secrets": {
+    "azhaq": 12,
+    "jsluice": 4,
+    "shared": 4
+  },
+  "tenants": {
+    "expected": 6,
+    "matched": 6,
+    "signed_in_logouts": 0,
+    "seconds": 7.219267422
+  },
+  "scale": {
+    "urls": 178,
+    "one_received": 140,
+    "budget": 100,
+    "processes": 2,
+    "most_received": 100,
+    "all_received": 145,
+    "budget_same": true,
+    "budget_missing": 0,
+    "killed_after_seconds": 0.8568406443333334,
+    "killed_same": true,
+    "worker_tasks": 78,
+    "workers_same": true,
+    "workers_seconds": 3.105270762,
+    "one_seconds": 2.570521933
+  },
+  "claims": {
+    "rows": [
+      {
+        "case": "run",
+        "pace": "unpaced",
+        "summary": 140,
+        "ledger": 140,
+        "counter": 140,
+        "pass": true,
+        "detail": "summary 140, ledger 140 (http 140), counter 140"
+      },
+      {
+        "case": "run",
+        "pace": "rate 10",
+        "summary": 140,
+        "ledger": 140,
+        "counter": 140,
+        "pass": true,
+        "detail": "summary 140, ledger 140 (http 140), counter 140"
+      },
+      {
+        "case": "run",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (http 60), counter 60"
+      },
+      {
+        "case": "run -browser",
+        "pace": "unpaced",
+        "summary": 276,
+        "ledger": 276,
+        "counter": 276,
+        "pass": true,
+        "detail": "summary 276, ledger 276 (chrome 130, http 146), counter 276; socket.io requests at the counter 0, WebSocket upgrades 0"
+      },
+      {
+        "case": "run -browser",
+        "pace": "rate 10",
+        "summary": 200,
+        "ledger": 200,
+        "counter": 200,
+        "pass": true,
+        "detail": "summary 200, ledger 200 (chrome 54, http 146), counter 200; socket.io requests at the counter 0, WebSocket upgrades 0"
+      },
+      {
+        "case": "run -browser",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (chrome 10, http 50), counter 60; socket.io requests at the counter 0, WebSocket upgrades 0"
+      },
+      {
+        "case": "shots",
+        "pace": "unpaced",
+        "summary": 49,
+        "ledger": 49,
+        "counter": 49,
+        "pass": true,
+        "detail": "summary 49, ledger 49 (chrome 48, http 1), counter 49"
+      },
+      {
+        "case": "shots",
+        "pace": "rate 2",
+        "summary": 50,
+        "ledger": 50,
+        "counter": 50,
+        "pass": true,
+        "detail": "summary 50, ledger 50 (chrome 49, http 1), counter 50"
+      },
+      {
+        "case": "run -login",
+        "pace": "unpaced",
+        "summary": 66,
+        "ledger": 66,
+        "counter": 66,
+        "pass": true,
+        "detail": "summary 66, ledger 66 (chrome 10, http 56), counter 66"
+      },
+      {
+        "case": "run -login",
+        "pace": "rate 10",
+        "summary": 66,
+        "ledger": 66,
+        "counter": 66,
+        "pass": true,
+        "detail": "summary 66, ledger 66 (chrome 10, http 56), counter 66"
+      },
+      {
+        "case": "run -login",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (chrome 8, http 52), counter 60"
+      },
+      {
+        "case": "run -login -browser",
+        "pace": "unpaced",
+        "summary": 94,
+        "ledger": 94,
+        "counter": 82,
+        "pass": false,
+        "detail": "summary 94, ledger 94 (chrome 38, http 56), counter 82 | ledger 94 != counter 82 | only in the ledger (12): GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/browser_api.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.css x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/main.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_scripting_api.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/shared.rollup.js x1; GET chrome://resources/css/roboto.css x1; GET chrome://resources/css/text_defaults_md.css x1; GET chrome://resources/js/assert.js x1; GET chrome://resources/js/load_time_data.js x1; GET chrome://resources/lit/v3_0/lit.rollup.js x1; GET chrome://resources/mojo/mojo/public/js/bindings.js x1"
+      },
+      {
+        "case": "run -login -browser",
+        "pace": "rate 10",
+        "summary": 91,
+        "ledger": 91,
+        "counter": 82,
+        "pass": false,
+        "detail": "summary 91, ledger 91 (chrome 35, http 56), counter 82 | ledger 91 != counter 82 | only in the ledger (9): GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.css x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/main.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/shared.rollup.js x1; GET chrome://resources/css/roboto.css x1; GET chrome://resources/css/text_defaults_md.css x1; GET chrome://resources/js/load_time_data.js x1; GET chrome://resources/lit/v3_0/lit.rollup.js x1; GET chrome://resources/mojo/mojo/public/js/bindings.js x1"
+      },
+      {
+        "case": "run -login -browser",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (chrome 20, http 40), counter 60"
+      },
+      {
+        "case": "roles",
+        "pace": "unpaced",
+        "summary": 130,
+        "ledger": 130,
+        "counter": 130,
+        "pass": true,
+        "detail": "summary 130, ledger 130 (http 130), counter 130"
+      },
+      {
+        "case": "roles",
+        "pace": "rate 10",
+        "summary": 130,
+        "ledger": 130,
+        "counter": 130,
+        "pass": true,
+        "detail": "summary 130, ledger 130 (http 130), counter 130"
+      },
+      {
+        "case": "roles",
+        "pace": "rate 2",
+        "summary": 130,
+        "ledger": 130,
+        "counter": 130,
+        "pass": true,
+        "detail": "summary 130, ledger 130 (http 130), counter 130"
+      },
+      {
+        "case": "roles -replay-writes put",
+        "pace": "unpaced",
+        "summary": 139,
+        "ledger": 139,
+        "counter": 139,
+        "pass": true,
+        "detail": "summary 139, ledger 139 (http 139), counter 139"
+      },
+      {
+        "case": "roles -replay-writes put",
+        "pace": "rate 10",
+        "summary": 139,
+        "ledger": 139,
+        "counter": 139,
+        "pass": true,
+        "detail": "summary 139, ledger 139 (http 139), counter 139"
+      },
+      {
+        "case": "roles -replay-writes put",
+        "pace": "rate 2",
+        "summary": 142,
+        "ledger": 142,
+        "counter": 142,
+        "pass": true,
+        "detail": "summary 142, ledger 142 (http 142), counter 142"
+      },
+      {
+        "case": "dirs",
+        "pace": "unpaced",
+        "summary": 505,
+        "ledger": 505,
+        "counter": 505,
+        "pass": true,
+        "detail": "summary 505, ledger 505 (http 505), counter 505"
+      },
+      {
+        "case": "dirs",
+        "pace": "rate 10",
+        "summary": 200,
+        "ledger": 200,
+        "counter": 200,
+        "pass": true,
+        "detail": "summary 200, ledger 200 (http 200), counter 200"
+      },
+      {
+        "case": "dirs",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (http 60), counter 60"
+      },
+      {
+        "case": "fuzz",
+        "pace": "unpaced",
+        "summary": 506,
+        "ledger": 506,
+        "counter": 506,
+        "pass": true,
+        "detail": "summary 506, ledger 506 (http 506), counter 506"
+      },
+      {
+        "case": "fuzz",
+        "pace": "rate 10",
+        "summary": 200,
+        "ledger": 200,
+        "counter": 200,
+        "pass": true,
+        "detail": "summary 200, ledger 200 (http 200), counter 200"
+      },
+      {
+        "case": "fuzz",
+        "pace": "rate 2",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "summary 60, ledger 60 (http 60), counter 60"
+      },
+      {
+        "case": "params",
+        "pace": "unpaced",
+        "summary": 8,
+        "ledger": 8,
+        "counter": 8,
+        "pass": true,
+        "detail": "summary 8, ledger 8 (http 8), counter 8"
+      },
+      {
+        "case": "params",
+        "pace": "rate 10",
+        "summary": 8,
+        "ledger": 8,
+        "counter": 8,
+        "pass": true,
+        "detail": "summary 8, ledger 8 (http 8), counter 8"
+      },
+      {
+        "case": "params",
+        "pace": "rate 2",
+        "summary": 8,
+        "ledger": 8,
+        "counter": 8,
+        "pass": true,
+        "detail": "summary 8, ledger 8 (http 8), counter 8"
+      },
+      {
+        "case": "ports -p",
+        "pace": "unpaced",
+        "summary": 74,
+        "ledger": 74,
+        "counter": 71,
+        "pass": true,
+        "detail": "summary 74, ledger 74 (tcp 74), counter 71; accepts map[127.0.0.1:35417:1 127.0.0.1:37281:23 127.0.0.1:37961:1 127.0.0.1:44119:23 127.0.0.1:45311:23]; HTTP requests answered 1, http ledger lines 0"
+      },
+      {
+        "case": "ports -pu",
+        "pace": "unpaced",
+        "summary": 14,
+        "ledger": 14,
+        "counter": 13,
+        "pass": true,
+        "detail": "summary 14, ledger 14 (udp 14), counter 13; datagrams map[127.0.0.1:44551:4 127.0.0.1:51379:4 127.0.0.1:57102:4 127.0.0.1:59774:1]"
+      },
+      {
+        "case": "ports -p",
+        "pace": "rate 5",
+        "summary": 74,
+        "ledger": 74,
+        "counter": 71,
+        "pass": true,
+        "detail": "summary 74, ledger 74 (tcp 74), counter 71; accepts map[127.0.0.1:34393:1 127.0.0.1:37237:23 127.0.0.1:40721:1 127.0.0.1:41951:23 127.0.0.1:45457:23]; HTTP requests answered 1, http ledger lines 0"
+      },
+      {
+        "case": "ports -pu",
+        "pace": "rate 5",
+        "summary": 14,
+        "ledger": 14,
+        "counter": 13,
+        "pass": true,
+        "detail": "summary 14, ledger 14 (udp 14), counter 13; datagrams map[127.0.0.1:37042:1 127.0.0.1:37598:4 127.0.0.1:50881:4 127.0.0.1:60844:4]"
+      },
+      {
+        "case": "mcp budget 60 (first azhaq_map)",
+        "pace": "unpaced",
+        "summary": 60,
+        "ledger": 60,
+        "counter": 60,
+        "pass": true,
+        "detail": "first azhaq_map: summary 60, ledger 60 (http 60), counter 60; second azhaq_map: summary 0, ledger 0 (), counter 0; azhaq_ports after the budget is spent: summary 0, ledger 0 (), counter 0; result: the request budget of this server (60) is spent; restart azhaq mcp with a larger -max-requests; together: summary 60, ledger 60, counter 60"
+      },
+      {
+        "case": "mcp budget 60 (second azhaq_map)",
+        "pace": "unpaced",
+        "summary": 0,
+        "ledger": 0,
+        "counter": 0,
+        "pass": true
+      },
+      {
+        "case": "mcp budget 60 (azhaq_ports after the budget is spent)",
+        "pace": "unpaced",
+        "summary": 0,
+        "ledger": 0,
+        "counter": 0,
+        "pass": true
+      },
+      {
+        "case": "mcp budget 2 (two calls at once)",
+        "pace": "unpaced",
+        "summary": 2,
+        "ledger": 2,
+        "counter": 2,
+        "pass": true,
+        "detail": "two calls at once: summary 2, ledger 2 (http 2), counter 2; call 1: 2 ({\"highlights\":[{\"coverage\":\"visited\",\"key\":\"http://127.0.0.1:33033/\",\"role\":\"app\",\"status\":200,\"title\":\"OWASP Juice Shop…); call 2: 0 (refused: budget spent)"
+      },
+      {
+        "case": "budget -max-requests 40 (run)",
+        "pace": "unpaced",
+        "summary": 40,
+        "ledger": 40,
+        "counter": 40,
+        "pass": true,
+        "detail": "run: summary 40, ledger 40 (http 40), counter 40; resume: summary 40, ledger 40 (http 40), counter 40; together: summary 80, ledger 80, counter 80"
+      },
+      {
+        "case": "budget -max-requests 40 (resume)",
+        "pace": "unpaced",
+        "summary": 40,
+        "ledger": 40,
+        "counter": 40,
+        "pass": true
+      },
+      {
+        "case": "kill switch run (run)",
+        "pace": "rate 10",
+        "summary": 31,
+        "ledger": 31,
+        "counter": 31,
+        "pass": true,
+        "detail": "run: summary 31, ledger 31 (http 31), counter 31; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 111, ledger 111, counter 111"
+      },
+      {
+        "case": "kill switch run (resume)",
+        "pace": "rate 10",
+        "summary": 80,
+        "ledger": 80,
+        "counter": 80,
+        "pass": true
+      },
+      {
+        "case": "kill switch run (run)",
+        "pace": "rate 2",
+        "summary": 6,
+        "ledger": 6,
+        "counter": 6,
+        "pass": true,
+        "detail": "run: summary 6, ledger 6 (http 6), counter 6; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 86, ledger 86, counter 86"
+      },
+      {
+        "case": "kill switch run (resume)",
+        "pace": "rate 2",
+        "summary": 80,
+        "ledger": 80,
+        "counter": 80,
+        "pass": true
+      },
+      {
+        "case": "kill switch shots (run)",
+        "pace": "rate 5",
+        "summary": 13,
+        "ledger": 13,
+        "counter": 13,
+        "pass": true,
+        "detail": "run: summary 13, ledger 13 (chrome 12, http 1), counter 13; last request 0.00s after the file, exit 4; resume: summary 52, ledger 52 (chrome 52), counter 52; together: summary 65, ledger 65, counter 65"
+      },
+      {
+        "case": "kill switch shots (resume)",
+        "pace": "rate 5",
+        "summary": 52,
+        "ledger": 52,
+        "counter": 52,
+        "pass": true
+      }
+    ],
+    "seconds": 657.823480405
+  },
+  "lab": {
+    "resolver": "127.0.0.1:54453",
+    "own_lab": true,
+    "udp_open": true,
+    "live": [
+      "api.azqlab.lan",
+      "app.azqlab.lan",
+      "assets.azqlab.lan",
+      "dev.azqlab.lan",
+      "docs.azqlab.lan",
+      "mail.azqlab.lan",
+      "old-shop.azqlab.lan",
+      "staging.azqlab.lan",
+      "vpn.azqlab.lan",
+      "www.azqlab.lan"
+    ],
+    "truth": [
+      "api.azqlab.lan",
+      "app.azqlab.lan",
+      "assets.azqlab.lan",
+      "dev.azqlab.lan",
+      "docs.azqlab.lan",
+      "mail.azqlab.lan",
+      "old-shop.azqlab.lan",
+      "staging.azqlab.lan",
+      "vpn.azqlab.lan",
+      "www.azqlab.lan"
+    ],
+    "dangling": [
+      "assets",
+      "docs",
+      "old-shop"
+    ],
+    "wildcard_zone": [
+      "real.wild.azqlab.lan"
+    ]
+  },
+  "docs": {
+    "readme_version": "0.10.0",
+    "readme_date": "2026-10-30",
+    "changelog_version": "0.10.0",
+    "tag": "0.10.0",
+    "record_date": "2026-10-30"
+  },
+  "openapi": {
+    "specs": [
+      {
+        "app": "Juice Shop",
+        "paths": 74
+      },
+      {
+        "app": "VAmPI",
+        "paths": 13
+      },
+      {
+        "app": "DVGA",
+        "paths": 2
+      },
+      {
+        "app": "duplicate /blog and /blog/",
+        "paths": 3
+      },
+      {
+        "app": "ginandjuice.shop",
+        "paths": 16
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "[default] juice-shop: ≥ 90% of the server routes its frontend calls",
+      "pass": true,
+      "detail": "azhaq 70/77, katana 1/77, jsluice 0/77"
+    },
+    {
+      "name": "[default] juice-shop: no catch-all page reported as visited",
+      "pass": true,
+      "detail": "0 visited URLs return the SPA index"
+    },
+    {
+      "name": "[default] crawl juice-shop: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 53, reference 1; routes found azhaq 61, katana 5; known 53 and 1 of 77; time ×0.16 of the reference | azhaq crawl -u http://127.0.0.1:3101/ -depth 3 -silent vs katana -u http://127.0.0.1:3101/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10"
+    },
+    {
+      "name": "[default] crawl juice-shop: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 2.2s, reference 13.8s (the median of 3 below 20 s, one run above) | azhaq crawl -u http://127.0.0.1:3101/ -depth 3 -silent vs katana -u http://127.0.0.1:3101/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10"
+    },
+    {
+      "name": "[default] roles: Juice Shop anonymous → user",
+      "pass": true,
+      "detail": "38 endpoints differ; 401 → 200 on 2/2 of /api/Users, /rest/user/authentication-details"
+    },
+    {
+      "name": "[default] roles: Juice Shop anonymous → user, signed in with Chrome",
+      "pass": true,
+      "detail": "40 endpoints differ; 401 → 200 on 2/2 (with a token: 38 endpoints) "
+    },
+    {
+      "name": "[default] juice-shop: -browser finds the known routes katana -headless finds",
+      "pass": true,
+      "detail": "azhaq -browser 70/77 in 11s, katana -headless 6/77 in 8s"
+    },
+    {
+      "name": "[default] identical runs diff empty",
+      "pass": true,
+      "detail": "added=0 removed=0 observations=0"
+    },
+    {
+      "name": "[default] crawl vampi: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 1, reference 1; routes found azhaq 1, katana 1; known 1 and 1 of 12; time ×0.02 of the reference | azhaq crawl -u http://127.0.0.1:5102/ -depth 3 -silent vs katana -u http://127.0.0.1:5102/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10"
+    },
+    {
+      "name": "[default] crawl vampi: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.2s, reference 10.7s (the median of 3 below 20 s, one run above) | azhaq crawl -u http://127.0.0.1:5102/ -depth 3 -silent vs katana -u http://127.0.0.1:5102/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10"
+    },
+    {
+      "name": "[default] vampi: paths from /openapi.json",
+      "pass": true,
+      "detail": "azhaq 12/12, katana 1/12"
+    },
+    {
+      "name": "[default] diff across different seeds is labelled",
+      "pass": true,
+      "detail": "seeds_differ=true"
+    },
+    {
+      "name": "[default] crawl ginandjuice.shop: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; routes found azhaq 11, katana 14; known 2 and 2 of 3; time ×0.51 of the reference | azhaq crawl -u https://ginandjuice.shop/ -depth 3 -silent -rate 5 vs katana -u https://ginandjuice.shop/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[default] crawl ginandjuice.shop: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.5s, reference 20.8s (the median of 3 below 20 s, one run above) | azhaq crawl -u https://ginandjuice.shop/ -depth 3 -silent -rate 5 vs katana -u https://ginandjuice.shop/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[default] ginandjuice: page scripts parsed",
+      "pass": true,
+      "detail": "4/4 page scripts, 3/3 routes only in page scripts or script-driven forms"
+    },
+    {
+      "name": "[default] ginandjuice: product and blog pages are one template each",
+      "pass": true,
+      "detail": "map lines: product 1, blog post 1"
+    },
+    {
+      "name": "[default] known routes ≥ katana ∪ jsluice on every app",
+      "pass": true,
+      "detail": "juice-shop 70/77 vs 1, vampi 12/12 vs 1, ginandjuice.shop 3/3 vs 2"
+    },
+    {
+      "name": "[default] no catch-all page reported as visited on any app",
+      "pass": true,
+      "detail": "3 apps"
+    },
+    {
+      "name": "[default] dirs: results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 20, reference 20; old bar: 22 of 22 = 100%; hits azhaq 22, ffuf 22, shared 22; 4750 words, 2 apps; time ×1.01 of the reference; ffuf only [] | azhaq dirs -u http://127.0.0.1:5102/ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -silent vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -ac -s"
+    },
+    {
+      "name": "[default] dirs: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 25.4s, reference 25.0s (the median of 3 below 20 s, one run above) | azhaq dirs -u http://127.0.0.1:5102/ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -silent vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -ac -s"
+    },
+    {
+      "name": "[default] dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 2, ffuf 2"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:3101 calibrated (-ac): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 18, reference 18; old bar: 20 of 20 = 100%; hits azhaq 20, ffuf 20, shared 20; 4750 words; time ×1.04 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:3101 calibrated (-ac): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 20.3s, reference 19.6s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac"
+    },
+    {
+      "name": "[default] fuzz http://127.0.0.1:3101/: the JSON report equals ffuf's (duration dropped)",
+      "pass": true,
+      "detail": "20 results equal"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:3101 filtered (-fs 9984): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 18, reference 18; old bar: 20 of 20 = 100%; hits azhaq 20, ffuf 20, shared 20; 4750 words; time ×0.96 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 9984 vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 9984"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:3101 filtered (-fs 9984): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 19.5s, reference 20.2s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 9984 vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 9984"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:5102 calibrated (-ac): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; old bar: 2 of 2 = 100%; hits azhaq 2, ffuf 2, shared 2; 4750 words; time ×0.98 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:5102 calibrated (-ac): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 5.4s, reference 5.5s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -ac"
+    },
+    {
+      "name": "[default] fuzz http://127.0.0.1:5102/: the JSON report equals ffuf's (duration dropped)",
+      "pass": true,
+      "detail": "2 results equal"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:5102 filtered (-fs 205): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; old bar: 2 of 2 = 100%; hits azhaq 2, ffuf 2, shared 2; 4750 words; time ×1.14 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 205 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 205"
+    },
+    {
+      "name": "[default] fuzz 127.0.0.1:5102 filtered (-fs 205): time ≤ 1.05× the reference's",
+      "pass": false,
+      "detail": "azhaq 5.6s, reference 4.9s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 205 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/common.txt -s -fs 205"
+    },
+    {
+      "name": "[default] screenshots: results ≥ the reference's, confirmed by the image files: each decodes and is not one colour",
+      "pass": true,
+      "detail": "azhaq 8, reference 6; old bar: 8 of 6 = 133%; 8 targets; azhaq listed 8, gowitness wrote 6 files; time ×0.10 of the reference | azhaq shots -l /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/targets.txt -dir /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/azhaq0 -silent vs gowitness scan file -f /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/targets.txt --chrome-path /usr/bin/google-chrome -s /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/gowitness0 -q"
+    },
+    {
+      "name": "[default] screenshots: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 6.3s, reference 64.5s (the median of 3 below 20 s, one run above) | azhaq shots -l /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/targets.txt -dir /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/azhaq0 -silent vs gowitness scan file -f /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/targets.txt --chrome-path /usr/bin/google-chrome -s /home/runner/work/azhaq/azhaq/bench/.work/shots-073500-default/gowitness0 -q"
+    },
+    {
+      "name": "[default] params: ginandjuice.shop (2 pages, 1,000 names, 5 requests per second) time ≤ 1.05× arjun's",
+      "pass": true,
+      "detail": "azhaq 10.3s, arjun 14.2s"
+    },
+    {
+      "name": "[default] params: results ≥ the reference's, confirmed by the planted server's own list of the parameters it reads (wrong names count against)",
+      "pass": true,
+      "detail": "azhaq 8, reference 8; old bar: 11 of 11 = 100%; planted pages: azhaq 8 right 0 wrong, arjun 8 right 0 wrong, of 8; all pages azhaq 12, arjun 11, shared 11; time ×0.20 of the reference | azhaq params -u https://ginandjuice.shop/blog/ -w /home/runner/work/azhaq/azhaq/bench/.work/params/gin-words.txt -silent -rate 5 vs arjun -u https://ginandjuice.shop/blog/ -w /home/runner/work/azhaq/azhaq/bench/.work/params/gin-words.txt -oJ /home/runner/work/azhaq/azhaq/bench/.work/params/arjun.json -q --disable-redirects --rate-limit 5"
+    },
+    {
+      "name": "[default] params: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 1.1s, reference 5.4s (the median of 3 below 20 s, one run above) | azhaq params -u https://ginandjuice.shop/blog/ -w /home/runner/work/azhaq/azhaq/bench/.work/params/gin-words.txt -silent -rate 5 vs arjun -u https://ginandjuice.shop/blog/ -w /home/runner/work/azhaq/azhaq/bench/.work/params/gin-words.txt -oJ /home/runner/work/azhaq/azhaq/bench/.work/params/arjun.json -q --disable-redirects --rate-limit 5"
+    },
+    {
+      "name": "[default] subs -live hackerone.com: results ≥ the reference's, confirmed by a name resolving at 9.9.9.9 or 208.67.222.222 (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 14, reference 12; old bar: 12 of 12 = 100%; azhaq printed 14, subfinder 33 names, dnsx 12 live; azhaq 14, reference 12 confirmed, both 12; subfinder 5s + dnsx 1s; time ×0.44 of the reference | azhaq subs -d hackerone.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d hackerone.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/hackerone.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live hackerone.com: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 2.7s, reference 6.2s (the median of 3 below 20 s, one run above) | azhaq subs -d hackerone.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d hackerone.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/hackerone.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live hackerone.com: every confirmed live name subfinder | dnsx finds is in azhaq's list or its source is named as failed",
+      "pass": true,
+      "detail": "0 gaps, 0 unexplained: []"
+    },
+    {
+      "name": "[default] subs -live tesla.com: results ≥ the reference's, confirmed by a name resolving at 9.9.9.9 or 208.67.222.222 (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 519, reference 429; old bar: 416 of 429 = 97%; azhaq printed 519, subfinder 1814 names, dnsx 429 live; azhaq 519, reference 429 confirmed, both 416; subfinder 14s + dnsx 52s; time ×0.26 of the reference | azhaq subs -d tesla.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d tesla.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/tesla.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live tesla.com: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 17.1s, reference 65.4s (the median of 3 below 20 s, one run above) | azhaq subs -d tesla.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d tesla.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/tesla.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live tesla.com: every confirmed live name subfinder | dnsx finds is in azhaq's list or its source is named as failed",
+      "pass": true,
+      "detail": "13 gaps, 0 unexplained: [akamai-apigateway-gallagher-external-api.tesla.com (subfinder: subdomaincenter) akamai-apigateway-mfs-stg.de.tesla.com (subfinder: subdomaincenter) akamai-apigateway-mytcore-prdsvc.tesla.com (subfinder: subdomaincenter) akamai-apigateway-sandbox-automation-billing.tesla.com (subfinder: subdomaincenter) akamai-apigateway-suppliers-rfq-stg.tesla.com (subfinder: subdomaincenter) apigateway-energy-fulfillment-cx-bff-prd.tesla.com (subfinder: subdomaincenter) apigateway-logisticsportalapi.tesla.com (subfinder: subdomaincenter) charging-guest-ownership.tesla.com (subfinder: subdomaincenter)] … 5 more"
+    },
+    {
+      "name": "[default] subs -live vulnweb.com: results ≥ the reference's, confirmed by a name resolving at 9.9.9.9 or 208.67.222.222 (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 7, reference 6; old bar: 6 of 6 = 100%; azhaq printed 7, subfinder 19 names, dnsx 6 live; azhaq 7, reference 6 confirmed, both 6; subfinder 7s + dnsx 1s; time ×2.24 of the reference | azhaq subs -d vulnweb.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d vulnweb.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/vulnweb.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live vulnweb.com: time ≤ 1.05× the reference's",
+      "pass": false,
+      "detail": "azhaq 16.4s, reference 7.3s (the median of 3 below 20 s, one run above) | azhaq subs -d vulnweb.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt vs subfinder -d vulnweb.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/vulnweb.com-default-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8"
+    },
+    {
+      "name": "[default] subs -live vulnweb.com: every confirmed live name subfinder | dnsx finds is in azhaq's list or its source is named as failed",
+      "pass": true,
+      "detail": "0 gaps, 0 unexplained: []"
+    },
+    {
+      "name": "[default] subdomain sources: no silent zeros",
+      "pass": true,
+      "detail": "every empty result is a failure flagged as error or degraded, or a zero every source answered"
+    },
+    {
+      "name": "[default] urls vulnweb.com: results ≥ the reference's, confirmed by being on the domain and not a static asset (the archives refuse this machine, so no other source is asked)",
+      "pass": false,
+      "detail": "azhaq 119, reference 150; old bar: 116 of 150 = 77%; azhaq 119 URLs, gau 150, gau's missing from azhaq 34 [http://testphp.vulnweb.com/7zSo1DIz.exe http://testphp.vulnweb.com/NhYzAp8A.exe http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl http://testphp.vulnweb.com/cart.php.[] … 30 more; time ×0.10 of the reference [azhaq finished with failures or was stopped: exit status 3   exit 3: finished, but what is marked ! failed; the results are usable] | azhaq urls -d vulnweb.com -silent vs gau --providers wayback,otx,urlscan --timeout 30 vulnweb.com"
+    },
+    {
+      "name": "[default] urls vulnweb.com: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 17.7s, reference 169.8s (the median of 3 below 20 s, one run above) | azhaq urls -d vulnweb.com -silent vs gau --providers wayback,otx,urlscan --timeout 30 vulnweb.com"
+    },
+    {
+      "name": "[default] urls vulnweb.com: every URL gau lists is in azhaq's list",
+      "pass": false,
+      "detail": "34 of gau's 150 missing [http://testphp.vulnweb.com/7zSo1DIz.exe http://testphp.vulnweb.com/NhYzAp8A.exe http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl http://testphp.vulnweb.com/cart.php.[ http://testphp.vulnweb.com/login.ph%E2%80%A6] … 29 more"
+    },
+    {
+      "name": "[default] dns brute force: results ≥ the reference's, confirmed by the lab resolver, asked directly by the bench (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 9, reference 9; old bar: 9 of 9 = 100%; azhaq [api.azqlab.lan app.azqlab.lan dev.azqlab.lan mail.azqlab.lan ns1.azqlab.lan ns2.azqlab.lan staging.azqlab.lan vpn.azqlab.lan www.azqlab.lan], dnsx [api.azqlab.lan app.azqlab.lan dev.azqlab.lan mail.azqlab.lan ns1.azqlab.lan ns2.azqlab.lan staging.azqlab.lan vpn.azqlab.lan www.azqlab.lan]; 5000 words on azqlab.lan; time ×0.16 of the reference | azhaq dns -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/subdomains-top1million-5000.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/brute/resolvers.txt -silent vs dnsx -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/subdomains-top1million-5000.txt -r 127.0.0.1:54453 -silent"
+    },
+    {
+      "name": "[default] dns brute force: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.1s, reference 0.7s (the median of 3 below 20 s, one run above) | azhaq dns -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/subdomains-top1million-5000.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/brute/resolvers.txt -silent vs dnsx -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/subdomains-top1million-5000.txt -r 127.0.0.1:54453 -silent"
+    },
+    {
+      "name": "[default] wildcard zone: no fake hosts",
+      "pass": true,
+      "detail": "3 of 3 real names found, 0 fake (dnsx without wildcard filtering reports 50)"
+    },
+    {
+      "name": "[default] dns record types: results ≥ the reference's, confirmed by the zone the bench serves (a name and type it holds)",
+      "pass": true,
+      "detail": "azhaq 12, reference 12; 32 names, 9 types; queries received azhaq 290, dnsx 523; time ×0.04 of the reference | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:58475 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa"
+    },
+    {
+      "name": "[default] dns record types: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.0s, reference 0.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:58475 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa"
+    },
+    {
+      "name": "[default] dns record types: azhaq's JSON values equal dnsx's",
+      "pass": true,
+      "detail": "0 differences []"
+    },
+    {
+      "name": "[default] dns -ptr: results ≥ the reference's, confirmed by the zone's PTR records",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; azhaq [app.bench.lan www.bench.lan], dnsx [app.bench.lan www.bench.lan] | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:58475 -ptr -json -silent"
+    },
+    {
+      "name": "[default] dns -ptr: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.0s, reference 0.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:58475 -ptr -json -silent"
+    },
+    {
+      "name": "[default] ports scanme.nmap.org top-1000: results ≥ the reference's, confirmed by an independent TCP connect",
+      "pass": true,
+      "detail": "azhaq 3, reference 3; old bar: 3 of 3 = 100%; azhaq only [], naabu only [] | azhaq ports -host scanme.nmap.org -p top-1000 -silent vs naabu -host scanme.nmap.org -top-ports 1000 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] ports scanme.nmap.org top-1000: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 1.8s, reference 5.8s (the median of 3 below 20 s, one run above) | azhaq ports -host scanme.nmap.org -p top-1000 -silent vs naabu -host scanme.nmap.org -top-ports 1000 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] ports 127.0.0.1 1-65535: results ≥ the reference's, confirmed by `ss -ltn` taken before and after the scan",
+      "pass": true,
+      "detail": "azhaq 9, reference 9; old bar: 9 of 9 = 100%; sockets listening throughout and missed: azhaq [], naabu [] | azhaq ports -host 127.0.0.1 -p 1-65535 -silent vs naabu -host 127.0.0.1 -p 1-65535 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] ports 127.0.0.1 1-65535: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 4.6s, reference 133.5s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.1 -p 1-65535 -silent vs naabu -host 127.0.0.1 -p 1-65535 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] ports 127.0.0.0/28: results ≥ the reference's, confirmed by the listeners the bench opened (a port that is not one counts against)",
+      "pass": true,
+      "detail": "azhaq 4, reference 4; planted 4; azhaq 4 of them, 4 reported; naabu 4, 4 reported | azhaq ports -host 127.0.0.0/28 -p 35577,35021,46789,41039,37259,34393 -silent vs naabu -host 127.0.0.0/28 -p 35577,35021,46789,41039,37259,34393 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] ports 127.0.0.0/28: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.1s, reference 2.5s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.0/28 -p 35577,35021,46789,41039,37259,34393 -silent vs naabu -host 127.0.0.0/28 -p 35577,35021,46789,41039,37259,34393 -scan-type c -Pn -silent"
+    },
+    {
+      "name": "[default] services: every lab daemon serves before anything is timed",
+      "pass": false,
+      "detail": "not serving after 4m0s: [10053 coredns (tcp)] (the rows for them measure a lab that was not up)"
+    },
+    {
+      "name": "[default] services (nmap -sV): results ≥ the reference's, confirmed by the lab's own list of what runs on each port (bench/services.yaml) and `ss` showing every port listening",
+      "pass": true,
+      "detail": "azhaq 15, reference 12; 15 ports; with a product and version: azhaq 13, nmap 11; azhaq missed []; nmap missed [11883 mosquitto (mqtt): \"\" 21211 memcached: \"unknown\" 10053 coredns (tcp): \"tcpwrapped\"]; time ×0.02 of the reference | azhaq ports -host 127.0.0.1 -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -json -silent vs nmap -sV -Pn -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -oX - 127.0.0.1"
+    },
+    {
+      "name": "[default] services (nmap -sV): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 2.8s, reference 145.3s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.1 -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -json -silent vs nmap -sV -Pn -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -oX - 127.0.0.1"
+    },
+    {
+      "name": "[default] services: azhaq names ≥ 90% of the lab's TCP services",
+      "pass": true,
+      "detail": "15 of 15"
+    },
+    {
+      "name": "[default] probe: results ≥ the reference's, confirmed by a GET to the host itself giving the status the tool reported",
+      "pass": true,
+      "detail": "azhaq 107, reference 107; old bar: 107 of 107 = 100%; 107 hosts (5 apps, the services lab's web ports, 100 local servers); answered azhaq 107, httpx 107, shared 107; time ×0.54 of the reference | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -json -silent -favicon -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -silent -json -fr -td -cdn -favicon -title -sc -no-color"
+    },
+    {
+      "name": "[default] probe: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.9s, reference 1.6s (the median of 3 below 20 s, one run above) | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -json -silent -favicon -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -silent -json -fr -td -cdn -favicon -title -sc -no-color"
+    },
+    {
+      "name": "[default] probe: status, title and tech agree with httpx on ≥ 95% of shared hosts",
+      "pass": true,
+      "detail": "all three 106/107 (status 107, title 107, tech 106; 0 redirects out of the site compared by their own status)"
+    },
+    {
+      "name": "[default] probe public sites (5/s): results ≥ the reference's, confirmed by a GET to the site giving the status the tool reported (a redirect out of the site counts)",
+      "pass": true,
+      "detail": "azhaq 1, reference 1; [ginandjuice.shop testphp.vulnweb.com demo.testfire.net]; one run each [azhaq finished with failures or was stopped: exit status 3 {\"type\":\"summary\",\"command\":\"probe\",\"version\":\"0.10.1-0.20261031072033-054691250efe+dirty\",\"complete\":false,\"exit\":3,\"results\":3,\"counts\":{\"hosts …] | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -json -silent -rate 5 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -silent -json -fr -title -sc -rl 5 -t 1 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -no-color"
+    },
+    {
+      "name": "[default] probe public sites (5/s): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.4s, reference 21.5s (the median of 3 below 20 s, one run above) | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -json -silent -rate 5 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -silent -json -fr -title -sc -rl 5 -t 1 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -no-color"
+    },
+    {
+      "name": "[default] probe: every input is a row, a failure or a skip (rows + failed + skipped == inputs)",
+      "pass": true,
+      "detail": "6 distinct inputs: 6 rows, 0 failed or skipped in the summary, unaccounted [] (exit 3; azhaq probe -l LIST -json; the list holds a live host, a redirect to another input, a closed port, a raw TCP port, a name that does not resolve, a repeat, a URL)"
+    },
+    {
+      "name": "[default] notify: results ≥ the reference's, confirmed by the stub's own log (a request with the message in its body, per provider)",
+      "pass": true,
+      "detail": "azhaq 6, reference 6; 6 messages to 2 providers; distinct requests at the stub: azhaq 6, notify 6  [azhaq finished with failures or was stopped: exit status 3   exit 3: finished, but what is marked ! failed; the results are usable] | azhaq notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/azhaq.yaml -silent vs notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/notify.yaml -silent -duc"
+    },
+    {
+      "name": "[default] notify: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 5.0s, reference 5.0s (the median of 3 below 20 s, one run above) | azhaq notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/azhaq.yaml -silent vs notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/notify.yaml -silent -duc"
+    },
+    {
+      "name": "[default] notify: the same requests as notify's (bodies and content types), per the stub",
+      "pass": true,
+      "detail": "azhaq /custom application/json {\"text\":\"new host app1.example.com live\"} ; /custom application/json {\"text\":\"new host app2.example.com live\"} ; /custom application/json {\"text\":\"new host app3.example.com live\"} ; /custom application/json {\"text\":\"new host app4.example.com live\"} ; /custom application/json… | notify /custom application/json {\"text\":\"new host app1.example.com live\"} ; /custom application/json {\"text\":\"new host app2.example.com live\"} ; /custom application/json {\"text\":\"new host app3.example.com live\"} ; /custom application/json {\"text\":\"new host app4.example.com live\"} ; /custom application/json…"
+    },
+    {
+      "name": "[default] notify: a webhook token reaches no output when the webhook cannot be reached",
+      "pass": true,
+      "detail": "azhaq watch -always -notify http://127.0.0.1:CLOSED/services/…/TOKEN: exit 3, token printed: false"
+    },
+    {
+      "name": "[polite] crawl juice-shop: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 53, reference 1; routes found azhaq 61, katana 5; known 53 and 1 of 77; time ×0.94 of the reference | azhaq crawl -u http://127.0.0.1:3101/ -depth 3 -silent -rate 5 vs katana -u http://127.0.0.1:3101/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] crawl juice-shop: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 16.6s, reference 17.6s (the median of 3 below 20 s, one run above) | azhaq crawl -u http://127.0.0.1:3101/ -depth 3 -silent -rate 5 vs katana -u http://127.0.0.1:3101/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] crawl vampi: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 1, reference 1; routes found azhaq 1, katana 1; known 1 and 1 of 12; time ×0.01 of the reference | azhaq crawl -u http://127.0.0.1:5102/ -depth 3 -silent -rate 5 vs katana -u http://127.0.0.1:5102/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] crawl vampi: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.1s, reference 10.5s (the median of 3 below 20 s, one run above) | azhaq crawl -u http://127.0.0.1:5102/ -depth 3 -silent -rate 5 vs katana -u http://127.0.0.1:5102/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] crawl ginandjuice.shop: results ≥ the reference's, confirmed by the app's own routes (its server code or OpenAPI document, or the routes only its page scripts hold)",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; routes found azhaq 11, katana 14; known 2 and 2 of 3; time ×0.51 of the reference | azhaq crawl -u https://ginandjuice.shop/ -depth 3 -silent -rate 5 vs katana -u https://ginandjuice.shop/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] crawl ginandjuice.shop: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.5s, reference 20.8s (the median of 3 below 20 s, one run above) | azhaq crawl -u https://ginandjuice.shop/ -depth 3 -silent -rate 5 vs katana -u https://ginandjuice.shop/ -d 3 -jc -jsl -silent -nc -timeout 10 -c 10 -rl 5"
+    },
+    {
+      "name": "[polite] dirs: results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 13, reference 13; old bar: 13 of 13 = 100%; hits azhaq 13, ffuf 13, shared 13; 257 words, 2 apps; time ×1.01 of the reference; ffuf only [] | azhaq dirs -u http://127.0.0.1:5102/ -w /home/runner/work/azhaq/azhaq/bench/.work/dirs-polite.txt -silent -rate 5 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/dirs-polite.txt -ac -s -rate 5"
+    },
+    {
+      "name": "[polite] dirs: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 104.1s, reference 102.9s (the median of 3 below 20 s, one run above) | azhaq dirs -u http://127.0.0.1:5102/ -w /home/runner/work/azhaq/azhaq/bench/.work/dirs-polite.txt -silent -rate 5 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/dirs-polite.txt -ac -s -rate 5"
+    },
+    {
+      "name": "[polite] dirs: no more false positives than ffuf",
+      "pass": true,
+      "detail": "hits that answer like a missing path: azhaq 0, ffuf 0"
+    },
+    {
+      "name": "[polite] fuzz 127.0.0.1:3101 calibrated (-ac): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 11, reference 11; old bar: 11 of 11 = 100%; hits azhaq 11, ffuf 11, shared 11; 257 words; time ×1.02 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5 vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5"
+    },
+    {
+      "name": "[polite] fuzz 127.0.0.1:3101 calibrated (-ac): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 52.4s, reference 51.4s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5 vs ffuf -u http://127.0.0.1:3101/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5"
+    },
+    {
+      "name": "[polite] fuzz 127.0.0.1:5102 calibrated (-ac): results ≥ the reference's, confirmed by a request that is not the app's catch-all answer",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; old bar: 2 of 2 = 100%; hits azhaq 2, ffuf 2, shared 2; 257 words; time ×1.02 of the reference; ffuf only [] | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5"
+    },
+    {
+      "name": "[polite] fuzz 127.0.0.1:5102 calibrated (-ac): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 52.4s, reference 51.5s (the median of 3 below 20 s, one run above) | azhaq fuzz -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5 vs ffuf -u http://127.0.0.1:5102/FUZZ -w /home/runner/work/azhaq/azhaq/bench/.work/fuzz-polite.txt -s -ac -rate 5"
+    },
+    {
+      "name": "[polite] screenshots: results ≥ the reference's, confirmed by the image files: each decodes and is not one colour",
+      "pass": true,
+      "detail": "azhaq 4, reference 4; old bar: 4 of 4 = 100%; 4 targets; azhaq listed 4, gowitness wrote 4 files; time ×2.91 of the reference | azhaq shots -l /home/runner/work/azhaq/azhaq/bench/.work/shots-080436-polite/targets.txt -dir /home/runner/work/azhaq/azhaq/bench/.work/shots-080436-polite/azhaq0 -silent -rate 5 vs gowitness scan file -f /home/runner/work/azhaq/azhaq/bench/.work/shots-080436-polite/targets.txt --chrome-path /usr/bin/google-chrome -s /home/runner/work/azhaq/azhaq/bench/.work/shots-080436-polite/gowitness0 -q"
+    },
+    {
+      "name": "[polite] params: results ≥ the reference's, confirmed by the planted server's own list of the parameters it reads (wrong names count against)",
+      "pass": true,
+      "detail": "azhaq 8, reference 8; old bar: 9 of 9 = 100%; planted pages: azhaq 8 right 0 wrong, arjun 8 right 0 wrong, of 8; all pages azhaq 9, arjun 9, shared 9; time ×0.83 of the reference | azhaq params -u http://127.0.0.1:3101/rest/products/search -w /home/runner/work/azhaq/azhaq/bench/.work/burp-parameter-names.txt -silent -rate 5 vs arjun -u http://127.0.0.1:3101/rest/products/search -w /home/runner/work/azhaq/azhaq/bench/.work/burp-parameter-names.txt -oJ /home/runner/work/azhaq/azhaq/bench/.work/params/arjun.json -q --disable-redirects --rate-limit 5"
+    },
+    {
+      "name": "[polite] params: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 36.9s, reference 44.4s (the median of 3 below 20 s, one run above) | azhaq params -u http://127.0.0.1:3101/rest/products/search -w /home/runner/work/azhaq/azhaq/bench/.work/burp-parameter-names.txt -silent -rate 5 vs arjun -u http://127.0.0.1:3101/rest/products/search -w /home/runner/work/azhaq/azhaq/bench/.work/burp-parameter-names.txt -oJ /home/runner/work/azhaq/azhaq/bench/.work/params/arjun.json -q --disable-redirects --rate-limit 5"
+    },
+    {
+      "name": "[polite] subs -live hackerone.com: results ≥ the reference's, confirmed by a name resolving at 9.9.9.9 or 208.67.222.222 (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 14, reference 12; old bar: 12 of 12 = 100%; azhaq printed 14, subfinder 33 names, dnsx 12 live; azhaq 14, reference 12 confirmed, both 12; subfinder 5s + dnsx 4s; time ×1.35 of the reference | azhaq subs -d hackerone.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt -dns-rate 10 vs subfinder -d hackerone.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/hackerone.com-polite-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8 -rl 10"
+    },
+    {
+      "name": "[polite] subs -live hackerone.com: time ≤ 1.05× the reference's",
+      "pass": false,
+      "detail": "azhaq 12.6s, reference 9.3s (the median of 3 below 20 s, one run above) | azhaq subs -d hackerone.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt -dns-rate 10 vs subfinder -d hackerone.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/hackerone.com-polite-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8 -rl 10"
+    },
+    {
+      "name": "[polite] subs -live hackerone.com: every confirmed live name subfinder | dnsx finds is in azhaq's list or its source is named as failed",
+      "pass": true,
+      "detail": "0 gaps, 0 unexplained: []"
+    },
+    {
+      "name": "[polite] subs -live vulnweb.com: results ≥ the reference's, confirmed by a name resolving at 9.9.9.9 or 208.67.222.222 (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 7, reference 6; old bar: 6 of 6 = 100%; azhaq printed 7, subfinder 19 names, dnsx 6 live; azhaq 7, reference 6 confirmed, both 6; subfinder 7s + dnsx 2s; time ×1.21 of the reference | azhaq subs -d vulnweb.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt -dns-rate 10 vs subfinder -d vulnweb.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/vulnweb.com-polite-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8 -rl 10"
+    },
+    {
+      "name": "[polite] subs -live vulnweb.com: time ≤ 1.05× the reference's",
+      "pass": false,
+      "detail": "azhaq 10.1s, reference 8.4s (the median of 3 below 20 s, one run above) | azhaq subs -d vulnweb.com -live -json -silent -resolvers /home/runner/work/azhaq/azhaq/bench/.work/domains/resolvers.txt -dns-rate 10 vs subfinder -d vulnweb.com -silent -json -cs | dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/domains/vulnweb.com-polite-names.txt -silent -a -aaaa -cname -r 1.1.1.1,8.8.8.8 -rl 10"
+    },
+    {
+      "name": "[polite] subs -live vulnweb.com: every confirmed live name subfinder | dnsx finds is in azhaq's list or its source is named as failed",
+      "pass": true,
+      "detail": "0 gaps, 0 unexplained: []"
+    },
+    {
+      "name": "[polite] subdomain sources: no silent zeros",
+      "pass": true,
+      "detail": "every empty result is a failure flagged as error or degraded, or a zero every source answered"
+    },
+    {
+      "name": "[polite] urls vulnweb.com: results ≥ the reference's, confirmed by being on the domain and not a static asset (the archives refuse this machine, so no other source is asked)",
+      "pass": false,
+      "detail": "azhaq 119, reference 150; old bar: 116 of 150 = 77%; azhaq 119 URLs, gau 150, gau's missing from azhaq 34 [http://testphp.vulnweb.com/7zSo1DIz.exe http://testphp.vulnweb.com/NhYzAp8A.exe http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl http://testphp.vulnweb.com/cart.php.[] … 30 more; time ×0.31 of the reference [azhaq finished with failures or was stopped: exit status 3   exit 3: finished, but what is marked ! failed; the results are usable] | azhaq urls -d vulnweb.com -silent vs gau --threads 1 --providers wayback,otx,urlscan --timeout 30 vulnweb.com"
+    },
+    {
+      "name": "[polite] urls vulnweb.com: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 18.0s, reference 58.0s (the median of 3 below 20 s, one run above) | azhaq urls -d vulnweb.com -silent vs gau --threads 1 --providers wayback,otx,urlscan --timeout 30 vulnweb.com"
+    },
+    {
+      "name": "[polite] urls vulnweb.com: every URL gau lists is in azhaq's list",
+      "pass": false,
+      "detail": "34 of gau's 150 missing [http://testphp.vulnweb.com/7zSo1DIz.exe http://testphp.vulnweb.com/NhYzAp8A.exe http://testphp.vulnweb.com/acunetix_xsl_inclusion_test.xsl http://testphp.vulnweb.com/cart.php.[ http://testphp.vulnweb.com/login.ph%E2%80%A6] … 29 more"
+    },
+    {
+      "name": "[polite] dns brute force: results ≥ the reference's, confirmed by the lab resolver, asked directly by the bench (A, AAAA or CNAME)",
+      "pass": true,
+      "detail": "azhaq 9, reference 9; old bar: 9 of 9 = 100%; azhaq [api.azqlab.lan app.azqlab.lan dev.azqlab.lan mail.azqlab.lan ns1.azqlab.lan ns2.azqlab.lan staging.azqlab.lan vpn.azqlab.lan www.azqlab.lan], dnsx [api.azqlab.lan app.azqlab.lan dev.azqlab.lan mail.azqlab.lan ns1.azqlab.lan ns2.azqlab.lan staging.azqlab.lan vpn.azqlab.lan www.azqlab.lan]; 310 words on azqlab.lan; time ×0.96 of the reference | azhaq dns -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/brute/words-polite.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/brute/resolvers.txt -silent -dns-rate 10 vs dnsx -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/brute/words-polite.txt -r 127.0.0.1:54453 -silent -rl 10"
+    },
+    {
+      "name": "[polite] dns brute force: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 29.3s, reference 30.5s (the median of 3 below 20 s, one run above) | azhaq dns -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/brute/words-polite.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/brute/resolvers.txt -silent -dns-rate 10 vs dnsx -d azqlab.lan -w /home/runner/work/azhaq/azhaq/bench/.work/brute/words-polite.txt -r 127.0.0.1:54453 -silent -rl 10"
+    },
+    {
+      "name": "[polite] dns record types: results ≥ the reference's, confirmed by the zone the bench serves (a name and type it holds)",
+      "pass": true,
+      "detail": "azhaq 12, reference 12; 32 names, 9 types; queries received azhaq 290, dnsx 523; time ×0.86 of the reference | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa -rl 10 vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:53504 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa -rl 10"
+    },
+    {
+      "name": "[polite] dns record types: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 3.0s, reference 3.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa -rl 10 vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/names.txt -r 127.0.0.1:53504 -json -silent -a -aaaa -cname -mx -ns -txt -srv -caa -soa -rl 10"
+    },
+    {
+      "name": "[polite] dns record types: azhaq's JSON values equal dnsx's",
+      "pass": true,
+      "detail": "0 differences []"
+    },
+    {
+      "name": "[polite] dns record types: queries per second at the server within the rate, or no more than dnsx's at the same setting",
+      "pass": true,
+      "detail": "most in one second: azhaq 92, dnsx 180 (rate 10 per second; 290 and 523 queries)"
+    },
+    {
+      "name": "[polite] dns -ptr: results ≥ the reference's, confirmed by the zone's PTR records",
+      "pass": true,
+      "detail": "azhaq 2, reference 2; azhaq [app.bench.lan www.bench.lan], dnsx [app.bench.lan www.bench.lan] | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:53504 -ptr -json -silent"
+    },
+    {
+      "name": "[polite] dns -ptr: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 0.0s, reference 0.5s (the median of 3 below 20 s, one run above) | azhaq dns -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -resolvers /home/runner/work/azhaq/azhaq/bench/.work/dns/resolvers.txt -ptr -json -silent vs dnsx -l /home/runner/work/azhaq/azhaq/bench/.work/dns/ips.txt -r 127.0.0.1:53504 -ptr -json -silent"
+    },
+    {
+      "name": "[polite] ports scanme.nmap.org top-1000: results ≥ the reference's, confirmed by an independent TCP connect",
+      "pass": true,
+      "detail": "azhaq 3, reference 3; old bar: 3 of 3 = 100%; azhaq only [], naabu only [] | azhaq ports -host scanme.nmap.org -p top-1000 -silent -rate 100 vs naabu -host scanme.nmap.org -top-ports 1000 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] ports scanme.nmap.org top-1000: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.2s, reference 61.7s (the median of 3 below 20 s, one run above) | azhaq ports -host scanme.nmap.org -p top-1000 -silent -rate 100 vs naabu -host scanme.nmap.org -top-ports 1000 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] ports 127.0.0.1 top-1000: results ≥ the reference's, confirmed by `ss -ltn` taken before and after the scan",
+      "pass": true,
+      "detail": "azhaq 6, reference 6; old bar: 6 of 6 = 100%; sockets listening throughout and missed: azhaq [127.0.0.1:3101 127.0.0.1:5013 127.0.0.1:5020], naabu [127.0.0.1:3101 127.0.0.1:5013 127.0.0.1:5020] | azhaq ports -host 127.0.0.1 -p top-1000 -silent -rate 100 vs naabu -host 127.0.0.1 -top-ports 1000 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] ports 127.0.0.1 top-1000: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.0s, reference 31.5s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.1 -p top-1000 -silent -rate 100 vs naabu -host 127.0.0.1 -top-ports 1000 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] ports 127.0.0.0/28: results ≥ the reference's, confirmed by the listeners the bench opened (a port that is not one counts against)",
+      "pass": true,
+      "detail": "azhaq 4, reference 4; planted 4; azhaq 4 of them, 4 reported; naabu 4, 4 reported | azhaq ports -host 127.0.0.0/28 -p 37785,41705,36297,46009,33839,45181 -silent -rate 100 vs naabu -host 127.0.0.0/28 -p 37785,41705,36297,46009,33839,45181 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] ports 127.0.0.0/28: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 1.0s, reference 4.5s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.0/28 -p 37785,41705,36297,46009,33839,45181 -silent -rate 100 vs naabu -host 127.0.0.0/28 -p 37785,41705,36297,46009,33839,45181 -scan-type c -Pn -silent -rate 100"
+    },
+    {
+      "name": "[polite] services: every lab daemon serves before anything is timed",
+      "pass": false,
+      "detail": "not serving after 4m0s: [10053 coredns (tcp)] (the rows for them measure a lab that was not up)"
+    },
+    {
+      "name": "[polite] services (nmap -sV): results ≥ the reference's, confirmed by the lab's own list of what runs on each port (bench/services.yaml) and `ss` showing every port listening",
+      "pass": true,
+      "detail": "azhaq 15, reference 12; 15 ports; with a product and version: azhaq 13, nmap 11; azhaq missed []; nmap missed [11883 mosquitto (mqtt): \"\" 21211 memcached: \"unknown\" 10053 coredns (tcp): \"tcpwrapped\"]; time ×0.02 of the reference | azhaq ports -host 127.0.0.1 -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -json -silent -rate 100 vs nmap -sV -Pn -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -oX - 127.0.0.1 --max-rate 100"
+    },
+    {
+      "name": "[polite] services (nmap -sV): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 2.9s, reference 145.4s (the median of 3 below 20 s, one run above) | azhaq ports -host 127.0.0.1 -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -json -silent -rate 100 vs nmap -sV -Pn -p 16379,13306,15432,17017,11883,15682,21211,12222,10021,10025,18825,10389,10445,19200,10053 -oX - 127.0.0.1 --max-rate 100"
+    },
+    {
+      "name": "[polite] services: azhaq names ≥ 90% of the lab's TCP services",
+      "pass": true,
+      "detail": "15 of 15"
+    },
+    {
+      "name": "[polite] probe: results ≥ the reference's, confirmed by a GET to the host itself giving the status the tool reported",
+      "pass": true,
+      "detail": "azhaq 107, reference 107; old bar: 107 of 107 = 100%; 107 hosts (5 apps, the services lab's web ports, 100 local servers); answered azhaq 107, httpx 107, shared 107; time ×0.97 of the reference | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -json -silent -favicon -fr -rl 5 vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -silent -json -fr -td -cdn -favicon -title -sc -no-color -rl 5"
+    },
+    {
+      "name": "[polite] probe: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 21.3s, reference 21.9s (the median of 3 below 20 s, one run above) | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -json -silent -favicon -fr -rl 5 vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/hosts.txt -silent -json -fr -td -cdn -favicon -title -sc -no-color -rl 5"
+    },
+    {
+      "name": "[polite] probe: status, title and tech agree with httpx on ≥ 95% of shared hosts",
+      "pass": true,
+      "detail": "all three 106/107 (status 107, title 107, tech 106; 0 redirects out of the site compared by their own status)"
+    },
+    {
+      "name": "[polite] probe public sites (5/s): results ≥ the reference's, confirmed by a GET to the site giving the status the tool reported (a redirect out of the site counts)",
+      "pass": true,
+      "detail": "azhaq 1, reference 1; [ginandjuice.shop testphp.vulnweb.com demo.testfire.net]; one run each [azhaq finished with failures or was stopped: exit status 3 {\"type\":\"summary\",\"command\":\"probe\",\"version\":\"0.10.1-0.20261031072033-054691250efe+dirty\",\"complete\":false,\"exit\":3,\"results\":3,\"counts\":{\"hosts …] | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -json -silent -rate 5 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -silent -json -fr -title -sc -rl 5 -t 1 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -no-color"
+    },
+    {
+      "name": "[polite] probe public sites (5/s): time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 10.7s, reference 21.5s (the median of 3 below 20 s, one run above) | azhaq probe -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -json -silent -rate 5 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -fr vs httpx -l /home/runner/work/azhaq/azhaq/bench/.work/probe/public.txt -silent -json -fr -title -sc -rl 5 -t 1 -H User-Agent: azhaq-bench/1 (+https://github.com/trannghiach/azhaq) -no-color"
+    },
+    {
+      "name": "[polite] notify: results ≥ the reference's, confirmed by the stub's own log (a request with the message in its body, per provider)",
+      "pass": true,
+      "detail": "azhaq 6, reference 6; 6 messages to 2 providers; distinct requests at the stub: azhaq 6, notify 6  [azhaq finished with failures or was stopped: exit status 3   exit 3: finished, but what is marked ! failed; the results are usable] | azhaq notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/azhaq.yaml -silent -rl 5 vs notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/notify.yaml -silent -duc -rl 5"
+    },
+    {
+      "name": "[polite] notify: time ≤ 1.05× the reference's",
+      "pass": true,
+      "detail": "azhaq 1.0s, reference 1.0s (the median of 3 below 20 s, one run above) | azhaq notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/azhaq.yaml -silent -rl 5 vs notify -i /home/runner/work/azhaq/azhaq/bench/.work/notify/input.txt -provider-config /home/runner/work/azhaq/azhaq/bench/.work/notify/notify.yaml -silent -duc -rl 5"
+    },
+    {
+      "name": "drop-in: azhaq crawl finds Juice Shop's known routes",
+      "pass": false,
+      "detail": "69/77"
+    },
+    {
+      "name": "drop-in: azhaq probe reads stdin and writes httpx's JSON fields",
+      "pass": true,
+      "detail": "2 of 2 local apps, fields true"
+    },
+    {
+      "name": "export: OpenAPI of VAmPI holds every path of its own description",
+      "pass": true,
+      "detail": "12/12"
+    },
+    {
+      "name": "export: targets and HTML report",
+      "pass": true,
+      "detail": "targets 2 of 2, HTML 6382 bytes with its sections true"
+    },
+    {
+      "name": "scope: no request leaves the program's scope",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host (links, scripts, a redirect, a form, robots.txt; path, parameter, port and GraphQL modules on); 6 in-scope URLs mapped"
+    },
+    {
+      "name": "scope: no request leaves the program's scope with Chrome (-browser, -login, shots)",
+      "pass": true,
+      "detail": "0 requests to the out-of-scope host from run -browser (exit 0), run -login (exit 1: the sign-in form posts to the trap, so it is refused), shots (exit 0) and crawl -browser (exit 0)"
+    },
+    {
+      "name": "watch: an unchanged app reports no change",
+      "pass": true,
+      "detail": "3 runs, 0 reported changes []"
+    },
+    {
+      "name": "secrets: everything jsluice finds in the planted script, and more",
+      "pass": true,
+      "detail": "azhaq 12 values, jsluice 4, shared 4"
+    },
+    {
+      "name": "roles: anon → member → owner on a multi-tenant app, signed in with Chrome",
+      "pass": true,
+      "detail": "6/6 rows as expected; wrong []; extra []; signed-in logouts 0 "
+    },
+    {
+      "name": "scale: a run stopped by -max-requests and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "2 processes of at most 100 requests (Juice Shop received at most 100 from one); 180 URLs, one run 178, 0 missing"
+    },
+    {
+      "name": "scale: a stopped and resumed run sends at most 10% more than one run",
+      "pass": true,
+      "detail": "145 requests over 2 processes, one run 140"
+    },
+    {
+      "name": "scale: a run killed with SIGKILL and resumed maps everything one run maps",
+      "pass": true,
+      "detail": "killed after 0.9s; 178 URLs, one run 178"
+    },
+    {
+      "name": "scale: a run shared with two workers maps everything one run maps",
+      "pass": true,
+      "detail": "178 URLs, one run 178; the workers ran 78 tasks"
+    },
+    {
+      "name": "claims: the counter forwards and logs a WebSocket upgrade (Juice Shop socket.io)",
+      "pass": true,
+      "detail": "answer \"HTTP/1.1 101 Switching Protocols\", logged 1 requests, upgrade flag true "
+    },
+    {
+      "name": "claims: run unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 140, ledger 140 (http 140), counter 140"
+    },
+    {
+      "name": "claims: run rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 140, ledger 140 (http 140), counter 140"
+    },
+    {
+      "name": "claims: run rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (http 60), counter 60"
+    },
+    {
+      "name": "claims: run -browser unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 276, ledger 276 (chrome 130, http 146), counter 276; socket.io requests at the counter 0, WebSocket upgrades 0"
+    },
+    {
+      "name": "claims: run -browser rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 200, ledger 200 (chrome 54, http 146), counter 200; socket.io requests at the counter 0, WebSocket upgrades 0"
+    },
+    {
+      "name": "claims: run -browser rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (chrome 10, http 50), counter 60; socket.io requests at the counter 0, WebSocket upgrades 0"
+    },
+    {
+      "name": "claims: shots unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 49, ledger 49 (chrome 48, http 1), counter 49"
+    },
+    {
+      "name": "claims: shots rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 50, ledger 50 (chrome 49, http 1), counter 50"
+    },
+    {
+      "name": "claims: run -login unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 66, ledger 66 (chrome 10, http 56), counter 66"
+    },
+    {
+      "name": "claims: run -login rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 66, ledger 66 (chrome 10, http 56), counter 66"
+    },
+    {
+      "name": "claims: run -login rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (chrome 8, http 52), counter 60"
+    },
+    {
+      "name": "claims: run -login -browser unpaced: summary = ledger = what arrived",
+      "pass": false,
+      "detail": "summary 94, ledger 94 (chrome 38, http 56), counter 82 | ledger 94 != counter 82 | only in the ledger (12): GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/browser_api.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.css x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/main.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_scripting_api.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/shared.rollup.js x1; GET chrome://resources/css/roboto.css x1; GET chrome://resources/css/text_defaults_md.css x1; GET chrome://resources/js/assert.js x1; GET chrome://resources/js/load_time_data.js x1; GET chrome://resources/lit/v3_0/lit.rollup.js x1; GET chrome://resources/mojo/mojo/public/js/bindings.js x1"
+    },
+    {
+      "name": "claims: run -login -browser rate 10: summary = ledger = what arrived",
+      "pass": false,
+      "detail": "summary 91, ledger 91 (chrome 35, http 56), counter 82 | ledger 91 != counter 82 | only in the ledger (9): GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/index.css x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/main.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js x1; GET chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/shared.rollup.js x1; GET chrome://resources/css/roboto.css x1; GET chrome://resources/css/text_defaults_md.css x1; GET chrome://resources/js/load_time_data.js x1; GET chrome://resources/lit/v3_0/lit.rollup.js x1; GET chrome://resources/mojo/mojo/public/js/bindings.js x1"
+    },
+    {
+      "name": "claims: run -login -browser rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (chrome 20, http 40), counter 60"
+    },
+    {
+      "name": "claims: roles unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 130, ledger 130 (http 130), counter 130"
+    },
+    {
+      "name": "claims: roles rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 130, ledger 130 (http 130), counter 130"
+    },
+    {
+      "name": "claims: roles rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 130, ledger 130 (http 130), counter 130"
+    },
+    {
+      "name": "claims: roles -replay-writes put unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 139, ledger 139 (http 139), counter 139"
+    },
+    {
+      "name": "claims: roles -replay-writes put rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 139, ledger 139 (http 139), counter 139"
+    },
+    {
+      "name": "claims: roles -replay-writes put rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 142, ledger 142 (http 142), counter 142"
+    },
+    {
+      "name": "claims: dirs unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 505, ledger 505 (http 505), counter 505"
+    },
+    {
+      "name": "claims: dirs rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 200, ledger 200 (http 200), counter 200"
+    },
+    {
+      "name": "claims: dirs rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (http 60), counter 60"
+    },
+    {
+      "name": "claims: fuzz unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 506, ledger 506 (http 506), counter 506"
+    },
+    {
+      "name": "claims: fuzz rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 200, ledger 200 (http 200), counter 200"
+    },
+    {
+      "name": "claims: fuzz rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 60, ledger 60 (http 60), counter 60"
+    },
+    {
+      "name": "claims: params unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 8, ledger 8 (http 8), counter 8"
+    },
+    {
+      "name": "claims: params rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 8, ledger 8 (http 8), counter 8"
+    },
+    {
+      "name": "claims: params rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 8, ledger 8 (http 8), counter 8"
+    },
+    {
+      "name": "claims: ports -p unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 74, ledger 74 (tcp 74), counter 71; accepts map[127.0.0.1:35417:1 127.0.0.1:37281:23 127.0.0.1:37961:1 127.0.0.1:44119:23 127.0.0.1:45311:23]; HTTP requests answered 1, http ledger lines 0"
+    },
+    {
+      "name": "claims: ports -pu unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 14, ledger 14 (udp 14), counter 13; datagrams map[127.0.0.1:44551:4 127.0.0.1:51379:4 127.0.0.1:57102:4 127.0.0.1:59774:1]"
+    },
+    {
+      "name": "claims: ports -p rate 5: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 74, ledger 74 (tcp 74), counter 71; accepts map[127.0.0.1:34393:1 127.0.0.1:37237:23 127.0.0.1:40721:1 127.0.0.1:41951:23 127.0.0.1:45457:23]; HTTP requests answered 1, http ledger lines 0"
+    },
+    {
+      "name": "claims: ports -pu rate 5: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "summary 14, ledger 14 (udp 14), counter 13; datagrams map[127.0.0.1:37042:1 127.0.0.1:37598:4 127.0.0.1:50881:4 127.0.0.1:60844:4]"
+    },
+    {
+      "name": "claims: mcp budget 60 unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "first azhaq_map: summary 60, ledger 60 (http 60), counter 60; second azhaq_map: summary 0, ledger 0 (), counter 0; azhaq_ports after the budget is spent: summary 0, ledger 0 (), counter 0; result: the request budget of this server (60) is spent; restart azhaq mcp with a larger -max-requests; together: summary 60, ledger 60, counter 60"
+    },
+    {
+      "name": "claims: mcp budget 2 unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "two calls at once: summary 2, ledger 2 (http 2), counter 2; call 1: 2 ({\"highlights\":[{\"coverage\":\"visited\",\"key\":\"http://127.0.0.1:33033/\",\"role\":\"app\",\"status\":200,\"title\":\"OWASP Juice Shop…); call 2: 0 (refused: budget spent)"
+    },
+    {
+      "name": "claims: budget -max-requests 40 unpaced: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 40, ledger 40 (http 40), counter 40; resume: summary 40, ledger 40 (http 40), counter 40; together: summary 80, ledger 80, counter 80"
+    },
+    {
+      "name": "claims: kill switch run rate 10: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 31, ledger 31 (http 31), counter 31; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 111, ledger 111, counter 111"
+    },
+    {
+      "name": "claims: kill switch run rate 2: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 6, ledger 6 (http 6), counter 6; last request 0.00s after the file, exit 4; resume: summary 80, ledger 80 (http 80), counter 80; together: summary 86, ledger 86, counter 86"
+    },
+    {
+      "name": "claims: kill switch shots rate 5: summary = ledger = what arrived",
+      "pass": true,
+      "detail": "run: summary 13, ledger 13 (chrome 12, http 1), counter 13; last request 0.00s after the file, exit 4; resume: summary 52, ledger 52 (chrome 52), counter 52; together: summary 65, ledger 65, counter 65"
+    },
+    {
+      "name": "asn: announced prefixes match registered routes",
+      "pass": true,
+      "detail": "AS394161: azhaq 102 (RIPEstat), RADb 39, shared 31"
+    },
+    {
+      "name": "ptr: ≥ 95% of dnsx -ptr's answers",
+      "pass": true,
+      "detail": "45.33.32.128/25: azhaq 36, dnsx 36, shared 36 addresses with a reverse name"
+    },
+    {
+      "name": "lab: ports -pu finds the DNS lab's UDP port open",
+      "pass": true,
+      "detail": "azhaq ports -host 127.0.0.1 -p none -pu top,54453: 1 rows"
+    },
+    {
+      "name": "lab: subs -w -live gives the names the lab answers (dangling CNAMEs included, as dnsx counts them)",
+      "pass": true,
+      "detail": "lab answers 10 names, azhaq printed 10; missing [], extra []; azhaq subs -d azqlab.lan -w WORDS -resolvers LAB -live"
+    },
+    {
+      "name": "lab: a wildcard subzone gives only its real name",
+      "pass": true,
+      "detail": "azhaq dns -d wild.azqlab.lan -w WORDS: [real.wild.azqlab.lan] (the lab answers 5 for every label; only real.wild differs)"
+    },
+    {
+      "name": "lab: run -domain -passive names the dangling CNAMEs (assets, docs, old-shop)",
+      "pass": true,
+      "detail": "takeover candidates named: [assets docs old-shop]; exit 0"
+    },
+    {
+      "name": "openapi: the export of Juice Shop is a valid OpenAPI 3 document",
+      "pass": true,
+      "detail": "74 paths; 0 problems []"
+    },
+    {
+      "name": "openapi: the export of VAmPI is a valid OpenAPI 3 document",
+      "pass": true,
+      "detail": "13 paths; 0 problems []"
+    },
+    {
+      "name": "openapi: the export of DVGA is a valid OpenAPI 3 document",
+      "pass": true,
+      "detail": "2 paths; 0 problems []"
+    },
+    {
+      "name": "openapi: the export of duplicate /blog and /blog/ is a valid OpenAPI 3 document",
+      "pass": true,
+      "detail": "3 paths; 0 problems []"
+    },
+    {
+      "name": "openapi: the export of ginandjuice.shop is a valid OpenAPI 3 document",
+      "pass": true,
+      "detail": "16 paths; 0 problems []"
+    },
+    {
+      "name": "docs: no public doc says an active option needs -allow or a scope, or that requests are GETs only without HEAD",
+      "pass": true,
+      "detail": "0 lines: []"
+    },
+    {
+      "name": "docs: README's 'Latest run (date, vX)' names the newest release (CHANGELOG) and is not older than the tag",
+      "pass": true,
+      "detail": "README \"0.10.0\" on 2026-10-30, CHANGELOG newest \"0.10.0\", latest tag \"0.10.0\", newest bench record 2026-10-30"
+    }
+  ],
+  "runs": [
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 2.573078722,
+      "rss_mb": 87.6875,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 13.991570737,
+      "rss_mb": 1298.94140625,
+      "profile": "default"
+    },
+    {
+      "tool": "jsluice",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 1.180740619,
+      "rss_mb": 165.4609375,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 0.147510951,
+      "rss_mb": 14.21484375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 2.143971817,
+      "rss_mb": 82.046875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 2.16011269,
+      "rss_mb": 84.76171875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 2.550565482,
+      "rss_mb": 86.359375,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 13.807286415,
+      "rss_mb": 1189.06640625,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 13.92674892,
+      "rss_mb": 1197.046875,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 13.770313181,
+      "rss_mb": 1440.7109375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles",
+      "seconds": 5.918385657,
+      "rss_mb": 93.43359375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "roles-login",
+      "seconds": 16.278662362,
+      "rss_mb": 96.296875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 11.4319224,
+      "rss_mb": 93.625,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 8.274496826,
+      "rss_mb": 94.80078125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 2.744560485,
+      "rss_mb": 90.3984375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.394809076,
+      "rss_mb": 63.984375,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.517132795,
+      "rss_mb": 62.7734375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.297246569,
+      "rss_mb": 56.80859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.249476708,
+      "rss_mb": 58.34765625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.126812703,
+      "rss_mb": 57.78515625,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.672001971,
+      "rss_mb": 62.828125,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.498743169,
+      "rss_mb": 62.82421875,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.659782851,
+      "rss_mb": 63.16015625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 20.517729803,
+      "rss_mb": 87.09765625,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 20.640644991,
+      "rss_mb": 752.11328125,
+      "profile": "default"
+    },
+    {
+      "tool": "jsluice",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 0.256279556,
+      "rss_mb": 48.66796875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 10.510572308,
+      "rss_mb": 81.6171875,
+      "profile": "default"
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 20.765735715,
+      "rss_mb": 760.2421875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 20.067932596,
+      "rss_mb": 41.2265625,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.958897462,
+      "rss_mb": 25.15625,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.75862259,
+      "rss_mb": 23.48046875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.716831824,
+      "rss_mb": 26.25390625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.267298672,
+      "rss_mb": 38.8125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.269892573,
+      "rss_mb": 17.5078125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.305692897,
+      "rss_mb": 38.67578125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.270169114,
+      "rss_mb": 17.30859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.30204618,
+      "rss_mb": 38.5,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.776607905,
+      "rss_mb": 17.26171875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 20.312482664,
+      "rss_mb": 35.4140625,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.018051065,
+      "rss_mb": 24.23046875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.588418938,
+      "rss_mb": 23.6328125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.611775841,
+      "rss_mb": 23.80078125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/FUZZ",
+      "seconds": 18.407502016,
+      "rss_mb": 34.94921875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/FUZZ",
+      "seconds": 18.646625907,
+      "rss_mb": 27.82421875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.465900905,
+      "rss_mb": 35.203125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 20.223192104,
+      "rss_mb": 22.8671875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.189312686,
+      "rss_mb": 35.40625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 19.870706657,
+      "rss_mb": 35.02734375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.414038726,
+      "rss_mb": 33.2421875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.394160552,
+      "rss_mb": 17.44140625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.373474272,
+      "rss_mb": 33.203125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.581913314,
+      "rss_mb": 17.5234375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.509923698,
+      "rss_mb": 33.27734375,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.525000858,
+      "rss_mb": 17.43359375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/FUZZ",
+      "seconds": 6.70539706,
+      "rss_mb": 33.26171875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/FUZZ",
+      "seconds": 7.29836415,
+      "rss_mb": 17.46875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 6.078793006,
+      "rss_mb": 33.0703125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 6.150914414,
+      "rss_mb": 17.5546875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 5.583723667,
+      "rss_mb": 33.48828125,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 4.893842694,
+      "rss_mb": 17.44921875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 4.726568522,
+      "rss_mb": 33.1796875,
+      "profile": "default"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 4.894991208,
+      "rss_mb": 17.42578125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 6.309451081,
+      "rss_mb": 148.6640625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 5.932142312,
+      "rss_mb": 148.19140625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 6.290518318,
+      "rss_mb": 140.73828125,
+      "profile": "default"
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 64.457035262,
+      "rss_mb": 247.21875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.042795487,
+      "rss_mb": 32.57421875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.044407187,
+      "rss_mb": 35.10546875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.043290657,
+      "rss_mb": 34.96484375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.396843838,
+      "rss_mb": 35.12109375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.341813646,
+      "rss_mb": 35.08203125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/search",
+      "seconds": 0.342736296,
+      "rss_mb": 35.109375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.039119902,
+      "rss_mb": 32.58984375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.038687531,
+      "rss_mb": 32.99609375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.038566116,
+      "rss_mb": 32.625,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.31184054,
+      "rss_mb": 35.03515625,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.312260018,
+      "rss_mb": 35.0859375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:36103/item",
+      "seconds": 0.312868634,
+      "rss_mb": 35.22265625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 0.490392745,
+      "rss_mb": 34.3984375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 0.522979144,
+      "rss_mb": 34.6953125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 0.478556252,
+      "rss_mb": 34.19921875,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.9539097939999999,
+      "rss_mb": 36.1953125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.951882788,
+      "rss_mb": 36.0859375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 1.946378809,
+      "rss_mb": 36.20703125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.128578697,
+      "rss_mb": 33.609375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.175804219,
+      "rss_mb": 33.41015625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.143551516,
+      "rss_mb": 33.72265625,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.415723181,
+      "rss_mb": 35.0625,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.416359999,
+      "rss_mb": 35.0078125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/user/whoami",
+      "seconds": 0.477862027,
+      "rss_mb": 35.0859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 0.492063379,
+      "rss_mb": 34.18359375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 0.378380429,
+      "rss_mb": 34.3046875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 0.33547948,
+      "rss_mb": 33.74609375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 2.434457649,
+      "rss_mb": 35.65234375,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 2.403508703,
+      "rss_mb": 35.703125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:5102/users/v1",
+      "seconds": 2.398938065,
+      "rss_mb": 35.69921875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 5.12738123,
+      "rss_mb": 46.71875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 5.130278921,
+      "rss_mb": 46.5625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 5.135954132,
+      "rss_mb": 47.10546875,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 5.924189746,
+      "rss_mb": 43.7421875,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 4.885128874,
+      "rss_mb": 43.76171875,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/catalog",
+      "seconds": 5.761198228,
+      "rss_mb": 43.91796875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 5.11856228,
+      "rss_mb": 46.875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 5.124106633,
+      "rss_mb": 46.765625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 5.132961272,
+      "rss_mb": 46.92578125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 8.009410537,
+      "rss_mb": 43.078125,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 8.435385901,
+      "rss_mb": 43.7890625,
+      "profile": "default"
+    },
+    {
+      "tool": "arjun",
+      "target": "https://ginandjuice.shop/blog/",
+      "seconds": 8.854677473,
+      "rss_mb": 43.859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "hackerone.com",
+      "seconds": 2.71577081,
+      "rss_mb": 0,
+      "profile": "default"
+    },
+    {
+      "tool": "subfinder",
+      "target": "hackerone.com",
+      "seconds": 5.457419796,
+      "rss_mb": 50.671875,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "hackerone.com",
+      "seconds": 0.762183734,
+      "rss_mb": 48.79296875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "tesla.com",
+      "seconds": 17.070515494,
+      "rss_mb": 0,
+      "profile": "default"
+    },
+    {
+      "tool": "subfinder",
+      "target": "tesla.com",
+      "seconds": 13.739484185,
+      "rss_mb": 52.55859375,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "tesla.com",
+      "seconds": 51.694897472,
+      "rss_mb": 57.6953125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 16.377948408,
+      "rss_mb": 0,
+      "profile": "default"
+    },
+    {
+      "tool": "subfinder",
+      "target": "vulnweb.com",
+      "seconds": 6.630857766,
+      "rss_mb": 50.796875,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "vulnweb.com",
+      "seconds": 0.678067541,
+      "rss_mb": 47.2265625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 17.662588426,
+      "rss_mb": 0,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "default"
+    },
+    {
+      "tool": "gau",
+      "target": "vulnweb.com",
+      "seconds": 169.75557844,
+      "rss_mb": 12.859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "azqlab.lan",
+      "seconds": 0.115187617,
+      "rss_mb": 34.859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "azqlab.lan",
+      "seconds": 0.115258121,
+      "rss_mb": 34.78125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "azqlab.lan",
+      "seconds": 0.113645539,
+      "rss_mb": 33.97265625,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "azqlab.lan",
+      "seconds": 0.735956057,
+      "rss_mb": 61.2265625,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "azqlab.lan",
+      "seconds": 0.701067161,
+      "rss_mb": 61.2890625,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "azqlab.lan",
+      "seconds": 0.669233287,
+      "rss_mb": 58.72265625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "wild.bench.lan",
+      "seconds": 0.061192279,
+      "rss_mb": 43.14453125,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "wild.bench.lan",
+      "seconds": 0.666868922,
+      "rss_mb": 45.66796875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.01876965,
+      "rss_mb": 0.203125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.019670078,
+      "rss_mb": 0.01953125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.018447967,
+      "rss_mb": 0.08203125,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.500411585,
+      "rss_mb": 46.8828125,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.499644615,
+      "rss_mb": 47.5625,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.490268176,
+      "rss_mb": 47.27734375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.013302419,
+      "rss_mb": 0.015625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.012310512,
+      "rss_mb": 0.14453125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.012599042,
+      "rss_mb": 0.15625,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.485269541,
+      "rss_mb": 45.3125,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.492589307,
+      "rss_mb": 45.48046875,
+      "profile": "default"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.476895626,
+      "rss_mb": 46.515625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scanme.nmap.org",
+      "seconds": 1.8418652039999999,
+      "rss_mb": 45.59375,
+      "profile": "default"
+    },
+    {
+      "tool": "naabu",
+      "target": "scanme.nmap.org",
+      "seconds": 5.765833009,
+      "rss_mb": 74.953125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 4.222410112,
+      "rss_mb": 72.8125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 4.615883234,
+      "rss_mb": 72.93359375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 4.720713759,
+      "rss_mb": 73.12890625,
+      "profile": "default"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.1",
+      "seconds": 133.518392251,
+      "rss_mb": 112.6171875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 0.060723856,
+      "rss_mb": 41.05859375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 0.059926666,
+      "rss_mb": 42.77734375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 0.073511978,
+      "rss_mb": 43.88671875,
+      "profile": "default"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 2.5162326,
+      "rss_mb": 62.671875,
+      "profile": "default"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 2.497220796,
+      "rss_mb": 62.72265625,
+      "profile": "default"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 2.521254136,
+      "rss_mb": 62.59375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.819720879,
+      "rss_mb": 45.26953125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.818197786,
+      "rss_mb": 43.6484375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.813305423,
+      "rss_mb": 43.2734375,
+      "profile": "default"
+    },
+    {
+      "tool": "nmap",
+      "target": "services",
+      "seconds": 145.302490078,
+      "rss_mb": 88.453125,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 3.119380949,
+      "rss_mb": 44.1015625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "probe",
+      "seconds": 1.075175378,
+      "rss_mb": 80.2265625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "probe",
+      "seconds": 0.871951991,
+      "rss_mb": 76.1796875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "probe",
+      "seconds": 0.878979984,
+      "rss_mb": 74.55078125,
+      "profile": "default"
+    },
+    {
+      "tool": "httpx",
+      "target": "probe",
+      "seconds": 1.6215700320000002,
+      "rss_mb": 231.94921875,
+      "profile": "default"
+    },
+    {
+      "tool": "httpx",
+      "target": "probe",
+      "seconds": 1.5652955990000001,
+      "rss_mb": 223.4140625,
+      "profile": "default"
+    },
+    {
+      "tool": "httpx",
+      "target": "probe",
+      "seconds": 1.827786227,
+      "rss_mb": 233.43359375,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "public",
+      "seconds": 10.419749209999999,
+      "rss_mb": 69.0625,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"probe\",\"version\":\"0.10.1-0.20261031072033-054691250efe+dirty\",\"complete\":false,\"exit\":3,\"results\":3,\"counts\":{\"hosts without a web service\":1,\"without an answer\":1},\"seconds\":10.404,\"requests\":4,\"run_id\":\"49321380-2b26-41cb-81ec-d8c445e5c022\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":1,\"targets\":[\"testphp.vulnweb.com\"]}]}",
+      "profile": "default"
+    },
+    {
+      "tool": "httpx",
+      "target": "public",
+      "seconds": 21.530515581,
+      "rss_mb": 229.66796875,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.161008472,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 5.013715618,
+      "rss_mb": 26.49609375,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 5.014565954,
+      "rss_mb": 25.83203125,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 5.013383165,
+      "rss_mb": 25.9609375,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "default"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 5.021717045,
+      "rss_mb": 24.94140625,
+      "profile": "default"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 5.021513772,
+      "rss_mb": 25.1171875,
+      "profile": "default"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 5.021492211,
+      "rss_mb": 25.53515625,
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 3.1326834,
+      "rss_mb": 0,
+      "error": "exit status 3 azhaq watch: POST http://127.0.0.1:43953/…: dial tcp 127.0.0.1:43953: connect: connection refused (after 3 tries)",
+      "profile": "default"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.639215963,
+      "rss_mb": 78.296875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.657841061,
+      "rss_mb": 77.08984375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.645451752,
+      "rss_mb": 78.4609375,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 16.629706585,
+      "rss_mb": 1933.61328125,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 17.944019028,
+      "rss_mb": 1604.83984375,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 17.62780011,
+      "rss_mb": 1711.40625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.12267371,
+      "rss_mb": 48.73828125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.122194094,
+      "rss_mb": 47.81640625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 0.118210351,
+      "rss_mb": 50.14453125,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.663360917,
+      "rss_mb": 62.78125,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.464169421,
+      "rss_mb": 62.94140625,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 10.497341292,
+      "rss_mb": 62.68359375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 10.500214645,
+      "rss_mb": 77.79296875,
+      "profile": "polite"
+    },
+    {
+      "tool": "katana",
+      "target": "https://ginandjuice.shop/",
+      "seconds": 20.765735715,
+      "rss_mb": 760.2421875,
+      "cached": true,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 52.038931285,
+      "rss_mb": 33.98828125,
+      "profile": "polite"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 51.422428641,
+      "rss_mb": 18.7890625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 52.029353447,
+      "rss_mb": 33.87890625,
+      "profile": "polite"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 51.483593873,
+      "rss_mb": 15.24609375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 52.419879061,
+      "rss_mb": 29.75,
+      "profile": "polite"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:3101/",
+      "seconds": 51.413841198,
+      "rss_mb": 19.2734375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 52.417378464,
+      "rss_mb": 29.39453125,
+      "profile": "polite"
+    },
+    {
+      "tool": "ffuf",
+      "target": "http://127.0.0.1:5102/",
+      "seconds": 51.491074402,
+      "rss_mb": 15.50390625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 13.409944981,
+      "rss_mb": 77.90625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 13.470772896,
+      "rss_mb": 72.94140625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "shots",
+      "seconds": 13.389351195,
+      "rss_mb": 77.62109375,
+      "profile": "polite"
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 4.615502605,
+      "rss_mb": 246.23828125,
+      "profile": "polite"
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 4.550903367,
+      "rss_mb": 246.7734375,
+      "profile": "polite"
+    },
+    {
+      "tool": "gowitness",
+      "target": "shots",
+      "seconds": 4.681100533,
+      "rss_mb": 255.75390625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/search",
+      "seconds": 16.850879224,
+      "rss_mb": 33.35546875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/search",
+      "seconds": 16.82509002,
+      "rss_mb": 33.84765625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/search",
+      "seconds": 16.825168743,
+      "rss_mb": 34.14453125,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:33527/search",
+      "seconds": 21.151590586,
+      "rss_mb": 35.12890625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 13.360283189,
+      "rss_mb": 33.42578125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 13.226577303,
+      "rss_mb": 33.75390625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 13.227232601,
+      "rss_mb": 33.59765625,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 15.112826555,
+      "rss_mb": 35.015625,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 14.112541168,
+      "rss_mb": 35.0390625,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:33527/item",
+      "seconds": 15.113776064,
+      "rss_mb": 35.15234375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 6.835387709,
+      "rss_mb": 34.39453125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 6.834278443,
+      "rss_mb": 34.328125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 6.887404142,
+      "rss_mb": 34.46484375,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 8.151321905,
+      "rss_mb": 36.15625,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 8.153440506,
+      "rss_mb": 36.05859375,
+      "profile": "polite"
+    },
+    {
+      "tool": "arjun",
+      "target": "http://127.0.0.1:3101/rest/products/search",
+      "seconds": 8.155192787,
+      "rss_mb": 36.1015625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "hackerone.com",
+      "seconds": 12.559610382,
+      "rss_mb": 0,
+      "profile": "polite"
+    },
+    {
+      "tool": "subfinder",
+      "target": "hackerone.com",
+      "seconds": 5.457419796,
+      "rss_mb": 50.671875,
+      "cached": true,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "hackerone.com",
+      "seconds": 3.83687192,
+      "rss_mb": 46.12109375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 10.138641069,
+      "rss_mb": 0,
+      "profile": "polite"
+    },
+    {
+      "tool": "subfinder",
+      "target": "vulnweb.com",
+      "seconds": 6.630857766,
+      "rss_mb": 50.796875,
+      "cached": true,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "vulnweb.com",
+      "seconds": 1.740502313,
+      "rss_mb": 47.1796875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "vulnweb.com",
+      "seconds": 17.979178867999998,
+      "rss_mb": 0,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "polite"
+    },
+    {
+      "tool": "gau",
+      "target": "vulnweb.com",
+      "seconds": 58.011977423,
+      "rss_mb": 12.40234375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "azqlab.lan",
+      "seconds": 29.32731064,
+      "rss_mb": 28.984375,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "azqlab.lan",
+      "seconds": 30.468774821,
+      "rss_mb": 46.48828125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 3.015716403,
+      "rss_mb": 28.3203125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 3.015216344,
+      "rss_mb": 28.265625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 3.014915422,
+      "rss_mb": 27.84765625,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 3.475631139,
+      "rss_mb": 47.38671875,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 3.509017198,
+      "rss_mb": 48.7890625,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 3.518309282,
+      "rss_mb": 48.2578125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.013007673,
+      "rss_mb": 0.01953125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.012834618,
+      "rss_mb": 0.2265625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dns",
+      "seconds": 0.012225698,
+      "rss_mb": 0.015625,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.674559873,
+      "rss_mb": 46.55078125,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.503111825,
+      "rss_mb": 47.5,
+      "profile": "polite"
+    },
+    {
+      "tool": "dnsx",
+      "target": "dns",
+      "seconds": 0.511545149,
+      "rss_mb": 46.90234375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scanme.nmap.org",
+      "seconds": 10.18357651,
+      "rss_mb": 45.58203125,
+      "profile": "polite"
+    },
+    {
+      "tool": "naabu",
+      "target": "scanme.nmap.org",
+      "seconds": 61.709079136,
+      "rss_mb": 64.46875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 9.983063927,
+      "rss_mb": 44.81640625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 9.970900013,
+      "rss_mb": 44.00390625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.1",
+      "seconds": 9.971286817,
+      "rss_mb": 44.69140625,
+      "profile": "polite"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.1",
+      "seconds": 31.500090286,
+      "rss_mb": 66.8046875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 0.918949715,
+      "rss_mb": 43.9453125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 1.131270001,
+      "rss_mb": 44.3046875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "127.0.0.0/28",
+      "seconds": 0.960215776,
+      "rss_mb": 43.74609375,
+      "profile": "polite"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 4.693505792,
+      "rss_mb": 63.11328125,
+      "profile": "polite"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 4.518426106,
+      "rss_mb": 63.26171875,
+      "profile": "polite"
+    },
+    {
+      "tool": "naabu",
+      "target": "127.0.0.0/28",
+      "seconds": 4.526289049,
+      "rss_mb": 63.6015625,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.933845409,
+      "rss_mb": 43.29296875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.931801556,
+      "rss_mb": 43.83984375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "services",
+      "seconds": 2.922435144,
+      "rss_mb": 45.9765625,
+      "profile": "polite"
+    },
+    {
+      "tool": "nmap",
+      "target": "services",
+      "seconds": 145.425040564,
+      "rss_mb": 88.5703125,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "probe",
+      "seconds": 21.295909876,
+      "rss_mb": 81.19921875,
+      "profile": "polite"
+    },
+    {
+      "tool": "httpx",
+      "target": "probe",
+      "seconds": 21.89982169,
+      "rss_mb": 231.46484375,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "public",
+      "seconds": 10.706902596,
+      "rss_mb": 66.01171875,
+      "error": "exit status 3 {\"type\":\"summary\",\"command\":\"probe\",\"version\":\"0.10.1-0.20261031072033-054691250efe+dirty\",\"complete\":false,\"exit\":3,\"results\":3,\"counts\":{\"hosts without a web service\":1,\"without an answer\":1},\"seconds\":10.69,\"requests\":4,\"run_id\":\"7b7d1a15-bd67-451f-a85e-0f872fc8a3ad\",\"failed\":[{\"collector\":\"azhaq-http\",\"error\":\"timeout\",\"retryable\":true,\"count\":1,\"targets\":[\"testphp.vulnweb.com\"]}]}",
+      "profile": "polite"
+    },
+    {
+      "tool": "httpx",
+      "target": "public",
+      "seconds": 21.530515581,
+      "rss_mb": 229.66796875,
+      "cached": true,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 1.014221739,
+      "rss_mb": 25.84765625,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 1.01441927,
+      "rss_mb": 25.9453125,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "notify",
+      "seconds": 1.013922357,
+      "rss_mb": 25.7109375,
+      "error": "exit status 3   exit 3: finished, but what is marked ! failed; the results are usable",
+      "profile": "polite"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 1.022432925,
+      "rss_mb": 25.0234375,
+      "profile": "polite"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 1.023100848,
+      "rss_mb": 25.55859375,
+      "profile": "polite"
+    },
+    {
+      "tool": "notify",
+      "target": "notify",
+      "seconds": 1.021858152,
+      "rss_mb": 25.1796875,
+      "profile": "polite"
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 2.365273844,
+      "rss_mb": 86.45703125
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.15970391,
+      "rss_mb": 1.95703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.199834909,
+      "rss_mb": 59.91796875
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.016621487,
+      "rss_mb": 0.0859375
+    },
+    {
+      "tool": "sh",
+      "target": "dropin",
+      "seconds": 0.156999755,
+      "rss_mb": 1.95703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.01424606,
+      "rss_mb": 0.18359375
+    },
+    {
+      "tool": "azhaq",
+      "target": "dropin",
+      "seconds": 0.016891984,
+      "rss_mb": 0.19140625
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 1.610960546,
+      "rss_mb": 74.01171875
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 2.665723094,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 2.9913169870000003,
+      "rss_mb": 0,
+      "error": "exit status 1 azhaq: -login http://127.0.0.1:43551/login: the sign-in went to 127.0.0.2, outside the scope: add it with -allow 127.0.0.2"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 2.758922162,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "scope",
+      "seconds": 2.535459832,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 2.547682197,
+      "rss_mb": 93.78125
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 2.515408298,
+      "rss_mb": 94.79296875
+    },
+    {
+      "tool": "azhaq",
+      "target": "watch",
+      "seconds": 2.506093564,
+      "rss_mb": 90.27734375
+    },
+    {
+      "tool": "azhaq",
+      "target": "secrets",
+      "seconds": 0.143526321,
+      "rss_mb": 56.2734375
+    },
+    {
+      "tool": "jsluice",
+      "target": "secrets",
+      "seconds": 0.006387549,
+      "rss_mb": 0.015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "tenants",
+      "seconds": 7.219267422,
+      "rss_mb": 69.859375
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 2.570521933,
+      "rss_mb": 90.20703125
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 1.89206312,
+      "rss_mb": 87.5859375,
+      "error": "exit status 4   exit 4: stopped by a limit with work left"
+    },
+    {
+      "tool": "azhaq",
+      "target": "scale",
+      "seconds": 2.189117787,
+      "rss_mb": 83.015625
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 2.8079966130000003,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 13.874365514,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 29.53282455,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 11.617465626,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 22.584322174,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 36.970976726,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 3.156219385,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 25.76656735,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 3.229649744,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 8.526323083,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 29.942428194,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 9.432139403,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 15.001249182,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 41.131833474,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.608239181,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 11.913806659,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 62.111113246,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.48533124,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 12.667402305,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 67.705786983,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 2.551376113,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 20.11600004,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 30.028589486,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.514115635,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 19.825177139,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 29.524103885,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.123907243,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.631438562,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 3.533813552,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 4.561325097,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 6.068538909,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 15.813542968,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 8.063993188,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 1.001307473,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 0.533771822,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 7.871366549,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 39.556628626,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "claims",
+      "seconds": 12.398063223,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "AS394161",
+      "seconds": 0.747617578,
+      "rss_mb": 34.515625
+    },
+    {
+      "tool": "azhaq",
+      "target": "45.33.32.128/25",
+      "seconds": 2.026352687,
+      "rss_mb": 46.7734375
+    },
+    {
+      "tool": "dnsx",
+      "target": "45.33.32.128/25",
+      "seconds": 0.827892313,
+      "rss_mb": 48.6484375
+    },
+    {
+      "tool": "azhaq",
+      "target": "lab",
+      "seconds": 0.297396104,
+      "rss_mb": 42.6875
+    },
+    {
+      "tool": "azhaq",
+      "target": "lab",
+      "seconds": 0.08605084,
+      "rss_mb": 43.58984375
+    },
+    {
+      "tool": "azhaq",
+      "target": "lab",
+      "seconds": 0.013307793,
+      "rss_mb": 0.01953125
+    },
+    {
+      "tool": "azhaq",
+      "target": "lab",
+      "seconds": 0.164675834,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 2.527422199,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.036118978,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.195148643,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.015882613,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.790281481,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.01947992,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.147853949,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.01405186,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 20.366528822,
+      "rss_mb": 0
+    },
+    {
+      "tool": "azhaq",
+      "target": "openapi",
+      "seconds": 0.039848649,
+      "rss_mb": 0
+    }
+  ]
+}
