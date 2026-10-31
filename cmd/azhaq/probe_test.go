@@ -390,3 +390,36 @@ func TestProbeBoundedRunThatAnsweredEverythingIsComplete(t *testing.T) {
 		t.Errorf("exit %d, %d requests, stopped %q: %s", code, rep.Requests, rep.Stopped, out)
 	}
 }
+
+// The url of a row is the URL input as it was given, slash, query and
+// fragment included, and a bare host's front page has no slash, as in httpx.
+func TestProbeURLFieldIsTheInputAsGiven(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := newProbeSite(t)
+	bare := strings.TrimPrefix(site.URL, "http://")
+	want := map[string]string{
+		site.URL + "/":        site.URL + "/",
+		site.URL + "/#x":      site.URL + "/#x",
+		site.URL + "/api?a=1": site.URL + "/api?a=1",
+		site.URL + "/api#y":   site.URL + "/api#y",
+		bare:                  site.URL,
+	}
+	args := []string{"probe"}
+	for in := range want {
+		args = append(args, "-u", in)
+	}
+	out, _, _ := runContract(t, args...)
+	rows := probeRows(t, out)
+	if len(rows) != len(want) {
+		t.Fatalf("%d rows for %d inputs\n%s", len(rows), len(want), out)
+	}
+	for _, r := range rows {
+		in, _ := r["input"].(string)
+		if r["url"] != want[in] {
+			t.Errorf("input %q: url %v, want %q", in, r["url"], want[in])
+		}
+		if in == site.URL+"/#x" && r["path"] != "/" {
+			t.Errorf("path %v, want /", r["path"])
+		}
+	}
+}

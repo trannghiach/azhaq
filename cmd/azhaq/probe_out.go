@@ -224,8 +224,10 @@ func (p *probeOut) row(r engine.ProbeRow, m map[string]any, input string, addrs,
 		elapsed = time.Duration(ns)
 	}
 	shown := r.URL
-	if u != nil && u.Path == "/" && u.RawQuery == "" {
-		shown = strings.TrimSuffix(r.URL, "/") // httpx prints a site's front page without its slash
+	if given, ok := urlAsGiven(input, r.URL); ok {
+		shown = given // httpx prints a URL input as it was given: slash, query and fragment
+	} else if u != nil && u.Path == "/" && u.RawQuery == "" {
+		shown = strings.TrimSuffix(r.URL, "/") // a bare host: httpx prints the front page without its slash
 	}
 	if u != nil && p.pf.ldp && u.Port() == "" {
 		shown = strings.Replace(shown, "://"+u.Host, "://"+net.JoinHostPort(u.Hostname(), port), 1)
@@ -510,6 +512,19 @@ func (s rowSink) write(p *probeOut, row map[string]any, r engine.ProbeRow) {
 	}
 }
 
+// urlAsGiven is the input itself when it is a URL and url is that URL
+// asked, not a redirect, another path or the other scheme.
+func urlAsGiven(input, url string) (string, bool) {
+	input = strings.TrimSpace(input)
+	if !strings.Contains(input, "://") {
+		return "", false
+	}
+	if n, err := normalize.URL(input); err != nil || n != url {
+		return "", false
+	}
+	return input, true
+}
+
 // failedRow is the row of a target that got no answer.
 func (p *probeOut) failedRow(input, why string) {
 	u := input
@@ -519,8 +534,12 @@ func (p *probeOut) failedRow(input, why string) {
 			u = "https://" + net.JoinHostPort(strings.Trim(input, "[]"), fmt.Sprint(p.spec.Ports[0].Port))
 		}
 	}
+	shown := strings.TrimSuffix(u, "/")
+	if strings.Contains(input, "://") {
+		shown = strings.TrimSpace(input) // a URL input is printed as given
+	}
 	row := map[string]any{
-		"timestamp": time.Now().Format(time.RFC3339Nano), "url": strings.TrimSuffix(u, "/"), "input": input,
+		"timestamp": time.Now().Format(time.RFC3339Nano), "url": shown, "input": input,
 		"failed": true, "error": why,
 	}
 	if pu, err := url.Parse(u); err == nil {
