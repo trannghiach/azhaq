@@ -1,0 +1,20 @@
+# Routes of juice-shop-v20.3.0-routes.txt that a crawler does not reach, for
+# the drop-in check of `azhaq crawl`: they are in the truth because each
+# static part of the server route is written somewhere in main.js, not
+# because a page or script requests them. `run` reaches /ftp (robots.txt
+# names it) and, with the id routes it infers, some of the rest; `crawl`,
+# which asks only what a crawler asks, does not.
+#
+# The id form of five REST collections: the frontend requests the
+# collection (/api/Complaints) and never /api/Complaints/{id}.
+/api/Challenges/{id}
+/api/Complaints/{id}
+/api/Recycles/{id}
+/api/SecurityAnswers/{id}
+/api/SecurityQuestions/{id}
+# Written as the prefix constant of a service (the host of the basket
+# service), never requested bare; /order is a substring of /order-history.
+/rest/basket
+/rest/basket/{id}/order
+# The directory: pages link /ftp/legal.md; only robots.txt names /ftp.
+/ftp
