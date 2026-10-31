@@ -40,6 +40,11 @@ const DerivedKey = "derived"
 // -depth.
 const SameTargetKey = "same"
 
+// RedirectKey marks a hint that is where the seed it came from redirected to,
+// within the site: the redirect is the answer to the seed, so it is no step
+// of -depth either.
+const RedirectKey = "redirect"
+
 // FromURLKey on a hostname the engine derived from a URL holds that URL:
 // a collector that tries a name on both schemes can leave it out when the
 // URL is the service the user named.

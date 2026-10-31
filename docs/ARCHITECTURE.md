@@ -205,7 +205,7 @@ Up to `-parallel` items (default 16) run at a time. Each batch collector may run
 
 Limits:
 
-- `-depth` (default 4) bounds how many hints away from the seeds a seed may be.
+- `-depth` (default 4) bounds how many hints away from the seeds a seed may be. The same target under another scheme, and the page a redirect leads to within the site, are no step away: a link that redirects maps its destination at the link's own depth.
 - `-max-items` (default 2048) caps ordinary work items.
 - `-max-names` (default 20,000) caps the names handed to batch collectors (DNS). A domain with thousands of subdomains then does not spend the item budget on resolution.
 - `-max-requests` caps the requests sent to targets, and `-rate` paces them over all hosts. See [The request budget](#the-request-budget).

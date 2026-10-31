@@ -658,7 +658,7 @@ func (c *Collector) fetch(ctx context.Context, raw string, rq *fetch.Req) (types
 	if final != "" && final != reqURL && !catchAll && sameSite(reqURL, final) {
 		// A redirect to another site (an open redirect, a login provider)
 		// is recorded in the hops, not followed.
-		hint = types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": final}}
+		hint = types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": final, types.RedirectKey: "1"}}
 	}
 	return obs, hint, cached, nil
 }
