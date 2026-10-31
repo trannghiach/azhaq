@@ -166,3 +166,74 @@ func TestRunListsEveryLinkedQueryURL(t *testing.T) {
 		t.Errorf("%d /item asked, want run's bound of 3", n)
 	}
 }
+
+// A shop shaped like ginandjuice.shop: product and blog links in anchors,
+// a script object that names product URLs with one name and with two.
+func templateSite(t *testing.T) *httptest.Server {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/":
+			fmt.Fprint(w, `<html><body><a href="/catalog">catalog</a><a href="/blog">blog</a></body></html>`)
+		case "/catalog":
+			var a, js []string
+			for i := 1; i <= 6; i++ {
+				a = append(a, fmt.Sprintf(`<a href="/catalog/product?productId=%d">p%d</a>`, i, i))
+				js = append(js, fmt.Sprintf(`{"url":"/catalog/product?productId=%d&storeId=%d"}`, i, i))
+			}
+			fmt.Fprintf(w, `<html><body>%s<script>var products=[%s];</script></body></html>`, strings.Join(a, ""), strings.Join(js, ","))
+		case "/blog":
+			fmt.Fprint(w, `<html><body><a href="/blog/post?postId=1">1</a><a href="/blog/post?postId=2">2</a><a href="/blog/post?postId=3">3</a><a href="/blog/post?postId=4">4</a></body></html>`)
+		case "/catalog/product", "/blog/post":
+			fmt.Fprintf(w, `<html><body>%s</body></html>`, r.URL.RawQuery)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// Variants of one route are one template row in the map, each URL still
+// asked up to -per-template, while crawl lists every distinct URL.
+func TestRunFoldsQueryShapesOfOneRoute(t *testing.T) {
+	srv := templateSite(t)
+	out, _, err := captureBoth(t, func() error {
+		return cmdRun([]string{"-url", srv.URL + "/", "-allow", "127.0.0.1", "-depth", "3", "-no-tech", "-db", filepath.Join(t.TempDir(), "w.db")})
+	})
+	if err != nil && exitCode(err) != exitPartial {
+		t.Fatal(err)
+	}
+	product, blog := 0, 0
+	for _, l := range strings.Split(out, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(l), "URL ") {
+			if strings.Contains(l, "/catalog/product?productId=") {
+				product++
+			}
+			if strings.Contains(l, "/blog/post?postId=") {
+				blog++
+			}
+		}
+	}
+	if product != 1 || blog != 1 {
+		t.Errorf("map lines: product %d, blog post %d, want one each:\n%s", product, blog, out)
+	}
+
+	crawl, _, err := captureBoth(t, func() error {
+		return cmdCrawl([]string{"-u", srv.URL + "/", "-allow", "127.0.0.1", "-depth", "3", "-db", filepath.Join(t.TempDir(), "c.db")})
+	})
+	if err != nil && exitCode(err) != exitPartial {
+		t.Fatal(err)
+	}
+	lines := map[string]bool{}
+	for _, l := range strings.Split(crawl, "\n") {
+		lines[strings.TrimPrefix(l, srv.URL)] = true
+	}
+	for i := 1; i <= 6; i++ {
+		for _, u := range []string{fmt.Sprintf("/catalog/product?productId=%d", i), fmt.Sprintf("/catalog/product?productId=%d&storeId=%d", i, i)} {
+			if !lines[u] {
+				t.Errorf("crawl does not list %s:\n%s", u, crawl)
+			}
+		}
+	}
+}

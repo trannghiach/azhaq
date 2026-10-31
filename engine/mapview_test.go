@@ -2,6 +2,7 @@ package engine_test
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -166,5 +167,44 @@ func TestGroupTemplatesCountsTheUrlsNotAsked(t *testing.T) {
 	}
 	if row.Count != 5 || row.NotAsked != 3 || !strings.Contains(row.Line(), "(5 urls, 3 not asked)") {
 		t.Errorf("%d urls, %d not asked: %s", row.Count, row.NotAsked, row.Line())
+	}
+}
+
+// Pages of one route that differ in which ID-like names they carry are
+// one template row, with every name in its params; a word that names a
+// page stays a row of its own.
+func TestGroupTemplatesFoldsShapesOfOneRoute(t *testing.T) {
+	ents := []types.Entity{{ID: "root", Type: types.TypeURL, Key: "https://shop.test/"}}
+	obs := []types.StoredObservation{httpObs("root", `{"status":200,"url":"https://shop.test/"}`)}
+	for i, key := range []string{
+		"https://shop.test/catalog/product?productId=1",
+		"https://shop.test/catalog/product?productId=2",
+		"https://shop.test/catalog/product?productId=3&storeId=1",
+		"https://shop.test/catalog/product?productId=4&storeId=2",
+		"https://shop.test/catalog?category=Gin",
+		"https://shop.test/catalog?category=Juice",
+		"https://shop.test/catalog?category=Gin&page=2",
+	} {
+		id := string(rune('a' + i))
+		ents = append(ents, types.Entity{ID: id, Type: types.TypeURL, Key: key})
+		obs = append(obs, httpObs(id, `{"status":200,"url":"`+key+`"}`))
+	}
+	seeds := []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": "https://shop.test/"}}}
+	var product *engine.MapEntry
+	var lines []string
+	rows := engine.GroupTemplates(engine.BuildMap(ents, seeds, obs, nil, false))
+	for i, r := range rows {
+		lines = append(lines, r.Line())
+		if strings.Contains(r.Entity.Key, "/catalog/product") {
+			product = &rows[i]
+		}
+	}
+	text := strings.Join(lines, "\n")
+	if n := strings.Count(text, "/catalog/product?productId="); n != 1 || product == nil || product.Count != 4 ||
+		!slices.Contains(product.Params, "productId") || !slices.Contains(product.Params, "storeId") {
+		t.Errorf("product pages are not one row of 4 urls with both names:\n%s", text)
+	}
+	if n := strings.Count(text, "/catalog?category="); n != 3 {
+		t.Errorf("a category is a page of its own: %d rows\n%s", n, text)
 	}
 }
