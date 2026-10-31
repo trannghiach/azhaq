@@ -36,9 +36,9 @@ func archiveMirror(t *testing.T) (flags []string, asked func() []string) {
 		case r.URL.Path == "/cc/idx":
 			fmt.Fprint(w, `{"url":"http://example.org/cc"}`+"\n")
 		case strings.HasPrefix(r.URL.Path, "/otx/"):
-			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx"}]}`)
+			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx","httpcode":200}]}`)
 		case r.URL.Path == "/urlscan":
-			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us"},"task":{"url":"http://example.org/us"},"sort":[1,"a"]}]}`)
+			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us","status":"200","mimeType":"text/html"},"task":{"url":"http://example.org/us"},"sort":[1,"a"]}]}`)
 		case r.URL.Path == "/arquivo":
 			fmt.Fprint(w, `{"url":"http://example.org/arq"}`+"\n")
 		default:
@@ -164,12 +164,14 @@ func TestURLsFiltersAndNotes(t *testing.T) {
 		t.Errorf("%v", got)
 	}
 	for _, note := range []string{
-		"otx has no status, type or date of its captures: its 1 URL is not filtered by -mc, -ft, -from",
-		"urlscan has no status or type of its captures: its 2 URLs are not filtered by -mc, -ft",
+		"otx has no type or date of its captures: its 1 URL is not filtered by -ft, -from",
 	} {
 		if !strings.Contains(errOut, note) {
 			t.Errorf("the archives that cannot filter are not said (%q):\n%s", note, errOut)
 		}
+	}
+	if strings.Contains(errOut, "urlscan has no") || strings.Contains(errOut, "has no status") {
+		t.Errorf("urlscan and otx record a status; no note says they do not:\n%s", errOut)
 	}
 	n := 0
 	for _, r := range asked() {
@@ -189,38 +191,37 @@ func TestURLsFiltersAndNotes(t *testing.T) {
 	}
 }
 
-// gau's --mc filters where an archive has a status and prints the URLs of one
-// that has none: -mc with only OTX lists OTX's URLs, unfiltered, and says so.
-func TestURLsStatuslessArchiveKeepsItsURLsUnderMC(t *testing.T) {
-	flags, _ := archiveMirror(t)
-	base := append([]string{"-d", "example.org", "-urls-pause", "0", "-providers", "otx"}, flags...)
-	got, errOut, err := urlsRun(t, append(base, "-mc", "200", "-json")...)
-	if err != nil {
-		t.Fatalf("%v\n%s", err, errOut)
-	}
-	if len(got) != 1 || got[0] != `{"source":"otx","url":"http://example.org/otx"}` && got[0] != `{"url":"http://example.org/otx","source":"otx"}` {
-		t.Errorf("rows %q: no status, no invented one", got)
-	}
-	if !strings.Contains(errOut, "otx has no status of its captures: its 1 URL is not filtered by -mc") {
-		t.Errorf("no note:\n%s", errOut)
-	}
-	if rep := lastReport(t, errOut); rep.Results != 1 || rep.Exit != 0 || rep.Stopped != "" {
-		t.Errorf("summary %+v", rep)
-	}
-	for _, f := range []string{"-fc", "-ft", "-mt"} {
-		v := "404"
-		if f != "-fc" {
-			v = "image/png"
+// OTX records a status for each URL (httpcode, 0 when unknown): -mc keeps
+// the URLs of that status only, -fc drops the ones it names, and neither
+// says OTX has no status.
+func TestURLsMCJudgesOTXByItsHTTPCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/ok","httpcode":200},{"url":"http://example.org/gone","httpcode":404},{"url":"http://example.org/unknown","httpcode":0}]}`)
+	}))
+	t.Cleanup(srv.Close)
+	base := []string{"-d", "example.org", "-urls-pause", "0", "-providers", "otx", "-archive", "otx=" + srv.URL, "-sort"}
+	for _, c := range []struct {
+		flags []string
+		want  []string
+	}{
+		{nil, []string{"http://example.org/gone", "http://example.org/ok", "http://example.org/unknown"}},
+		{[]string{"-mc", "200"}, []string{"http://example.org/ok"}},
+		{[]string{"-mc", "200,404"}, []string{"http://example.org/gone", "http://example.org/ok"}},
+		{[]string{"-fc", "404"}, []string{"http://example.org/ok", "http://example.org/unknown"}},
+		{[]string{"-mc", "301"}, nil},
+	} {
+		got, errOut, err := urlsRun(t, append(append([]string{}, base...), append(c.flags, "-silent")...)...)
+		if err != nil || !slices.Equal(got, c.want) {
+			t.Errorf("%v: %v %v", c.flags, got, err)
 		}
-		got, errOut, err = urlsRun(t, append(base, f, v, "-silent")...)
-		if err != nil || len(got) != 1 {
-			t.Errorf("%s: %v %v", f, got, err)
+		if _, errOut, _ = urlsRun(t, append(append([]string{}, base...), append(c.flags, "-json")...)...); strings.Contains(errOut, "has no status") {
+			t.Errorf("%v: otx has a status, yet it is said to have none:\n%s", c.flags, errOut)
 		}
 	}
-	// Run apart from the stream: the same with the archives together.
-	got, errOut, err = urlsRun(t, append([]string{"-d", "example.org", "-urls-pause", "0", "-mc", "200", "-sort", "-silent"}, flags...)...)
-	if err != nil || !slices.Contains(got, "http://example.org/otx") || !slices.Contains(got, "http://example.org/us") {
-		t.Errorf("%v %v\n%s", got, err, errOut)
+	// A filter OTX cannot apply is still said.
+	_, errOut, err := urlsRun(t, append(append([]string{}, base...), "-mc", "200", "-mt", "text/html", "-json")...)
+	if err != nil || !strings.Contains(errOut, "otx has no type of its captures: its 1 URL is not filtered by -mt") {
+		t.Errorf("%v\n%s", err, errOut)
 	}
 }
 

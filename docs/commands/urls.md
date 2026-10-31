@@ -87,10 +87,11 @@ Every source's URLs go through these rules, OTX's too.
 `counts` has the total as `dropped as junk`, and a note says it: `7 URLs dropped as junk (…; -raw keeps them)`. `-raw` prints them and drops none.
 
 ### Filters an archive cannot apply
-- `unfiltered` lists what an archive keeps none of: `status`, `type` or `date`.
-- When you give a filter it cannot apply, `unfiltered_by` names the filter, such as `-mc` or `-ft`.
-- The archive is asked all the same and its URLs are kept, as gau keeps them, with no status on the row.
-- The notes say the same in words: `otx has no status of its captures: its 13 URLs are not filtered by -mc`.
+- OTX records a status for each URL (`httpcode`) and urlscan.io for each page (`status`, with its `mimeType`). `-mc`, `-fc`, and for urlscan.io `-mt` and `-ft`, judge them. A URL with no recorded status is not kept by `-mc` and is not left out by `-fc`.
+- `unfiltered` lists what an archive keeps none of: for OTX `type` and `date`, for none of the others.
+- When you give a filter it cannot apply, `unfiltered_by` names the filter, such as `-mt` or `-from`.
+- The archive is asked all the same and its URLs are kept, as gau keeps them, with no type on the row.
+- The notes say the same in words: `otx has no type of its captures: its 13 URLs are not filtered by -mt`.
 
 ## Flags
 
@@ -105,13 +106,13 @@ Every source's URLs go through these rules, OTX's too.
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-fail-on-capped` | bool |  | exit 4 when an archive stopped at its page cap with more to read |
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
-| `-fc` | string |  | leave out URLs the archive recorded with these HTTP status codes, comma-separated; the archives that keep no status (OTX, urlscan.io) are asked all the same and their URLs kept, with a note |
+| `-fc` | string |  | leave out URLs the archive recorded with these HTTP status codes, comma-separated; a URL whose status the archive did not record is kept |
 | `-fp` | bool |  | keep one URL for each host and path, dropping the variants that differ by parameters |
 | `-from` | string |  | only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is asked all the same and its URLs kept, with a note |
-| `-ft` | string |  | leave out URLs the archive recorded with these MIME types, comma-separated; the archives that keep no type (OTX, urlscan.io) are asked all the same and their URLs kept, with a note |
+| `-ft` | string |  | leave out URLs the archive recorded with these MIME types, comma-separated; OTX, which keeps no type, is asked all the same and its URLs kept, with a note |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
-| `-mc` | string |  | keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); the archives that keep no status (OTX, urlscan.io) are asked all the same and their URLs kept, as gau keeps them, with a note |
-| `-mt` | string |  | keep only URLs the archive recorded with these MIME types, comma-separated (text/html); the archives that keep no type (OTX, urlscan.io) are asked all the same and their URLs kept, with a note |
+| `-mc` | string |  | keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); OTX and urlscan.io record a status for most URLs, and a URL with none is not kept |
+| `-mt` | string |  | keep only URLs the archive recorded with these MIME types, comma-separated (text/html); OTX, which keeps no type, is asked all the same and its URLs kept, with a note |
 | `-o` | string |  | also write results to this file, appending to it as gau does |
 | `-provider-config` | string |  | API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml) |
 | `-providers` | string |  | the archives to ask, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all five). A value that names a file, or has a / in it, is the API-key file, as -providers meant before; -provider-config says that without doubt |

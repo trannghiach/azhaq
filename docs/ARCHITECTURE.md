@@ -1458,7 +1458,7 @@ A source that still fails stops and keeps the pages it read. It is reported with
 
 ### Filters
 
-The Wayback Machine, Common Crawl and arquivo.pt are sent the status, type and date filters in the query, as gau sends them. The flags are `-mc`, `-fc`, `-mt`, `-ft`, `-from` and `-to`. urlscan.io takes dates. OTX takes none.
+The Wayback Machine, Common Crawl and arquivo.pt are sent the status, type and date filters in the query, as gau sends them. The flags are `-mc`, `-fc`, `-mt`, `-ft`, `-from` and `-to`. urlscan.io takes dates in its query and judges the status and type it records for each page; OTX judges its `httpcode`. A status that is not recorded is not matched by `-mc` and not named by `-fc`. OTX takes no type or date.
 
 An archive that cannot apply a filter is asked all the same, and its URLs are kept unfiltered, as gau keeps them. Its row in the summary says `unfiltered` and by which flags, and a note gives the count.
 

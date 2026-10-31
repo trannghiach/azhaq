@@ -153,9 +153,9 @@ In `roles` the file is `roles.stop` in the `-dir`. There it stops the runs of th
 
 - an archive stopped at its page cap;
 - URLs went past `-urls-max`;
-- an archive cannot apply a `-mc`, `-fc`, `-mt`, `-ft`, `-from` or `-to` filter.
+- an archive cannot apply a `-mt`, `-ft`, `-from` or `-to` filter (OTX has no type or date).
 
-For the last case the note reads like `otx has no status of its captures: its 13 URLs are not filtered by -mc`. Those URLs are listed, not judged by the filter. An archive that failed is listed as failed, and the exit code is 3.
+For the last case the note reads like `otx has no type of its captures: its 13 URLs are not filtered by -mt`. Those URLs are listed, not judged by the filter. An archive that failed is listed as failed, and the exit code is 3.
 
 **Fix:**
 

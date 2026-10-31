@@ -79,9 +79,9 @@ func newMirror(t *testing.T, wayback map[string][]string) *mirror {
 			}
 			fmt.Fprint(w, `{"url":"http://example.org/cc"}`+"\n")
 		case strings.HasPrefix(r.URL.Path, "/otx/"):
-			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx"},{"url":"http://api.example.org/otx"}]}`)
+			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx","httpcode":200},{"url":"http://api.example.org/otx","httpcode":200}]}`)
 		case r.URL.Path == "/urlscan":
-			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us"},"task":{"url":"http://example.org/us-task"},"sort":[1,"a"]}]}`)
+			fmt.Fprint(w, `{"has_more":false,"results":[{"page":{"url":"http://example.org/us","status":"200","mimeType":"text/html; charset=utf-8"},"task":{"url":"http://example.org/us-task"},"sort":[1,"a"]}]}`)
 		case r.URL.Path == "/arquivo":
 			fmt.Fprint(w, `{"url":"http://example.org/arq"}`+"\n")
 		default:
@@ -233,11 +233,13 @@ func TestFiltersAreSentAndTheRestAreUnfiltered(t *testing.T) {
 	}
 	srcs := summary["sources"].(map[string]any)
 	for name, c := range map[string]struct{ what, by string }{
-		"otx":     {"status, type or date", "-mc, -fc, -mt, -ft, -from, -to"},
-		"urlscan": {"status or type", "-mc, -fc, -mt, -ft"},
+		"otx":     {"type or date", "-mt, -ft, -from, -to"},
+		"urlscan": {"", ""},
 	} {
 		row := srcs[name].(map[string]any)
-		if row["unfiltered"] != c.what || row["unfiltered_by"] != c.by || row["skipped"] != nil || row["count"].(float64) == 0 {
+		what, _ := row["unfiltered"].(string)
+		by, _ := row["unfiltered_by"].(string)
+		if what != c.what || by != c.by || row["skipped"] != nil || row["count"].(float64) == 0 {
 			t.Errorf("%s row: %v", name, row)
 		}
 	}
@@ -257,6 +259,56 @@ func TestFiltersAreSentAndTheRestAreUnfiltered(t *testing.T) {
 	}
 	if summary["degraded"] == true {
 		t.Error("an archive that cannot filter is not a failure")
+	}
+}
+
+// OTX records the status of each URL (httpcode, 0 when it has none) and
+// urlscan.io that of each page: -mc and -fc judge them, a status that is not
+// known is not matched by -mc and is not named by -fc.
+func TestOTXAndUrlscanAreJudgedByTheirStatus(t *testing.T) {
+	otxBody := `{"has_next":false,"url_list":[{"url":"http://example.org/o200","httpcode":200},{"url":"http://example.org/o404","httpcode":404},{"url":"http://example.org/o0","httpcode":0},{"url":"http://example.org/onone"}]}`
+	usBody := `{"has_more":false,"results":[` +
+		`{"page":{"url":"http://example.org/u200","status":"200","mimeType":"text/html"},"task":{"url":"http://example.org/ut"},"sort":[1,"a"]},` +
+		`{"page":{"url":"http://example.org/u404","status":"404","mimeType":"image/png"},"task":{"url":"http://example.org/ut"},"sort":[2,"b"]},` +
+		`{"page":{"url":"http://example.org/u0"},"task":{"url":"http://example.org/ut"},"sort":[3,"c"]}]}`
+	for _, c := range []struct {
+		name string
+		f    Filters
+		otx  []string
+		us   []string
+	}{
+		{"none", Filters{}, []string{"o0", "o200", "o404", "onone"}, []string{"u0", "u200", "u404", "ut"}},
+		{"mc 200", Filters{MatchStatus: []string{"200"}}, []string{"o200"}, []string{"u200"}},
+		{"mc 200 and 404", Filters{MatchStatus: []string{"200", "404"}}, []string{"o200", "o404"}, []string{"u200", "u404"}},
+		{"fc 404", Filters{DropStatus: []string{"404"}}, []string{"o0", "o200", "onone"}, []string{"u0", "u200", "ut"}},
+		{"mt html", Filters{MatchMime: []string{"TEXT/html"}}, []string{"o0", "o200", "o404", "onone"}, []string{"u200"}},
+		{"ft png", Filters{DropMime: []string{"image/png"}}, []string{"o0", "o200", "o404", "onone"}, []string{"u0", "u200", "ut"}},
+	} {
+		m := newMirror(t, pages)
+		m.text["/otx/domain/example.org/url_list"], m.text["/urlscan"] = otxBody, usBody
+		var rows []string
+		o := Options{Bases: m.bases(), Client: m.Client(), Filters: c.f, Only: []string{"otx", "urlscan"}, OnURL: func(u, src string) { rows = append(rows, src+" "+strings.TrimPrefix(u, "http://example.org/")) }}
+		summary, _, _, err := run(t, o, context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var otx, us []string
+		for _, r := range rows {
+			if src, u, _ := strings.Cut(r, " "); src == "otx" {
+				otx = append(otx, u)
+			} else {
+				us = append(us, u)
+			}
+		}
+		slices.Sort(otx)
+		slices.Sort(us)
+		if !slices.Equal(otx, c.otx) || !slices.Equal(us, c.us) {
+			t.Errorf("%s: otx %v urlscan %v", c.name, otx, us)
+		}
+		srcs := summary["sources"].(map[string]any)
+		if row := srcs["otx"].(map[string]any); row["unfiltered_by"] != nil && strings.Contains(row["unfiltered_by"].(string), "-mc") {
+			t.Errorf("%s: otx has a status, its row says it has none: %v", c.name, row)
+		}
 	}
 }
 

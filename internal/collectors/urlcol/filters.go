@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -147,6 +148,29 @@ func (f Filters) params(q url.Values, flavour int) {
 	for _, m := range f.DropMime {
 		q.Add("filter", not+mime+":"+m)
 	}
+}
+
+// keepStatus judges a capture by the status its archive recorded, "" when it
+// recorded none. A status that is not known cannot be matched by -mc, and
+// is not one that -fc names: it stays.
+func (f Filters) keepStatus(code string) bool {
+	if len(f.MatchStatus) > 0 && !slices.Contains(f.MatchStatus, code) {
+		return false
+	}
+	return !slices.Contains(f.DropStatus, code)
+}
+
+// keepMime is keepStatus for the content type, compared without its
+// parameters and in lower case.
+func (f Filters) keepMime(mime string) bool {
+	mime = strings.ToLower(strings.TrimSpace(strings.SplitN(mime, ";", 2)[0]))
+	in := func(list []string) bool {
+		return slices.ContainsFunc(list, func(m string) bool { return strings.ToLower(m) == mime })
+	}
+	if len(f.MatchMime) > 0 && !in(f.MatchMime) {
+		return false
+	}
+	return !in(f.DropMime)
 }
 
 // ParseProxy reads a proxy address: http, https or socks5.

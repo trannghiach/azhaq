@@ -32,8 +32,8 @@ func allSources() []source {
 	return []source{
 		{name: "wayback", can: byStatus | byMime | byDate, fetch: wayback},
 		{name: "commoncrawl", can: byStatus | byMime | byDate, fetch: commonCrawl},
-		{name: "otx", fetch: otx},
-		{name: "urlscan", can: byDate, fetch: urlscan},
+		{name: "otx", can: byStatus, fetch: otx},
+		{name: "urlscan", can: byStatus | byMime | byDate, fetch: urlscan},
 		{name: "arquivo", can: byStatus | byMime | byDate, fetch: arquivo},
 	}
 }
@@ -458,7 +458,8 @@ func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (
 			HasNext  bool `json:"has_next"`
 			FullSize int  `json:"full_size"`
 			URLList  []struct {
-				URL string `json:"url"`
+				URL      string `json:"url"`
+				HTTPCode int    `json:"httpcode"` // 0 when OTX has none
 			} `json:"url_list"`
 		}
 		if err := json.Unmarshal(body, &r); err != nil {
@@ -466,7 +467,13 @@ func otx(ctx context.Context, g *getter, domain, _ string, add func([]string)) (
 		}
 		var urls []string
 		for _, u := range r.URLList {
-			urls = append(urls, u.URL)
+			code := ""
+			if u.HTTPCode > 0 {
+				code = strconv.Itoa(u.HTTPCode)
+			}
+			if g.filters.keepStatus(code) {
+				urls = append(urls, u.URL)
+			}
 		}
 		add(urls)
 		// has_next is sometimes false while full_size says more remain.
@@ -499,7 +506,9 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 		var r struct {
 			Results []struct {
 				Page struct {
-					URL string `json:"url"`
+					URL      string `json:"url"`
+					Status   string `json:"status"`
+					MimeType string `json:"mimeType"`
 				} `json:"page"`
 				Task struct {
 					URL string `json:"url"`
@@ -513,8 +522,11 @@ func urlscan(ctx context.Context, g *getter, domain, key string, add func([]stri
 		}
 		var urls []string
 		for _, x := range r.Results {
-			urls = append(urls, x.Page.URL)
-			if !g.raw {
+			if g.filters.keepStatus(x.Page.Status) && g.filters.keepMime(x.Page.MimeType) {
+				urls = append(urls, x.Page.URL)
+			}
+			// The submitted URL has no status or type of its own.
+			if !g.raw && g.filters.keepStatus("") && g.filters.keepMime("") {
 				urls = append(urls, x.Task.URL)
 			}
 		}
