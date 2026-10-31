@@ -1,6 +1,6 @@
 # azhaq dns
 
-Resolve names, any record type; wildcard answers left out. Replaces dnsx (see [Migrating](../MIGRATING.md#dnsx-azhaq-dns)).
+Resolves names for any record type and leaves out wildcard answers. Replaces dnsx (see [Migrating](../MIGRATING.md#dnsx-azhaq-dns)).
 
 ## Synopsis
 
@@ -11,22 +11,111 @@ azhaq dns -d NAME | -l FILE | stdin  [-a -aaaa -cname -ns -txt -srv -ptr -mx -so
 ## Examples
 
 ```
+# the A records of every subdomain found, as JSON
 azhaq subs -d example.com | azhaq dns -a -json
+
+# MX and TXT records of a list, every record printed, two resolvers
 azhaq dns -l names.txt -mx -txt -resp -r 1.1.1.1,tcp:9.9.9.9
+
+# reverse lookups of a range
 azhaq dns -l 192.0.2.0/24 -ptr -resp
+
+# guess names under a domain from a wordlist, 50 names a second, 100 at once
 azhaq dns -d example.com -w words.txt -rl 50 -t 100
+
+# ask the name servers of a domain for its whole zone
 azhaq dns -d example.com -axfr -allow example.com
 ```
 
+## What it does
+
+1. Takes names from `-d`, `-l` or stdin.
+2. Asks resolvers for the record types you choose. A is the default.
+3. Leaves out a name that only resolves through a wildcard zone.
+4. Prints the names that have a record of the types asked.
+
+`dns` sends DNS queries and nothing else. `-axfr` connects to the name servers of the name, `-trace` asks the root servers, and `-asn` asks Team Cymru's DNS service.
+
 ## Output
 
-One name per line (A by default); -json: dnsx's fields (host, ttl, resolver, a, aaaa, cname, mx, ns, txt, srv, ptr, soa, caa, all, status_code, status_code_raw, cdn-name, ...) for every name a resolver answered, left out when empty.
+Plain output is one name per line: the names that have a record of the types asked. With `-json` you get one object per name a resolver answered, with the fields below. A field with no value is left out. `-db FILE` keeps the names that have records in a workspace.
 
-dnsx's fields, in its order, each left out when empty: `host`, `ttl` (of the first record that has one), `resolver` (the resolvers that answered), `a`, `aaaa`, `cname` (targets, no final dot), `mx`, `ptr`, `soa` (`name`, `ns`, `mailbox`, `serial`, `refresh`, `retry`, `expire`, `minttl`), `ns`, `txt` (the strings of a record joined), `srv` (targets), `caa` (values), `all` (every record as text; `-omit-raw` drops it), `raw` (with `-raw`), `has_internal_ips` and `internal_ips` (an answer in a private, loopback, link-local, documentation or multicast range), `status_code` (`NOERROR`, `NXDOMAIN`, `SERVFAIL`, `REFUSED`, ...) and `status_code_raw` (the number, left out for 0), `takeover` (not a dnsx field: the finding of a name whose CNAME points at what is gone), `trace` and `axfr` (`{host, chain: [rows]}`, with `-trace` and `-axfr`), `timestamp`, `hosts_file` (with `-hf`), and with `-cdn` `cdn` (true for a CDN), `cdn-name` and `cdn-type`, with `-asn` `asn` (`as-number`, `as-name`, `as-country`, `as-range`), and `query-time`. `-json` gives a row for every name a resolver answered, one that does not exist too (`status_code` `NXDOMAIN`, no records); with a type flag (`-a`, `-mx`, ...) only the names that have a record of that type, or with `-rcode` the names whose answer has that code. Text: one name per line, the names that have a record of the types asked (A by default); `-resp` gives `NAME [TYPE] [VALUE]` per record, `-resp-only` the values, each exactly as the resolver sent it (a TXT value or a target name keeps its capitals, as in `-json`), `-rcode` gives `NAME [NXDOMAIN]`, `-cdn` and `-asn` add ` [cdn-name]` and ` [AS number, name, country]`, `-ot '{{host}} {{a}}'` any template over the `-json` fields (`{{ip}}` is `a` and `aaaa` together). `-all` asks every type but AXFR, which is asked with `-axfr` only (it connects to the name servers); an address gets PTR only. A name that only resolves through a wildcard zone is left out of `a`, `aaaa` and `cname` (`-no-wildcard` keeps it) and counted in the summary as `wildcard answers left out`. With `-d DOMAIN -w WORDS` it resolves `WORD.DOMAIN` for each word, as dnsx `-d -w` does. The summary counts `asked`, `did not resolve` (names with no record of the types asked), `no answer` (no resolver answered), `other codes` (answered, but not with a code `-rcode` lists), `servfail from every resolver` (the name's own DNS is broken: not a failure), `left out` (inputs not asked about: an address or range without `-ptr`, a word that makes no name, a name outside the scope) and, when a run stops, `not asked`; it lists failures per kind of error and takeover candidates (a CNAME to a name that no longer exists). `-db FILE` keeps the names that have records in a workspace.
+What the text forms print:
+
+| Flag | Each line is |
+| --- | --- |
+| `-resp` | `NAME [TYPE] [VALUE]`, one per record |
+| `-resp-only` | the values, each exactly as the resolver sent it: a TXT value or a target name keeps its capitals, as in `-json` |
+| `-rcode` | `NAME [NXDOMAIN]`, with the code of the answer |
+| `-cdn`, `-asn` | the name, then ` [cdn-name]` or ` [AS number, name, country]` |
+| `-ot '{{host}} {{a}}'` | a template over the `-json` fields; `{{ip}}` is `a` and `aaaa` together |
+
+The `-json` fields are dnsx's, in its order:
+
+| Field | Meaning |
+| --- | --- |
+| `host` | The name asked. |
+| `ttl` | The TTL of the first record that has one. |
+| `resolver` | The resolvers that answered. |
+| `a`, `aaaa` | The addresses. |
+| `cname` | The targets, with no final dot. |
+| `mx`, `ptr` | The record values. |
+| `soa` | `name`, `ns`, `mailbox`, `serial`, `refresh`, `retry`, `expire`, `minttl`. |
+| `ns` | The name servers. |
+| `txt` | The strings of a record, joined. |
+| `srv` | The targets. |
+| `caa` | The values. |
+| `all` | Every record as text. `-omit-raw` drops it. |
+| `raw` | The raw answer, with `-raw`. |
+| `has_internal_ips`, `internal_ips` | An answer in a private, loopback, link-local, documentation or multicast range. |
+| `status_code` | `NOERROR`, `NXDOMAIN`, `SERVFAIL`, `REFUSED`, … |
+| `status_code_raw` | The code as a number. Left out for 0. |
+| `takeover` | Not a dnsx field: a name whose CNAME points at what is gone. |
+| `trace`, `axfr` | `{host, chain: [rows]}`, with `-trace` and `-axfr`. |
+| `timestamp` | The time of the query. |
+| `hosts_file` | With `-hf`. |
+| `cdn`, `cdn-name`, `cdn-type` | With `-cdn`. `cdn` is true for a CDN. |
+| `asn` | With `-asn`: `as-number`, `as-name`, `as-country`, `as-range`. |
+| `query-time` | The duration of the query. |
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary counts:
+
+| Count | Meaning |
+| --- | --- |
+| `asked` | Names asked. |
+| `did not resolve` | Names with no record of the types asked. |
+| `no answer` | Names no resolver answered. |
+| `other codes` | Names answered, but not with a code `-rcode` lists. |
+| `servfail from every resolver` | The name's own DNS is broken. This is not a failure. |
+| `left out` | Inputs not asked about: see Details. |
+| `not asked` | Names left when a run stops. |
+| `wildcard answers left out` | Names that resolved only through a wildcard zone. |
+
+The summary also lists failures per kind of error, and takeover candidates: a CNAME to a name that no longer exists.
+
+## Details
+
+### Which names get a row
+- `-json` gives a row for every name a resolver answered, one that does not exist too: `status_code` is `NXDOMAIN` and there are no records.
+- With a type flag (`-a`, `-mx`, …), only the names that have a record of that type get a row.
+- With `-rcode`, only the names whose answer has that code get a row.
+
+### Types
+- `-all` asks every type but AXFR. AXFR is asked with `-axfr` only, because it connects to the name servers.
+- An address gets PTR only.
+
+### Wildcards
+- A name that only resolves through a wildcard zone is left out of `a`, `aaaa` and `cname`.
+- `-no-wildcard` keeps it.
+
+### Words and inputs left out
+- With `-d DOMAIN -w WORDS` it resolves `WORD.DOMAIN` for each word, as `dnsx -d -w` does.
+- `left out` counts inputs that were not asked about:
+  - an address or range without `-ptr`
+  - a word that makes no name
+  - a name outside the scope
 
 ## Flags
 
