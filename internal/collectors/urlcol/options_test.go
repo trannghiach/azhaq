@@ -656,3 +656,31 @@ func TestAnEmptyAnswerIsNotAFailedArchive(t *testing.T) {
 		}
 	}
 }
+
+// An OTX URL cut at the end of its sentence, or shortened to "...", is junk
+// like any other source's: left out and counted, and kept by -raw.
+func TestOTXJunkIsDroppedAndCounted(t *testing.T) {
+	otx := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"https://example.org/reports/2307813."},{"url":"https://example.org/reports/..."},{"url":"https://example.org/reports/2307814"}]}`)
+	}))
+	defer otx.Close()
+	m := newMirror(t, pages)
+	bases := m.bases()
+	bases["otx"] = otx.URL
+	var got []string
+	summary, _, _, err := run(t, Options{Bases: bases, Client: otx.Client(), Only: []string{"otx"}, OnURL: func(u, _ string) { got = append(got, u) }}, context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"https://example.org/reports/2307814"}; !slices.Equal(got, want) {
+		t.Errorf("urls %v, want %v", got, want)
+	}
+	junk, _ := summary["junk"].(map[string]any)
+	if junk["link cut at the end of its sentence"] != 1.0 || junk["malformed link (wildcard, quote, bracket, ellipsis)"] != 1.0 {
+		t.Errorf("junk %v", junk)
+	}
+	got = nil
+	if _, _, _, err := run(t, Options{Bases: bases, Client: otx.Client(), Only: []string{"otx"}, Raw: true, OnURL: func(u, _ string) { got = append(got, u) }}, context.Background()); err != nil || len(got) != 3 {
+		t.Errorf("raw keeps them: %v (%v)", got, err)
+	}
+}
