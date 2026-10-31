@@ -458,3 +458,65 @@ func TestSourceTimeoutFlagDefaultsToThirtySeconds(t *testing.T) {
 		}
 	}
 }
+
+// Guessed names are accounted for like source names: the ones that did
+// not resolve are counted, and the count note adds up to what was printed.
+func TestSubsGuessesCountWhatDidNotResolve(t *testing.T) {
+	zone := fakeZone{
+		a:     map[string]string{"www.example.org": "192.0.2.10", "app.example.org": "192.0.2.11", "dev.example.org": "192.0.2.12"},
+		cname: map[string]string{"api.example.org": "www.example.org"},
+	}
+	for _, live := range []bool{true, false} {
+		t.Run(fmt.Sprint("live=", live), func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			resolvers := serveZone(t, zone)
+			defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true, Names: []string{"app.example.org"}})()
+			// app is given by a source and guessed too; random and missing do not exist.
+			words := wlist(t, "www", "app", "api", "dev", "random", "missing")
+			args := []string{"subs", "-d", "example.org", "-w", words, "-resolvers", resolvers, "-no-history"}
+			if live {
+				args = append(args, "-live")
+			}
+			out, rep, code := runContract(t, args...)
+			if code != exitOK {
+				t.Fatalf("exit %d %+v", code, rep)
+			}
+			c := rep.Counts
+			if want := []string{"api.example.org", "app.example.org", "dev.example.org", "www.example.org"}; !reflect.DeepEqual(hosts(t, out), want) {
+				t.Fatalf("printed %v", hosts(t, out))
+			}
+			if c["found by guessing"] != 3 || c["asked by guessing"] != 5 || c["did not resolve"] != 2 {
+				t.Errorf("counts %v", c)
+			}
+			if got := c["from sources"] + c["asked by guessing"] - c["did not resolve"] + c["found as CNAME targets"]; got != rep.Results {
+				t.Errorf("counts do not add up to the %d printed: %v", rep.Results, c)
+			}
+			want := "count: 1 from the sources + 5 asked by guessing − 2 did not resolve = 4 printed"
+			found := false
+			for _, n := range rep.Notes {
+				found = found || strings.HasPrefix(n, want)
+			}
+			if !found {
+				t.Errorf("no note %q in %v", want, rep.Notes)
+			}
+		})
+	}
+}
+
+// With no source at all the guesses alone still get a count note.
+func TestSubsGuessesAloneAreCounted(t *testing.T) {
+	t.Chdir(t.TempDir())
+	resolvers := serveZone(t, fakeZone{a: map[string]string{"www.example.org": "192.0.2.10"}})
+	words := wlist(t, "www", "random", "missing")
+	_, rep, code := runContract(t, "subs", "-d", "example.org", "-w", words, "-live", "-sources", "none", "-resolvers", resolvers, "-no-history")
+	if code != exitOK || rep.Results != 1 || rep.Counts["did not resolve"] != 2 {
+		t.Fatalf("exit %d results %d counts %v", code, rep.Results, rep.Counts)
+	}
+	found := false
+	for _, n := range rep.Notes {
+		found = found || strings.HasPrefix(n, "count: 0 from the sources + 3 asked by guessing − 2 did not resolve = 1 printed")
+	}
+	if !found {
+		t.Errorf("notes %v", rep.Notes)
+	}
+}

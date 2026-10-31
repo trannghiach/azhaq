@@ -364,7 +364,7 @@ The first line is `subfinder | dnsx` at a pace.
 
 - `-dns-rate` is queries a second per resolver. `two.txt` lists two resolver addresses, one a line, so the pace is twice that.
 - `-source-rate` is requests a second to each passive source.
-- The summary's `counts` add up. `from sources`, less `did not resolve`, plus what DNS found as CNAME targets, is `results`. The `count:` note writes the sum out.
+- The summary's `counts` add up. `from sources`, less `did not resolve`, plus what DNS found as CNAME targets and the names `-w` asked, is `results`. The `count:` note writes the sum out.
 
 Without `-live` nothing is looked up in DNS. Two kinds of name then carry `"unverified": true`:
 

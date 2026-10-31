@@ -121,11 +121,12 @@ The counts also say what became of the names, so a reader can add them up:
 | --- | --- |
 | `from sources` | The names every source gave for the domains, with the name history and subdomain.center's guesses, before any check. |
 | `the domain itself` | The domain given, when a source returned it. It is not printed. |
-| `did not resolve` | Names DNS says do not exist: guesses and history names that did not resolve, and with `-live` every other name that did not. |
+| `did not resolve` | Names DNS says do not exist: guesses and history names that did not resolve, and with `-live` every other name that did not. A guess that only a wildcard answered is one of them. |
 | `collected` | With `-live`: `from sources` less the domain itself and the guesses that did not resolve. |
 | `resolved from sources` | With `-live`: names from sources that resolved and were printed. |
 | `CNAME only` | With `-live`: printed names that are a CNAME and have no address of their own. |
 | `found as CNAME targets`, `found by guessing` | Live names no source gave: another name's CNAME target in scope, and the names of `-w` and `-permute`. |
+| `asked by guessing` | The names `-w` and `-permute` asked that no source gave. `found by guessing` is what is left of them after `did not resolve` and `left out by -m/-f`. |
 | `unverified` | Printed names no DNS lookup checked, without `-live`: names only subdomain.center guessed, and names only the name history held, which no source gave this run. |
 | `not checked` | With `-live`: names the resolvers failed on, left out. The run says so and `azhaq resume` checks them. |
 | `left out by -m/-f` | Names a `-m`, `-f`, `-match-regex` or `-filter-regex` removed. |
@@ -138,13 +139,15 @@ The counts also say what became of the names, so a reader can add them up:
 The number of results is `from sources`, less some counts and plus others:
 
 - Less: `the domain itself`, `did not resolve`, `not checked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`.
-- Plus: `found as CNAME targets` and `found by guessing`.
+- Plus: `found as CNAME targets` and `asked by guessing` (the guesses that did not resolve are in `did not resolve`).
 
 The run prints the sum as a note:
 
 ```
 count: 2638 from the sources − 2096 did not resolve − 1 not checked + 10 found as CNAME targets = 551 printed
 ```
+
+With `-w`, the guesses are in it: `count: 0 from the sources + 14 asked by guessing − 2 did not resolve = 12 printed`.
 
 ### Per-source status
 The workspace keeps a status for each source, shown by `azhaq show` and held in the `sources` payload of an `azhaq-subdomains` observation:

@@ -91,7 +91,7 @@ func init() {
 		{name: "subs", group: groupDropIn, like: "subfinder", run: cmdSubs,
 			summary: "subdomains from passive sources",
 			usage:   "-d DOMAIN | -dL FILE | stdin  [-live] [-json] [-silent] [-o FILE] [-db FILE] [-m GLOB | -f GLOB | -match-regex RE | -filter-regex RE] [-source-rate N] [-ls]",
-			output:  "one name per line, as subfinder prints it (-cs: host,[sources]; -live -oI: host,ip,source); -json: {\"host\",\"input\",\"source\",\"sources\"} like subfinder, with \"unverified\":true on a name that only subdomain.center guessed or only the name history held, which was not looked up in DNS (without -live), and with -live dnsx's a, aaaa, cname. The domain given is not printed, as subfinder keeps only the names below it. The summary's counts add up: from sources, less the domain itself and did not resolve, plus CNAME targets and guesses found, is the names printed",
+			output:  "one name per line, as subfinder prints it (-cs: host,[sources]; -live -oI: host,ip,source); -json: {\"host\",\"input\",\"source\",\"sources\"} like subfinder, with \"unverified\":true on a name that only subdomain.center guessed or only the name history held, which was not looked up in DNS (without -live), and with -live dnsx's a, aaaa, cname. The domain given is not printed, as subfinder keeps only the names below it. The summary's counts add up: from sources, less the domain itself and did not resolve, plus CNAME targets and the guesses asked, is the names printed",
 			examples: []string{
 				"azhaq subs -d example.com",
 				"azhaq subs -d example.com -live -json -db example.db",

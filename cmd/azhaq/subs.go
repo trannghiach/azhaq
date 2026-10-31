@@ -397,11 +397,25 @@ func cmdSubs(args []string) error {
 	}
 	// Names the guesses found. A dangling CNAME is found but not live: with
 	// -live it shows as a takeover candidate, not as a name.
-	guessed := 0
+	guessed, guessTried, guessHeld, guessDead, guessFiltered := 0, 0, 0, 0, 0
 	for _, g := range []struct{ collector, source string }{{"azhaq-dns-brute", "dns-brute"}, {"azhaq-permute", "permute"}} {
 		for _, p := range payloads(st, g.collector) {
-			for _, name := range strs(p["names"]) {
-				if seen[name] || (alive != nil && alive[name] == nil) || !filt.keep(name) {
+			names := strs(p["names"])
+			// Every guess is accounted for: found and printed, found but
+			// already given, left out by a filter or by the -live check, or
+			// not found (it did not resolve, or only a wildcard answered).
+			guessTried += max(intOf(p["tried"]), len(names))
+			guessDead += max(intOf(p["tried"]), len(names)) - len(names)
+			for _, name := range names {
+				switch {
+				case seen[name]:
+					guessHeld++
+					continue
+				case !filt.keep(name):
+					guessFiltered++
+					continue
+				case alive != nil && alive[name] == nil:
+					guessDead++
 					continue
 				}
 				seen[name] = true
@@ -459,6 +473,10 @@ func cmdSubs(args []string) error {
 	rep.Degraded = rep.Counts["sources failed"] > 0
 	if active {
 		rep.Counts["found by guessing"] = guessed
+		// A guess a source gave too is one of the source names.
+		if n := guessTried - guessHeld; n > 0 {
+			rep.Counts["asked by guessing"] = n
+		}
 	}
 	// The names add up: from sources, less what was dropped or left out,
 	// plus what DNS and the guesses added, is what was printed.
@@ -469,7 +487,7 @@ func cmdSubs(args []string) error {
 		}
 	}
 	set("the domain itself", itself)
-	set("did not resolve", dropped+didNot)
+	set("did not resolve", dropped+didNot+guessDead)
 	if *live {
 		// Show the live/dead split: a raw subdomain count is mostly names
 		// that do not resolve (stale certificate logs, wildcard noise). The
@@ -481,7 +499,7 @@ func cmdSubs(args []string) error {
 	set("CNAME only", out.cnameN)
 	set("not checked", notChecked)
 	set("unverified", unverified)
-	set("left out by -m/-f", filtered)
+	set("left out by -m/-f", filtered+guessFiltered)
 	set("listed under another domain", dup)
 	set("cut by -max-names", cut)
 	if cut > 0 {
@@ -512,10 +530,13 @@ func cmdSubs(args []string) error {
 // sources gave, less what was dropped, plus what DNS added, are the names
 // printed.
 func nameSum(c map[string]int, results int, filtering bool) string {
-	if c["from sources"] == 0 {
+	if c["from sources"] == 0 && c["asked by guessing"] == 0 {
 		return ""
 	}
 	parts := []string{fmt.Sprintf("%d from the sources", c["from sources"])}
+	if n := c["asked by guessing"]; n > 0 {
+		parts = append(parts, fmt.Sprintf("+ %d asked by guessing", n))
+	}
 	minus := func(k, label string) {
 		if c[k] > 0 {
 			parts = append(parts, fmt.Sprintf("− %d %s", c[k], label))
@@ -529,9 +550,6 @@ func nameSum(c map[string]int, results int, filtering bool) string {
 	minus("cut by -max-names", "cut by -max-names")
 	if n := c["found as CNAME targets"]; n > 0 {
 		parts = append(parts, fmt.Sprintf("+ %d found as CNAME targets", n))
-	}
-	if n := c["found by guessing"]; n > 0 {
-		parts = append(parts, fmt.Sprintf("+ %d found by guessing", n))
 	}
 	return fmt.Sprintf("count: %s = %d printed", strings.Join(parts, " "), results)
 }
