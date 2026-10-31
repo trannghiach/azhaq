@@ -174,9 +174,10 @@ This list says which part of Azhaq each group of options drives:
 - **Passive:** `-passive`. See [Planning and scope](#planning-and-scope).
 - **Subdomain sources:** `-sources`, `-exclude-sources`, `-all-sources`, `-providers`, `-source-rate`, `-source-rates`, `-max-results`, `-max-time`, `-max-body`, `-source-proxy`, `-no-history`. See [Subdomain sources](#subdomain-sources).
 - **DNS:** `-resolvers`, `-dns-rate`. See [DNS](#dns).
+- **Paths you rule out:** `-deny-path REGEX` (repeatable). See [Paths you rule out](#paths-you-rule-out).
 - **Active techniques:** `-dns-brute`, `-permute`, `-dirs`, `-params`, `-ports`, `-ports-udp`, `-graphql`. Each is held to the targets given, or to the scope `-allow` or `-scope` names.
 - **Ledger and kill switch:** `-ledger`, `-kill-file`. See [The request ledger and the kill switch](#the-request-ledger-and-the-kill-switch).
-- **Scheduling:** `-depth`, `-max-items`, `-parallel`, `-host-parallel`, `-delay`, `-all-gets`, `-v`. See [Scheduling](#scheduling-runlocal).
+- **Scheduling:** `-depth`, `-max-items`, `-parallel`, `-host-parallel`, `-delay`, `-v`. See [Scheduling](#scheduling-runlocal).
 
 ### Packages and workers
 
@@ -238,7 +239,7 @@ An origin is a scheme, a host and a port. It is stopped for the rest of the run 
 
 - Its remaining requests are refused with `neterr.ErrOriginDown`, instead of each taking a timeout.
 - The tasks that asked end `capped`. They are left for `azhaq resume`, which tries the origin again.
-- The summary lists them under `left alone` with `ORIGIN stopped answering after 5 timeouts`, and names the origin in `stopped`.
+- The summary lists them under `skipped` with `ORIGIN stopped answering after 5 timeouts`, and names the origin in `stopped`.
 - Any answer starts the count over. A request the run itself cancelled does not count.
 - Only the 5 timeouts are failures.
 - The check of `http://host/` for a host given as https treats a stopped origin as nothing listening.
@@ -367,6 +368,19 @@ All HTTP collectors share one client (`internal/fetch`):
 - `-delay` adds a pause before each uncached request.
 - `-cookie` and `-header` are added to every request, which lets a run reuse a session you already have. `-login` gets one with Chrome. Azhaq stores cookie names but never their values.
 - Headers must arrive within 10 seconds, as in httpx, because CDN edges and bot managers often answer slowly. The whole request, body included, gets 30 seconds, so a large bundle on a slow link still arrives.
+
+### Paths you rule out
+
+`-deny-path REGEX` is the user's own rule for paths, and the only one: azhaq has no default and decides nothing about a URL by its name. The rules are part of the scope (`scope.Rules.DenyPath`, compiled once). A regex is checked at start; a bad one is a usage error, exit 2, before any request. `DeniedPath(url)` matches each against the path as sent and decoded, with and without the query, so an escaped dot or slash does not step round it.
+
+One rule set, enforced where every request passes:
+
+- `fetch.DeniedBy` is set from the rules. `fetch.DoReq` and `SubmitForm` refuse a URL it matches with `neterr.Denied` before the cache, the budget or the network, and a redirect to one is recorded with its `Location` and not followed.
+- `ledger.Transport`, which every HTTP client of a run sends through (the fuzz sender, the path sweep, parameter search, the roles' replays), refuses it too, giving back the request it had counted.
+- Chrome's Fetch domain fails the request (`internal/browser/scope.go`), pages and scripts alike.
+- The scheduler keeps a matching URL seed out of the queue; the path sweep leaves a matching word unsent; `fuzz` does not send a matching input; a parameter search skips a matching page.
+- Each URL kept out is told to `fetch.OnDenied`, which the engine writes as a `skipped` observation (`-deny-path REGEX`), so it is `skipped` in the map and listed in the summary. `fuzz` counts its inputs per rule.
+- `roles` holds the rules over each replay it sets up (`holdDeny`), `azhaq mcp -deny-path` hands them to every tool call, and `plan` prints them.
 
 ### Probing
 
@@ -646,10 +660,10 @@ A link is followed when `crawl`'s scope allows it. By default that is the regist
 
 Every form is a `forms` entry of its page.
 
-- A GET form is asked once with neutral values in its fields. Hidden fields, ticked boxes and selects get the page's own values. Text gets `azhaq`, an email gets `azhaq@example.org`, and a number gets `1`. `-no-form-fill` leaves GET forms alone.
+- A GET form is asked once with neutral values in its fields. Hidden fields, ticked boxes and selects get the page's own values. Text gets `azhaq`, an email gets `azhaq@example.org`, and a number gets `1`. `-no-form-fill` does not fill GET forms.
 - A POST form is sent only with `-submit-forms`, with the same values, urlencoded. It changes data on the target.
 - Each submission is one request of the budget and the pace, and is in the ledger. It is held to `-allow`, `-deny` and the crawl's scope.
-- A POST form is skipped when its address looks like it would change something, such as `logout` or `delete`, or when it uploads a file.
+- A POST form is not sent when it uploads a file, posts outside the crawl's scope, or its address matches a `-deny-path` rule. Its name decides nothing.
 - The summary says how many POST forms were sent and which were not.
 
 #### Politeness
@@ -661,12 +675,19 @@ Every form is a `forms` entry of its page.
 
 ### Sessions and roles
 
-`-cookie` and `-header` apply to every request of a run. So does the session `-login` gets. Chrome fills and submits the login form. The cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). While a session is set, URLs that look like a logout are not requested, by the HTTP collectors or by `-browser`.
+`-cookie` and `-header` apply to every request of a run. So does the session `-login` gets. Chrome fills and submits the login form. The cookies the site sets and a JSON Web Token the page stores become a `Cookie` and an `Authorization` header (`internal/browser/login.go`). Nothing is guessed from a URL's name, a logout link included: it is requested like any other. What keeps the session honest is a check (`internal/fetch/session.go`):
+
+- The run asks a page with its session and without it before it starts (`cmd/azhaq/session.go`: the page `-login` ended on, else a target) and keeps one whose answers differ (status, and the path a redirect goes to). If none differs, only a response that expires a cookie the run sends ends the session as far as the run can tell.
+- `Spend`, which every request to a target passes through, counts requests and asks the check every 50, and at once after an answer that looks like the end of the session (a 401, a redirect to the sign-in page, a response that expires a session cookie, which also names the URL). `fetch.EndCheck` asks it once more when the work ends. While it runs, other requests wait; the sign-in's own requests pass.
+- A failed check with `-login` renews the session (a new Chrome sign-in, whose headers are set whole with `fetch.SetExtra`). `fetch.DoReq` has kept the GETs sent since the last good check; they leave the cache, the scheduler (`redoSession`) drops what the touching collectors reported of them and runs their tasks again, so their stored answers are the signed-in ones. The URL whose answer ended the session is not asked again. A note says what was done.
+- A failed check with `-cookie` or `-header`, or a fifth loss, sets `neterr.SessionLost`: `Spend` refuses every later request with it, the summary lists it as a failure (`azhaq-session`) and the exit code is 3.
+- Path and parameter sweeps (`dirs`, `params`) are counted by the check, not recorded: their requests since the last good check are named in the note and not repeated.
+- `roles` has its own canaries (`roles_canary.go`): see [roles](commands/roles.md).
 
 A role of `azhaq roles` is headers (`-role`) or an account to sign in with (`-role-login`). `azhaq roles` works in two phases:
 
 1. It runs the same seeds once per role, in turn, each with its own database.
-2. It replays. Every URL any role reached is asked with each role that did not reach it, through that role's session. The URLs are those on the run's hosts, as a GET whose name does not say it changes something.
+2. It replays. Every URL any role reached is asked with each role that did not reach it, through that role's session. The URLs are those on the run's hosts, as GETs.
 
 GET routes with path parameters are filled with the values of identifier-like fields the roles' own JSON answers held. The fields are `id`, `username`, `*_id`, `*_title` and more. The order of values is:
 
@@ -878,7 +899,7 @@ The sweep has its own client:
 - It reads bodies only to count them. A body is kept, up to 1 MB, only for `-mr` and for the calibration's check that a page repeats its path.
 - It keeps one connection per thread, with 40 requests in flight and no pace beyond that, as ffuf does. `-dirs-threads` and `-dirs-rate` set them.
 
-Hits become URLs for the other collectors. A sweep hands them to the engine in batches, which write each batch in one transaction. So a target that answers every guess is not slowed by the workspace. With a session, logout-like words are skipped.
+Hits become URLs for the other collectors. A sweep hands them to the engine in batches, which write each batch in one transaction. So a target that answers every guess is not slowed by the workspace.
 
 ## Fuzzing
 
@@ -955,11 +976,12 @@ The likelier names come first.
 
 The page is asked twice with one random name. That answer is the reference, and the difference between the two is the page's own noise.
 
-A page is left alone, and the summary says why, when it:
+A page is not searched, and the summary says why, when it:
 
 - changes too much by itself;
 - is not text, HTML, JSON or XML;
-- answers 405 to a body method.
+- answers 405 to a body method;
+- matches a `-deny-path` rule.
 
 Names the reference answer itself holds go first. They are:
 
@@ -1023,7 +1045,7 @@ Nothing is dropped without a word.
 - A 429, 418 or 503 that the page did not give for unknown names before is waited out. The wait is its `Retry-After` up to 30 s, else 1, 2 and 4 s. Every request to that host waits.
 - If it persists, the page fails with the names found so far kept and a note. The exit code is 3.
 - A request that gets no answer, even after one retry of a timeout, fails the page the same way. The names of its group are not judged.
-- A page left alone is named in a note. That covers a page that changes by itself, is not text, or has more pages than `-params-per-host`.
+- A page not searched is named in a note. That covers a page that changes by itself, is not text, or has more pages than `-params-per-host`.
 - A request that times out is asked again with 5 s more, up to 20 s (`params -T`).
 
 ### Pace
@@ -1091,7 +1113,7 @@ It finds what only a click brings:
 A click sends nothing a page load does not:
 
 - The writes it would send are refused and mapped like any other. `-browser-writes` is a separate choice.
-- A button or link whose words or address say log out, sign out, delete, remove, reset or the like is not clicked.
+- A button or link is clicked whatever its words say, as in katana: a link's GET is requested. What a click would write is refused by its method.
 - `mailto:`, `tel:`, `javascript:` and downloads are not clicked.
 - Chrome stays held to the scope and the budget.
 
@@ -1099,7 +1121,7 @@ The summary says:
 
 - how many clicks were made, and on how many pages;
 - how many routes they found;
-- how many candidates were left alone;
+- how many candidates were not clicked (downloads, mail and phone links);
 - how many writes were mapped.
 
 Azhaq does not attach to a Chrome that is already running (katana's `-cwu`). A Chrome it did not start would not be behind the scope guard and the ledger.
@@ -1181,7 +1203,7 @@ What a refused write would have sent is not lost:
 - Its method, the names in its query and the names its body sends become an operation on its route, with `source` `browser`, as a script's call does.
 - The names in a body are a JSON object's keys, also in a beacon's `text/plain` string, or a urlencoded or multipart form's fields. A value is never kept.
 - So the route is in the map as a `hint` with that method and in the OpenAPI export. It is not fetched for it.
-- The summary lists it as left alone, by method and URL without its query:
+- The summary lists it as not sent, by method and URL without its query:
 
 ```
 {"target":"POST http://127.0.0.1:3001/api/track","reason":"a page's script would send a write"}
@@ -1552,12 +1574,12 @@ A found URL is requested with GET when all of these hold:
 
 - it is on the run's hosts and in scope;
 - it has no unfilled parameter;
-- its path, or an `action=` value, does not start with a verb that does something. Examples are logout, delete, remove, reset, create, save, update, change, send, run and import (`webextract.StateChanging`).
+- no `-deny-path` rule matches its path or query.
 
-URLs that start with such a verb are kept as `skipped`, with the word. They are listed under `left alone` in the summary, whatever found them: a link, a script's call or an API description. `-all-gets` requests them too.
+A name decides nothing: azhaq cannot know what a GET does on the server, so `/logout`, `/createdb` and `?action=delete` are requested like any other URL. A URL a `-deny-path` rule matches is kept as `skipped`, with the rule, and listed under `skipped` in the summary, whatever found it: a link, a script's call, an API description, a wordlist or Chrome.
 
-- API description operations are asked when they are GETs that need no path or query parameter. The same verbs keep them out. VAmPI's `GET /createdb` resets its database.
-- With a session, path and parameter guesses that read that way are not sent either, and are listed as `skipped`. A session is `-cookie`, an `Authorization` header, or a header that carries a token.
+- API description operations are asked when they are GETs that need no path or query parameter. VAmPI's `GET /createdb`, which resets its database, is asked; `-deny-path '^/createdb$'` keeps it out.
+- Path and parameter guesses are sent with a session as without one.
 
 ### Junk that never enters the graph
 
@@ -1640,7 +1662,7 @@ The writes a page's scripts would send are mapped and listed, not sent. Operatio
 
 **Every outcome said.**
 
-- Each command ends with a summary. It says what failed and whether it is worth retrying, which targets never answered, what was left alone and why, and the limit that stopped the work.
+- Each command ends with a summary. It says what failed and whether it is worth retrying, which targets never answered, what was not requested and why, and the limit that stopped the work.
 - The exit code says the same: 0 complete, 3 finished with failures, 4 stopped by a limit. So a script or an assistant never has to guess whether an empty result is an honest zero.
 
 ## Limitations

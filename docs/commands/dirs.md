@@ -70,7 +70,8 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 ### Which words are asked
 - A sweep asks every word, `/logout` and `/delete` included, as ffuf does.
-- Only with a session (`-cookie`, `-H 'Authorization: …'`) are the words that look like they change something held back and listed as `skipped`. `-all-gets` asks them too.
+- No word is held back, with a session or without one: what a GET does on the server cannot be known from its name. A word whose URL a `-deny-path` rule matches is not sent and is listed under `skipped` with the rule.
+- With a session, the run checks it as it goes. A word that ended the session is noticed: a `-login` run signs in again, a `-cookie` or `-H` run stops with a failure and exit 3. The words sent since the last good check are counted in the note, not repeated: [Sessions](../CONCEPTS.md#sessions).
 - `-u https://h/api/` asks `https://h/api/WORD`. A query or fragment on the URL is dropped, and a note says so.
 
 ### Pace
@@ -82,11 +83,11 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-H` | string, repeatable |  | extra request header K: V |
-| `-all-gets` | bool |  | also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested |
 | `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
 | `-cookie` | string, repeatable |  | Cookie name=value (repeatable; sent as one Cookie header) |
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
 | `-e` | string |  | also try each word with these extensions, comma-separated (php,bak) |
 | `-fc` | string |  | hide these statuses |

@@ -144,6 +144,7 @@ note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 re
 | `-csv` | string |  | also write one row per page to this CSV file (url, final_url, response_code, title, technologies, file, phash, partial) |
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-dir` | string | `screenshots` | directory for the picture files |
 | `-hostnames` | bool |  | with -nmap or -nessus: the host's name instead of its address, when the file has one |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |

@@ -104,7 +104,7 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 | `unreachable` | Targets you gave that never answered. |
 | `takeover` | Names another party may take over: `host`, `service`, `target` (the CNAME target), `evidence`, `strength`. See [takeover](#takeover). |
 | `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. See [failed](#failed). |
-| `skipped` | Targets and requests azhaq chose not to touch, with the reason. See [skipped](#skipped). |
+| `skipped` | Targets and requests azhaq did not send, with the reason. See [skipped](#skipped). |
 | `junk` | `urls` only: the URLs left out as junk, by reason. See [urls](commands/urls.md#junk). |
 | `sources` | `subs` and `urls`: which sources answered, which failed and why, and what each gave. See [subs](commands/subs.md#the-sources-block) and [urls](commands/urls.md#summary-and-exit-codes). |
 | `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
@@ -125,11 +125,12 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 - `retryable` is true for timeouts, dropped connections, 429 and 5xx.
 - `source` names a third-party source, such as `crtsh` or `wayback`.
 - `targets` names up to 100. `azhaq query -db FILE -failed` lists every failed target: the list to retry.
+- `azhaq-session` is a signed-in run whose session ended and could not be renewed (`the session ended: after /logout was requested …`). Every request after it was refused, so nothing after it was answered as an anonymous visitor. The exit code is 3: see [Sessions](CONCEPTS.md#sessions).
 - `partial` and `fanout` failures do not make the exit code 3: see [Failures](CONCEPTS.md#failures-fan-out-partial-and-degraded).
 
 ### skipped
 
-- The reasons: outside the scope, would end the session, or a scope entry a run cannot use.
+- The reasons: outside the scope, a `-deny-path` rule (`-deny-path REGEX`), sent before the run was killed, or a scope entry a run cannot use. azhaq lists nothing as skipped for what a URL is called.
 - Chrome's requests outside the scope are refused before they leave. They are listed without their query string as `outside the scope (Chrome)`.
 - Without a scope, the reason is `outside the site (Chrome)`. The site is the registrable domain or address of the pages Chrome was pointed at.
 - The first 100 URLs of a run are listed. `notes` gives the number of requests when there were more.

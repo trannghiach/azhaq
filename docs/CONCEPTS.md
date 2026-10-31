@@ -41,10 +41,10 @@ A row's `scope` (`target` or `fanout`) is not the request [scope](#scope) that `
 | `error` | Requested; no answer: timeout, refused, reset or TLS failure. | `azhaq query -db W -failed`, then try again. |
 | `gone` | Requested; it answered 404 or 410, usually a URL found in an archive or a link. Nothing read says it takes another method. | Try older API versions near it. |
 | `hint` | Known from a script, a description, an archive or a link, not proven by a GET. See below for the cases. | Send the method in its operations yourself. |
-| `skipped` | Not requested on purpose: its name says a GET would change something. Listed under "left alone". | `-get-words WORD`, or `-all-gets`, if you accept the side effect. |
+| `skipped` | Found, and not requested for a stated reason: a `-deny-path` rule of yours keeps its path out. Listed under `skipped` with the rule. | Change the rule if you want it requested. |
 | `capped` | Not requested: a limit (budget, depth, items) ran out first. | `azhaq resume -db W`. |
 
-A `skipped` row has a `word` field that names the verb, such as `logout` or `delete`.
+A `skipped` row says why in its `skipped` field, for example `-deny-path ^/admin/`. azhaq decides nothing by a URL's name: what a GET does on the server cannot be known from it.
 
 A `hint` row is one of these:
 
@@ -75,7 +75,7 @@ A row takes the strongest level any of its sources reaches, in this order:
 
 - A 404 does not make a row `answered`. The server said it is not there, so the row keeps the level of whatever named it.
 - A row folded into a template (`/product?id={n}`) takes the strongest level of its instances and lists the collectors of all of them.
-- Only URL rows have a level. Coverage still says what was done: `skipped` is a URL deliberately not asked, with the level it was named at.
+- Only URL rows have a level. Coverage still says what was done: `skipped` is a URL kept out by a rule of yours, with the level it was named at.
 
 ### A 5xx without input
 
@@ -121,6 +121,7 @@ The scope is the set of hosts a run may send to. No request to a target goes to 
 - `-deny` names what the run must not touch, even when given as a target.
 - `-scope` reads a program's scope: a file, or `hackerone`, `bugcrowd`, `intigriti` or `yeswehack` with `-program`. `azhaq scope` prints what a run would take, exclude and skip.
 - With no rule, the scope is the targets you named, and Chrome stays on the site.
+- `-deny-path REGEX` keeps paths out (repeatable): a URL whose path, or path and query, matches is never requested, by any collector or by Chrome, and is listed under `skipped` as `-deny-path REGEX`. It is the only rule azhaq has about a path, and it has no default: see [what azhaq sends](#what-azhaq-sends).
 - Options that send more than the map does are held to the targets given, or to `-allow` and `-scope`: see [what azhaq sends](#what-azhaq-sends).
 
 A scope entry, in `-allow`, `-deny` and a scope file, is one of:
@@ -140,6 +141,17 @@ A header that names a host is held to the scope too, because a front end routes 
 - With no `-allow`, `-deny` or `-scope`, a host you name in a header joins the targets you named.
 - With a rule, a header that names a host outside it is refused before anything is sent. The command exits 2.
 - A request file, an import (`params -i`), a `-vi` line and a `-role-cmd` bring headers you did not type. They are held to the targets.
+
+## Sessions
+
+A run with a session (`-login`, `-cookie`, `-header` carrying a token) sends it with every request. Any URL it requests may end that session: a `/logout` link, an expiry. azhaq does not guess which; it measures.
+
+- **The check.** At the start the run asks a page with its session and without it (the page `-login` ended on, else a target) and keeps one whose answers differ: a 200 against a redirect to the sign-in page, say. If none differs, the summary says so, and a lost session is noticed only when a response clears the session cookie.
+- **When it is asked.** Every 50 requests, once more at the end, and right after an answer that looks like the end of the session: a 401, a redirect to the sign-in page the run used, or a response that expires a cookie the run sends (that response names the URL that ended it).
+- **A session that failed its check, with `-login` (or a `-role-login`).** The run signs in again, asks again the pages requested since the last good check (counted and entered in the ledger as any request) and says so in a note: `the session ended after /logout was requested; signed in again; 37 requests asked again`. The URL that ended the session is not asked again. A session that ends 5 times stops the run as below.
+- **A session that failed its check, given with `-cookie` or `-header`.** The run cannot sign in again. It refuses every later request with `the session ended: …`, lists the failure, exits 3 and never goes on as an anonymous visitor. Give a fresh session and `azhaq resume`.
+- **What is not asked again.** The requests of a path or parameter sweep sent since the last good check are counted in the note and not repeated: a sweep is redone whole with `azhaq resume`.
+- **`roles`.** Each signed-in role's session has its own check (a page only a live session reads), every `-canary-every` requests; see [roles](commands/roles.md). A role's logout is requested like any other URL, and the check says when it mattered.
 
 ## Budget, pace and the kill switch
 
@@ -342,10 +354,20 @@ With `-replay-writes`, three more come before them all:
 - Every download is refused and listed. Chrome saves nothing to disk.
 - A page read for its requests is loaded without its images, fonts and media.
 
+### What azhaq sends, and what it cannot know
+
+azhaq sends a GET to every URL it finds in scope. It cannot know what a GET does on the server: a name says nothing reliable (`/createdb`, `/logout`, `/rest/saveLoginIp` are GETs that change state on some apps and read-only pages on others), so no name keeps a URL out. What decides is known:
+
+- **The method.** Writes (POST, PUT, PATCH, DELETE, a form submitted, a page's own writes in Chrome, a role's write replay, a parameter search with a body) are sent only with their flag: `-submit-forms`, `-browser-writes`, `roles -replay-writes`, `-params-writes`, `-graphql` for the introspection POST. Without it they are mapped, not sent.
+- **Your rule.** `-deny-path REGEX` keeps a path out of every request, Chrome's included.
+- **A measurement.** A signed-in run checks that its session lives: see [Sessions](#sessions).
+
+`azhaq plan` lists what a run would send, and the [ledger](#the-ledger-and-its-seal) records what was sent. If a URL must not be requested, say so with `-deny-path`.
+
 ### What is held back
 
-- The map (`run`, `crawl`) lists, and does not request, URLs whose names say a GET would change something: `/logout`, `/createdb`, `?phpids=on`. These are the "left alone" URLs.
-- A wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does. With a session, `dirs` holds those words back and `-all-gets` asks them.
+- A path a `-deny-path` rule matches is never requested. It is listed under `skipped` with the rule, and its coverage is `skipped`.
+- A wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does, with a session or without one. A word a `-deny-path` rule matches is not sent.
 - A URL that carries a scanner's payload in its path or query never enters the map. Examples are `<script>`, `../../etc/passwd` and `union select`, as archives often keep them. A scanner's own test file never enters either.
 - No request to a target goes to a host outside the [scope](#scope), Chrome's included. Without a scope, requests stay on the site.
 - Third-party sources (subdomain lists, archives, RDAP) are asked about your domains. `-passive` sends nothing to the targets.

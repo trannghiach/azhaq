@@ -91,14 +91,14 @@ It is a valid OpenAPI document whatever went into it:
 - Every `{name}` in a path is a declared path parameter, and a parameter is listed once.
 - Component names that OpenAPI does not allow are renamed, with their references.
 
-#### Routes the run left alone
+#### Routes the run did not request
 
-A route the run left alone (`skipped`) has no GET or HEAD of azhaq's making in it. A tool importing the description would send one.
+A route the run did not request (`skipped`, kept out by `-deny-path`) has no GET or HEAD of azhaq's making in it. A tool importing the description would send one.
 
 - The served description may list such a route anyway, such as VAmPI's `GET /createdb`. Or azhaq may have guessed its POST.
-- Each such operation carries `x-azhaq-skipped: true` and `x-azhaq-skipped-reason`, for example `looks like a GET would change something (createdb)`.
+- Each such operation carries `x-azhaq-skipped: true` and `x-azhaq-skipped-reason`, for example `-deny-path ^/createdb`.
 - `-safe` leaves those operations out, for a tool that must not touch them.
-- An API route left alone for its name (`/user/change-email`), whose callers do not say the method, is described as a POST. `x-azhaq.method` says it is a guess. It is never described as a GET.
+- An API route kept out whose callers do not say the method is described as a POST. `x-azhaq.method` says it is a guess. It is never described as a GET.
 
 #### Forms
 
@@ -186,5 +186,5 @@ Rules look like this:
 | `-db` | string |  | sqlite path (default: last run) |
 | `-format` | string | `jsonl` | jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, graphql (introspection JSON), sdl (GraphQL schema), burp (the run's scope), html, graphml, secrets |
 | `-origin` | string |  | openapi: the origin to describe (default: the one with most API routes); graphql, sdl: the endpoints of an origin, or one endpoint's URL |
-| `-safe` | bool |  | openapi: leave out the routes the run left alone as state-changing (otherwise they carry x-azhaq-skipped: true), for a tool that must not touch them |
+| `-safe` | bool |  | openapi: leave out the routes the run did not request, such as those -deny-path kept out (otherwise they carry x-azhaq-skipped: true) |
 <!-- flags:end -->

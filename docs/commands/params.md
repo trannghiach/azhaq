@@ -69,7 +69,7 @@ Two files can be written as well:
 The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). These cases are specific to `params`.
 
 - A page that rate-limits (429, 418, 503) or leaves requests unanswered fails with exit 3. The failure is listed as `failed` and retryable, with a note.
-- A page left alone has a note that says why: it changes by itself, is not text, or is past `-params-per-host`.
+- A page not searched has a note that says why: it changes by itself, is not text, is past `-params-per-host`, or a `-deny-path` rule matches its address.
 - A page that answers names it does not read is listed in the summary's `notes`: see Details.
 
 ## Details
@@ -87,7 +87,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-H` | string, repeatable |  | extra request header K: V |
 | `-T` | float | `15` | seconds to wait for each request; one that times out is asked again with 5 s more, up to 20 s (arjun -T) |
 | `-X` | string | `GET` | how names are sent: GET (query), POST (form body), JSON or XML. A body sends requests that may change data on the target, and needs -allow or -scope, or a single page |
-| `-all-gets` | bool |  | also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested |
 | `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
 | `-c` | int |  | names per request at most (0: 500, and about 7.6 KB in a query; fewer where the server refuses a long query) |
 | `-casing` | string |  | write the names in one style: snake (like_this), camel (likeThis) or lower (likethis) |
@@ -95,6 +94,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-d` | float |  | seconds to wait before each request, one at a time (arjun -d) |
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-i` | string |  | import pages: a file of URLs, a Burp Suite XML export (HTML, JSON and XML items) or a raw HTTP request (GET or POST) |
 | `-include` | string |  | sent with every request: a query (a=1&b=2) for GET; for a body a form, a JSON object, or XML, or a template with $arjun$ where the names go |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |

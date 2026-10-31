@@ -154,6 +154,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-debug-resp` | bool |  | print each response to stderr |
 | `-delay` | duration |  | time between requests to targets: a pace of one request per DELAY over all hosts (as -rate 1/DELAY) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-dns-rate` | float |  | DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx) |
 | `-e` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex |
 | `-efqdn` | bool |  | report the names a page and its policy name: csp, body_fqdn, body_domains |

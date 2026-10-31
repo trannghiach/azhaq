@@ -5,7 +5,7 @@ Serve azhaq to MCP clients over stdio, with the scope and the request budget fix
 ## Synopsis
 
 ```
-azhaq mcp [-scope FILE|PLATFORM -program P] [-allow D] [-deny D] [-max-requests N] [-rate N] [-dir DIR]
+azhaq mcp [-scope FILE|PLATFORM -program P] [-allow D] [-deny D] [-deny-path RE] [-max-requests N] [-rate N] [-dir DIR]
 ```
 
 ## Examples
@@ -21,7 +21,7 @@ claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000
 ## What it does
 
 1. Starts a Model Context Protocol server that talks JSON-RPC on stdin and stdout.
-2. Holds every tool to the scope given by `-scope`, `-allow` and `-deny`. All tool calls together share the `-max-requests` budget and the `-rate` pace.
+2. Holds every tool to the scope given by `-scope`, `-allow`, `-deny` and `-deny-path`. All tool calls together share the `-max-requests` budget and the `-rate` pace.
 3. Writes the workspaces the tools make into `-dir`.
 
 The tools and their arguments are listed in [MCP.md](../MCP.md).
@@ -41,6 +41,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | --- | --- | --- | --- |
 | `-allow` | string, repeatable |  | a domain or host the tools may touch (repeatable); with -scope, added to it |
 | `-deny` | string, repeatable |  | a domain or host the tools must not touch |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested by any tool |
 | `-dir` | string | `azhaq-mcp` | directory for the workspaces the tools write |
 | `-max-requests` | int |  | requests to targets all tool calls together may send (0: no cap) |
 | `-program` | string |  | the program to take from -scope |

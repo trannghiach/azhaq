@@ -7,6 +7,7 @@
 The **scope**, the **request budget** and the **pace** are fixed at start. No tool argument can widen them:
 
 - Targets outside the scope are skipped and listed in the summary.
+- Paths a `-deny-path` rule matches are never requested by any tool, and are listed as skipped. azhaq has no path rule of its own: every other GET found in scope is requested.
 - A subdomain lookup for a domain outside the scope is refused, because the passive sources would learn what the assistant asks about.
 - Once the budget is spent, every tool that sends requests refuses.
 
@@ -17,7 +18,7 @@ azhaq mcp -scope hackerone -program security -max-requests 20000 -rate 5
 azhaq mcp -allow example.com -deny admin.example.com -max-requests 5000
 ```
 
-Every flag is described on the [`azhaq mcp` page](commands/mcp.md#flags): `-scope` with `-program`, `-allow`, `-deny`, `-max-requests`, `-rate`, `-dir` (default `azhaq-mcp`) and `-unlocked`.
+Every flag is described on the [`azhaq mcp` page](commands/mcp.md#flags): `-scope` with `-program`, `-allow`, `-deny`, `-deny-path`, `-max-requests`, `-rate`, `-dir` (default `azhaq-mcp`) and `-unlocked`.
 
 Without `-allow` or `-scope` the server does not start (exit 2), unless `-unlocked` says so. Then any target a tool is given may be touched, and port scans are refused.
 

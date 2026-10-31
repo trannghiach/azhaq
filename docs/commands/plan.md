@@ -84,7 +84,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 <!-- flags:begin plan -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-all-gets` | bool |  | also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested |
 | `-all-sources` | bool |  | also run slower subdomain sources outside the default set |
 | `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
 | `-asn` | string, repeatable |  | seed an autonomous system: its announced prefixes |
@@ -107,6 +106,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-delay` | duration |  | pause before each uncached fetch |
 | `-demo` | bool |  | run against the built-in fixture server (no internet) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-depth` | int | `4` | max fan-out waves (0 = seed wave only, not unlimited) |
 | `-dirs` | string |  | guess paths on each web service from this wordlist, or @common for the built-in one (active; the targets given are the scope unless -allow) |
 | `-dirs-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
@@ -132,14 +132,13 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
 | `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
-| `-get-words` | string |  | request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets |
 | `-graphql` | bool |  | read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow) |
 | `-graphql-wordlist` | string |  | extra probe words (one per line), tried and recombined with the built-in ones when a GraphQL endpoint's introspection is off and its schema has to be recovered from validation errors |
 | `-header` | string, repeatable |  | extra request header K: V |
 | `-host-parallel` | int |  | requests in flight per host (default 10, as katana) |
 | `-host-rate` | float |  | requests per second to each host, besides -rate over all (0: none) |
 | `-in` | string |  | JSONL seeds |
-| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made |
+| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; a click is made whatever its label says, and the writes it would send are refused by their method and mapped, not sent |
 | `-interact-clicks` | int | `12` | clicks -interact makes on each page |
 | `-json` | bool |  | print the map as JSON lines, and the summary as one JSON object on stderr |
 | `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |

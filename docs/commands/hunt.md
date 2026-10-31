@@ -73,7 +73,6 @@ $ azhaq hunt -db app.db
 | `unauth-write` | A POST, PUT, PATCH or DELETE that no description asks credentials for, on a route that did not turn the plain request away. |
 | `upload` | A file field in a form, or an operation whose body is `multipart/form-data` or a file. |
 | `xml` | An operation whose body is XML (`application/xml`, `text/xml`): a parser that may read entities. |
-| `state-change` | A GET left alone because its name says it changes something. A logout is left out. |
 | `password-in-url` | A GET form with a password field: the password lands in logs and history. |
 | `gated` | A 401 or 403: a session is needed, so a target for `azhaq roles`. |
 | `server-error` | A 5xx, weighed by what shows beside it: see [Server errors](#server-errors). |

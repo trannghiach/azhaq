@@ -30,7 +30,7 @@ azhaq run -url https://app.example.com/ -browser -login https://app.example.com/
 2. Resolves names, probes web services, crawls pages and scripts, and reads API descriptions.
 3. Follows what it finds in waves, as far as `-depth` allows.
 4. Asks each web service for the built-in paths unless `-no-paths` says not to ([Path checks](#path-checks-stop-at-their-answer)).
-5. Lists, but does not request, URLs whose names say a GET would change something. They get the coverage `skipped`.
+5. Requests every GET URL it finds in scope. It cannot know what a GET does on the server, so no name keeps a URL out. Writes go only with their flags, and `-deny-path REGEX` keeps paths out (they get the coverage `skipped`).
 6. Sends nothing to a host outside the scope, Chrome's requests included. `-passive` sends nothing to the targets at all.
 7. Prints the ranked map when it ends and the summary on stderr.
 
@@ -133,12 +133,12 @@ found in
   - A route that scripts call only with POST or PUT.
   - A route that only a page in Chrome writes to. A GET that answers 404, 405 or the catch-all page says nothing about such a route.
   - A route named only in scripts, with no GET call among them, while a GET answers 404. Its `proof` says `GET answers 404; found only in scripts, method unknown`.
-- `skipped` means found by a link, a script's call, an API description or an archive. It was not requested: its name says a GET would change something.
-  - `word` names the verb. The summary lists the URL under `skipped`, as `left alone`.
-  - This is the map's rule. A wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does. It holds words back only under a session (see [dirs](dirs.md)).
+- `skipped` means found by a link, a script's call, an API description or an archive, and not requested because a `-deny-path` rule of yours keeps its path out.
+  - The row's `skipped` field and the summary say which rule: `-deny-path ^/admin/`.
+  - Nothing else makes a URL `skipped`. A wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does, and so does the map.
 - `capped` means left when a limit was hit, or when its origin stopped answering.
   - An origin has stopped answering after 5 connects or timeouts in a row with no answer between them.
-  - The rest of that origin's work is left for `azhaq resume`. It is listed under `left alone` as `ORIGIN stopped answering after 5 timeouts`, and `stopped` names the origin.
+  - The rest of that origin's work is left for `azhaq resume`. It is listed under `skipped` as `ORIGIN stopped answering after 5 timeouts`, and `stopped` names the origin.
 - A version prefix alone that only a script's strings name (`/v3`) is left out of the map when it answers 404 or the catch-all page.
 
 ### Evidence
@@ -271,7 +271,6 @@ Examples of what `notes` holds for a run:
 <!-- flags:begin run -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-all-gets` | bool |  | also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested |
 | `-all-sources` | bool |  | also run slower subdomain sources outside the default set |
 | `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
 | `-asn` | string, repeatable |  | seed an autonomous system: its announced prefixes |
@@ -294,6 +293,7 @@ Examples of what `notes` holds for a run:
 | `-delay` | duration |  | pause before each uncached fetch |
 | `-demo` | bool |  | run against the built-in fixture server (no internet) |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-depth` | int | `4` | max fan-out waves (0 = seed wave only, not unlimited) |
 | `-dirs` | string |  | guess paths on each web service from this wordlist, or @common for the built-in one (active; the targets given are the scope unless -allow) |
 | `-dirs-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
@@ -319,14 +319,13 @@ Examples of what `notes` holds for a run:
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
 | `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
-| `-get-words` | string |  | request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets |
 | `-graphql` | bool |  | read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow) |
 | `-graphql-wordlist` | string |  | extra probe words (one per line), tried and recombined with the built-in ones when a GraphQL endpoint's introspection is off and its schema has to be recovered from validation errors |
 | `-header` | string, repeatable |  | extra request header K: V |
 | `-host-parallel` | int |  | requests in flight per host (default 10, as katana) |
 | `-host-rate` | float |  | requests per second to each host, besides -rate over all (0: none) |
 | `-in` | string |  | JSONL seeds |
-| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made |
+| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; a click is made whatever its label says, and the writes it would send are refused by their method and mapped, not sent |
 | `-interact-clicks` | int | `12` | clicks -interact makes on each page |
 | `-json` | bool |  | print the map as JSON lines, and the summary as one JSON object on stderr |
 | `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |

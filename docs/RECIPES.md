@@ -76,7 +76,7 @@ azhaq run -url https://app.example.com/ -header 'Authorization: Bearer …' -db 
 azhaq run -url https://app.example.com/ -login https://app.example.com/login -login-user me@example.com -login-pass '…' -allow app.example.com -db app.db
 ```
 
-**You get:** `-login` signs in with Chrome. It keeps the cookies and the token the page stored. A signed-in run never requests a logout URL.
+**You get:** `-login` signs in with Chrome. It keeps the cookies and the token the page stored. A signed-in run requests every URL it finds, a logout link included, and checks its session as it goes: if a request ended it, the run signs in again and asks again what the lost session answered. Add `-deny-path 'logout'` to keep that URL out.
 
 ## Find IDOR and BOLA with two accounts
 
@@ -514,10 +514,10 @@ The target is an app of yours with forms on port 5030, such as a DVWA container,
 
 - `-submit-forms` changes data on the target. A sign-up form creates an account. Use it on a target you may write to.
 - The ledger lists every submission, and the summary counts them.
-- Three kinds of form are left alone, and the summary says so:
-  - a form whose address looks like it would change something, such as `logout` or `delete`;
+- Three kinds of form are not sent, and the summary says so:
   - a form that uploads a file;
-  - a form that posts outside the crawl's scope.
+  - a form that posts outside the crawl's scope;
+  - a form whose address a `-deny-path` rule matches.
 - A form that posts to its own page, with an empty action, is sent.
 - Without `-sweep`, `crawl` does not ask the built-in paths: `/admin`, `/.git/HEAD` and API description names.
 - `-kf all` asks only `robots.txt` and the sitemaps, and reads every entry.

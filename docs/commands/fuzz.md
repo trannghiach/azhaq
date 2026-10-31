@@ -35,7 +35,7 @@ azhaq fuzz -u 'https://app.example.com/api/§v1§/users/§1§' -w ids.txt -mode 
 4. Counts each answer as ffuf does and applies the matchers, filters and calibration.
 5. Prints one line for each match. `-o FILE` also writes ffuf's report.
 
-A word is asked whatever it says, `/logout` included. A request to a host outside the scope is not sent.
+A word is asked whatever it says, `/logout` included; `-deny-path REGEX` keeps an input whose URL it matches from being sent, and lists it under `skipped`. A request to a host outside the scope is not sent.
 
 ## Output
 
@@ -194,6 +194,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-db` | string |  | keep the matches in this database for query, show, export and diff (none by default) |
 | `-debug-log` | string |  | write each failed request and its error to this file |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: an input whose URL it matches is never sent, and is listed as not requested |
 | `-e` | string |  | extensions added to each FUZZ word, comma-separated: .php,.bak |
 | `-enc` | string, repeatable |  | encoders for a keyword: 'FUZZ:urlencode b64encode' (repeatable); one of b64decode, b64encode, hexdecode, hexencode, jsonescape, jsonunescape, lower, md5, sha1, sha224, sha256, sha384, sha512, unicodedecode, unicodeencodeall, upper, urldecode, urlencode, urlencodeall, utf16, utf16be, xmlescape, xmlunescape or a .tmpl file with #PAYLOAD# |
 | `-fc` | string |  | filter out these statuses |

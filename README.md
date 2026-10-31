@@ -147,12 +147,12 @@ Coverage is one of seven states:
 - `error`: no answer.
 - `gone`: 404 or 410.
 - `hint`: known, not proven by a GET.
-- `skipped`: not requested, because a GET there would change something.
+- `skipped`: not requested, because a `-deny-path` rule of yours keeps its path out.
 - `capped`: not requested, because a limit ran out. `azhaq resume` continues.
 
 A row that no request answered ends with how it is known, such as `[called]`. [Concepts](docs/CONCEPTS.md#evidence-how-azhaq-knows-a-url) lists the levels.
 
-Every command prints results on stdout and a summary on stderr: what failed, what was left alone and which limit stopped it. `-json` makes both JSON. Exit codes: `0` complete, `1` error, `2` usage (nothing sent), `3` finished with failures, `4` stopped by a limit or the kill file. See [Output](docs/OUTPUT.md#exit-codes) and [Concepts](docs/CONCEPTS.md).
+Every command prints results on stdout and a summary on stderr: what failed, what was not requested and which limit stopped it. `-json` makes both JSON. Exit codes: `0` complete, `1` error, `2` usage (nothing sent), `3` finished with failures, `4` stopped by a limit or the kill file. See [Output](docs/OUTPUT.md#exit-codes) and [Concepts](docs/CONCEPTS.md).
 
 ## Drop-in commands
 
@@ -201,8 +201,9 @@ These controls hold for everything azhaq sends to a target. [Concepts](docs/CONC
 - **Budget and pace.** `-max-requests` caps what a run sends, and `-rate` paces it. `azhaq resume` continues a run that a limit stopped. `azhaq plan` prints what a run would send before anything goes out.
 - **Kill switch.** Create the kill file (`-kill-file`, default `DB.stop`) and nothing more is sent, within a tenth of a second.
 - **Ledger.** Every request and connection of a run with a workspace is recorded in a hash-chained file that a seal closes. `azhaq ledger -verify` checks it.
-- **Side effects.** The map lists, and does not request, URLs whose names say a GET would change something. Chrome refuses a page's own writes unless `-browser-writes`, and every download.
-- **What is sent.** Pages, scripts, API descriptions and 32 built-in path checks are GETs. Guesses, ports, UDP and wordlists go out only when you ask. A port (`-ports`) gets a TCP connect, and one that says nothing also a `HEAD /`. [Every row](docs/CONCEPTS.md#what-azhaq-sends).
+- **What azhaq sends.** azhaq sends a GET to every URL it finds in scope. It cannot know what a GET does on the server, so no name keeps a URL out. Writes (POST, PUT, PATCH, DELETE, forms, a page's own writes in Chrome, role write replays) are sent only with their flags. `-deny-path REGEX` keeps paths out, by any collector and Chrome. `azhaq plan` lists what will be sent, and the ledger records what was sent. Chrome saves no download.
+- **Sessions.** A signed-in run checks its session as it goes. If a request ends it, a `-login` run signs in again and asks again what the lost session answered; a `-cookie` run stops with a failure and exit 3, never going on anonymous. See [Sessions](docs/CONCEPTS.md#sessions).
+- **Kinds of request.** Pages, scripts, API descriptions and 32 built-in path checks are GETs. Guesses, ports, UDP and wordlists go out only when you ask. A port (`-ports`) gets a TCP connect, and one that says nothing also a `HEAD /`. [Every row](docs/CONCEPTS.md#what-azhaq-sends).
 - **Passive.** `-passive` sends nothing to the targets. Third-party sources, such as subdomain lists, archives and RDAP, are asked about your domains.
 
 ## For assistants: MCP

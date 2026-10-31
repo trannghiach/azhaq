@@ -26,10 +26,10 @@ This page lists, tool by tool:
 ## What is the same for every command
 
 - **Flags.** A flag may have one dash or two: `-silent` or `--silent`. A flag a command does not have stops it with exit 2 before anything is sent. `azhaq help COMMAND` lists the flags a command has, and `azhaq help -json` lists them for a program.
-- **Output.** Results go to stdout, one per line, as the tool prints them. A summary goes to stderr: what failed, what was left alone, and which limit stopped the run. With `-json` the results are JSON lines and the summary is one JSON object. See [OUTPUT.md](OUTPUT.md).
+- **Output.** Results go to stdout, one per line, as the tool prints them. A summary goes to stderr: what failed, what was not requested, and which limit stopped the run. With `-json` the results are JSON lines and the summary is one JSON object. See [OUTPUT.md](OUTPUT.md).
 - **Exit codes.** `0` complete, `1` error, `2` usage, `3` finished with failures, `4` stopped by a limit or the kill file. They are the same for every command. The tools above exit 0 after most of these, so a script that checks `$?` sees more than it did. See [OUTPUT.md](OUTPUT.md#exit-codes).
 - **Scope and limits.** Nothing is sent to a host outside the scope. See [Concepts](CONCEPTS.md). The flags differ by command:
-  - `probe`, `crawl`, `ports`, `dirs`, `fuzz`, `params` and `shots` take `-allow`, `-deny`, `-scope`, `-max-requests`, `-kill-file`, `-ledger` and `-rate`. `-scope` takes a program's scope.
+  - `probe`, `crawl`, `ports`, `dirs`, `fuzz`, `params` and `shots` take `-allow`, `-deny`, `-scope`, `-max-requests`, `-kill-file`, `-ledger` and `-rate`. `-scope` takes a program's scope. Except `ports`, they also take `-deny-path REGEX`, which keeps paths out: it is where the out-of-scope regexes of katana and feroxbuster (its dont-scan list) go when a URL must never be requested. azhaq decides nothing about a path by itself, so it has no default rule.
   - `dns` takes the three scope flags.
   - `subs`, `urls`, `asn` and `notify` send nothing to a target, so they have none of these.
 - **Workspace.** `-db FILE` keeps what a command found in a workspace. `query`, `show`, `export`, `diff`, `watch` and `resume` then work on it. Without `-db` the command uses a temporary workspace.
@@ -233,7 +233,7 @@ Behaviour, fields and edge cases: [`azhaq crawl`](commands/crawl.md).
 | `-headless` | `-browser` | Pages are also loaded in Chrome. `-interact` clicks the buttons and menus. |
 | `-fs rdn` | `-fs rdn` | The hosts a crawl follows: `rdn`, `fqdn`, `dn` or a regex. See below for the default. |
 | `-ns` | `-ns` | Follow links to any host, still held to `-allow` and `-deny`. |
-| `-cs`, `-cos` | `-cs`, `-cos` | Regexes of the URLs to follow or never follow. |
+| `-cs`, `-cos` | `-cs`, `-cos` | Regexes of the URLs to follow or never follow. `-deny-path REGEX` goes further: a URL it matches is never requested, by any collector or Chrome. |
 | `-do` | `-do` | Also list the URLs found and left out of scope. They are never requested. |
 | `-f url,path,rdn`, `-sf`, `-sfd` | the same | Fields; one file per field. azhaq adds `method`: `-ot '{{method}} {{url}}'` prints the methods a route is called with. |
 | `-em`, `-ef`, `-mr`, `-fr` | the same | Extension filters and regex filters on the printed URLs. |
@@ -257,7 +257,7 @@ Behaviour, fields and edge cases: [`azhaq crawl`](commands/crawl.md).
 <!-- azhaq: crawl -->
 
 - **Hosts followed.** Without `-fs`, a crawl of a name follows its registrable domain and subdomains, as `rdn` does. A crawl of an address stays on that address and port. Redirects are followed inside the site, not to any host.
-- **Not asked.** A URL whose name says a GET would change something is listed, not requested. Examples are `/logout` and `/delete?id=1`. `azhaq run -all-gets` asks them.
+- **Every URL found is asked.** Like katana and Burp's crawler, `crawl` requests every GET URL it finds in scope, `/logout` and `/delete?id=1` included: azhaq cannot know what a GET does on the server, so no name keeps a URL out. Writes go only with their flags. `-deny-path REGEX` keeps paths out of every request. With a session, a request that ends it is noticed and the session is renewed or the run stops: [Sessions](CONCEPTS.md#sessions).
 - A URL with a scanner's payload in it never enters the map.
 - Chrome sends only GET, HEAD and OPTIONS unless you give `-browser-writes`.
 - A page with many query variants, such as `/item?id=N`, is asked 3 times, as `-per-template` sets. The rest are listed.
@@ -346,7 +346,7 @@ azhaq crawl -u https://app.example.com/ -fs rdn -do -f rdn,path -rl 5
 - **Not in `fuzz`.** ffuf's scrapers, `-search` and its history files are not there. `-db FILE` keeps the matches. There is no audit log: the hash-chained `-ledger` is the record.
 - **`dirs` follows ffuf's counting and its defaults.** That is 40 guesses in flight, no pace, and the matcher `-mc 200-299,301,302,307,401,403,405,500`.
 - **Headers.** `fuzz` and `dirs` send what ffuf sends: no `Accept`, `Accept-Encoding: gzip` and your `-H` headers. The `User-Agent` is a current Chrome's, not `Fuzz Faster U Fool`. A size does not depend on it unless the app answers by it, so a `-fs` taken from ffuf filters the same answers.
-- **Every word is asked.** A sweep requests `/logout` and the like, as ffuf does. Only with a session does `dirs` hold back the words that look like they change something. A session is `-cookie` or `-H 'Authorization: …'`. `-all-gets` asks the held-back words.
+- **Every word is asked.** A sweep requests `/logout` and the like, as ffuf does, with a session or without one. `-deny-path REGEX` is the one way to hold a word back.
 
 ### Examples
 
@@ -464,7 +464,7 @@ Behaviour, fields and edge cases: [`azhaq params`](commands/params.md).
 - The built-in list is 6,500 names, which is `-w large`. arjun's `large` is longer. Use `-w FILE` for a list of your own. Names are sent in the order given, without duplicates.
 - When a long query is refused with 414, the group of names shrinks.
 - A page that rate-limits with 429, 418 or 503, or leaves requests unanswered, fails with exit 3 and a note. It is not a silent empty list.
-- A name that looks like a logout, delete or reset is left out when you give a session, with `-cookie` or `-H`. `-all-gets` asks it.
+- Every name of the list is sent, with a session or without one. A page that `-deny-path REGEX` matches is not searched, and a note says so.
 
 ### Examples
 

@@ -33,17 +33,24 @@ Entries are grouped by what you were doing:
 
 **Fix:** [Coverage](CONCEPTS.md#coverage-what-azhaq-did-with-a-url) says what to try next.
 
-### Why was `/exec` (or `/logout`, `/createdb`) not requested?
+### Why was `/logout` (or `/exec`, `/createdb`) requested?
 
-**Why:** Its name says a GET there could change something. The URL is listed under "left alone" with the word. Two cases differ:
+**Why:** azhaq sends a GET to every URL it finds in scope. It cannot know what a GET does on the server: a name says nothing reliable, and the same name is a read-only page on one app and a state change on another. So no name keeps a URL out. Writes (POST, PUT, PATCH, DELETE) are different: they are sent only with their flags.
 
-- A directory named `exec`, `execute`, `run`, `import`, `create`, `add`, `generate`, `send`, `start` or `checkout`, such as `/vulnerabilities/exec/` or `/admin/user/add/`, is a section with a form. It is requested.
-- The same directory under an API path, such as `/api/jobs/run/`, is not requested: it is an endpoint.
+**Fix:** Say which paths must not be requested, with your own rule.
 
-**Fix:** You accept the side effect, or you do not ask.
+- `-deny-path '^/(logout|createdb)'` keeps those paths out of every request, Chrome's included. The URL stays in the map as `skipped`, and the summary lists it as `-deny-path ^/(logout|createdb)`.
+- `azhaq plan` lists the rules a run would hold to, and the ledger records everything that was sent.
+- A request that ended your session is noticed: see below.
 
-- `-get-words exec` requests the URLs left alone for that word only.
-- `-all-gets` requests all of them.
+### The run says `the session ended`
+
+**Why:** A request ended the session of a signed-in run: a logout link, or an expiry. azhaq noticed because its check page, the one that answers differently with the session and without it, no longer answered as it did.
+
+- With `-login`, the run signs in again, asks again the pages requested since the last good check, and says so in a note: `the session ended after /logout was requested; signed in again; 37 requests asked again`.
+- With `-cookie` or `-header` it cannot sign in again. It refuses every later request, lists `azhaq-session` as a failure and exits 3, so nothing after the loss is mistaken for an anonymous answer.
+
+**Fix:** Give a fresh session and `azhaq resume -db W`, or keep the URL that ends it out with `-deny-path`. [Sessions](CONCEPTS.md#sessions) has the rules.
 
 ### The map looks thin
 
@@ -568,6 +575,6 @@ The allowed hosts are then requested, counted and in the ledger.
 
 ### `dns -axfr` found no zone
 
-**Why:** A name server that refuses a transfer is common. The summary's notes say, for each server, one of three things: it refused, it did not answer, or it was left alone because the scope does not allow it. Only the name servers of the name, and the `-resolvers` you gave, are asked.
+**Why:** A name server that refuses a transfer is common. The summary's notes say, for each server, one of three things: it refused, it did not answer, or it was not asked because the scope does not allow it. Only the name servers of the name, and the `-resolvers` you gave, are asked.
 
 **Fix:** `-allow` the server's name or address to ask a server the scope left out.

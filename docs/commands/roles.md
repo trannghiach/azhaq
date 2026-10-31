@@ -301,11 +301,11 @@ http://app refuses with a 200 page saying "Access denied" (the anonymous role go
 
 - **Session.** A role with no `-role` headers, no `-role-cmd` and no `-role-login` takes the `Authorization` and `Cookie` header of its most recent request to the target. `Bearer null` and `Bearer undefined` are no session. A role whose history carries none is anonymous.
 - **Target origins.** For each account, the origin most of its requests go to, and any other with a quarter of them. `-allow HOST` adds one. Requests to other origins, such as analytics and CDNs, are neither sent nor read from. A note names them.
-- **Pages.** Each GET on the target that does not look like it changes something is asked once, as the account. Its answer is the account's own, as if its run had found it. `/rest/basket/6` and `/rest/basket/7` in two histories are the route `/rest/basket/{id}`.
+- **Pages.** Each GET on the target a history reached is asked once, as the account. Its answer is the account's own, as if its run had found it. `/rest/basket/6` and `/rest/basket/7` in two histories are the route `/rest/basket/{id}`.
 - **After the read.** Replay, identity, controls, evidence and `roles show` work as after a crawl.
 - **Without run options.** Without `--` run options nothing is crawled, and the target is the history's origins. With them, the crawl's pages are added.
 - **Flags.** `-no-anon` leaves the anonymous role out. `-rate N` paces the history reads and the replay. The history reads count against `-replay-max`.
-- **Writes.** With `-replay-writes`, the history's writes of the methods named are replayed. They go to the target's origins only, never a logout, and DELETE only when named.
+- **Writes.** With `-replay-writes`, the history's writes of the methods named are replayed. They go to the target's origins only, and DELETE only when named. A name decides nothing: a logout the history sent is replayed like any write you asked for, and the role's session check says when it ended that role's session.
 - **Proof.** A write is proved in the field it sets, against the object as the owner's last write left it. A short 2xx answer that says no, such as `Only Admins may delete users!` or `forbidden`, is a refusal.
 
 ### Identifiers you give
@@ -453,7 +453,7 @@ Writes change data on the target. They go only to the hosts of the run options' 
 
 #### Which writes are sent
 
-- **Writes a role sent, from a HAR** (`-har NAME=FILE`, as a browser's developer tools or Burp save it). They are its requests with those methods on the run's hosts, one each. Each goes with its body and `Content-Type`, `Accept` and `X-Requested-With`. It never carries the session that sent it: cookies, `Authorization` or a CSRF token. A logout is never replayed.
+- **Writes a role sent, from a HAR** (`-har NAME=FILE`, as a browser's developer tools or Burp save it). They are its requests with those methods on the run's hosts, one each. Each goes with its body and `Content-Type`, `Accept` and `X-Requested-With`. It never carries the session that sent it: cookies, `Authorization` or a CSRF token. It is replayed whatever its URL is called: only the method decides.
 - **Writes the map finds.** These are the PUT, PATCH and DELETE that the routes the runs found take, from API descriptions and scripts. They go on each role's own objects, filled with each role's own identifiers. That is the identity the read replay uses: JWT claims, `/me` answers, list items and `-id`.
 - This includes routes that only take a write and have no GET, such as `PUT /users/v1/{username}/email`.
 
@@ -576,9 +576,9 @@ The diff lines look like this:
 | `-proxy` | string |  | send every request through this proxy (http, https or socks5 URL): the runs, the history reads and the replay |
 | `-rate` | float |  | requests per second for the history reads and the replay, when the run options give none |
 | `-refusal` | string |  | REGEX: a 2xx answer whose body matches is a refusal, for every role (a 200 "Access denied" page); each origin's own refusal page is learned besides |
-| `-replay` | bool | `true` | ask every endpoint one session reached with every other session, and each role's objects with the others (GETs that change nothing only) |
+| `-replay` | bool | `true` | ask every endpoint one session reached with every other session, and each role's objects with the others (reads only, by method: GET; a write is replayed only with -replay-writes) |
 | `-replay-max` | int | `2000` | requests the replay may send, over all roles |
-| `-replay-writes` | string |  | also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins, never a logout), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks |
+| `-replay-writes` | string |  | also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks |
 | `-replay-writes-canary` | bool |  | with -replay-writes: change one short string field of a PUT or PATCH body to a unique value for each role it is replayed with, before it is sent, so a write that would otherwise replay the owner's own value back (no change to read back) can still be proved; never on by default, since it changes data, and restoring the field afterward is not done |
 | `-role` | string, repeatable |  | NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: … |
 | `-role-cmd` | string, repeatable |  | NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes |

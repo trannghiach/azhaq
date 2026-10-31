@@ -59,7 +59,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - counts the rejected strings and the links outside the scope;
 - names a host that answered 429 or 503, and what was done about it;
 - counts both kinds of listed URL, and says where to look: routes that scripts call with other methods, and strings that scripts only name;
-- says how many POST forms `-submit-forms` sent, and which POST forms it left alone and why.
+- says how many POST forms `-submit-forms` sent, and which POST forms it did not send and why.
 
 A crawl never drops links without a word. When `-max-items`, `-max-requests`, `-mdp` or the run's `-timeout` stops it, the run exits 4 and `azhaq resume` continues it.
 
@@ -158,6 +158,7 @@ These filters limit what is printed, not what is crawled.
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-delay` | duration |  | pause before each uncached fetch |
 | `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
 | `-depth` | int | `4` | max fan-out waves (0 = seed wave only, not unlimited) |
 | `-do` | bool |  | also list the URLs found and left out of the crawl's scope (never requested) |
 | `-dr` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |
@@ -174,7 +175,7 @@ These filters limit what is printed, not what is crawled.
 | `-host-rate` | float |  | requests per second to each host, besides -rate over all (0: none) |
 | `-hrl` | int |  | requests per second to each host (katana's -hrl) |
 | `-hrlm` | int |  | requests per minute to each host (katana's -hrlm) |
-| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made |
+| `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; a click is made whatever its label says, and the writes it would send are refused by their method and mapped, not sent |
 | `-interact-clicks` | int | `12` | clicks -interact makes on each page |
 | `-iqp` | bool |  | ask one URL of each path whatever its query values (katana's -iqp; the others are listed) |
 | `-j` | bool |  | same as -jsonl |
