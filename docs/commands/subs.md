@@ -93,6 +93,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - `failed` counts sources in the default set, or named with `-sources`. `off_by_default_failed` counts sources that ran only because of `-all-sources`.
 - `asked` is `answered` plus `failed` plus `off_by_default_failed`. A source skipped for want of a key is not asked.
 - `names` is what each source gave, before any DNS check or filter. For `urls` the field is `urls`: see [urls](urls.md#summary-and-exit-codes).
+- `requests` is what each source was sent, retries included, summed over the domains. The summary's top-level `requests` leaves them out: they go to third parties, not to targets.
 - `seconds` is how long each source took, the longest over the domains. The slowest source set the run's time. crt.sh is asked in its public PostgreSQL first, as subfinder does, and in its JSON API only when the database fails or has no names; a note says which happened, as in `crt.sh database: connection refused; asked the JSON API`. A note names it when it held the run: `crtsh took 30 s, the next slowest source 3 s, so it held the run`.
 - `failed_sources` has each failed source's reason, such as `"wayback": "web.archive.org answered 429"`. With several domains, each reason starts with its domain.
 - `dns` asks resolvers, not sources, and has no such block.

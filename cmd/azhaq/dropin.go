@@ -646,6 +646,9 @@ func cmdURLs(args []string) error {
 	if n := rep.Sources.archivesNote(); n != "" {
 		rep.Notes = append(rep.Notes, n)
 	}
+	if n := rep.Sources.requestsNote(); n != "" {
+		rep.Notes = append(rep.Notes, n)
+	}
 	rep.failOnErrors = hasFlag(given(), "fail-on-errors")
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)

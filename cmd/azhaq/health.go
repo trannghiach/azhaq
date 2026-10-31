@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -19,6 +21,10 @@ type sourceHealth struct {
 	// any DNS check or filter.
 	Names map[string]int `json:"names,omitempty"`
 	URLs  map[string]int `json:"urls,omitempty"`
+	// Requests is what each source was sent, retries included, summed over
+	// the domains. They go to third parties, so the run's own requests count
+	// leaves them out.
+	Requests map[string]int `json:"requests,omitempty"`
 	// Seconds is how long each source took (the longest over the domains): the
 	// one that set the run's time is the largest.
 	Seconds map[string]float64 `json:"seconds,omitempty"`
@@ -38,6 +44,7 @@ type healthTally struct {
 func newHealthTally(urls bool) *healthTally {
 	t := &healthTally{reasons: map[string][]string{}, domains: map[string]bool{}, urls: urls}
 	t.h.Seconds = map[string]float64{}
+	t.h.Requests = map[string]int{}
 	if urls {
 		t.h.URLs = map[string]int{}
 	} else {
@@ -60,6 +67,9 @@ func (t *healthTally) add(domain string, srcs map[string]any) {
 			gave = t.h.URLs
 		}
 		gave[name] += intOf(row["count"])
+		if n := intOf(row["requests"]); n > 0 {
+			t.h.Requests[name] += n
+		}
 		if sec, ok := row["seconds"].(float64); ok {
 			t.h.Seconds[name] = max(t.h.Seconds[name], sec)
 		}
@@ -82,6 +92,9 @@ func (t *healthTally) result() *sourceHealth {
 		return nil
 	}
 	h := t.h
+	if len(h.Requests) == 0 {
+		h.Requests = nil
+	}
 	if len(t.reasons) > 0 {
 		h.FailedSources = map[string]string{}
 		for name, rs := range t.reasons {
@@ -160,4 +173,19 @@ func (h *sourceHealth) archivesNote() string {
 		parts = append(parts, p)
 	}
 	return "URLs by archive: " + strings.Join(parts, ", ")
+}
+
+// requestsNote says what the archives were sent: the summary's own
+// requests count is what reached the targets, and urls sends none.
+func (h *sourceHealth) requestsNote() string {
+	if h == nil || len(h.Requests) == 0 {
+		return ""
+	}
+	var parts []string
+	total := 0
+	for _, n := range slices.Sorted(maps.Keys(h.Requests)) {
+		parts = append(parts, fmt.Sprintf("%s %d", n, h.Requests[n]))
+		total += h.Requests[n]
+	}
+	return fmt.Sprintf("%d requests to archives, retries included (%s): third parties, not in the requests count, which is what reached the targets", total, strings.Join(parts, ", "))
 }

@@ -374,3 +374,37 @@ func TestURLsSaysHowManyWereDroppedAsJunk(t *testing.T) {
 		t.Errorf("-raw: %d lines %v\n%s", len(lines), err, errOut)
 	}
 }
+
+// The summary's requests count is what reached the targets, and urls sends
+// none; the archives' own requests, retries included, are in the sources
+// block and in a note.
+func TestURLsSummaryCountsTheArchiveRequests(t *testing.T) {
+	var mu sync.Mutex
+	var n int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		n++
+		first := n == 1
+		mu.Unlock()
+		if first {
+			w.WriteHeader(http.StatusServiceUnavailable) // asked again
+			return
+		}
+		fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/otx"}]}`)
+	}))
+	defer srv.Close()
+	_, errOut, err := urlsRun(t, "-d", "example.org", "-json", "-urls-pause", "0", "-providers", "otx", "-archive", "otx="+srv.URL+"/otx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := lastReport(t, errOut)
+	mu.Lock()
+	sent := n
+	mu.Unlock()
+	if sent != 2 || r.Sources == nil || r.Sources.Requests["otx"] != sent {
+		t.Fatalf("server saw %d requests, sources block %+v", sent, r.Sources)
+	}
+	if r.Requests != 0 || !strings.Contains(strings.Join(r.Notes, "\n"), "2 requests to archives, retries included (otx 2)") {
+		t.Errorf("requests %d, notes %v", r.Requests, r.Notes)
+	}
+}
