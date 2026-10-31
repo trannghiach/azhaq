@@ -294,10 +294,14 @@ func init() {
 			output:   "progress on stderr",
 			examples: []string{"AZHAQ_WORKER_TOKEN=… azhaq worker -server http://10.0.0.5:7777"}},
 		{name: "docs", group: groupOther, run: cmdDocs,
-			summary:  "print the documentation: output fields, exit codes, connectors, MCP",
-			usage:    "[TOPIC]",
-			output:   "Markdown",
-			examples: []string{"azhaq docs output"}},
+			summary: "print the documentation: output fields, exit codes, connectors, MCP",
+			usage:   "[TOPIC] | -flags COMMAND | -flags-into DIR",
+			output:  "Markdown; -flags prints one command's flag table, -flags-into rewrites the flag tables of the pages in DIR",
+			examples: []string{
+				"azhaq docs output",
+				"azhaq docs -flags ports",
+				"azhaq docs -flags-into docs/commands",
+			}},
 		{name: "version", group: groupOther, run: cmdVersion,
 			summary: "print the version",
 			usage:   "[-json]",
@@ -433,6 +437,11 @@ func flagsOf(name string) *flag.FlagSet {
 	if !ok || c.run == nil || name == "help" || name == "resume" {
 		return nil
 	}
+	return describe(c.run)
+}
+
+// describe reads the flags of a command function by calling it with -h.
+func describe(run func([]string) error) *flag.FlagSet {
 	wasDescribing, wasDescribed := describing, described
 	describing, described = true, nil
 	defer func() { describing = wasDescribing }()
@@ -442,7 +451,7 @@ func flagsOf(name string) *flag.FlagSet {
 		os.Stdout, os.Stderr = null, null
 		defer func() { os.Stdout, os.Stderr = stdout, stderr; null.Close() }()
 	}
-	_ = c.run([]string{"-h"})
+	_ = run([]string{"-h"})
 	fs := described
 	described = wasDescribed
 	return fs

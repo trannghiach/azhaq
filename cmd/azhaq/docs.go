@@ -46,7 +46,23 @@ azhaq docs migrating has its flags next to Azhaq's.
 
 func cmdDocs(args []string) error {
 	fs := newFlags("docs")
+	flagsCmd := fs.String("flags", "", "print the Markdown table of the flags of this command, made from the data help -json lists")
+	flagsInto := fs.String("flags-into", "", "rewrite the flag table of each NAME.md page in this directory, between its flags:begin and flags:end markers (go run ./cmd/azhaq docs -flags-into docs/commands)")
 	if err := parse(fs, args); err != nil {
+		return err
+	}
+	if *flagsCmd != "" || *flagsInto != "" {
+		if fs.NArg() > 0 || *flagsCmd != "" && *flagsInto != "" {
+			return usagef("-flags and -flags-into take no topic and are not used together")
+		}
+		if *flagsInto != "" {
+			return updateFlagTables(*flagsInto)
+		}
+		table, err := flagTableMarkdown(*flagsCmd)
+		if err != nil {
+			return usagef("%v", err)
+		}
+		_, err = os.Stdout.WriteString(table)
 		return err
 	}
 	if fs.NArg() == 0 {
