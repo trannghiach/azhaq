@@ -36,7 +36,7 @@ type MapEntry struct {
 	Protocol  string            // websocket: socket.io, or "" for a plain WebSocket
 	Namespace string            // websocket: socket.io's namespace, when known
 	// How the URL is known (answered, browser, described, called, linked,
-	// archived, guessed) and the collectors behind it, sorted.
+	// archived, guessed, given) and the collectors behind it, sorted.
 	Evidence     string   `json:"evidence,omitempty"`
 	EvidenceFrom []string `json:"evidence_from,omitempty"`
 	// What a 5xx the run got says less of than it looks: "500 without
@@ -94,6 +94,12 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 	probes := pathProbes(obs)
 	finds := findings(obs)
 	evidence := evidenceIndex(obs)
+	givenURLs := map[string]bool{}
+	for _, s := range seeds {
+		if s = normalize.Seed(s); s.Type == types.TypeURL {
+			givenURLs[s.Key()] = true
+		}
+	}
 	decl := declaredRoles(obs)
 	secured := securedHosts(obs)
 	out := make([]MapEntry, 0, len(ents))
@@ -180,7 +186,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 			}
 			m.Forms = pageForms(byEnt[e.ID])
 			m.Answer = answerNote(m, e.Key)
-			m.setEvidence(evidence[e.Key], rows)
+			m.setEvidence(evidence[e.Key], rows, givenURLs[e.Key])
 			// The URL's own query names; those in the links on a page
 			// are the links' rows'.
 			if u, err := url.Parse(e.Key); err == nil {

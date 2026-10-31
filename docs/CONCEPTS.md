@@ -46,12 +46,13 @@ Coverage says what Azhaq did with a URL. Evidence says how it knows the URL at a
 | `linked` | A page links to it, a form submits to it, or a script names it in a string or as a route. |
 | `archived` | Only archive sources (Wayback, Common Crawl, OTX, urlscan, Arquivo) hold it. |
 | `guessed` | Only a wordlist guess found it, and the answer was a 404 or the origin's any-path answer. |
+| `given` | You named the URL and nothing else holds it (it did not answer: the row is `error`). |
 
 A 404 does not make a row `answered`: the server said it is not there, so the row keeps the level of whatever named it. A row folded into a template (`/product?id={n}`) takes the strongest level of its instances and lists the collectors of all of them. Only URL rows have a level. Coverage still says what was done (`skipped` is a URL deliberately not asked, with the level it was named at).
 
 A 5xx that Azhaq's plain request got from a route that takes names (query or body) carries `answer`: `500 without input`. The request carried none of them, so the failure says little of the route; it is a lead only with something more (an error text in the body, a different answer for another session).
 
-It shows in `azhaq query -fields key,evidence,evidence_from` (`azhaq query -evidence answered,described` keeps the rows with those levels), at the end of a map row that is not `answered` (`[browser]`, `[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]`), in `export -format jsonl` (`evidence`, `evidence_from`, `answer`), in `export -format openapi` (`x-azhaq-evidence` on each operation) and in the Evidence column of `export -format html`.
+It shows in `azhaq query -fields key,evidence,evidence_from` (`azhaq query -evidence answered,described` keeps the rows with those levels), at the end of a map row that is not `answered` (`[browser]`, `[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]`, `[given]`), in `export -format jsonl` (`evidence`, `evidence_from`, `answer`), in `export -format openapi` (`x-azhaq-evidence` on each operation) and in the Evidence column of `export -format html`.
 
 ## Kinds of URL
 

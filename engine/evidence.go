@@ -20,10 +20,11 @@ const (
 	EvLinked    = "linked"    // a page, a script string or a form names it
 	EvArchived  = "archived"  // only archives hold it
 	EvGuessed   = "guessed"   // a wordlist guess that did not answer
+	EvGiven     = "given"     // the user named it, and nothing else holds it
 )
 
 // EvidenceLevels lists the levels, strongest first.
-var EvidenceLevels = []string{EvAnswered, EvBrowser, EvDescribed, EvCalled, EvLinked, EvArchived, EvGuessed}
+var EvidenceLevels = []string{EvAnswered, EvBrowser, EvDescribed, EvCalled, EvLinked, EvArchived, EvGuessed, EvGiven}
 
 // EvidenceRank orders a level: 0 is the strongest, an unknown or empty
 // level is last.
@@ -133,7 +134,7 @@ func evidenceIndex(obs []types.StoredObservation) map[string]*evidenceSource {
 
 // setEvidence fills a URL row's evidence from the index and, for a row
 // the run fetched, the collectors that fetched it.
-func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservation) {
+func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservation, given bool) {
 	m.Evidence, m.EvidenceFrom = "", nil
 	if src != nil {
 		m.Evidence = src.level
@@ -148,6 +149,9 @@ func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservatio
 				m.EvidenceFrom = append(m.EvidenceFrom, o.Collector)
 			}
 		}
+	}
+	if m.Evidence == "" && given {
+		m.Evidence = EvGiven // a URL asked for that gave no answer: only the user's word
 	}
 	sort.Strings(m.EvidenceFrom)
 }

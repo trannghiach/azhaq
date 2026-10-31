@@ -29,7 +29,7 @@ func evidenceRows(t *testing.T, keys []string, obs []types.StoredObservation) ma
 }
 
 func TestEvidenceLevelOrder(t *testing.T) {
-	want := []string{"answered", "browser", "described", "called", "linked", "archived", "guessed"}
+	want := []string{"answered", "browser", "described", "called", "linked", "archived", "guessed", "given"}
 	if !slices.Equal(engine.EvidenceLevels, want) {
 		t.Fatalf("levels %v", engine.EvidenceLevels)
 	}
@@ -38,8 +38,8 @@ func TestEvidenceLevelOrder(t *testing.T) {
 			t.Errorf("%s does not rank above %s", want[i-1], want[i])
 		}
 	}
-	if engine.EvidenceRank("") <= engine.EvidenceRank("guessed") {
-		t.Error("no level ranks below guessed")
+	if engine.EvidenceRank("") <= engine.EvidenceRank("given") {
+		t.Error("no level ranks below given")
 	}
 }
 
@@ -210,5 +210,20 @@ func TestAnswerWithoutInput(t *testing.T) {
 	}
 	if l := got[h+"/needs-email"].Line(); !strings.Contains(l, "500 without input") {
 		t.Errorf("text row %q", l)
+	}
+}
+
+// A URL the user named that nothing answered or names is known by their
+// word alone; one nobody named has no level to claim.
+func TestEvidenceGivenSeed(t *testing.T) {
+	obs := []types.StoredObservation{
+		{EntityID: "a", Observation: types.Observation{Collector: "azhaq-http", Kind: "error", Payload: json.RawMessage(`{"url":"https://shop.test/","error":"connection refused"}`)}},
+	}
+	got := evidenceRows(t, []string{"https://shop.test/", "https://shop.test/other"}, obs)
+	if m := got["https://shop.test/"]; m.Evidence != "given" || m.Coverage != "error" || !strings.HasSuffix(m.Line(), "[given]") {
+		t.Errorf("the seed: %q %q %q", m.Evidence, m.Coverage, m.Line())
+	}
+	if m := got["https://shop.test/other"]; m.Evidence != "" {
+		t.Errorf("a URL nobody named: %q", m.Evidence)
 	}
 }

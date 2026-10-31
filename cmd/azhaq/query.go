@@ -24,7 +24,7 @@ func cmdQuery(args []string) error {
 	db := fs.String("db", "", "the database (default: the last run's)")
 	typ := fs.String("type", "", "entity types, comma-separated: URL, Hostname, Domain, IPAddress, …")
 	roleF := fs.String("role", "", "roles, comma-separated: app, auth, forbidden, api, page, client-route, websocket, live, sibling, unresolved, dead, …")
-	evid := fs.String("evidence", "", "how the route is known, comma-separated: answered, browser, described, called, linked, archived, guessed")
+	evid := fs.String("evidence", "", "how the route is known, comma-separated: answered, browser, described, called, linked, archived, guessed, given")
 	cov := fs.String("coverage", "", "coverage, comma-separated: visited, catchall, error, gone, hint, skipped, capped")
 	status := fs.String("status", "", "statuses, comma-separated: 200, 401, 4xx, 5xx")
 	method := fs.String("method", "", "routes with this method: GET, POST, …")
