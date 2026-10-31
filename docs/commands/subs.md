@@ -48,7 +48,7 @@ Plain output is one name per line, as subfinder prints it. The domain you give i
 | `input` | The domain you gave. |
 | `source` | The first source that gave the name. |
 | `sources` | Every source that gave it, with the special values below. |
-| `unverified` | `true` on a name no DNS lookup checked, without `-live`: one only subdomain.center guessed, or one only the name history held. |
+| `unverified` | `true` on a name no DNS lookup checked: one only subdomain.center guessed, or one only the name history held. See [Name history](#name-history). |
 | `wildcard_certificate` | `true` on a name a certificate gave as `*.name`. |
 | `a`, `aaaa` | With `-live`, the addresses, also those the name's CNAME chain ends in. |
 | `cname` | With `-live`, the chain. |
@@ -204,6 +204,9 @@ coverage: the independent sources hold about 1609 names; this run has 1400 of th
 - `-m`, `-f`, `-match-regex` and `-filter-regex` filter the names.
 - `-ls` lists the sources with their key requirement. With `-json` it prints one object for each.
 - `-recursive` runs only the sources that handle subdomains of subdomains.
+- `-max-names` is a different limit here than in `run`: names kept for each domain, 200,000 by default. In `run` it is the hostnames resolved, 20,000 by default.
+- A SOCKS5 `-proxy` carries crt.sh's database connection too. An HTTP proxy cannot, so crt.sh is then asked in the JSON API only, and a note says so.
+- A source that needs a key and has none is not run. Its status says `skipped: needs a key`, and `-ls` marks it with `*`.
 - `-stats` prints each source's requests, names and errors. `-version` prints the version.
 - A source's key may also come from `$SOURCE_API_KEY`, or `$VAR` in the provider file.
 - `-sources` with a name that is no source says so. `azhaq subs -ls` lists the real ones.
@@ -216,6 +219,7 @@ coverage: the independent sources hold about 1609 names; this run has 1400 of th
 - A live name has an address, directly or through its CNAME chain. A chain that ends without one is a takeover candidate, not a live name.
 - Answers too big for 512 bytes, such as a long CNAME chain, arrive with EDNS0, or over TCP when a server truncates them.
 - Without `-live` nothing is looked up. The guesses are listed with `"unverified": true`, and the summary counts them.
+- With `-live`, a guess that could not be checked, near `-timeout` or with the DNS lookups failing, is left out and counted as `not checked`. The source's status says `N of its names not checked`, and `azhaq resume` checks them.
 
 On tesla.com, `subs -live -dns-rate 10` with two resolvers took 161 s and listed 555 live names. `subfinder | dnsx -a -cname -rl 10` on the same resolvers took 211 s and listed 513. At the default pace it took 25 to 29 s against 56 to 63 s.
 

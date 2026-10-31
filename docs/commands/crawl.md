@@ -28,7 +28,7 @@ azhaq crawl -u https://app.example.com/ -json -rejected
 
 1. Starts from the URLs you give and follows links to the depth `-d`: 3 link levels below the start URL by default, as katana does.
 2. Reads forms, scripts and API descriptions for more URLs and routes. Library scripts are not read for routes.
-3. Asks only what a crawler does. The built-in path checks of `run` are off unless you add `-sweep`.
+3. Asks only what a crawler does. The built-in path checks of `run` are off unless you add `-sweep`. `-kf all`, `-kf robotstxt` or `-kf sitemapxml` asks each web service only for its `robots.txt` and sitemaps and reads every entry.
 4. Lists every page it asked and every URL it found, each distinct URL once.
 5. Lists routes that scripts call with POST, PUT or another method. Their GET may answer 404 or 405.
 6. Never drops links without a word. When a limit stops the crawl, it exits 4 and `azhaq resume` continues it.
@@ -70,7 +70,7 @@ A crawl never drops links without a word. When `-max-items`, `-max-requests`, `-
 
 - One URL per line, as katana lists them: every page asked and every URL found, each distinct URL once.
 - A link or a script's string with its query is its own line: `/catalog?category=Gin`, `/item?id=7`.
-- `-per-template N` limits how many URLs of one template (`/item?id={n}`) are asked, not how many are listed.
+- `-per-template N` limits how many URLs of one template (`/item?id={n}`) are asked, not how many are listed. `crawl` asks every one by default, as katana does, and its `-max-items` is 1,000,000. `run` asks 3 of a template and stops at 2,048 items. `-iqp` asks one URL for each path.
 - Every script and stylesheet a page loads or a script imports is listed, whether it was fetched or only found. This holds when it is in the crawl's scope. Examples are `/main.js`, `/styles.css` and a lazy `chunk-*.js`.
 - `-json` is the map's rows. The extension list does not cut it. Its script and stylesheet rows are there by default, and an image's with `-assets`.
 - `run`'s map lists every row, scripts and images included.
@@ -104,6 +104,16 @@ These filters limit what is printed, not what is crawled.
 - `-em php,html` lists only those extensions. `none` stands for URLs without one.
 - `-mr` and `-fr` match the printed URL by regex.
 - `-assets` brings back the images, fonts and media a page loads. It also lists the source maps and build manifests azhaq reads, which no page names.
+
+### Forms
+
+- Every form is a `forms` entry of its page: `method`, `action`, `enctype`, `fields`, `files`.
+- A GET form is asked once with neutral values in its fields. Hidden fields, ticked boxes and selects get the page's own values. Text gets `azhaq`, an email gets `azhaq@example.org`, and a number gets `1`. `-no-form-fill` does not fill GET forms.
+- A POST form is sent only with `-submit-forms`, with the same values, urlencoded. It changes data on the target.
+- Each submission is one request of the budget and the pace, and is in the ledger. It is held to `-allow`, `-deny` and the crawl's scope. The same action with the same values is sent once.
+- A POST form is not sent when it uploads a file (`multipart`), has nothing to send, posts outside the crawl's scope, or its address matches a `-deny-path` rule. Its name decides nothing.
+- A form whose action is empty or `#` submits to its own page: its `action` is the page's URL, and it is handled like any other. See [run](run.md#forms).
+- The summary says how many POST forms were sent, and names each one that was not and why, such as `a POST form to /upload was not submitted: it uploads a file or has nothing to send`.
 
 ### Routes called with other methods
 

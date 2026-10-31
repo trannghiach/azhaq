@@ -40,9 +40,10 @@ Plain output is the URL and the parameter names, one line per page. With `-json`
 | `url` | The page. |
 | `method` | `GET`, or `POST`, `JSON` or `XML` when the names were sent in a body. |
 | `params` | The names found. |
-| `why` | What changed in the answer for each name. The values are below. |
+| `why` | An object: each name found, with what changed in the answer. The values are below. |
 | `values` | The value a name needed, such as `{"debug":"true"}`, when it answered only to that one. |
-| `writes` | The number of body requests sent. |
+
+`params -json` prints only these fields. The workspace row of a page also keeps `requests`, and `writes` (the body requests sent) for a body method: `azhaq show` prints them. A note in the summary says how many body requests were sent.
 
 What `why` says for a name:
 
@@ -78,6 +79,13 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - A page answers names it does not read when most names of a group, or nearly every name tried alone, change its answer. As many random names made like them change it too.
 - The names of that group are dropped and the search stops there. Names found in earlier groups stay.
 - The summary's `notes` list the page.
+
+### Names and groups
+- The built-in list is 6,500 names, `-w large`. arjun's `large` is longer. Use `-w FILE` for your own list.
+- Names are sent in the order given, without duplicates. Every name is sent, with a session or without one.
+- A group of names the server refuses with another status than the baseline's, such as 414 for a long query, is cut down until the server answers as before. That size is then the group.
+- A page that `-deny-path REGEX` matches is not searched, and a note says so.
+- A page that prints the query string back or counts the names is told apart by random names of the same lengths. Reflection is told apart by a random token.
 
 ## Flags
 

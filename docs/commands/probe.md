@@ -106,6 +106,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - A target that got no answer, such as a name that does not resolve or a closed port, is a row with `failed: true` and an `error`.
 - The summary counts it under `without an answer`.
 - A bare host, IP or `host:port` is asked over both schemes, the likelier first (https on port 443 and on ports below 1024, http on 80, 8080 and above 1024). When neither answers, the row's `url` and `scheme`, the summary's `failed` target and `unreachable` entry name the scheme asked last, as httpx does, and the `error` is that try's: `127.0.0.1:9` is `http://127.0.0.1:9`, `127.0.0.1:8081` is `https://127.0.0.1:8081`.
+- A plain request that is answered 400, or not answered, is asked again over TLS, as httpx does. The 400 stays when TLS does not answer.
 - Every target given ends as a row, a failure or a skip.
 - A target that resolved and got neither an answer nor a recorded failure is listed as failed, with `no answer and no failure recorded`.
 
@@ -121,6 +122,17 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - With `-p`, the port of a `host:port` or a URL is replaced by the ports of `-p`, as in httpx. `-l 127.0.0.1:3001 -p 5002` asks `http://127.0.0.1:5002/` only, and the row's `port` is `5002`. `input` is the line as given.
 - `-path` is joined onto the path of a URL input, as httpx does: `-u 'http://h/rest/products/search?q=juice#frag' -path /,/login` asks `/rest/products/search/?q=juice` and `/rest/products/search/login?q=juice`. One slash goes between the two paths, a path that already ends with the other, or starts with it, is not repeated, the URL's query is kept and the path's own query is added to it, and the fragment is never sent. A bare host has no path, so `-path` is the whole path there (`/`, `/login`).
 - A port of `-p` with no scheme is asked as a bare `host:port` is, plain HTTP first above 1024. A URL with a path, a query or a user keeps its path and its scheme on the new port. A port of `-p` that is the URL's own leaves the URL as given.
+
+### Pace
+- `-rl N` counts services a second, as httpx does. A target's first request waits its turn. Its favicon, redirects and second scheme do not.
+- `-rate N` paces every request instead. The default is no pace, where httpx's `-rl` is 150.
+- `-t N` is the work items in flight: 16 by default, where httpx's is 50.
+- `-req-timeout` is one request's time. `-timeout` stops the whole run.
+
+### Page kinds (`-kb`)
+- `-kb` (also `-fpt` and `-fep`) classifies each page with the dit model. It is read from `~/.dit/model.json`, or from `$AZHAQ_DIT_MODEL`.
+- azhaq never downloads the model. Without it, the command is a usage error, exit 2, that says where to fetch it: `the page classifier's model is not at …`. Fetch the model once from the address in the message.
+- The model is about 100 MB and takes a few seconds to load.
 
 ## Flags
 

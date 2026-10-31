@@ -34,7 +34,7 @@ azhaq dns -d example.com -axfr -allow example.com
 3. Leaves out a name that only resolves through a wildcard zone.
 4. Prints the names that have a record of the types asked.
 
-`dns` sends DNS queries and nothing else. `-axfr` connects to the name servers of the name, `-trace` asks the root servers, and `-asn` asks Team Cymru's DNS service.
+`dns` sends DNS queries and nothing else. `-axfr` connects to the name servers of the name, `-trace` asks the root servers, and `-asn` asks Team Cymru's DNS service through your resolvers.
 
 ## Output
 
@@ -104,6 +104,7 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 - A name no resolver answered gets no row in either form. It is counted as `no answer`.
 - With a type flag (`-mx`, `-txt`, …), the types are those flags'.
 - With `-rcode`, only the names whose answer has that code get a row, with its `status_code`. That is how to list the names that do not exist.
+- With `-all`, `-any` or `-axfr`, `-json` gives a row to every name a resolver answered, including one with no record at all.
 - A name whose CNAME points at what is gone also gets its `-json` row, with `takeover`, whatever the types asked: it is a finding, and it is not counted as `did not resolve`.
 
 ### Types
@@ -123,11 +124,20 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 
 ### Words and inputs left out
 - With `-d DOMAIN -w WORDS` it resolves `WORD.DOMAIN` for each word, as `dnsx -d -w` does.
-- `-dns-rate N` holds back the queries of `-d` with `-w` too: 20 names at 1 a second took 19 s. In one test run dnsx 1.x did not slow those down with `-rl` (20 names at `-rl 1` took 0.46 s), so the same flag gives a faster run there. See [Migrating](../MIGRATING.md#dnsx-azhaq-dns).
+- `-dns-rate N` holds back the queries of `-d` with `-w` too: see [Time and pace](#time-and-pace).
 - `left out` counts inputs that were not asked about:
   - an address or range without `-ptr`
   - a word that makes no name
   - a name outside the scope
+
+### Time and pace
+- `-timeout` is how long one DNS answer is waited for, 3 s by default, as in dnsx. In `run` and the other commands `-timeout` is the time of the whole run.
+- `-maxtime SECONDS` bounds the run. It exits 4, and the summary says which `-start N` to go on from.
+- `-retry N` is the attempts per question on other resolvers. The default is 3, where dnsx's is 2. A name no resolver answers is counted as `no answer`, listed under `failed`, and the exit code is 3.
+- `-rl N` is names a second over all resolvers, as in dnsx. `-t N` is names in flight, 100 by default.
+- `-dns-rate N` is queries a second to each resolver. A second's worth may go out at once after a pause, so the total is N times the number of resolvers: six by default. A name asked for several types sends one query for each.
+- With one `-r` resolver, or with `-rl`, the total is the rate you gave. For a polite run give `-rl 5` and `-t 5`.
+- In one test run, `-rl` of dnsx 1.x did not slow the queries of `-d` with `-w` (20 names at `-rl 1` took 0.46 s). `-dns-rate` paces them: 20 names at 1 a second took 19 s. See [Migrating](../MIGRATING.md#dnsx-azhaq-dns).
 
 ## Flags
 

@@ -144,6 +144,7 @@ These rules hold for every message azhaq sends, `azhaq watch`'s included.
 - Every request has 30 seconds.
 - A 429, a 5xx or a failed connection is tried again, up to three times. The wait is `Retry-After` (seconds or a date, up to a minute) or 1 and 2 seconds. A longer `Retry-After` is reported, not waited out.
 - Any other 4xx is not tried again. A redirect to another host is not followed.
+- Certificates are verified, also through `-proxy`. azhaq checks for no updates.
 - A message longer than a service takes is sent in parts, not cut.
 - Failures are never silent. The summary lists each provider and the ids of its entries that did not get a message, with the reason.
 

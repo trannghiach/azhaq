@@ -74,6 +74,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 - A page whose own in-scope assets did not load is `partial`, and the run exits 3.
 - A page that is partial only because assets of hosts outside the scope were blocked is marked and noted. The run still exits 0, because the scope is yours.
+- A failure in a run kept in a database is listed by `azhaq query -db FILE -failed`, and the summary says so. There is one row for each name.
 
 ## Details
 
@@ -111,6 +112,7 @@ A page that was not fully loaded when the picture was taken has these fields, an
 - Chrome refuses some ports, such as 6000, 6666 and 10080, with `net::ERR_UNSAFE_PORT`. `-unsafe-ports` allows them by default.
 - A URL you give is shot as given, one file for each page, named like `http_host_port_path_hash.png`; with a scheme it is one target and one row (where Chrome ended is in `final_url`), and only a bare name or `host:port` is tried on both schemes. The URLs a run finds itself are shot only when they are front pages.
 - A page that calls `alert()` on load has its dialog accepted and is shot. Nothing waits for a click.
+- Every download is refused and listed, and a window a page opens (`window.open`, a `_blank` link) is closed as it opens. A page's own writes are refused and mapped. Chrome saves nothing to disk but the picture.
 
 ### Pace
 

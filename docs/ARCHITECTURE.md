@@ -660,13 +660,7 @@ A link is followed when `crawl`'s scope allows it. By default that is the regist
 
 #### Forms
 
-Every form is a `forms` entry of its page.
-
-- A GET form is asked once with neutral values in its fields. Hidden fields, ticked boxes and selects get the page's own values. Text gets `azhaq`, an email gets `azhaq@example.org`, and a number gets `1`. `-no-form-fill` does not fill GET forms.
-- A POST form is sent only with `-submit-forms`, with the same values, urlencoded. It changes data on the target.
-- Each submission is one request of the budget and the pace, and is in the ledger. It is held to `-allow`, `-deny` and the crawl's scope.
-- A POST form is not sent when it uploads a file, posts outside the crawl's scope, or its address matches a `-deny-path` rule. Its name decides nothing.
-- The summary says how many POST forms were sent and which were not.
+What is sent and what is not is on the command page: [crawl: Forms](commands/crawl.md#forms). `webextract` reads each form into a `forms` entry. `crawlcol` asks the GET ones with their values filled in and, with `-submit-forms`, sends the POST ones through `fetch.SubmitForm`, so the scope, the budget and the ledger apply.
 
 #### Politeness
 
@@ -1644,7 +1638,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 - `-browser`, `-screenshots` and `-login` drive a Chrome already installed on the machine. Azhaq downloads none, and that Chrome saves nothing to disk.
 - Chrome is held to the run's scope and budget like every other request.
 
-**Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities.
+**Map only.** A run records what exists. It sends no attack payloads and does not test for vulnerabilities. The commands and flags below send more, and only when you ask.
 
 Requests to a target are GETs, except these:
 

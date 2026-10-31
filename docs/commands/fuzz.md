@@ -65,6 +65,9 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - Five unanswered requests in a row stop the run, because the target is down. The exit code is 3 and the origin is listed under "did not answer".
 - With `-se` the run stops after twice `-t` failures of any kind in a row, as in ffuf. `-se-after N` names that number.
 - `-sf`, `-sa` and `-maxtime-job` say what they did in the summary. The first two end with exit 4, the last adds a note.
+  - `-sf` stops when over 95% of the first 50 or more answers are 403: `over 95% of the first 50 answers were 403 (-sf/-sa): the target is refusing, or the run is blocked`.
+  - `-sa` adds a stop at over 20% 429, which says the target is rate limiting: lower `-rate` or `-t`.
+  - The summary gives the command that goes on, with `-start N`.
 - A report that cannot be written is a `failed` entry, not a silent loss. The exit code is 3. The place is tested before the first request.
 - A note counts the preflight and postflight requests sent: they are in the request total. One that failed is a `failed` entry, `preflight/postflight failed: …`, and the exit code is 3.
 - With calibration on, a note says what it filtered: `auto-calibration filtered out answers with size 1234`.
@@ -126,6 +129,8 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - `-preflight-mode` and `-preflight-error` set when they run and what a failed one does.
 - They carry your `-H` and `-b`. Each goes through the scope, the budget, the pace and the ledger.
 - A value read from an answer can never change the scheme, host or port of a request. ffuf's `-preflight-anyhost` does not exist here.
+  - Values come from the target, and the request carries your cookies and headers. A `Host: TOKEN` line or a `TOKEN/path` is refused: `preflight/postflight failed … cannot choose where requests go`. The failure makes exit 3.
+  - Put the host in the request file. `… is outside the scope` means the file names a host the run may not touch: `-allow HOST` adds it.
 
 ### Steering a run
 - `-control FILE` steers a run that goes, in place of ffuf's console. A line added to the file is a command: `echo 'rate 2' >> FILE`.
@@ -151,7 +156,9 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ### What goes out
 - The request carries the headers ffuf sends: no `Accept`, `Accept-Encoding: gzip`, and yours from `-H`. So a size matches ffuf's for the same server.
 - The `User-Agent` is a Chrome's unless `-H` gives one.
-- A header that names a host, such as `Host`, is held to the scope too: see [Concepts](../CONCEPTS.md).
+- A header that names a host, such as `Host`, is held to the scope too: see [Hosts named in headers](../CONCEPTS.md#hosts-named-in-headers).
+  - `-u https://10.0.0.5/ -H 'Host: app.example.com'` and `-H 'Host: FUZZ.example.com'` run as in ffuf. With `-allow 10.0.0.5`, a word that names another host is counted and not sent.
+  - A `Host` from a `-request` file is not typed by you. One that differs from `-u` is refused unless `-allow` names it.
 
 ### Scope, budget and pace
 - The host in `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise. When the keyword starts the host, as in `FUZZ.example.com`, the scope is its domain.

@@ -91,7 +91,7 @@ In `roles` the file is `roles.stop` in the `-dir`. There it stops the runs of th
 
 ### Where did my database go?
 
-**Why:** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or uses the file `$AZHAQ_DB` names. It remembers the file in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
+**Why:** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or uses the file `$AZHAQ_DB` names. A new file is remembered in `.azhaq-last` for `query` and `show`: see [the workspace](OUTPUT.md#the-workspace). Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
 **Fix:** Give a drop-in `-db FILE` to keep its results.
 
@@ -339,7 +339,7 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 
 ### `probe -kb` says the model is not there
 
-**Why:** The classifier reads `~/.dit/model.json`, or `$AZHAQ_DIT_MODEL`. azhaq never downloads it.
+**Why:** The classifier reads `~/.dit/model.json`, or `$AZHAQ_DIT_MODEL`. azhaq never downloads it. See [probe](commands/probe.md#page-kinds--kb).
 
 **Fix:** Fetch the model once from the address in the message.
 
@@ -553,18 +553,18 @@ The allowed hosts are then requested, counted and in the ledger.
 
 ### `dns -timeout 5s` did not stop the run after 5 seconds
 
-**Why:** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx. It is 3 s by default. `run` and the other commands use `-timeout` as the time of the whole run.
+**Why:** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx. `run` and the other commands use `-timeout` as the time of the whole run. See [Time and pace](commands/dns.md#time-and-pace).
 
 **Fix:** `dns -maxtime SECONDS` bounds the run. It exits 4 and says which `-start` to go on from.
 
 ### `dns -dns-rate 5` still sent more than 5 queries a second
 
-**Why:** `-dns-rate` paces each resolver, and a second's worth of queries may go out at once after a pause. So the total is the rate times the number of resolvers. There are six by default.
+**Why:** `-dns-rate` paces each resolver, so the total is the rate times the number of resolvers. There are six by default. See [Time and pace](commands/dns.md#time-and-pace).
 
 **Fix:**
 
 - `-rl N` paces names over all resolvers, as dnsx's `-rl`.
-- With one resolver, or with `-rl`, the total is the rate you gave. A name asked for several types sends one query per type.
+- With one resolver, or with `-rl`, the total is the rate you gave.
 - `-t N` bounds the names in flight.
 
 ### `dns -d 192.0.2.0/24` printed nothing
