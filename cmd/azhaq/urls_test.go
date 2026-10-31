@@ -26,7 +26,7 @@ func archiveMirror(t *testing.T) (flags []string, asked func() []string) {
 		q := r.URL.Query()
 		switch {
 		case r.URL.Path == "/wayback" && q.Get("page") == "0":
-			fmt.Fprint(w, `[["original"],["http://example.org/a?x=1"],["http://example.org/a?x=2"],["http://example.org/logo.png"],["http://www.example.org/w"],["http://example.org/b"]]`)
+			fmt.Fprint(w, `[["original"],["http://example.org/a?x=1"],["http://example.org/a?x=2"],["http://example.org/logo.png"],["http://www.example.org/w"],["http://api.example.org/s"],["http://example.org/b"]]`)
 		case r.URL.Path == "/wayback":
 			w.WriteHeader(http.StatusBadRequest)
 		case r.URL.Path == "/cc/collinfo.json":
@@ -59,11 +59,11 @@ func urlsRun(t *testing.T, args ...string) (lines []string, errOut string, err e
 }
 
 var apexURLs = []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/arq", "http://example.org/b", "http://example.org/cc",
-	"http://example.org/logo.png", "http://example.org/otx", "http://example.org/us"}
+	"http://example.org/logo.png", "http://example.org/otx", "http://example.org/us", "http://www.example.org/w"}
 
 // Into a pipe the URLs come as they arrive, each once; -sort holds them
 // until every archive has answered and sorts them. The domain alone is the
-// default; -subs adds its subdomains.
+// default, www. being the domain itself; -subs adds its subdomains.
 func TestURLsApexStreamAndSort(t *testing.T) {
 	flags, asked := archiveMirror(t)
 	args := append([]string{"-d", "example.org", "-silent", "-urls-pause", "0"}, flags...)
@@ -86,7 +86,7 @@ func TestURLsApexStreamAndSort(t *testing.T) {
 		}
 	}
 	got, _, err = urlsRun(t, append(args, "-subs", "-sort")...)
-	if err != nil || len(got) != len(apexURLs)+1 || !slices.Contains(got, "http://www.example.org/w") {
+	if err != nil || len(got) != len(apexURLs)+1 || !slices.Contains(got, "http://api.example.org/s") {
 		t.Errorf("-subs %v %v", got, err)
 	}
 }
@@ -97,14 +97,14 @@ func TestURLsJSONAndPositionalDomains(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 4 {
+	if len(got) != 5 {
 		t.Fatalf("%v", got)
 	}
 	out := strings.Join(got, "")
 	if !strings.Contains(out, `"url":"http://example.org/a?x=1"`) || !strings.Contains(out, `"source":"wayback"`) {
 		t.Errorf("%s", out)
 	}
-	if r := lastReport(t, errOut); r.Results != 4 {
+	if r := lastReport(t, errOut); r.Results != 5 {
 		t.Errorf("summary %+v", r)
 	}
 }
@@ -160,7 +160,7 @@ func TestURLsFiltersAndNotes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, errOut)
 	}
-	if !slices.Equal(got, []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/arq", "http://example.org/b", "http://example.org/cc", "http://example.org/logo.png", "http://example.org/otx", "http://example.org/us"}) {
+	if !slices.Equal(got, []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/arq", "http://example.org/b", "http://example.org/cc", "http://example.org/logo.png", "http://example.org/otx", "http://example.org/us", "http://www.example.org/w"}) {
 		t.Errorf("%v", got)
 	}
 	for _, note := range []string{
@@ -228,11 +228,11 @@ func TestURLsBlacklistRawAndFirstPath(t *testing.T) {
 	flags, _ := archiveMirror(t)
 	base := append([]string{"-d", "example.org", "-silent", "-urls-pause", "0", "-providers", "wayback", "-sort"}, flags...)
 	got, _, err := urlsRun(t, append(base, "-blacklist", "png,jpg", "-fp")...)
-	if err != nil || !slices.Equal(got, []string{"http://example.org/a?x=1", "http://example.org/b"}) {
+	if err != nil || !slices.Equal(got, []string{"http://example.org/a?x=1", "http://example.org/b", "http://www.example.org/w"}) {
 		t.Errorf("%v %v", got, err)
 	}
 	got, _, err = urlsRun(t, append([]string{"-d", "example.org", "-silent", "-urls-pause", "0", "-providers", "wayback", "-raw", "-blacklist", ".png"}, flags...)...)
-	if err != nil || len(got) != 3 {
+	if err != nil || len(got) != 4 {
 		t.Errorf("raw %v %v", got, err)
 	}
 }
@@ -249,7 +249,7 @@ func TestURLsReadsAGauConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, errOut)
 	}
-	want := []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/b", "http://example.org/otx"}
+	want := []string{"http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/b", "http://example.org/otx", "http://www.example.org/w"}
 	if !slices.Equal(got, want) || !strings.Contains(errOut, "read "+cfg) {
 		t.Errorf("%v\n%s", got, errOut)
 	}
