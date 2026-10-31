@@ -769,6 +769,12 @@ func cmdDirs(args []string) error {
 				run = append(run, "-allow", u.Hostname())
 			}
 		}
+		if !hasFlag(extra, "deny") {
+			// With no rule, a host a -H names is part of what was named.
+			for _, h := range flagHeaderHosts(extra) {
+				run = append(run, "-allow", h)
+			}
+		}
 	}
 	_, done, err := runPreset(&c, append(run, extra...), rep, see)
 	if err != nil {

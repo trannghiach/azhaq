@@ -656,7 +656,13 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	ws := wsName(a)
 	// A header that names a host would reach it through an address the lock
 	// allows: the target is named by url or targets, never by a header.
-	for _, h := range strList(a, "headers") {
+	named := strList(a, "headers")
+	roleList, _ := a["roles"].([]any)
+	for _, x := range roleList {
+		r, _ := x.(map[string]any)
+		named = append(named, strList(r, "header")...)
+	}
+	for _, h := range named {
 		k, _, _ := strings.Cut(h, ":")
 		for _, hh := range hostHeaders {
 			if strings.EqualFold(strings.TrimSpace(k), hh) {

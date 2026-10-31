@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/scope"
 )
 
 // Config is one run.
@@ -54,8 +55,11 @@ type Config struct {
 	// answers are 403; StopOnAll (-sa) also on 429 over 20% and on errors.
 	StopOn403, StopOnAll bool
 	// Allow, when set, says whether a request's host is in scope; one that
-	// is not is not sent.
-	Allow func(host string) bool
+	// is not is not sent. The hosts its Host-naming headers name count too,
+	// except the headers in OpenHeaders (lower-case names): the user typed
+	// them, with no scope rule, so what they name is what was authorized.
+	Allow       func(host string) bool
+	OpenHeaders map[string]bool
 	// OriginTrips unanswered requests in a row stop the run: the target is
 	// down. Zero: never. With TripOnAnyError every error counts, not only a
 	// missing answer (-se).
@@ -361,7 +365,7 @@ func (e *engine) task(ctx context.Context, j job, tmpl Template, input map[strin
 	input["FFUFHASH"] = j.hash + strconv.FormatInt(int64(pos), 16)
 	req := tmpl.Expand(input)
 	req.Position = pos
-	if e.cfg.Allow != nil && !e.cfg.Allow(hostOf(req.URL)) {
+	if !e.inScope(&req) {
 		e.count(func(s *Stats) { s.OutOfScope++ })
 		return true
 	}
@@ -619,7 +623,7 @@ func (e *engine) calibrate(ctx context.Context, t Template, input map[string]str
 			}
 			in[e.cfg.CalKeyword] = s
 			req := t.Expand(in)
-			if e.cfg.Allow != nil && !e.cfg.Allow(hostOf(req.URL)) {
+			if !e.inScope(&req) {
 				continue
 			}
 			resp, err := e.send(ctx, &req)
@@ -689,6 +693,34 @@ func (e *engine) calibrateFilters(rs []*Response, key string) {
 	})
 }
 
+// inScope says whether req may be sent: its URL's host and every host a
+// Host-naming header of it names (a front end routes by those) pass Allow.
+func (e *engine) inScope(req *Request) bool {
+	return InScope(e.cfg.Allow, req, e.cfg.OpenHeaders)
+}
+
+// InScope is that check for any sender of a request: allow nil lets all
+// through, and the headers named in open (lower case) are not held to it.
+func InScope(allow func(string) bool, req *Request, open map[string]bool) bool {
+	if allow == nil {
+		return true
+	}
+	if !allow(hostOf(req.URL)) {
+		return false
+	}
+	for _, h := range req.Headers {
+		if !scope.NamesHost(h.Name) || open[strings.ToLower(h.Name)] {
+			continue
+		}
+		for _, host := range scope.HeaderHosts(h.Value) {
+			if !allow(host) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func hostOf(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -709,7 +741,7 @@ func originOf(raw string) string {
 // request set one, as ffuf's "host" field.
 func hostHeaderOf(req *Request) string {
 	for _, h := range req.Headers {
-		if h.Name == "Host" {
+		if strings.EqualFold(h.Name, "Host") {
 			return h.Value
 		}
 	}

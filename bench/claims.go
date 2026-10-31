@@ -691,7 +691,7 @@ func (c *claims) caseSweeps() {
 		return append([]string{"dirs", "-u", o + "/", "-w", words, "-db", db, "-json"}, p.flags...)
 	}, nil)
 	c.httpCase("fuzz", claimVampi, paces3, func(o, db string, p claimPace) []string {
-		return append([]string{"fuzz", "-u", o + "/FUZZ", "-w", words, "-db", db, "-json"}, p.flags...)
+		return append([]string{"fuzz", "-u", o + "/FUZZ", "-w", words, "-ac", "-db", db, "-json"}, p.flags...)
 	}, nil)
 	c.httpCase("params", claimJuice, paces3, func(o, db string, p claimPace) []string {
 		return append([]string{"params", "-u", o + "/rest/products/search", "-w", params, "-db", db, "-json"}, p.flags...)

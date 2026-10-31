@@ -516,11 +516,14 @@ func historyWrites(h *history, sc histScope, methods map[string]bool, own map[st
 }
 
 // runAllows are the values of -allow in the run options.
-func runAllows(args []string) []string {
+func runAllows(args []string) []string { return runFlagValues(args, "allow") }
+
+// runFlagValues are the values of -name in the run options.
+func runFlagValues(args []string, name string) []string {
 	var out []string
 	for i, a := range args {
 		k, v, eq := strings.Cut(strings.TrimLeft(a, "-"), "=")
-		if !strings.HasPrefix(a, "-") || k != "allow" {
+		if !strings.HasPrefix(a, "-") || k != name {
 			continue
 		}
 		if !eq && i+1 < len(args) {

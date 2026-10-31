@@ -43,6 +43,25 @@ func (f Filters) needs() int {
 	return n
 }
 
+// flagsFor names the flags that were given for the filters of kinds (by*).
+func (f Filters) flagsFor(kinds int) []string {
+	var out []string
+	for _, k := range []struct {
+		bit  int
+		name string
+		on   bool
+	}{
+		{byStatus, "-mc", len(f.MatchStatus) > 0}, {byStatus, "-fc", len(f.DropStatus) > 0},
+		{byMime, "-mt", len(f.MatchMime) > 0}, {byMime, "-ft", len(f.DropMime) > 0},
+		{byDate, "-from", f.From != ""}, {byDate, "-to", f.To != ""},
+	} {
+		if kinds&k.bit != 0 && k.on {
+			out = append(out, k.name)
+		}
+	}
+	return out
+}
+
 var statusRE = regexp.MustCompile(`^[1-5][0-9][0-9]$`)
 
 // Validate refuses a value no archive would understand: gau ignores a bad

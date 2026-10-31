@@ -17,6 +17,8 @@ import (
 	"sync/atomic"
 
 	"golang.org/x/net/html"
+
+	"github.com/trannghiach/azhaq/scope"
 )
 
 // Preflight and postflight (-preflight FILE, -postflight FILE) are ffuf's:
@@ -423,6 +425,21 @@ func (f *flightSender) build(ctx context.Context, st FlightStep, vars map[string
 	if f.allow != nil && !f.allow(u.Hostname()) {
 		return nil, fmt.Errorf("%s: %s is outside the scope: not sent (-allow adds it)", st.File, u.Hostname())
 	}
+	if f.allow != nil {
+		// The Host a file names and any header that names a host reach that
+		// host through the address the URL allows.
+		named := map[string]string{"Host": host}
+		for k, v := range headers {
+			named[k] = v
+		}
+		for k, v := range named {
+			for _, h := range hostsNamedBy(k, v) {
+				if !f.allow(h) {
+					return nil, fmt.Errorf("%s: its %s header names %s, outside the scope: not sent (-allow adds it)", st.File, k, h)
+				}
+			}
+		}
+	}
 	hr, err := http.NewRequestWithContext(ctx, method, raw, strings.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("%s: %v", st.File, err)
@@ -454,6 +471,14 @@ func (f *flightSender) destination(path, host string) (scheme, auth string) {
 		}
 	}
 	return scheme, host
+}
+
+// hostsNamedBy are the hosts a header names, none when it names no host.
+func hostsNamedBy(name, value string) []string {
+	if !scope.NamesHost(name) {
+		return nil
+	}
+	return scope.HeaderHosts(value)
 }
 
 func hasKeyword(s string, keywords []string) bool {

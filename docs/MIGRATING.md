@@ -213,7 +213,7 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 
 <!-- azhaq: fuzz dirs -->
 
-`azhaq fuzz` takes ffuf's flags, counts words, lines and sizes as ffuf does, and calibrates and recurses as it does, so a command line moved from ffuf gives the same results. `azhaq dirs` is the short form for the common job: paths from a wordlist, calibrated, with SecLists' `common.txt` built in.
+`azhaq fuzz` takes ffuf's flags, counts words, lines and sizes as ffuf does, and calibrates (with `-ac`) and recurses as it does, so a command line moved from ffuf gives the same results. `azhaq dirs` is the short form for the common job: paths from a wordlist, calibrated, with SecLists' `common.txt` built in.
 
 | ffuf | azhaq `fuzz` | Note |
 | --- | --- | --- |
@@ -226,7 +226,7 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 | `-mc -ms -mw -ml -mr -mt` | the same | |
 | `-fc -fs -fw -fl -fr -ft` | the same | |
 | `-mmode`, `-fmode` | the same | |
-| `-ac`, `-acc`, `-acs`, `-ack`, `-ach` | the same | See the note on calibration. |
+| `-ac`, `-acc`, `-acs`, `-ack`, `-ach` | the same | Calibration is off unless `-ac` is given, as in ffuf; `-acc`, `-acs` and `-ach` imply `-ac`. |
 | `-recursion`, `-recursion-depth`, `-recursion-strategy` | the same | |
 | `-t 40`, `-p 0.1`, `-rate 100` | the same | |
 | `-maxtime`, `-maxtime-job` | the same | |
@@ -251,9 +251,9 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 
 What differs on purpose:
 
-- **Calibration.** It is on, and ffuf's is off unless `-ac` is given. It is switched off when you give `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft`, since a command line moved from ffuf that has its own filters calibrated by hand, and the summary says so. It needs the keyword `FUZZ` (or the one `-ack` names); without it a note says nothing was calibrated.
-- **Scope.** The host in `-u` is the scope, unless `-allow`, `-deny` or `-scope` say otherwise. An input that would go to another host is counted and not sent. `Host: FUZZ.example.com` is still fine: the scope is the domain.
-- **Budget and pace.** Every request, calibration included, counts against `-max-requests` and `-rate`, goes in the ledger and stops at the kill file. ffuf's calibration is not paced.
+- **Calibration.** `dirs` calibrates by default, as ffuf with `-ac`; it is switched off when you give `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft`, since a command line moved from ffuf that has its own filters calibrated by hand, and the summary says so. `fuzz` does not calibrate unless you give `-ac`, as in ffuf, so a command line moved over returns ffuf's matches. Either needs the keyword `FUZZ` (or the one `-ack` names); without it a note says nothing was calibrated.
+- **Scope.** The host in `-u` is the scope, unless `-allow`, `-deny` or `-scope` say otherwise. An input that would go to another host is counted and not sent. A header that names a host (`Host`, `X-Forwarded-Host`, `X-Host`, `X-Original-Host`) is held to the scope too, since a front end routes by it: with no `-allow`, `-deny` or `-scope`, a host you name in a header joins the targets you named; with a rule, a header naming a host outside it is refused before anything is sent. So `-u https://10.0.0.5/ -H 'Host: app.example.com'` and `-H 'Host: FUZZ.example.com'` run as in ffuf, and with `-allow 10.0.0.5` a word that names another host is counted and not sent. A `Host` from a `-request` file is not typed by you: one that differs from `-u` is refused unless `-allow` names it.
+- **Budget and pace.** Every request, calibration included, counts against `-max-requests` and `-rate`, goes in the ledger and stops at the kill file. `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced, so at a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate (`dirs`, which calibrates always, and `fuzz -ac`).
 - **Dead target.** Five unanswered requests in a row stop the run with exit 3. `-se` makes it twice `-t` failures of any kind, as ffuf's.
 - **Not in `fuzz`:** ffuf's scrapers, `-search` and its history files (`-db FILE` keeps the matches), and an audit log (the hash-chained `-ledger` is the record).
 - **`dirs` follows ffuf's counting and its defaults**: 40 guesses in flight, no pace, and the matcher `-mc 200-299,301,302,307,401,403,405,500`.
@@ -279,7 +279,7 @@ On top: `-db FILE` keeps the matches in the workspace; `azhaq fuzz` with `-maxti
 | `example.com` | `example.com` | Domains as arguments, or `-d`, `-dL FILE`, or stdin. |
 | `--subs` | `-subs` | The default is the name given, as gau's. |
 | `--providers wayback,otx` | `-providers wayback,otx` | `commoncrawl`, `urlscan` and `arquivo` too; all five by default. |
-| `--mc 200`, `--fc 404`, `--mt text/html`, `--ft image/png` | `-mc 200`, `-fc 404`, `-mt text/html`, `-ft image/png` | An archive that keeps no status or type (OTX, urlscan.io) is not asked when one of these is given. |
+| `--mc 200`, `--fc 404`, `--mt text/html`, `--ft image/png` | `-mc 200`, `-fc 404`, `-mt text/html`, `-ft image/png` | An archive that keeps no status or type (OTX, urlscan.io) is asked all the same and its URLs are kept unfiltered, as gau keeps them; a note says so (`otx has no status of its captures: its 13 URLs are not filtered by -mc`). |
 | `--from 202401`, `--to 202412` | `-from 202401`, `-to 202412` | |
 | `--blacklist png,jpg` | `-blacklist png,jpg` | |
 | `--fp` | `-fp` | One URL for each host and path. |

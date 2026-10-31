@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/store"
@@ -95,29 +96,63 @@ func fuzzRows(t *testing.T, args ...string) ([]string, report, error) {
 	return rows, lastReport(t, errOut), err
 }
 
-func TestFuzzPathsCalibratedByDefault(t *testing.T) {
+// fuzz is ffuf: it calibrates only when -ac (or -acs, -acc, -ach) is given.
+func TestFuzzCalibratesOnlyWithAC(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "docs", "x"))
+	words := wlist(t, "admin", "nothing", "docs", "x")
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", words)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(rows) != 4 || rep.Requests != 4 || rep.Exit != 0 || rep.Command != "fuzz" || !rep.Complete {
+		t.Errorf("by default (ffuf's): %q, summary %+v", rows, rep)
+	}
+	for _, n := range rep.Notes {
+		if strings.Contains(n, "calibration") {
+			t.Errorf("a note about calibration without -ac: %s", n)
+		}
+	}
 	want := []string{"200 " + srv.URL + "/admin FUZZ=admin", "301 " + srv.URL + "/docs FUZZ=docs"}
-	if strings.Join(rows, "|") != strings.Join(want, "|") {
-		t.Errorf("rows %q", rows)
+	for _, args := range [][]string{{"-ac"}, {"-acs", "basic"}, {"-ach"}, {"-acc", "zzqq"}} {
+		rows, rep, err = fuzzRows(t, append([]string{"-u", srv.URL + "/FUZZ", "-w", words}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(rows, "|") != strings.Join(want, "|") || rep.Requests <= 4 {
+			t.Errorf("%v: rows %q, %d requests", args, rows, rep.Requests)
+		}
 	}
-	if rep.Command != "fuzz" || rep.Results != 2 || !rep.Complete || rep.Exit != 0 || rep.Requests != 10 {
-		t.Errorf("summary %+v", rep)
-	}
-	// -ac=false shows the catch-all page too.
-	rows, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "docs", "x"), "-ac=false")
+	// An explicit -ac=false stays off, whatever else is given.
+	rows, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", words, "-acs", "basic", "-ac=false")
 	if len(rows) != 4 || rep.Requests != 4 {
-		t.Errorf("without calibration: %q, %d requests", rows, rep.Requests)
+		t.Errorf("-ac=false -acs: %q, %d requests", rows, rep.Requests)
+	}
+}
+
+// Two keywords, as in ffuf's clusterbomb: every answer that matches -mc is
+// listed, the short ones too (calibration would drop answers of one size).
+func TestFuzzClusterbombKeepsEveryMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("q") == "apple" {
+			fmt.Fprint(w, strings.Repeat("a product ", 40))
+			return
+		}
+		fmt.Fprint(w, `{"status":"success","data":[]}`)
+	}))
+	t.Cleanup(srv.Close)
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/search?q=FUZZ&x=BAR", "-w", wlist(t, "apple", "zzzzzz")+":FUZZ", "-w", wlist(t, "1", "2")+":BAR",
+		"-mode", "clusterbomb", "-mc", "200")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 || rep.Requests != 4 {
+		t.Errorf("%d results, %d requests: %q", len(rows), rep.Requests, rows)
 	}
 }
 
 func TestFuzzRecursion(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "docs", "guide", "x"), "-recursion", "-recursion-depth", "2")
+	rows, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "docs", "guide", "x"), "-recursion", "-recursion-depth", "2", "-ac")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -241,12 +276,12 @@ func TestFuzzDBKeepsTheHits(t *testing.T) {
 
 func TestFuzzScopeRules(t *testing.T) {
 	tm, _ := fuzz.NewTemplate("", "http://FUZZ.example.com/", "", nil, nil)
-	r, err := fuzzScope(tm, []string{"FUZZ"}, "", "", nil, nil)
+	r, _, err := fuzzScope(tm, nil, []string{"FUZZ"}, "", "", nil, nil)
 	if err != nil || !r.Allows("a.example.com") || r.Allows("example.org") {
 		t.Errorf("%+v %v", r, err)
 	}
 	tm, _ = fuzz.NewTemplate("", "http://app.example.com/FUZZ", "", nil, nil)
-	r, err = fuzzScope(tm, []string{"FUZZ"}, "", "", nil, []string{"app.example.com"})
+	r, _, err = fuzzScope(tm, nil, []string{"FUZZ"}, "", "", nil, []string{"app.example.com"})
 	if err == nil || !errors.As(err, new(usageErr)) {
 		t.Errorf("a denied host: %+v %v", r, err)
 	}
@@ -269,9 +304,8 @@ func TestFuzzResumeArgs(t *testing.T) {
 	}
 }
 
-// A command line moved from ffuf that gives its own filter has calibrated by
-// hand: no calibration request goes out unless -ac says so.
-func TestFuzzOwnFilterTurnsCalibrationOff(t *testing.T) {
+// A filter of the command's own sends no calibration request; -ac with it does.
+func TestFuzzOwnFilterAndAC(t *testing.T) {
 	srv := fuzzServer(t)
 	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242")
 	if err != nil {
@@ -380,5 +414,35 @@ func TestFuzzRequestFile(t *testing.T) {
 	rows, _, err := fuzzRows(t, "-request", p, "-request-proto", "http", "-w", wlist(t, "v"), "-ac=false")
 	if err != nil || len(rows) != 1 || got != "PUT /x?y=1 1 k=v" {
 		t.Errorf("rows %q got %q err %v", rows, got, err)
+	}
+}
+
+// -rate holds the calibration's guesses as it holds every request: the whole
+// sweep, calibration included, keeps to the user's rate (ffuf's calibration
+// is unpaced; the docs say so). The pace lets a burst of rate/5 through.
+func TestFuzzRatePacesCalibration(t *testing.T) {
+	srv := fuzzServer(t)
+	start := time.Now()
+	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "x"), "-ac", "-rate", "20", "-t", "1")
+	took := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Requests <= 3 {
+		t.Fatalf("%d requests: no calibration went out", rep.Requests)
+	}
+	if min := time.Duration(float64(rep.Requests-4) / 20 * 0.9 * float64(time.Second)); took < min {
+		t.Errorf("%d requests at -rate 20 took %s, under %s: the calibration was not paced", rep.Requests, took, min)
+	}
+}
+
+// The docs say what -rate does to calibration, and how it differs from ffuf.
+func TestDocsSayRatePacesCalibration(t *testing.T) {
+	for _, f := range []string{"../../docs/OUTPUT.md", "../../docs/MIGRATING.md"} {
+		doc := readDoc(t, f)
+		if !strings.Contains(doc, "`-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced") ||
+			!strings.Contains(doc, "(guesses ÷ rate) seconds longer than ffuf's") && !strings.Contains(doc, "(guesses ÷ 5) seconds longer") {
+			t.Errorf("%s does not say that -rate paces the calibration", f)
+		}
 	}
 }

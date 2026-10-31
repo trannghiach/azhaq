@@ -24,7 +24,7 @@ import (
 type source struct {
 	name  string
 	needs string // provider key name; "" when none is needed
-	can   int    // the filters it applies (by*); a source that cannot apply one is not asked
+	can   int    // the filters it applies (by*); the others are not applied to its URLs
 	fetch func(ctx context.Context, g *getter, domain string, key string, add func([]string)) (pages int, err error)
 }
 

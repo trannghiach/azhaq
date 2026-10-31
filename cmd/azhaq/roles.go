@@ -22,6 +22,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -41,6 +42,36 @@ type role struct {
 }
 
 func (r role) anonymous() bool { return len(r.headers) == 0 && r.user == "" && r.cmd == "" }
+
+// rolesHostRules is the scope the headers of a role are held to: set by
+// cmdRoles for the headers its roles are given and the ones a -role-cmd prints.
+var rolesHostRules scope.Rules
+
+// rolesScope is what a role's host-naming headers may name: the run options'
+// -allow and -scope, else the -url targets, with the hosts of the histories
+// (-har, -burp, -allow of roles); -deny and a scope's out rules always hold.
+func rolesScope(runArgs []string, sc histScope, allows []string) (scope.Rules, error) {
+	allow, deny := runFlagValues(runArgs, "allow"), runFlagValues(runArgs, "deny")
+	if specs := runFlagValues(runArgs, "scope"); len(specs) > 0 {
+		var program string
+		if ps := runFlagValues(runArgs, "program"); len(ps) > 0 {
+			program = ps[len(ps)-1]
+		}
+		s, err := loadScope(specs[len(specs)-1], program)
+		if err != nil {
+			return scope.Rules{}, err
+		}
+		allow, deny = append(allow, s.Allow...), append(deny, s.Deny...)
+	}
+	if len(allow) == 0 {
+		allow = urlHosts(runArgs)
+	}
+	allow = append(allow, sc.hostnames()...)
+	for _, a := range allows {
+		allow = append(allow, strings.TrimSpace(a))
+	}
+	return scope.Rules{Allow: allow, Deny: deny}.Compile(), nil
+}
 
 // roleRow is one endpoint across the sessions.
 type roleRow struct {
@@ -141,6 +172,7 @@ func cmdRoles(args []string) error {
 	if len(runArgs) > 0 && runArgs[0] == "--" {
 		runArgs = runArgs[1:]
 	}
+	noRule := !hasFlag(runArgs, "allow", "deny", "scope") // before -replay-writes adds the targets as -allow
 	roles, err := parseRoles(specs)
 	if err != nil {
 		return err
@@ -203,6 +235,14 @@ func cmdRoles(args []string) error {
 			for _, h := range hosts {
 				runArgs = append(runArgs, "-allow", h)
 			}
+			if noRule {
+				// The hosts the -role headers name were typed with the targets.
+				for _, r := range roles {
+					for _, h := range headerHosts(headerOf(r.headers)) {
+						runArgs = append(runArgs, "-allow", h)
+					}
+				}
+			}
 		}
 	}
 	for _, a := range runArgs {
@@ -211,6 +251,22 @@ func cmdRoles(args []string) error {
 			return usagef("roles sets -db itself, one database per role in -dir; leave it out of the run options, and give -dir DIR before -- to choose where they go")
 		case "cookie", "header", "login", "login-user", "login-pass":
 			return usagef("roles sets -%s itself; leave it out of the run options", strings.TrimLeft(strings.SplitN(a, "=", 2)[0], "-"))
+		}
+	}
+	// A header that names a host is held to the scope before the first
+	// request of any role: the runs and the replay send it to the target's
+	// address. With no -allow, -deny or -scope, a host a -role header names
+	// joins the targets (the user typed it); what a -role-cmd prints was not
+	// typed, and is held to the targets when it has run.
+	if rolesHostRules, err = rolesScope(runArgs, sc, allows); err != nil {
+		return err
+	}
+	defer func() { rolesHostRules = scope.Rules{} }()
+	if !noRule {
+		for _, r := range roles {
+			if err := hostHeadersFrom("role "+r.name+" header", headerOf(r.headers), rolesHostRules); err != nil {
+				return err
+			}
 		}
 	}
 	if *dir == "" {
@@ -1293,6 +1349,9 @@ func cmdHeaders(r role) ([]string, error) {
 	}
 	if len(lines) == 0 {
 		return nil, fmt.Errorf("role %s: its -role-cmd printed no header", r.name)
+	}
+	if err := hostHeadersFrom("role "+r.name+": its -role-cmd printed the header", headerOf(lines), rolesHostRules); err != nil {
+		return nil, err
 	}
 	return lines, nil
 }

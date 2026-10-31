@@ -504,6 +504,20 @@ func TestMCPConcurrentCallsShareTheBudget(t *testing.T) {
 	}
 }
 
+// A role's headers are held to the same refusal as the call's.
+func TestMCPRefusesHostHeadersOfRoles(t *testing.T) {
+	dir := t.TempDir()
+	s := &mcpServer{exe: fakeAzhaq(t, dir), dir: dir, lock: []string{"-allow", "127.0.0.1", "-deny", "secret.lab"}, locked: true, budget: 50}
+	roles := []any{map[string]any{"name": "anon"}, map[string]any{"name": "bob", "header": []any{"X-Forwarded-Host: secret.lab"}}}
+	text, isErr := callText(t, s, "azhaq_roles", map[string]any{"url": "http://127.0.0.1:18090/", "roles": roles})
+	if !isErr || !strings.Contains(text, "not accepted") {
+		t.Errorf("%v %s", isErr, text)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "args")); err == nil {
+		t.Error("azhaq ran")
+	}
+}
+
 // A client that sends the language-server shutdown gets an answer, not
 // method-not-found, and the server ends when stdin closes.
 func TestMCPShutdownAnswered(t *testing.T) {

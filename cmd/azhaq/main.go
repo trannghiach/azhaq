@@ -236,11 +236,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	urlsFrom := fs.Bool("urls-source", false, "with -urls: each line is the URL, a tab, and the archive that gave it")
 	urlsSubs := fs.Bool("urls-subs", true, "ask the archives for the subdomains of each domain too (false: only the name itself, as gau does without --subs)")
 	urlsSources := fs.String("urls-sources", "", "ask only these archives, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all)")
-	urlsMC := fs.String("urls-mc", "", "keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); the archives that keep no status (OTX, urlscan.io) are not asked")
-	urlsFC := fs.String("urls-fc", "", "leave out URLs the archive recorded with these HTTP status codes, comma-separated; the archives that keep no status (OTX, urlscan.io) are not asked")
-	urlsMT := fs.String("urls-mt", "", "keep only URLs the archive recorded with these MIME types, comma-separated (text/html); the archives that keep no type (OTX, urlscan.io) are not asked")
-	urlsFT := fs.String("urls-ft", "", "leave out URLs the archive recorded with these MIME types, comma-separated; the archives that keep no type (OTX, urlscan.io) are not asked")
-	urlsFrom2 := fs.String("urls-from", "", "only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is not asked")
+	urlsMC := fs.String("urls-mc", "", "keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); the archives that keep no status (OTX, urlscan.io) are asked all the same and their URLs kept, as gau keeps them, with a note")
+	urlsFC := fs.String("urls-fc", "", "leave out URLs the archive recorded with these HTTP status codes, comma-separated; the archives that keep no status (OTX, urlscan.io) are asked all the same and their URLs kept, with a note")
+	urlsMT := fs.String("urls-mt", "", "keep only URLs the archive recorded with these MIME types, comma-separated (text/html); the archives that keep no type (OTX, urlscan.io) are asked all the same and their URLs kept, with a note")
+	urlsFT := fs.String("urls-ft", "", "leave out URLs the archive recorded with these MIME types, comma-separated; the archives that keep no type (OTX, urlscan.io) are asked all the same and their URLs kept, with a note")
+	urlsFrom2 := fs.String("urls-from", "", "only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is asked all the same and its URLs kept, with a note")
 	urlsTo := fs.String("urls-to", "", "only captures up to this time, in the same form")
 	urlsBlacklist := fs.String("urls-blacklist", "", "leave out URLs whose path ends in these extensions, comma-separated (png,jpg,svg)")
 	urlsFP := fs.Bool("urls-fp", false, "keep one URL for each host and path, dropping the variants that differ by parameters")
@@ -533,10 +533,25 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	if active && len(allow) == 0 {
+		noRule := len(deny) == 0 && *scopeSpec == ""
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
+		if noRule {
+			// With no rule, what the command line names is the authorization:
+			// a host a -header names joins the targets.
+			allow = append(allow, headerHosts(fetch.Extra)...)
+		}
 	}
 	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}.Compile()
 	if err := hostHeadersInScope(fetch.Extra, rules); err != nil {
+		return err
+	}
+	// What a request file, a page list or a probe line brings is held to it too.
+	if *paramsFile != "" && *paramsTargets != "" {
+		if err := paramsTargetsInScope(*paramsTargets, rules); err != nil {
+			return err
+		}
+	}
+	if err := probeSpecInScope(spec, rules); err != nil {
 		return err
 	}
 	if !rules.Empty() {
@@ -2144,22 +2159,119 @@ func browserAgent() string {
 
 // hostHeaders are the request headers that name the host a front end
 // serves (a CDN or an ingress routes by them).
-var hostHeaders = []string{"Host", "X-Forwarded-Host", "X-Host", "X-Original-Host"}
+var hostHeaders = scope.HostHeaders
 
 // hostHeadersInScope refuses a -header that names a host the scope leaves
-// out: it would reach that host through an address the scope allows.
+// out: it would reach that host through an address the scope allows. With no
+// -allow, -deny or -scope the host a header names joins the targets instead
+// (see headerHosts): what the user typed is what they authorized.
 func hostHeadersInScope(h http.Header, rules scope.Rules) error {
+	return hostHeadersFrom("-header", h, rules)
+}
+
+// headerHosts are the hosts the host-naming headers of h name, without
+// duplicates.
+func headerHosts(h http.Header) []string {
+	var out []string
+	for k, vs := range h {
+		if !scope.NamesHost(k) {
+			continue
+		}
+		for _, v := range vs {
+			for _, host := range scope.HeaderHosts(v) {
+				if !slices.Contains(out, host) {
+					out = append(out, host)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// flagHeaderHosts are the hosts the -header flags among run flags name.
+func flagHeaderHosts(runFlags []string) []string {
+	h := http.Header{}
+	for _, raw := range runFlagValues(runFlags, "header") {
+		if k, v, ok := strings.Cut(raw, ":"); ok {
+			h.Add(strings.TrimSpace(k), strings.TrimSpace(v))
+		}
+	}
+	return headerHosts(h)
+}
+
+// hostHeadersFrom is hostHeadersInScope for headers that came from what
+// (a role, a request file): the same refusal, before anything is sent.
+func hostHeadersFrom(what string, h http.Header, rules scope.Rules) error {
 	if rules.Empty() {
 		return nil
 	}
-	for _, k := range hostHeaders {
-		for _, v := range h.Values(k) {
-			host := v
-			if hh, _, err := net.SplitHostPort(v); err == nil {
-				host = hh
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for _, v := range h[k] {
+			if rules.HeaderOutside(k, v) != "" {
+				return usagef("%s %s: %s names a host outside the scope: a front end that routes by it serves that host; leave the header out, or name the host in the scope (-allow)", what, k, v)
 			}
-			if !rules.Allows(host) {
-				return usagef("-header %s: %s names a host outside the scope: a front end that routes by it serves that host", k, v)
+		}
+	}
+	return nil
+}
+
+// paramsTargetsInScope holds the headers of the pages a -params-targets file
+// (params -i writes it) names to the scope: a request that is imported
+// carries its own X-Forwarded-Host and the like.
+func paramsTargetsInScope(path string, rules scope.Rules) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil // the run reads it again and says
+	}
+	var targets map[string]paramcol.Target
+	if json.Unmarshal(raw, &targets) != nil {
+		return nil
+	}
+	urls := make([]string, 0, len(targets))
+	for u := range targets {
+		urls = append(urls, u)
+	}
+	sort.Strings(urls)
+	for _, u := range urls {
+		h := http.Header{}
+		for _, l := range targets[u].Header {
+			if k, v, ok := strings.Cut(l, ":"); ok {
+				h.Add(strings.TrimSpace(k), strings.TrimSpace(v))
+			}
+		}
+		if err := hostHeadersFrom("-i "+u+" header", h, rules); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// probeSpecInScope holds what a probe sends besides -header to the scope: the
+// headers of the request file (-rr) and the virtual hosts of -vi lines.
+func probeSpecInScope(spec *httpcol.Spec, rules scope.Rules) error {
+	if spec == nil {
+		return nil
+	}
+	if spec.Raw != nil {
+		if err := hostHeadersFrom("-rr header", spec.Raw.Header, rules); err != nil {
+			return err
+		}
+	}
+	hosts := make([]string, 0, len(spec.PerHost))
+	for h := range spec.PerHost {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	for _, h := range hosts {
+		for _, vh := range spec.PerHost[h].VHosts {
+			if err := hostHeadersFrom("-vi", http.Header{"Host": {vh}}, rules); err != nil {
+				return err
 			}
 		}
 	}

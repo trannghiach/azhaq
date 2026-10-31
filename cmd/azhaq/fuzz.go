@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -45,7 +46,7 @@ func cmdFuzz(args []string) error {
 	fs.StringVar(data, "data", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-ascii", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-binary", "", "ffuf's alias of -d")
-	fs.Var(&headers, "H", "header \"Name: value\"; the keyword may stand in name and value, Host included (repeatable)")
+	fs.Var(&headers, "H", "header \"Name: value\"; the keyword may stand in name and value, Host included (repeatable). A header that names a host (Host, X-Forwarded-Host, X-Host, X-Original-Host) joins the target when no -allow, -deny or -scope is given; with one, the host must be in the scope")
 	fs.Var(&cookies, "b", "cookie data \"NAME=VALUE; NAME2=VALUE2\"")
 	fs.Var(&cookies, "cookie", "ffuf's alias of -b")
 	reqFile := fs.String("request", "", "read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds")
@@ -72,7 +73,7 @@ func cmdFuzz(args []string) error {
 	ft := fs.String("ft", "", "filter out answers by milliseconds to the first byte: >MS or <MS")
 	mmode := fs.String("mmode", "or", "matchers: an answer must match any (or) or all (and) of them")
 	fmode := fs.String("fmode", "or", "filters: an answer is dropped by any (or) or by all (and) of them")
-	ac := fs.Bool("ac", true, "calibrate the filters on paths that cannot exist (-ac=false turns it off; ffuf's default is off; it is also off when -fc, -fs, -fw, -fl, -fr or -ft is given, as a line moved from ffuf has calibrated by hand, unless -ac is given)")
+	ac := fs.Bool("ac", false, "calibrate the filters on names that cannot exist, as ffuf does (off by default, as in ffuf; -acs, -acc and -ach turn it on too)")
 	ack := fs.String("ack", "FUZZ", "the keyword calibration replaces")
 	ach := fs.Bool("ach", false, "calibrate for each host and directory of the path (with a Host header or a keyword in the host)")
 	fs.Var(&acStrategies, "acs", "calibration strategy: basic, advanced (adds the names as directories), or a file ~/.config/ffuf/autocalibration/NAME.json (repeatable or comma list)")
@@ -305,32 +306,23 @@ func cmdFuzz(args []string) error {
 		}
 	}
 
-	// A command line moved from ffuf that gives its own filters has calibrated
-	// by hand: calibrating again would add requests and could drop answers
-	// it keeps. -ac (or -acs, -acc, -ach) asks for it.
-	calibrate := *ac
+	// As ffuf's help says, -acs, -acc and -ach imply -ac.
+	calibrate := *ac || !given["ac"] && (given["acs"] || given["acc"] || given["ach"])
 	var notes []string
 	if rcNote != "" {
 		notes = append(notes, rcNote)
-	}
-	if !given["ac"] && !given["acs"] && !given["acc"] && !given["ach"] {
-		var own []string
-		for _, f := range []string{"fc", "fs", "fw", "fl", "fr", "ft"} {
-			if given[f] {
-				own = append(own, "-"+f)
-			}
-		}
-		if len(own) > 0 {
-			calibrate = false
-			notes = append(notes, "auto-calibration is off because "+strings.Join(own, ", ")+" was given, as in a command line moved from ffuf; -ac turns it on")
-		}
 	}
 	calGroups, err := fuzz.CalibrationGroups(splitAll(acStrategies), acStrings)
 	if err != nil {
 		return usageErr{err}
 	}
 
-	rules, err := fuzzScope(tmpl, keywords, *scopeSpec, *program, allow, deny)
+	// What -H typed, as against what a -request file brought.
+	typedTmpl, err := fuzz.NewTemplate("", "http://x/", "", headers, nil)
+	if err != nil {
+		return usageErr{err}
+	}
+	rules, openHeaders, err := fuzzScope(tmpl, typedTmpl.Headers, keywords, *scopeSpec, *program, allow, deny)
 	if err != nil {
 		return err
 	}
@@ -364,7 +356,7 @@ func cmdFuzz(args []string) error {
 		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads, Sender: sender,
 		Calibrate: calibrate, CalKeyword: *ack, CalGroups: calGroups, Recursion: *recursion, Depth: *depth, Strategy: *strategy,
 		MaxTimeJob: time.Duration(*maxtimeJob * float64(time.Second)), DelayMin: dmin, DelayMax: dmax,
-		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
+		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OpenHeaders: openHeaders, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
 		Progress: new(fuzz.Progress),
 	}
 	if *replayProxy != "" {
@@ -691,33 +683,91 @@ func appendUnique(dst []string, add ...string) []string {
 // fuzzScope is the rules the run keeps to: -allow, -deny and a program's
 // -scope, else the host of -u (when the keyword stands at the start of
 // the host, its domain: FUZZ.example.com is example.com).
-func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, deny []string) (scope.Rules, error) {
+//
+// A header that names a host (Host, X-Forwarded-Host, …) is held to them as
+// the URL's host is, with one exception: with no -allow, -deny or -scope, a
+// host that -H names (typed) joins the target, a literal one in the scope and
+// one that holds the keyword (virtual hosts) open for every word: what the
+// user typed is what they authorized. A host from a -request file is not
+// typed: a literal one the rules leave out is refused before the run, one with
+// the keyword is checked for each input, and its domain is the scope too.
+func fuzzScope(t fuzz.Template, typed []fuzz.Header, keywords []string, spec, program string, allow, deny []string) (rules scope.Rules, open map[string]bool, err error) {
 	allow, deny = append([]string(nil), allow...), append([]string(nil), deny...)
 	if spec != "" {
 		sc, err := loadScope(spec, program)
 		if err != nil {
-			return scope.Rules{}, err
+			return scope.Rules{}, nil, err
 		}
 		allow, deny = append(allow, sc.Allow...), append(deny, sc.Deny...)
 	}
+	noRule := len(allow) == 0 && len(deny) == 0 && spec == ""
 	if len(allow) == 0 {
 		u, _ := url.Parse(t.URL)
-		host := u.Hostname()
-		for _, k := range keywords {
-			if rest, ok := strings.CutPrefix(host, k+"."); ok {
-				host = rest
+		hosts := []struct{ what, host string }{{"-u", u.Hostname()}}
+		for _, h := range t.Headers {
+			if !scope.NamesHost(h.Name) {
+				continue
 			}
-			if strings.Contains(host, k) {
-				return scope.Rules{}, usagef("the host in -u holds the keyword %s: say what may be touched with -allow DOMAIN or -scope", k)
+			isTyped := slices.Contains(typed, h)
+			for _, host := range scope.HeaderHosts(h.Value) {
+				switch {
+				case noRule && isTyped && holdsKeyword(host, keywords):
+					if open == nil {
+						open = map[string]bool{}
+					}
+					open[strings.ToLower(h.Name)] = true
+				case noRule && isTyped:
+					allow = append(allow, host)
+				case holdsKeyword(host, keywords):
+					hosts = append(hosts, struct{ what, host string }{"-H " + h.Name, host})
+				}
 			}
 		}
-		allow = []string{host}
+		for _, hh := range hosts {
+			host := hh.host
+			for _, k := range keywords {
+				if rest, ok := strings.CutPrefix(host, k+"."); ok {
+					host = rest
+				}
+				if strings.Contains(host, k) {
+					return scope.Rules{}, nil, usagef("the host in %s holds the keyword %s: say what may be touched with -allow DOMAIN or -scope", hh.what, k)
+				}
+			}
+			allow = append(allow, host)
+		}
 	}
-	rules := scope.Rules{Allow: allow, Deny: deny}
+	rules = scope.Rules{Allow: allow, Deny: deny}
 	if u, err := url.Parse(t.URL); err == nil && !strings.Contains(u.Hostname(), "FUZZ") && !rules.Allows(u.Hostname()) {
-		return scope.Rules{}, usagef("%s is outside the scope", u.Hostname())
+		return scope.Rules{}, nil, usagef("%s is outside the scope", u.Hostname())
 	}
-	return rules, nil
+	// A literal host header, before anything is sent; the ones that hold a
+	// keyword are held to the scope for each input (fuzz.InScope).
+	lit := http.Header{}
+	for _, h := range t.Headers {
+		if scope.NamesHost(h.Name) && !hasKeyword(h.Name+h.Value, keywords) {
+			lit.Add(h.Name, h.Value)
+		}
+	}
+	if err := hostHeadersFrom("-H", lit, rules.Compile()); err != nil {
+		return scope.Rules{}, nil, err
+	}
+	return rules, open, nil
+}
+
+// holdsKeyword says whether s holds a wordlist keyword.
+func holdsKeyword(s string, keywords []string) bool {
+	for _, k := range keywords {
+		if strings.Contains(s, k) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasKeyword says whether s holds a keyword or a sniper mark: where a word
+// may go.
+func hasKeyword(s string, keywords []string) bool {
+	return strings.Contains(s, fuzz.SniperMark) || holdsKeyword(s, keywords)
 }
 
 // keepFuzzHits stores the hits in the workspace as ffuf's report, which

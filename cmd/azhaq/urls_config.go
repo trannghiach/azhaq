@@ -3,10 +3,11 @@ package main
 import (
 	"flag"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -244,9 +245,14 @@ func archiveBases(list []string) (map[string]string, error) {
 }
 
 // urlsNotes says what the archives left partial: a source that stopped at
-// its page cap, URLs past the cap, and archives that were not asked.
+// its page cap, URLs past the cap, and the URLs of archives that cannot
+// apply a filter, which are listed unfiltered.
 func urlsNotes(rep *report, ps []map[string]any, failCapped bool) {
-	skipped := map[string]string{}
+	type unfiltered struct {
+		what, by string
+		urls     int
+	}
+	loose := map[string]*unfiltered{}
 	for _, p := range ps {
 		domain, _ := p["domain"].(string)
 		if caps, _ := p["capped"].([]any); len(caps) > 0 {
@@ -268,22 +274,36 @@ func urlsNotes(rep *report, ps []map[string]any, failCapped bool) {
 		}
 		srcs, _ := p["sources"].(map[string]any)
 		for name, v := range srcs {
-			if row, _ := v.(map[string]any); row["skipped"] != nil {
-				skipped[name] = fmt.Sprint(row["skipped"])
+			row, _ := v.(map[string]any)
+			if what, _ := row["unfiltered"].(string); what != "" {
+				u := loose[name]
+				if u == nil {
+					u = &unfiltered{what: what}
+					loose[name] = u
+				}
+				u.by, _ = row["unfiltered_by"].(string)
+				u.urls += intOf(row["count"])
 			}
 		}
 		if why, _ := p["skipped"].(string); why != "" && domain != "" {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("%s: no archive was asked: %s", domain, why))
 		}
 	}
-	var names []string
-	for n := range skipped {
-		names = append(names, n)
+	for _, n := range slices.Sorted(maps.Keys(loose)) {
+		if u := loose[n]; u.urls > 0 {
+			rep.Notes = append(rep.Notes, unfilteredNote(n, u.what, u.by, u.urls))
+		}
 	}
-	sort.Strings(names)
-	for _, n := range names {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%s was not asked: it %s", n, skipped[n]))
+}
+
+// unfilteredNote says that an archive keeps no status, type or date of its
+// captures, so its URLs were not judged by the flag given for it.
+func unfilteredNote(archive, what, by string, urls int) string {
+	n := fmt.Sprintf("its %d URLs are", urls)
+	if urls == 1 {
+		n = "its 1 URL is"
 	}
+	return fmt.Sprintf("%s has no %s of its captures: %s not filtered by %s", archive, what, n, by)
 }
 
 // urlsJunk says how many URLs on the domains were left out as junk and

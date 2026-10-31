@@ -204,11 +204,12 @@ func TestOTXTarget(t *testing.T) {
 }
 
 // The filters reach the archives as gau sends them, and the sources that
-// keep no status or type are not asked, with the reason in the summary.
-func TestFiltersAreSentAndTheRestSkipped(t *testing.T) {
+// keep no status or type are asked all the same: their URLs are kept
+// unfiltered and their rows say what they lack.
+func TestFiltersAreSentAndTheRestAreUnfiltered(t *testing.T) {
 	m := newMirror(t, pages)
 	f := Filters{MatchStatus: []string{"200"}, DropStatus: []string{"404"}, MatchMime: []string{"text/html"}, DropMime: []string{"image/png"}, From: "202401", To: "202412"}
-	summary, _, _, err := run(t, Options{Bases: m.bases(), Client: m.Client(), Filters: f}, context.Background())
+	summary, rows, _, err := run(t, Options{Bases: m.bases(), Client: m.Client(), Filters: f}, context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,17 +229,38 @@ func TestFiltersAreSentAndTheRestSkipped(t *testing.T) {
 	if !slices.Equal(got, want) {
 		t.Errorf("common crawl filters %v", cc["filter"])
 	}
-	if n := len(m.asked("/otx")) + len(m.asked("/urlscan")); n != 0 {
-		t.Errorf("%d requests to sources that cannot filter", n)
+	if n := len(m.asked("/otx")); n == 0 {
+		t.Error("otx holds no status, yet gau asks it: it was not asked")
+	}
+	if n := len(m.asked("/urlscan")); n == 0 {
+		t.Error("urlscan was not asked")
 	}
 	srcs := summary["sources"].(map[string]any)
-	for _, name := range []string{"otx", "urlscan"} {
-		if row := srcs[name].(map[string]any); !strings.Contains(fmt.Sprint(row["skipped"]), "status") {
+	for name, c := range map[string]struct{ what, by string }{
+		"otx":     {"status, type or date", "-mc, -fc, -mt, -ft, -from, -to"},
+		"urlscan": {"status or type", "-mc, -fc, -mt, -ft"},
+	} {
+		row := srcs[name].(map[string]any)
+		if row["unfiltered"] != c.what || row["unfiltered_by"] != c.by || row["skipped"] != nil || row["count"].(float64) == 0 {
 			t.Errorf("%s row: %v", name, row)
 		}
 	}
+	for _, name := range []string{"wayback", "commoncrawl", "arquivo"} {
+		if row := srcs[name].(map[string]any); row["unfiltered"] != nil {
+			t.Errorf("%s applies every filter, its row says %v", name, row)
+		}
+	}
+	var otx bool
+	for _, r := range rows {
+		if strings.Contains(fmt.Sprint(r), "example.org/otx") {
+			otx = true
+		}
+	}
+	if !otx {
+		t.Errorf("the URLs of otx are not in the rows: %v", rows)
+	}
 	if summary["degraded"] == true {
-		t.Error("a source left out for its filters is not a failure")
+		t.Error("an archive that cannot filter is not a failure")
 	}
 }
 
@@ -261,8 +283,8 @@ func TestUrlscanTakesDates(t *testing.T) {
 	if q := m.asked("/urlscan"); len(q) != 1 || q[0].Get("q") != "domain:example.org AND date:>=2024-01-01 AND date:<=2024-02-29" {
 		t.Errorf("urlscan asked %v", q)
 	}
-	if n := len(m.asked("/otx")); n != 0 {
-		t.Errorf("otx dates no capture, yet was asked %d times", n)
+	if n := len(m.asked("/otx")); n != 1 {
+		t.Errorf("otx dates no capture: it is asked all the same, once, not %d times", n)
 	}
 }
 

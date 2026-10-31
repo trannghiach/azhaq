@@ -45,7 +45,7 @@ func benchFuzz(apps []string) *fuzzRow {
 	rate := pick([]string(nil), []string{"-rate", politeHTTP})
 	for _, app := range apps {
 		u := app + "FUZZ"
-		// ffuf with -ac against azhaq's default calibration.
+		// -ac on both sides: fuzz calibrates only when asked, as ffuf does.
 		legs := []struct {
 			name   string
 			az, ff []string
@@ -56,7 +56,7 @@ func benchFuzz(apps []string) *fuzzRow {
 			legs = append(legs, struct {
 				name   string
 				az, ff []string
-			}{"filtered (-fs " + fs + ")", []string{"-ac=false", "-fs", fs}, []string{"-fs", fs}})
+			}{"filtered (-fs " + fs + ")", []string{"-fs", fs}, []string{"-fs", fs}})
 		}
 		for _, lg := range legs {
 			leg := fuzzLeg{App: app, Variant: lg.name}

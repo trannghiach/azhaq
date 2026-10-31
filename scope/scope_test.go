@@ -150,3 +150,22 @@ func TestAllowsPrefix(t *testing.T) {
 		}
 	}
 }
+
+func TestHeaderOutside(t *testing.T) {
+	r := Rules{Allow: []string{"127.0.0.1", "ok.lab"}, Deny: []string{"secret.lab"}}.Compile()
+	for _, c := range []struct{ name, value, out string }{
+		{"Host", "ok.lab", ""},
+		{"host", "secret.lab:8080", "secret.lab"},
+		{"X-Forwarded-Host", "ok.lab, other.test", "other.test"},
+		{"x-original-host", "[::1]:80", "::1"},
+		{"X-Host", "127.0.0.1:3001", ""},
+		{"X-Forwarded-For", "other.test", ""},
+	} {
+		if got := r.HeaderOutside(c.name, c.value); got != c.out {
+			t.Errorf("%s: %s: %q, want %q", c.name, c.value, got, c.out)
+		}
+	}
+	if (Rules{}).HeaderOutside("Host", "anything.test") != "" {
+		t.Error("no rules: nothing is outside")
+	}
+}
