@@ -2,7 +2,11 @@
 # fetch.sh bench|hunt|trial NAME DIR: copies what the CI run KIND-NAME put
 # on the ci-results branch into DIR, decrypts and unpacks it, and puts back
 # a Codex session the run refreshed, when it is newer than this machine's.
+# Then usage.py counts which commands and flags the run used and writes
+# DIR/usage.json (skipped without python3 or azhaq); to count every run
+# fetched into one folder: usage.py FOLDER <(azhaq help -json).
 set -euo pipefail
+here=$(cd "$(dirname "$0")" && pwd)
 kind=${1:?usage: fetch.sh bench|hunt|trial NAME DIR}
 name=${2:?usage: fetch.sh bench|hunt|trial NAME DIR}
 dir=${3:?usage: fetch.sh bench|hunt|trial NAME DIR}
@@ -36,3 +40,9 @@ for f in *codex-auth.json.age; do
   rm -f "$f.json"
 done
 ls -la
+if command -v python3 >/dev/null 2>&1 && command -v azhaq >/dev/null 2>&1; then
+  if azhaq help -json >.usage-help.json 2>/dev/null; then
+    python3 -I "$here/usage.py" -1 . .usage-help.json || echo "fetch.sh: usage.py failed; the results are fetched" >&2
+  fi
+  rm -f .usage-help.json
+fi

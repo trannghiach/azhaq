@@ -48,6 +48,16 @@ Do not read azhaq's Go source and do not review diffs: judge only by behaviour, 
 - Nothing outward-facing: no GitHub, no posting.
 - Aim to finish within about 60 minutes of wall time.
 
+## Native features this round
+
+Evaluators score what they try, and some of azhaq's strongest features are the ones nobody tries. Use each of these at least once, on the lab where it applies, and report in FINDINGS.md whether it worked and what it found, compared with doing the same by hand or with the reference tool (same target, same settings, counted by independent evidence):
+
+- `subs -permute` and `run -permute`: the DNS lab (`-resolvers 127.0.0.1:5354`, zone azqlab.lan). Which names did the variations find that the sources did not give? Check each with `dig`.
+- `run -browser -interact` and `crawl -browser -interact`: Juice Shop. Which routes did the clicks find that `-browser` alone and katana did not? Does the summary's `-interact:` note match what the proxy log shows was sent? No write may leave.
+- `fuzz -preflight` with `-preflight-var-auto` (and `-postflight`): the DVWA login, which has a CSRF token. Does it find the right password where a copied token fails? Compare with ffuf in a loop that fetches the token by hand.
+- `run -dirs`, `run -params`, `run -ports`, `run -screenshots`: each against the same job done by `dirs`, `params`, `ports`, `shots` or by the reference tool (ffuf, arjun, naabu, gowitness) on one lab. Are the results the same? Is the run slower or heavier?
+- `run -stream`: are the found lines printed before the map, and are they the same as the map's rows?
+
 ## How to judge
 
 - **The parity bar azhaq claims:** results at least the reference tool's, and time no slower, both at default settings and at a polite pace (`-rate 2` to `5` for HTTP, `-dns-rate 5` to `10` for DNS, with the reference tool's equivalent flag). Check it on your area's commands. Measure wall time with `/usr/bin/time -v`.
