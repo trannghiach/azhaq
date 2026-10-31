@@ -196,6 +196,7 @@ func cmdCrawl(args []string) error {
 	}
 	facts, rejected, offsite := crawlFacts(obs)
 	counts := map[string]int{}
+	var otherMethod, scriptsOnly int
 	for _, r := range rows {
 		if r.Entity.Type != types.TypeURL || (*noShell && r.Coverage == "catchall") || r.Scope != "target" {
 			continue
@@ -213,6 +214,12 @@ func cmdCrawl(args []string) error {
 			continue
 		}
 		counts[r.Coverage]++
+		switch {
+		case len(r.Methods) > 0 && !slices.Contains(r.Methods, "GET"):
+			otherMethod++
+		case r.Coverage == "hint" && len(r.Methods) == 0 && strings.HasSuffix(r.Proof, engine.ProofScriptsOnly):
+			scriptsOnly++
+		}
 		out.write(r, facts[r.Entity.Key])
 	}
 	if *showOut {
@@ -237,6 +244,12 @@ func cmdCrawl(args []string) error {
 		return err
 	}
 	rep.Results, rep.Counts = out.w.count(), counts
+	if otherMethod > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d listed URLs are routes scripts call with a method other than GET, so a GET may answer 404 or 405 (-json has methods; -ot '{{method}} {{url}}' prints them)", otherMethod))
+	}
+	if scriptsOnly > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d listed URLs are named only in scripts, with no call to say how they are used, and a GET answers 404 (-json has proof)", scriptsOnly))
+	}
 	if n := len(rejected); n > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d strings read from scripts and pages were kept out of the URLs, with the reason each (not requested; -rejected lists them)", n))
 	}
@@ -359,8 +372,9 @@ func crawlTarget(t string) string {
 }
 
 // crawlFieldNames are katana's output fields (pkg/output/fields.go, MIT),
-// all read off the URL.
-var crawlFieldNames = []string{"url", "path", "fqdn", "rdn", "rurl", "qurl", "qpath", "file", "ufile", "key", "value", "kv", "dir", "udir"}
+// all read off the URL, and azhaq's own method: the methods the row is
+// called with, one line each (GET for a page no script calls another way).
+var crawlFieldNames = []string{"url", "path", "fqdn", "rdn", "rurl", "qurl", "qpath", "file", "ufile", "key", "value", "kv", "dir", "udir", "method"}
 
 // defaultDenyExt are the extensions katana leaves out by default.
 var defaultDenyExt = strings.Fields(".3g2 .3gp .7z .apk .arj .avi .axd .bmp .csv .deb .dll .doc .drv .eot .exe .flv .gif .gifv .gz .h264 .ico .iso .jar .jpeg .jpg .lock .m4a .m4v .map .mkv .mov .mp3 .mp4 .mpeg .mpg .msi .ogg .ogm .ogv .otf .pdf .pkg .png .ppt .psd .rar .rm .rpm .svg .swf .sys .tar.gz .tar .tif .tiff .ttf .txt .vob .wav .webm .webp .wmv .woff .woff2 .xcf .xls .xlsx .zip")
@@ -370,7 +384,7 @@ type crawlOpts struct {
 	fields, store                       []string
 	dir, tmpl                           string
 	match, deny, defDeny                map[string]bool
-	hasMatch                            bool
+	hasMatch, method                    bool
 	mr, fr                              *regexp.Regexp
 	exclude                             []string
 }
@@ -425,8 +439,10 @@ func crawlOutOpts(jsonl bool, fields, store, dir, tmpl, em, ef string, ndef bool
 			if !slices.Contains(crawlFieldNames, m[1]) {
 				return o, usagef("-ot: no field %q (fields: %s)", m[1], strings.Join(crawlFieldNames, ", "))
 			}
+			o.method = o.method || m[1] == "method"
 		}
 	}
+	o.method = o.method || slices.Contains(o.fields, "method") || slices.Contains(o.store, "method")
 	ext := func(e string) string {
 		e = strings.ToLower(strings.TrimSpace(e))
 		if e == "none" {
@@ -578,7 +594,7 @@ func (c *crawlOutput) drop(row map[string]any) map[string]any {
 func (c *crawlOutput) write(r engine.MapEntry, f crawlFact) {
 	key := r.Entity.Key
 	if len(c.o.store) > 0 {
-		c.store(key)
+		c.store(key, rowMethods(r))
 	}
 	switch {
 	case c.o.jsonl:
@@ -592,18 +608,25 @@ func (c *crawlOutput) write(r engine.MapEntry, f crawlFact) {
 			row["tech"] = f.tech
 		}
 		c.w.obj(c.drop(row))
-	case c.o.tmpl != "":
-		fields := urlFields(key)
-		line := crawlTagRe.ReplaceAllStringFunc(c.o.tmpl, func(m string) string {
-			name := crawlTagRe.FindStringSubmatch(m)[1]
-			return strings.Join(fields[name], "\n")
-		})
-		c.w.line(line)
-	case len(c.o.fields) > 0:
-		fields := urlFields(key)
-		for _, name := range c.o.fields {
-			for _, v := range fields[name] {
-				c.w.line(v)
+	case c.o.tmpl != "" || len(c.o.fields) > 0:
+		// A row with several methods is one set of lines for each, as -jsonl has a line each.
+		methods := []string{""}
+		if c.o.method {
+			methods = rowMethods(r)
+		}
+		for _, m := range methods {
+			fields := urlFields(key)
+			fields["method"] = []string{m}
+			if c.o.tmpl != "" {
+				c.w.line(crawlTagRe.ReplaceAllStringFunc(c.o.tmpl, func(t string) string {
+					return strings.Join(fields[crawlTagRe.FindStringSubmatch(t)[1]], "\n")
+				}))
+				continue
+			}
+			for _, name := range c.o.fields {
+				for _, v := range fields[name] {
+					c.w.line(v)
+				}
 			}
 		}
 	default:
@@ -692,14 +715,24 @@ func (c *crawlOutput) writeRejected(x rejectedStr) {
 	c.w.line(x.str + "\t" + x.reason)
 }
 
+// rowMethods are the methods a row is listed with: those scripts and
+// descriptions call it with, GET for a page nothing calls another way.
+func rowMethods(r engine.MapEntry) []string {
+	if len(r.Methods) == 0 {
+		return []string{"GET"}
+	}
+	return r.Methods
+}
+
 // store appends the fields of a URL to the -sf files.
-func (c *crawlOutput) store(raw string) {
+func (c *crawlOutput) store(raw string, methods []string) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return
 	}
 	_ = os.MkdirAll(c.o.dir, 0o755)
 	fields := urlFields(raw)
+	fields["method"] = methods
 	for _, name := range c.o.store {
 		for _, v := range fields[name] {
 			file := filepath.Join(c.o.dir, fmt.Sprintf("%s_%s_%s.txt", u.Scheme, u.Hostname(), name))

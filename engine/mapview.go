@@ -45,6 +45,9 @@ type MapEntry struct {
 	Answer string `json:"answer,omitempty"`
 }
 
+// ProofScriptsOnly ends the proof of a route only scripts name, with no call to go by.
+const ProofScriptsOnly = "found only in scripts, method unknown"
+
 // maxFound caps the places a row lists for where scripts name it.
 const maxFound = 3
 
@@ -150,7 +153,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 				// Named in a script with no method to go by: a GET that
 				// answers 404 says nothing of a route scripts may POST to.
 				m.Coverage = "hint"
-				m.Proof = fmt.Sprintf("GET answers %d; found only in scripts, method unknown", m.Status)
+				m.Proof = fmt.Sprintf("GET answers %d; %s", m.Status, ProofScriptsOnly)
 			}
 			m.Found = f.sites
 			if op, ok := apiOps[e.Key]; ok {
