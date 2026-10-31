@@ -12,6 +12,7 @@
 ```
 .github/ci/run.sh trial 11 research            # tag trial-11, kind research
 .github/ci/run.sh trial 12 hunter seed=lilac   # the same, with a fixed draw
+.github/ci/run.sh trial dry1 research dryrun     # estates, isolation and brief, no agent
 .github/ci/fetch.sh trial trial-11 /tmp/t11    # copies, decrypts and unpacks
 python3 .github/ci/range/grade.py /tmp/t11/key.json /tmp/t11
 ```

@@ -32,6 +32,7 @@ jobs:
     outputs:
       kind: ${{ steps.k.outputs.kind }}
       seed: ${{ steps.k.outputs.seed }}
+      dryrun: ${{ steps.k.outputs.dryrun }}
     steps:
       - uses: actions/checkout@v7
       - id: k
@@ -45,6 +46,7 @@ jobs:
           esac
           echo "kind=$kind" >> "$GITHUB_OUTPUT"
           echo "seed=$(echo "$msg" | sed -n 's/.*seed=\([A-Za-z0-9._-]*\).*/\1/p')" >> "$GITHUB_OUTPUT"
+          case " $msg " in *" dryrun "*) echo "dryrun=1" >> "$GITHUB_OUTPUT" ;; esac
           echo "trial kind: $kind"
   codex:
     needs: kind
@@ -107,6 +109,7 @@ jobs:
     timeout-minutes: 360
     env:
       KIND: ${{ needs.kind.outputs.kind }}
+      DRYRUN: ${{ needs.kind.outputs.dryrun }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -162,6 +165,15 @@ jobs:
           echo "release under review: $v"
           python3 -I "$HOME/ci/render_brief.py" "$KIND" "$v" "$HOME/ci/vars.json" "$HOME/ci" > "$HOME/ci/brief.md"
           cd "$HOME/trial"
+          if [ "$DRYRUN" = 1 ]; then
+            # Everything but the agent: the estates answer an unprivileged
+            # user after isolation, and the brief renders. Counts only.
+            nets=$(jq -r '[.NET1, .NET2] | join(" ")' "$HOME/ci/vars.json" 2>/dev/null || true)
+            open=$(nmap -sT -T4 -Pn --top-ports 1000 -oG - $nets 2>/dev/null | grep -o '/open/' | wc -l)
+            echo "dry run: $open open ports across both estates"
+            printf 'dry run\n\n%s open ports seen by the agent user after isolation.\n' "$open" > REPORT.md
+            exit 0
+          fi
           # Every line of the event stream gets the second it arrived, so the
           # time to a finding is measured, not reported by the agent.
           timeout 4h codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C "$HOME/trial" \
