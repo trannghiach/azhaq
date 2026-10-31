@@ -304,13 +304,19 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 	var r Report
 	var err error
 	ports = s.ordered(ip, ports)
-	var asked int
-	r.Open, r.Silent, asked, err = s.pass(ctx, host, ip, ports)
+	var asked, slow int
+	r.Open, r.Silent, asked, slow, err = s.pass(ctx, host, ip, ports)
 	r.Asked = asked
 	r.Threshold = s.Threshold > 0 && len(r.Open) >= s.Threshold
 	for try := 0; err == nil && !r.Threshold && len(r.Silent) > 0 && s.again(try, len(r.Silent), len(ports)); try++ {
+		if slow > 0 {
+			err = s.settle(ctx)
+			if err != nil {
+				break
+			}
+		}
 		var more []Open
-		more, r.Silent, _, err = s.pass(ctx, host, ip, r.Silent)
+		more, r.Silent, _, slow, err = s.pass(ctx, host, ip, r.Silent)
 		r.Open = append(r.Open, more...)
 	}
 	if err == nil {
@@ -326,6 +332,24 @@ func (s *Scanner) ScanEach(ctx context.Context, host, ip string, ports []int) (R
 	s.mu.Unlock()
 	return r, err
 }
+
+// settle waits a connect timeout before the silent ports are asked again:
+// a listener whose accept queue is full makes Linux drop the SYN, and the
+// connect gets in only once the service has drained it. Capped, so a long
+// timeout does not stall a scan.
+func (s *Scanner) settle(ctx context.Context) error {
+	t := time.NewTimer(min(s.Timeout, settleMax))
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+// settleMax caps the wait before a pass over the silent ports.
+const settleMax = 3 * time.Second
 
 // again says whether another pass over the silent ports follows try
 // earlier ones.
@@ -353,8 +377,9 @@ func (s *Scanner) wait(ctx context.Context, ip string) error {
 const retryFloor = 64
 
 // pass connects once to each port, at the scanner's rate, and says how
-// many it asked: all of them unless the threshold of open ports stopped it.
-func (s *Scanner) pass(ctx context.Context, host, ip string, ports []int) (open []Open, silent []int, asked int, err error) {
+// many it asked (all of them unless the threshold of open ports stopped it)
+// and how many of the silent ones timed out rather than failed at once.
+func (s *Scanner) pass(ctx context.Context, host, ip string, ports []int) (open []Open, silent []int, asked, slow int, err error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	var stop error
@@ -392,17 +417,20 @@ func (s *Scanner) pass(ctx context.Context, host, ip string, ports []int) (open 
 			switch state {
 			case portOpen:
 				open = append(open, o)
-			case portSilent:
+			case portSilent, portTimedOut:
 				silent = append(silent, p)
+				if state == portTimedOut {
+					slow++
+				}
 			}
 			mu.Unlock()
 		}(p)
 	}
 	wg.Wait()
 	if stop != nil {
-		return open, silent, asked, stop
+		return open, silent, asked, slow, stop
 	}
-	return open, silent, asked, ctx.Err()
+	return open, silent, asked, slow, ctx.Err()
 }
 
 type portState int
@@ -410,7 +438,8 @@ type portState int
 const (
 	portClosed portState = iota // refused: nothing listens
 	portOpen
-	portSilent // no answer either way
+	portSilent   // no answer either way, and an error at once (unreachable)
+	portTimedOut // no answer either way within the timeout
 )
 
 // dialer is a net.Dialer for a connect to ip, from the scanner's source
@@ -459,6 +488,10 @@ func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, p
 	if err != nil {
 		if refused(err) || ctx.Err() != nil {
 			return Open{}, portClosed
+		}
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return Open{}, portTimedOut
 		}
 		return Open{}, portSilent
 	}
