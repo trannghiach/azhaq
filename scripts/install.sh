@@ -4,7 +4,16 @@
 # from this repository's release workflow. Nothing is written to DIR before
 # both checks pass.
 #
-# Usage: sh install.sh [-v VERSION] [-d DIR]
+# Without cosign the install rests on the checksum alone, and says so. To
+# refuse that, give -s (--require-signature) or set AZHAQ_REQUIRE_SIGNATURE=1:
+# the script then stops before downloading anything when cosign is missing,
+# and stops when the signature does not verify.
+#
+# Needs: curl or wget; tar and gzip (the archive is a .tar.gz); sha256sum or
+# shasum; cosign (optional, required with -s); and the usual sh, awk, sed,
+# head, mktemp, uname, cp, chmod and mkdir.
+#
+# Usage: sh install.sh [-v VERSION] [-d DIR] [-s | --require-signature]
 set -eu
 
 REPO=trannghiach/azhaq
@@ -12,6 +21,11 @@ RELEASES=https://github.com/$REPO/releases
 VERSION=
 INSTALL_DIR=
 TMP=
+REQUIRE_SIG=
+case ${AZHAQ_REQUIRE_SIGNATURE:-} in
+    ''|0|false|no) ;;
+    *) REQUIRE_SIG=1 ;;
+esac
 
 err() {
     printf 'install.sh: %s\n' "$*" >&2
@@ -24,10 +38,23 @@ info() {
 
 usage() {
     cat <<EOF
-usage: sh install.sh [-v VERSION] [-d DIR]
-  -v VERSION  release tag such as v0.8.1 (default: latest)
-  -d DIR      install directory (default: \$HOME/.local/bin)
+usage: sh install.sh [-v VERSION] [-d DIR] [-s | --require-signature]
+  -v VERSION           release tag such as v0.8.1 (default: latest)
+  -d DIR               install directory (default: \$HOME/.local/bin)
+  -s, --require-signature
+                       install only when cosign verifies the signature of
+                       checksums.txt; stop when cosign is missing or the
+                       signature fails (same: AZHAQ_REQUIRE_SIGNATURE=1)
 EOF
+}
+
+# need CMD...: stops, naming every command of the list that is missing.
+need() {
+    missing=
+    for c in "$@"; do
+        command -v "$c" >/dev/null 2>&1 || missing="$missing $c"
+    done
+    [ -z "$missing" ] || err "missing commands:$missing; install them and run again"
 }
 
 # fetch URL FILE: curl if present, else wget.
@@ -41,10 +68,23 @@ fetch() {
     fi
 }
 
-while getopts ':v:d:h' opt; do
+# getopts reads no long option: take --require-signature out first.
+n=$#
+while [ "$n" -gt 0 ]; do
+    a=$1
+    shift
+    case $a in
+        --require-signature) REQUIRE_SIG=1 ;;
+        *) set -- "$@" "$a" ;;
+    esac
+    n=$((n - 1))
+done
+
+while getopts ':v:d:sh' opt; do
     case $opt in
         v) VERSION=$OPTARG ;;
         d) INSTALL_DIR=$OPTARG ;;
+        s) REQUIRE_SIG=1 ;;
         h) usage; exit 0 ;;
         \?) err "unknown option -$OPTARG (see: sh install.sh -h)" ;;
         :) err "option -$OPTARG needs a value" ;;
@@ -52,6 +92,18 @@ while getopts ':v:d:h' opt; do
 done
 shift $((OPTIND - 1))
 [ $# -eq 0 ] || err "unexpected argument: $1"
+
+# Every tool is checked before anything is downloaded.
+need uname mktemp awk sed head tar gzip cp chmod mkdir
+command -v curl >/dev/null 2>&1 || command -v wget >/dev/null 2>&1 || err "need curl or wget to download files"
+command -v sha256sum >/dev/null 2>&1 || command -v shasum >/dev/null 2>&1 || err "need sha256sum or shasum to verify the download"
+COSIGN_BIN=$(command -v "${COSIGN:-cosign}" 2>/dev/null || true)
+if [ -n "${COSIGN:-}" ] && [ -z "$COSIGN_BIN" ]; then
+    err "COSIGN=$COSIGN is not an executable"
+fi
+if [ -n "$REQUIRE_SIG" ] && [ -z "$COSIGN_BIN" ]; then
+    err "a signature is required (-s, AZHAQ_REQUIRE_SIGNATURE) but cosign was not found: install it (https://docs.sigstore.dev/cosign/system_config/installation/) or name it with COSIGN=/path/to/cosign; nothing was downloaded or installed"
+fi
 
 case $(uname -s) in
     Linux) OS=linux ;;
@@ -113,11 +165,6 @@ else
 fi
 (cd "$TMP" && $SHA_CMD check.txt >/dev/null 2>&1) || err "checksum mismatch for $ARCHIVE; nothing installed"
 info "sha256 of $ARCHIVE matches checksums.txt"
-
-COSIGN_BIN=$(command -v "${COSIGN:-cosign}" 2>/dev/null || true)
-if [ -n "${COSIGN:-}" ] && [ -z "$COSIGN_BIN" ]; then
-    err "COSIGN=$COSIGN is not an executable"
-fi
 
 if [ -n "$COSIGN_BIN" ]; then
     fetch "$BASE/checksums.txt.sigstore.json" "$TMP/checksums.txt.sigstore.json"
