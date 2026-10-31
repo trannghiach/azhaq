@@ -159,11 +159,16 @@ func counted(rt network.ResourceType) bool {
 // when they are in. It returns how many requests of the page still wait
 // for their turn if it gave up: a page that never stops asking is shot
 // as it is, and said to be partial. Without a pace it waits a third of a
-// second and no more than 5 s.
-func (b *Browser) quiet(ctx context.Context, t *tab, log *pageLog, prog *progress) (waiting int) {
+// second and no more than 5 s. With every set it is quiet only when no
+// request of any kind is out, not just those a picture shows: a page read
+// for its calls waits for the ones a slow answer holds back.
+func (b *Browser) quiet(ctx context.Context, t *tab, log *pageLog, prog *progress, every bool) (waiting int) {
 	hold, limit := 300*time.Millisecond, 5*time.Second
 	if r := egress.Rate(); r > 0 {
 		hold, limit = 700*time.Millisecond+time.Duration(float64(time.Second)/r), 3*b.Timeout
+		if every {
+			limit = 5 * time.Second // a page read, not shot, is not held for a page that never stops asking
+		}
 	}
 	end := time.Now().Add(limit)
 	if dl, ok := ctx.Deadline(); ok {
@@ -177,7 +182,11 @@ func (b *Browser) quiet(ctx context.Context, t *tab, log *pageLog, prog *progres
 		b.refMu.Lock()
 		waiting = t.pending
 		b.refMu.Unlock()
-		if waiting == 0 && log.unloaded() == 0 {
+		open := log.unloaded()
+		if every {
+			open = log.inflight()
+		}
+		if waiting == 0 && open == 0 {
 			if since.IsZero() {
 				since = time.Now()
 			} else if time.Since(since) >= hold {
@@ -200,4 +209,12 @@ func minTime(a, b time.Time) time.Time {
 		return a
 	}
 	return b
+}
+
+// idle says whether nothing of t's page is out or being decided.
+func (b *Browser) idle(t *tab, log *pageLog) bool {
+	b.refMu.Lock()
+	n := t.pending
+	b.refMu.Unlock()
+	return n <= 0 && log.inflight() == 0
 }

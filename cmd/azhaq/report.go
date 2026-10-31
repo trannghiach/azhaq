@@ -570,5 +570,9 @@ func interactNotes(obs []types.StoredObservation) []string {
 	if pages == 0 {
 		return nil
 	}
-	return []string{fmt.Sprintf("-interact: %d clicks on %d pages found %d routes; %d downloads and mail or phone links not clicked; the %d writes the clicks tried were mapped, not sent", clicks, pages, routes, skipped, writes)}
+	note := fmt.Sprintf("-interact: %d clicks on %d pages found %d routes; %d downloads and mail or phone links not clicked; the %d writes the clicks tried were mapped, not sent", clicks, pages, routes, skipped, writes)
+	if clicks == 0 {
+		note += "; no button, link or menu showed on a page that had settled: it may draw them only after a slower answer than the page waits for, or need a sign-in (-login)"
+	}
+	return []string{note}
 }

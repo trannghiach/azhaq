@@ -1155,6 +1155,8 @@ Static extraction reads what scripts contain. `-browser` also runs them.
 
 These become URLs for the other collectors. It shares the browser, tab limit and session headers with screenshots.
 
+A page is read once it has settled: 1.5 s after the load event, and then until no request of it is out for 0.3 s, up to 5 s more. An app that a slow path (a proxy that takes its time, a loaded machine) brings up late is read drawn, and its menus are there to click.
+
 A page read this way is loaded without its images, fonts and media, socket.io's polling and the tab's icon. A screenshot has them. They are not sent and not counted, because they name no route. A request to a host outside the scope is still listed.
 
 The writes a page sends, such as a POST, a DELETE or a beacon, are not sent but mapped, with their method and names. See [Chrome and the scope](#chrome-and-the-scope).
@@ -1162,6 +1164,8 @@ The writes a page sends, such as a POST, a DELETE or a beacon, are not sent but 
 ### Clicking (`-interact`)
 
 `-interact`, with `-browser`, clicks each rendered page's buttons, links, tabs and menus. It makes up to `-interact-clicks` clicks, 12 by default. It puts the page back after each, by history, else by loading it again.
+
+A page that shows nothing to click is looked at again for up to 2.4 s while it is still drawing. If it shows nothing, the `-interact:` note says so, with 0 clicks, instead of leaving the note out.
 
 It finds what only a click brings:
 

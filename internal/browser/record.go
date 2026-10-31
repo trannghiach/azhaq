@@ -295,3 +295,17 @@ func (r *pageLog) unloaded() int {
 	}
 	return n
 }
+
+// inflight is how many requests of the page, of any kind, have not been
+// answered: what a script still waits for before it draws the next view.
+func (r *pageLog) inflight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, e := range r.all {
+		if !e.done && !e.blocked {
+			n++
+		}
+	}
+	return n
+}

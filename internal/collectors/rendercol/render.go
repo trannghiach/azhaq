@@ -187,7 +187,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 		}
 	}
-	if in := p.Interaction; in.Clicks > 0 || in.Skipped > 0 {
+	if in := p.Interaction; c.Browser.Interact > 0 {
 		for _, h := range in.Snapshots {
 			for _, l := range webextract.Links([]byte(h), base) {
 				if webextract.SameOrigin(raw, l) {

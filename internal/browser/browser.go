@@ -392,8 +392,13 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 		}
 	}
 	waiting := 0
-	if err == nil && shot {
-		waiting = b.quiet(tab, t, log, prog)
+	if err == nil {
+		// Shot: until the picture's resources are in. Read: until no call is
+		// out, so an app a slow path (a proxy, a loaded machine) brings up
+		// late is read drawn, and its menus are there to click.
+		if n := b.quiet(tab, t, log, prog, !shot); shot {
+			waiting = n
+		}
 	}
 	if err == nil {
 		p.URL, _ = chromedp.Run(tab, chromedp.Location())
@@ -419,7 +424,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Partial = p.Unloaded > 0
 	if err == nil && b.Interact > 0 {
 		b.beginClicks(t)
-		p.Interaction = b.interact(tab, p.URL, b.Interact, func() bool { return b.capped(t) })
+		p.Interaction = b.interact(tab, p.URL, b.Interact, func() bool { return b.capped(t) }, func() bool { return b.idle(t, log) })
 	}
 	b.settle(t)
 	mu.Lock()

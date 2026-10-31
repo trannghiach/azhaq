@@ -78,7 +78,7 @@ azhaq query -db app.db -role api,client-route -fields key,methods,evidence
 
 Chrome must be installed. `run` maps everything. `crawl` is the katana-style crawler, and lists the URLs it found.
 
-**You get:** the summary says what the clicks did, for example `-interact: 6 clicks on 3 pages found 4 routes; 0 downloads and mail or phone links not clicked; the 0 writes the clicks tried were mapped, not sent`. The query lists the routes a click's script called as `api` rows with `evidence` `browser`, such as `/api/billing/plans  GET  browser`. The address a click went to is a row too: a route after the hash is a `client-route`.
+**You get:** the summary says what the clicks did, for example `-interact: 6 clicks on 3 pages found 4 routes; 0 downloads and mail or phone links not clicked; the 0 writes the clicks tried were mapped, not sent`. A summary with `0 clicks` says no button, link or menu showed on a page that had settled. The query lists the routes a click's script called as `api` rows with `evidence` `browser`, such as `/api/billing/plans  GET  browser`. The address a click went to is a row too: a route after the hash is a `client-route`.
 
 - `azhaq crawl` and `azhaq run` print `next: … -browser -interact` themselves when three or more URLs answered with the one page every unknown path gets and the front page is an empty shell. It is the sign of a single-page app.
 - `-interact-clicks N` sets the clicks on each page, 12 by default.

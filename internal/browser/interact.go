@@ -70,7 +70,9 @@ type Interaction struct {
 // back where it was after each: by history, else by loading it again. It
 // ends when spent says the budget refused the page something: the page is
 // loaded again after azhaq resume, so more clicks are time for nothing.
-func (b *Browser) interact(tab context.Context, start string, max int, spent func() bool) Interaction {
+// idle says whether the page has nothing out: a page with nothing to click
+// yet is looked at again while it is still drawing.
+func (b *Browser) interact(tab context.Context, start string, max int, spent func() bool, idle func() bool) Interaction {
 	var in Interaction
 	tried := map[string]bool{}
 	sameURL := func(a, c string) bool { return a == c }
@@ -84,6 +86,12 @@ func (b *Browser) interact(tab context.Context, start string, max int, spent fun
 		cands, err := chromedp.Run(tab, chromedp.Evaluate[[]candidate](candidatesJS))
 		if err != nil {
 			return in
+		}
+		if in.Clicks == 0 && len(tried) == 0 {
+			cands, err = b.drawn(tab, cands, spent, idle)
+			if err != nil {
+				return in
+			}
 		}
 		var pick *candidate
 		for i := range cands {
@@ -134,6 +142,33 @@ func (b *Browser) interact(tab context.Context, start string, max int, spent fun
 		}
 	}
 	return in
+}
+
+// drawn looks again, a few times, at a page that shows nothing to click: an
+// app that is still drawing its menus (after a slow answer) shows them soon.
+// It ends once something shows, or the page has been quiet and unchanged for
+// two looks.
+func (b *Browser) drawn(tab context.Context, cands []candidate, spent func() bool, idle func() bool) ([]candidate, error) {
+	size := func() int {
+		n, _ := chromedp.Run(tab, chromedp.Evaluate[int](`document.getElementsByTagName('*').length`))
+		return n
+	}
+	last, still := size(), 0
+	for look := 0; look < 8 && len(cands) == 0 && tab.Err() == nil && !spent(); look++ {
+		_ = chromedp.Do(tab, chromedp.Sleep(300*time.Millisecond))
+		var err error
+		if cands, err = chromedp.Run(tab, chromedp.Evaluate[[]candidate](candidatesJS)); err != nil {
+			return nil, err
+		}
+		if n := size(); n == last && idle() {
+			if still++; still >= 2 {
+				break
+			}
+		} else {
+			last, still = n, 0
+		}
+	}
+	return cands, nil
 }
 
 func withoutQuery(raw string) string {
