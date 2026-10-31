@@ -19,7 +19,7 @@ import (
 )
 
 // live names in example.org; *.wild.example.org is a wildcard.
-var live = map[string]bool{"www.example.org": true, "api.example.org": true, "api2.example.org": true, "dev-api.example.org": true}
+var live = map[string]bool{"www.example.org": true, "api.example.org": true, "api2.example.org": true, "dev-api.example.org": true, "www-dev.example.org": true}
 
 func pool(t *testing.T) *dnsr.Pool {
 	t.Helper()
@@ -94,6 +94,42 @@ func TestPermute(t *testing.T) {
 		func(o types.Observation) error { again = o; return nil })
 	if again.Payload != nil {
 		t.Fatalf("second run retried candidates: %s", again.Payload)
+	}
+}
+
+// A name a source gave is varied even when another name's variations
+// asked for it too (www is a word): only the names a variation found, which
+// come back marked, are not.
+func TestPermuteVariesASourceNameThatWasAlsoAGuess(t *testing.T) {
+	p := pool(t)
+	perm := &Permute{Pool: p, Wild: dnsr.NewWildcards(p)}
+	run := func(seed types.Seed) (types.Observation, types.RunMeta) {
+		var got types.Observation
+		meta, err := perm.Run(context.Background(), seed, func(o types.Observation) error { got = o; return nil })
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got, meta
+	}
+	host := func(n string) types.Seed {
+		return types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": n}}
+	}
+	_, meta := run(host("api.example.org")) // asks www.example.org among its variations
+	var marked types.Seed
+	for _, h := range meta.NextHints {
+		if h.Keys["fqdn"] == "www.example.org" {
+			marked = h
+		}
+	}
+	if marked.Keys[types.ViaKey] != types.ViaPermute {
+		t.Fatalf("a found name is not marked: %+v", meta.NextHints)
+	}
+	got, _ := run(host("www.example.org")) // the seed the source gave
+	if n := strings.Join(names(t, got), ","); !strings.Contains(n, "www-dev.example.org") {
+		t.Fatalf("variations of www.example.org found %q", n)
+	}
+	if again, _ := run(marked); again.Payload != nil {
+		t.Fatalf("a found name was varied: %s", again.Payload)
 	}
 }
 

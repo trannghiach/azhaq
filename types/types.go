@@ -57,9 +57,12 @@ const GivenKey = "given"
 // ViaKey on a URL hint says where it was found when that sets what it is
 // worth: ViaArchive for a URL an archive listed, which a run under a
 // budget requests after what the application itself serves and names.
+// On a hostname, ViaPermute is a name a variation found, which is not varied
+// again.
 const (
 	ViaKey     = "via"
 	ViaArchive = "archive"
+	ViaPermute = "permute"
 )
 
 // Derived reports whether the engine derived s from another seed.

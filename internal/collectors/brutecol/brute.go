@@ -136,11 +136,11 @@ func (p *Permute) Run(ctx context.Context, seed types.Seed, emit func(types.Obse
 	host := normalize.Hostname(seed.Keys["fqdn"])
 	domain := normalize.RegistrableDomain(host)
 	p.mu.Lock()
-	ownFind := p.tried[host]
 	p.mu.Unlock()
-	if domain == "" || host == domain || ownFind {
-		// A name this collector guessed is not permuted again: that would
-		// compound guesses on guesses.
+	if domain == "" || host == domain || seed.Keys[types.ViaKey] == types.ViaPermute {
+		// A name a variation found is not varied again: that would compound
+		// guesses on guesses. A name a source gave stays, even when some
+		// variation asked for it too.
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
 	words := p.Words
@@ -167,9 +167,13 @@ func (p *Permute) Run(ctx context.Context, seed types.Seed, emit func(types.Obse
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
 	found := resolveFound(ctx, p.Pool, p.Wild, domain, names, p.Workers)
-	return report(ctx, emit, PermuteName, host, map[string]any{
+	meta, err := report(ctx, emit, PermuteName, host, map[string]any{
 		"fqdn": host, "names": found, "count": len(found), "tried": len(names),
 	}, found)
+	for _, h := range meta.NextHints {
+		h.Keys[types.ViaKey] = types.ViaPermute
+	}
+	return meta, err
 }
 
 // variants of host: first label a.b.example.com is "a", rest "b.example.com".
