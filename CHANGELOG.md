@@ -19,6 +19,8 @@
 - `-permute` asks every kind of variation for each name (about 800 for `api.example.com`, every one of alterx's default patterns' names among them): the cap of 120 is gone, and the word in place and `dev.api.example.com` are asked, as the help says.
 - `fuzz -d` sends `Content-Type: application/x-www-form-urlencoded` when no `-H` gives one, as ffuf does.
 - `worker` without `-server` or a token, `watch` without `-db` or run options, `new` without `-db` and `-scope PLATFORM` without `-program` exit 2 (usage), not 1.
+- `dirs` keeps calibration on when you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr`, as ffuf's `-ac -fs` does: the catch-all answer your filter does not remove is hidden too (25 rows became 5 on a catch-all app). `-ac=false` (`-dirs-ac=false` for `run`) turns it off, and the filters are then yours alone. `fuzz` is unchanged.
+- `fuzz -preflight-var-auto` and `-postflight-var-auto` name the source between colons: `TOKEN:form:user_token` (or `meta`, `cookie`, `header`). The older `TOKEN:[form]user_token` still works, and a name with no source still tries all four; when a name that starts with a source name finds nothing, the error says how to pin the source.
 
 ### Added
 
@@ -56,6 +58,13 @@
 - `run -params` keeps the parameters `params` finds on the page's row of the map (`query -fields params`); before, the row had none.
 - `subs` keeps the names DNS answered before a stop (SIGTERM, Ctrl-C, `-timeout`): they are rows, and `azhaq resume` asks only the names that were not answered.
 - `subs -live` asks a sampled source's next round while the last round's names are looked up, so a round costs the longer of the call and the check, not the sum.
+- `params` tests the parameters the input URL already carries (`?q=apple`, `?id=1&Submit=Submit`): a name is reported, with its `why`, when renaming it or giving it another value changes the answer twice. A parameter the page ignores is not reported.
+- `-permute` varies a name a source gave even when another name's variations had asked for it (`www` is a word), so `www-dev.example.com` is found.
+- A signed-in run no longer sends its requests as a visitor while it signs in again with Chrome: the new session is set whole when Chrome is done. This also stops false "the session ended" notes, extra sign-ins and re-asked requests; `roles` on Juice Shop with Chrome read rows as a visitor's because of it.
+- A race between a session renewal and the probe row and GraphQL collector reading the session headers.
+- `run -dns-brute` and `-permute` keep the DNS answer of each name they find, so at `-depth 0` those names are live rows with their addresses, not `unresolved`.
+- `-interact` stops clicking at the first request the budget refuses, so a capped browser crawl ends promptly with exit 4 and its tasks left for `azhaq resume`; before, it could run on long after the budget was spent.
+- `-interact` keeps a page's rows when a click leaves the scope (the link is listed as skipped, outside the scope); before, the page's requests, links, click routes and the `-interact:` note were dropped, so `crawl -browser -interact` mapped 9 rows where `crawl -browser` mapped 167.
 
 ## v0.10.1
 
