@@ -39,12 +39,20 @@ A row's `scope` (`target` or `fanout`) is not the request [scope](#scope) that `
 | `visited` | Requested; it answered as a page of its own (any status but 404 and 410). | Read it. |
 | `catchall` | Requested; it answered with the page every unknown path gets (an app shell, a soft 404). Not proof the route exists. | Look at it in a browser, or use `-browser`. |
 | `error` | Requested; no answer: timeout, refused, reset or TLS failure. | `azhaq query -db W -failed`, then try again. |
-| `gone` | Requested; it answered 404 or 410. Usually an archived URL. | Try older API versions near it. |
-| `hint` | Known from a script, a description, an archive or a link, not proven by a GET. Not requested, or scripts call it with another method. | Send the method in its operations yourself. |
+| `gone` | Requested; it answered 404 or 410, usually a URL found in an archive or a link. Nothing read says it takes another method. | Try older API versions near it. |
+| `hint` | Known from a script, a description, an archive or a link, not proven by a GET. See below for the cases. | Send the method in its operations yourself. |
 | `skipped` | Not requested on purpose: its name says a GET would change something. Listed under "left alone". | `-get-words WORD`, or `-all-gets`, if you accept the side effect. |
 | `capped` | Not requested: a limit (budget, depth, items) ran out first. | `azhaq resume -db W`. |
 
 A `skipped` row has a `word` field that names the verb, such as `logout` or `delete`.
+
+A `hint` row is one of these:
+
+- It was not requested, because it takes a path parameter.
+- Scripts call it only with another method, such as POST or PUT, and a GET would prove nothing.
+- A GET answers 404 while scripts call it. Its `proof` says `GET answers 404; found only in scripts, method unknown`.
+
+A `capped` row also covers the work left for an origin that stopped answering, after 5 connects or timeouts in a row. [`run`](commands/run.md#coverage) has the cases of each state.
 
 ## Evidence: how azhaq knows a URL
 
@@ -115,6 +123,14 @@ The scope is the set of hosts a run may send to. No request to a target goes to 
 - With no rule, the scope is the targets you named, and Chrome stays on the site.
 - Options that send more than the map does are held to the targets given, or to `-allow` and `-scope`: see [what azhaq sends](#what-azhaq-sends).
 
+A scope entry, in `-allow`, `-deny` and a scope file, is one of:
+
+- a domain with its subdomains: `example.com` or `*.example.com`;
+- one host and no subdomains: `=api.example.com`;
+- an address range: `10.0.0.0/8`.
+
+A port in an entry, as in `127.0.0.1:5013`, is dropped: the scope matches hosts. [`scope`](commands/scope.md) shows how a scope file is read.
+
 Requests the scope refuses are listed in the summary under `skipped`: see [OUTPUT](OUTPUT.md#the-summary). Targets that are all outside the scope exit 2: see [exit codes](OUTPUT.md#exit-codes).
 
 ### Hosts named in headers
@@ -178,8 +194,8 @@ The ledger is the record of what a run sent. It has one JSON line for each reque
 Each line has its time, the URL or `ip:port`, the host, the scope rule that allowed it and the collector. [OUTPUT](OUTPUT.md#the-ledger) lists the fields.
 
 - **Chain.** Each line carries the hash of the one before, so an edited, removed or reordered line is caught.
-- **Seal.** A run that ends writes a `seal` line, so lines cut from the end are caught too. The summary names the seal (`sealed 3f9c…`), and `ledger -verify` prints the last one.
-- **Limit.** The chain alone cannot tell a ledger from one with lines removed and the rest re-chained. A seal kept apart from the file can: see the [`ledger` page](commands/ledger.md#output).
+- **Seal.** A run that ends writes a `seal` line, so lines cut from the end are caught too. The summary names the seal (`sealed 3f9c…`), and `ledger -verify` prints the last one: see [what `-verify` proves](commands/ledger.md#what--verify-proves).
+- **Limit.** The chain alone cannot tell a ledger from one with lines removed and the rest re-chained. A seal kept apart from the file can: see [Checking against a kept seal](commands/ledger.md#checking-against-a-kept-seal) and [Keeping the seal elsewhere](commands/ledger.md#keeping-the-seal-elsewhere).
 - **Not listed.** DNS queries, the third-party sources of `subs` and `urls`, and the RDAP registry are not targets.
 - **File.** `DB.ledger.jsonl` sits next to the workspace. Later runs into the workspace, and `azhaq resume`, append to it.
 - **Options.** `-ledger FILE` writes it elsewhere, and `-ledger off` writes none. A drop-in command without `-db` writes one only with `-ledger FILE`.
@@ -254,13 +270,17 @@ A takeover candidate is a name whose CNAME points at something gone, or whose fr
 
 ### What counts as refused
 
+[Reads and refusals](commands/roles.md#reads-and-refusals) has the detail.
+
 - Any 4xx.
 - An error served with a 2xx status.
 - The site's own `200 Access denied` page, or what `-refusal` matches.
 - A redirect to a sign-in page.
-- A redirect to the front page, when another role reads the endpoint directly.
+- A redirect to the front page, while another role reads the endpoint.
 
 ### Confidence
+
+The rules are in [Confidence](commands/roles.md#confidence) on the `roles` page.
 
 - `proved`: both the session (or the owner's own list) and the object's answer say whose it is.
 - `likely`: one of those two does.
@@ -268,7 +288,7 @@ A takeover candidate is a name whose CNAME points at something gone, or whose fr
 
 ### Verdicts
 
-Worst first:
+Worst first. What each means is in the [verdict table](commands/roles.md#verdicts) of the `roles` page.
 
 1. anyone reads sensitive fields
 2. reads another role's object
