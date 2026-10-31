@@ -174,3 +174,18 @@ func TestURLsWaitsOutAWaybackRateLimit(t *testing.T) {
 		t.Errorf("health %+v", h)
 	}
 }
+
+// The summary's sources block has each source's seconds, so what set the
+// run's time is in -json too.
+func TestSubsHealthHasSecondsPerSource(t *testing.T) {
+	t.Chdir(t.TempDir())
+	defer subcol.UseTestSources(
+		subcol.TestSource{Name: "fast", Default: true, Names: []string{"a.example.org"}},
+		subcol.TestSource{Name: "slow", Default: true, Delay: 1200 * time.Millisecond, Names: []string{"b.example.org"}},
+	)()
+	_, rep, _ := runContract(t, "subs", "-d", "example.org", "-no-history")
+	h := rep.Sources
+	if h == nil || h.Seconds["slow"] < 1.1 || h.Seconds["fast"] > 0.5 {
+		t.Errorf("seconds %+v", h)
+	}
+}

@@ -1038,7 +1038,7 @@ func slowSource(domain string, srcs map[string]any) string {
 	if first < 20 || first < 2*second {
 		return ""
 	}
-	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s (-source-timeout bounds each source, -exclude-sources %s drops it, -v lists them all)", domain, slow, first, second, slow)
+	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s, so it held the run (-source-timeout bounds each source: a shorter one ends the wait sooner and its names are then missing; -exclude-sources %s drops it; -v lists them all)", domain, slow, first, second, slow)
 }
 
 // guessCheck says where the time went when the DNS check of the names

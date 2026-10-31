@@ -14,6 +14,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/takeover"
@@ -405,12 +406,34 @@ func progressTicker(ctx context.Context, st *store.Store, silent bool) func() {
 			case <-ctx.Done():
 				return
 			case <-t.C:
-				fmt.Fprintf(os.Stderr, "azhaq: working, %s: %d tasks done, %d requests sent\n",
-					time.Since(t0).Round(time.Second), st.TasksDone(), fetch.Sent())
+				fmt.Fprintf(os.Stderr, "azhaq: working, %s: %d tasks done, %d requests sent%s\n",
+					time.Since(t0).Round(time.Second), st.TasksDone(), fetch.Sent(), stillWaiting())
 			}
 		}
 	}()
 	return func() { once.Do(func() { close(done) }) }
+}
+
+// stillWaiting names the subdomain sources that have not answered, for the
+// progress line: a run held by one (crt.sh on a large domain) says so.
+func stillWaiting() string {
+	ws := subcol.Waiting()
+	if len(ws) == 0 {
+		return ""
+	}
+	var parts []string
+	for i, w := range ws {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("%d more", len(ws)-3))
+			break
+		}
+		p := fmt.Sprintf("%s (%s", w.Source, w.Longest.Round(time.Second))
+		if w.Domains > 1 {
+			p += fmt.Sprintf(", %d domains", w.Domains)
+		}
+		parts = append(parts, p+")")
+	}
+	return "; still waiting for " + strings.Join(parts, ", ") + " (-source-timeout bounds each source)"
 }
 
 // takeoverLine is a candidate as -silent prints it on stderr, one per line:

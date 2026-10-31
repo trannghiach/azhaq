@@ -19,6 +19,9 @@ type sourceHealth struct {
 	// any DNS check or filter.
 	Names map[string]int `json:"names,omitempty"`
 	URLs  map[string]int `json:"urls,omitempty"`
+	// Seconds is how long each source took (the longest over the domains): the
+	// one that set the run's time is the largest.
+	Seconds map[string]float64 `json:"seconds,omitempty"`
 	// FailedSources has the reason of each failure; with several domains each
 	// reason names its domain.
 	FailedSources map[string]string `json:"failed_sources,omitempty"`
@@ -34,6 +37,7 @@ type healthTally struct {
 
 func newHealthTally(urls bool) *healthTally {
 	t := &healthTally{reasons: map[string][]string{}, domains: map[string]bool{}, urls: urls}
+	t.h.Seconds = map[string]float64{}
 	if urls {
 		t.h.URLs = map[string]int{}
 	} else {
@@ -56,6 +60,9 @@ func (t *healthTally) add(domain string, srcs map[string]any) {
 			gave = t.h.URLs
 		}
 		gave[name] += intOf(row["count"])
+		if sec, ok := row["seconds"].(float64); ok {
+			t.h.Seconds[name] = max(t.h.Seconds[name], sec)
+		}
 		if row["error"] == nil {
 			t.h.Answered++
 			continue

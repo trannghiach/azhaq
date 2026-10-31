@@ -292,7 +292,8 @@ func cmdSubs(args []string) error {
 		}
 		if verbose {
 			rep.Notes = append(rep.Notes, sourceDetail(input, srcs))
-		} else if n := slowSource(input, srcs); n != "" {
+		}
+		if n := slowSource(input, srcs); n != "" {
 			rep.Notes = append(rep.Notes, n)
 		}
 		if *stats {

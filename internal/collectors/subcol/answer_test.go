@@ -138,3 +138,28 @@ func TestAnErrorPageAfterNamesIsANote(t *testing.T) {
 		t.Errorf("row %v", row)
 	}
 }
+
+// A source still being waited for is named while it is, and not after.
+func TestWaitingNamesTheSlowSource(t *testing.T) {
+	defer UseTestSources(
+		TestSource{Name: "fast", Default: true, Names: []string{"a.example.org"}},
+		TestSource{Name: "slow", Default: true, Delay: 400 * time.Millisecond, Names: []string{"b.example.org"}},
+	)()
+	c := New(Options{NoHistory: true})
+	done := make(chan struct{})
+	go func() {
+		run(t, c, context.Background())
+		close(done)
+	}()
+	var seen []Wait
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline) && len(seen) == 0; time.Sleep(20 * time.Millisecond) {
+		seen = Waiting()
+	}
+	if len(seen) != 1 || seen[0].Source != "slow" || seen[0].Domains != 1 {
+		t.Errorf("waiting %v", seen)
+	}
+	<-done
+	if w := Waiting(); len(w) != 0 {
+		t.Errorf("still waiting %v after the run", w)
+	}
+}

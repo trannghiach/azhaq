@@ -323,7 +323,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			done := timing.Start(ctx, "source."+s.name)
 			t0 := time.Now()
+			answered := begin(s.name, domain)
 			names, err := s.collect(sctx, domain, c.opts.Keys[s.name], sess)
+			answered()
 			done()
 			if !s.sampler && sctx.Err() != nil && ctx.Err() == nil && (err == nil || contextEnded(err)) {
 				err = errSource // the names it gave by then are kept
