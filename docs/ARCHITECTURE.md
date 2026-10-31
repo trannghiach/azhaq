@@ -789,7 +789,8 @@ Real hosts in a wildcard zone are kept when their addresses differ. A real host 
 
 ### Retries and failures
 
-- crt.sh is asked again up to three times, after 1, 2 and 4 s. It is not asked again once 12 s have passed, since every other source waits for it.
+- crt.sh's public PostgreSQL is asked first, for the names of the domain with no `LIMIT`, within 60% of the source's time and a `statement_timeout` to match. The JSON API is asked when the database fails or gives nothing; the source's row notes why. A SOCKS5 proxy carries the database connection; an HTTP proxy cannot, so the JSON API is used and the note says so.
+- The JSON API is asked again up to three times, after 1, 2 and 4 s. It is not asked again once 12 s have passed, since every other source waits for it.
 - A source that answers 429 is asked again after its `Retry-After`. When it gives none, the pause is 2, 4 and 8 s. This happens at most three times and not for longer than 30 s. The row says how many requests were retried and whether the source gave up.
 - An answer that is an error with a 200 status is read as one, not as an empty list. Examples are a quota line such as hackertarget's `API count exceeded`, a JSON object holding an `error` or only a `message`, and a page titled `Just a moment...`. A source that gave no names after one failed, with the server's words in its `error`.
 - A source that needs a key is skipped, and listed as skipped, when none is configured.
@@ -1604,7 +1605,7 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 **In-process collectors, no wrapped tools.**
 
-- Collectors speak their protocols directly, or use permissively licensed Go libraries in-process. These are subfinder's source packages for subdomain sources, miekg/dns for DNS, and wappalyzergo's matcher and cdncheck for fingerprints.
+- Collectors speak their protocols directly, or use permissively licensed Go libraries in-process. These are subfinder's source packages for subdomain sources, miekg/dns for DNS, lib/pq for crt.sh's PostgreSQL, and wappalyzergo's matcher and cdncheck for fingerprints.
 - Azhaq never shells out to subfinder, dnsx or similar tools. So every fact lands in one graph with its source.
 - CI fails on GPL, AGPL, SSPL or unknown licenses.
 
