@@ -70,7 +70,7 @@ Entries are grouped by what you were doing:
 
 ### Exit 4
 
-**Why:** A limit stopped the run with work left. The limits are `-max-requests`, `-timeout`, Ctrl-C or `kill`, and the kill file. SIGINT, SIGTERM and SIGHUP stop a run alike.
+**Why:** A limit stopped the run with work left. The limits are `-max-requests`, `-daily-requests`, `-max-items`, `-timeout`, Ctrl-C or `kill`, and the kill file. SIGINT, SIGTERM and SIGHUP stop a run alike.
 
 **Fix:** `azhaq resume -db W` continues it.
 
@@ -242,7 +242,7 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 - Across a firewall that drops ICMP, closed ports also read `open|filtered`.
 - A host that rate-limits its ICMP replies leaves closed ports silent too. The summary says when that may be the case, as in `udp: N silent ports on a host that refused others …`.
 
-`ports` lists these ports as rows, `host:port/udp open|filtered`, and `"state":"open|filtered"` in `-json`. It counts them in `results`. A range leaves out an address that answered no UDP port at all, and the summary counts those.
+`ports` lists these ports as rows, `host:port/udp open|filtered`, and `"state":"open|filtered"` in `-json`. It counts them in `results`. A range leaves out an address that answered no UDP port at all, and the summary counts those. [UDP, products and versions](commands/ports.md#udp-products-and-versions) has the states.
 
 ### An open TCP port has no `service` or `product`
 
@@ -254,7 +254,7 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 - A daemon that greets a second or two late is named by its greeting.
 - When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports. The protocol list was not run for the rest.
 
-**Fix:** Read `banner`.
+**Fix:** Read `banner`. [How an open port is named](commands/ports.md#how-an-open-port-is-named) lists what is asked.
 
 ### A port I know is open is missing
 
@@ -348,7 +348,7 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 
 **Why:** Some passive sources answer differently each time. subdomain.center returns a random sample of its names on each call.
 
-azhaq keeps the names it found in `names/DOMAIN.json`. The file is under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`. azhaq asks those names again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds.
+azhaq keeps the names it found in `names/DOMAIN.json`. The file is under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`. azhaq asks those names again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds: see [Coverage estimate](commands/subs.md#coverage-estimate). [Name history](commands/subs.md#name-history) has the file and its limits.
 
 **Fix:** `-no-history` turns the file off.
 

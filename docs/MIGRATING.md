@@ -72,7 +72,7 @@ Behaviour, fields and edge cases: [`azhaq subs`](commands/subs.md).
 - Sources outside the default set stay out. `-all-sources` runs them.
 - A source that needs a key and has none is listed as `needs a key`, not skipped without a word.
 - A run in which every source failed is `degraded` and exits 3, not 0 with an empty list. The summary names each source that failed.
-- azhaq keeps the names it found for a domain and checks them again in the next run. `-no-history` turns this off. See [subs](commands/subs.md#details).
+- azhaq keeps the names it found for a domain and checks them again in the next run. `-no-history` turns this off. See [Name history](commands/subs.md#name-history).
 - With `-live`, a name that no longer resolves drops out.
 - Without `-live`, a stored name that no source gave this run is listed with `"unverified": true`. So are subdomain.center's guesses.
 
@@ -93,7 +93,7 @@ azhaq subs -d example.com -live -source-rate 2 -dns-rate 5 -resolvers 1.1.1.1,8.
 - `-live` checks names against the zone's wildcard, per parent zone, with CNAME targets.
 - `-w WORDS` also resolves `WORD.domain` for each word. `-permute` resolves variations of what was found.
 - A takeover candidate is listed with its evidence. It is a CNAME to a name that no longer exists, an unclaimed domain, or a hosting service's "no such site" page.
-- The summary says what each source gave. It also says how much of what the independent sources know this run holds, in the `coverage:` line.
+- The summary says what each source gave. It also says how much of what the independent sources know this run holds, in the `coverage:` line: see [Coverage estimate](commands/subs.md#coverage-estimate).
 - `-db` keeps the names for `query` and `diff`.
 
 ## dnsx: `azhaq dns`
