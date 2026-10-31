@@ -1,12 +1,15 @@
 package egress
 
 import (
+	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"golang.org/x/net/http2"
 
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -104,6 +107,26 @@ func hostOnly(hostport string) string {
 
 // CloseIdleConnections passes on to the transport, as http.Client looks for it.
 func (g *guarded) CloseIdleConnections() { g.base.CloseIdleConnections() }
+
+// ProxyOf is the proxy a request through c would go through, nil for none:
+// -proxy's for a client egress made for targets, the environment's for one
+// without a transport.
+func ProxyOf(c *http.Client, req *http.Request) (*url.URL, error) {
+	var tr http.RoundTripper
+	if c != nil {
+		tr = c.Transport
+	}
+	switch t := Unwrap(tr).(type) {
+	case *http.Transport:
+		if t.Proxy == nil {
+			return nil, nil
+		}
+		return t.Proxy(req)
+	case nil:
+		return http.ProxyFromEnvironment(req)
+	}
+	return nil, nil
+}
 
 // Unwrap is the *http.Transport under a client's transport that egress
 // made, or rt itself.
@@ -291,4 +314,35 @@ func OwnClient(o OwnOptions) *http.Client {
 		c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	}
 	return c
+}
+
+// H2Client is a client that speaks HTTP/2 over TLS to a target, taking any
+// certificate, for the probe that asks whether a server does. Its requests
+// are held and recorded like TargetClient's.
+func H2Client(timeout time.Duration) *http.Client {
+	tr := &http2.Transport{
+		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
+			conn, err := dialThrough(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+			host, _, _ := net.SplitHostPort(addr)
+			cfg = cfg.Clone()
+			cfg.InsecureSkipVerify, cfg.ServerName = true, host
+			tc := tls.Client(conn, cfg)
+			if err := tc.HandshakeContext(ctx); err != nil {
+				conn.Close()
+				return nil, err
+			}
+			return tc, nil
+		},
+	}
+	return &http.Client{Timeout: timeout, Transport: &foreign{rt: ledger.WrapAs(string(Target), tr), g: newGuarded(Target, &http.Transport{}, "")}}
+}
+
+// CloseIdleConnections passes on to the transport under it.
+func (f *foreign) CloseIdleConnections() {
+	if c, ok := f.rt.(interface{ CloseIdleConnections() }); ok {
+		c.CloseIdleConnections()
+	}
 }

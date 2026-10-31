@@ -193,3 +193,28 @@ var ipv6Routable = sync.OnceValue(func() bool {
 	ip := c.LocalAddr().(*net.UDPAddr).IP
 	return ip.IsGlobalUnicast() && !ip.IsPrivate()
 })
+
+// ConnectTarget opens a raw connection to a target (a probe that speaks a
+// protocol of its own: JARM, pipelining) and records it in the ledger as a
+// connect. It is held to the scope and the kill file; the caller counts it
+// with Spend.
+func ConnectTarget(ctx context.Context, addr string) (net.Conn, error) {
+	host, _, _ := net.SplitHostPort(addr)
+	ledger.TCP(ctx, host, addr)
+	return DialTarget(ctx, "tcp", addr)
+}
+
+// ConnectTargetTLS is ConnectTarget with a TLS handshake that takes any
+// certificate.
+func ConnectTargetTLS(ctx context.Context, addr string, cfg *tls.Config) (net.Conn, error) {
+	c, err := ConnectTarget(ctx, addr)
+	if err != nil {
+		return nil, err
+	}
+	tc := tls.Client(c, cfg)
+	if err := tc.HandshakeContext(ctx); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return tc, nil
+}

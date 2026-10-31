@@ -29,7 +29,6 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
-	"golang.org/x/net/http2"
 	"golang.org/x/text/transform"
 
 	"github.com/trannghiach/azhaq/internal/cpedetect"
@@ -328,7 +327,7 @@ func jarmHash(ctx context.Context, raw string) string {
 		if err := egress.Spend(ctx); err != nil {
 			return ""
 		}
-		c, err := egress.DialTarget(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		c, err := egress.ConnectTarget(ctx, net.JoinHostPort(host, strconv.Itoa(port)))
 		if err != nil {
 			return ""
 		}
@@ -376,30 +375,14 @@ func (c *Collector) supportsHTTP2(ctx context.Context, raw string) bool {
 		resp.Body.Close()
 		return resp.StatusCode == http.StatusSwitchingProtocols
 	}
-	tr := &http2.Transport{
-		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-			conn, err := egress.DialTarget(ctx, network, addr)
-			if err != nil {
-				return nil, err
-			}
-			host, _, _ := net.SplitHostPort(addr)
-			cfg = cfg.Clone()
-			cfg.InsecureSkipVerify, cfg.ServerName = true, host
-			tc := tls.Client(conn, cfg)
-			if err := tc.HandshakeContext(ctx); err != nil {
-				conn.Close()
-				return nil, err
-			}
-			return tc, nil
-		},
-	}
-	defer tr.CloseIdleConnections()
+	h2 := egress.H2Client(10 * time.Second)
+	defer h2.CloseIdleConnections()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
 		return false
 	}
 	fetch.ApplyHeaders(req)
-	resp, err := (&http.Client{Transport: tr, Timeout: 10 * time.Second}).Do(req)
+	resp, err := h2.Do(req)
 	if err != nil {
 		return false
 	}
@@ -431,18 +414,17 @@ func supportsPipeline(ctx context.Context, raw string) bool {
 			return false
 		}
 	}
-	conn, err := egress.DialTarget(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
+	addr := net.JoinHostPort(u.Hostname(), port)
+	var conn net.Conn
+	if u.Scheme == "https" {
+		conn, err = egress.ConnectTargetTLS(ctx, addr, &tls.Config{InsecureSkipVerify: true, ServerName: u.Hostname(), MinVersion: tls.VersionTLS10})
+	} else {
+		conn, err = egress.ConnectTarget(ctx, addr)
+	}
 	if err != nil {
 		return false
 	}
 	defer conn.Close()
-	if u.Scheme == "https" {
-		tc := tls.Client(conn, &tls.Config{InsecureSkipVerify: true, ServerName: u.Hostname(), MinVersion: tls.VersionTLS10})
-		if tc.HandshakeContext(ctx) != nil {
-			return false
-		}
-		conn = tc
-	}
 	req := fmt.Sprintf("GET / HTTP/1.1\nHost: %s\n\n", net.JoinHostPort(u.Hostname(), port))
 	for i := 0; i < n; i++ {
 		if _, err := conn.Write([]byte(req)); err != nil {
