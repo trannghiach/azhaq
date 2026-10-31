@@ -120,4 +120,4 @@ Verdicts, worst first: anyone reads sensitive fields · reads another role's obj
 | Chrome | what the page loads, inside the scope | `-browser`, `-login`, `shots`, `-role-login` |
 | Writes of other roles | POST, PUT, PATCH, DELETE | `roles -replay-writes` (held to the `-url` hosts, or `-allow`/`-scope`) |
 
-URLs whose names say a GET would change something are listed, not requested. Nothing goes to a host outside the scope. Every request and connection to a target goes in the ledger; DNS queries and third-party sources do not.
+URLs whose names say a GET would change something are listed, not requested. Nothing goes to a host outside the scope, and a header that names a host (`Host`, `X-Forwarded-Host`, `X-Host`, `X-Original-Host`: a front end routes by it) is held to the scope as a URL is: given with `-H`, in a role, a request file or a `-vi` line, it stops the command with exit 2 before the first request when it names a host the scope leaves out. Every request and connection to a target goes in the ledger; DNS queries and third-party sources do not.

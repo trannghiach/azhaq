@@ -249,3 +249,50 @@ func (s ruleSet) match(host string) bool {
 	}
 	return false
 }
+
+// HostHeaders are the request headers that name the host a front end
+// serves (a CDN or an ingress routes by them).
+var HostHeaders = []string{"Host", "X-Forwarded-Host", "X-Host", "X-Original-Host"}
+
+// NamesHost says whether a header of this name names a host, in any case.
+func NamesHost(name string) bool {
+	name = strings.TrimSpace(name)
+	for _, h := range HostHeaders {
+		if strings.EqualFold(name, h) {
+			return true
+		}
+	}
+	return false
+}
+
+// HeaderHosts are the hosts the value of a host-naming header names: a list
+// (X-Forwarded-Host: a.test, b.test) names each, and a port is dropped.
+func HeaderHosts(value string) []string {
+	var out []string
+	for _, v := range strings.Split(value, ",") {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
+		if h, _, err := net.SplitHostPort(v); err == nil {
+			v = h
+		}
+		out = append(out, strings.Trim(v, "[]"))
+	}
+	return out
+}
+
+// HeaderOutside is the first host a host-naming header names that the rules
+// leave out, "" when every one is in. A header that is not host-naming
+// names none.
+func (r Rules) HeaderOutside(name, value string) string {
+	if r.Empty() || !NamesHost(name) {
+		return ""
+	}
+	for _, h := range HeaderHosts(value) {
+		if !r.Allows(h) {
+			return h
+		}
+	}
+	return ""
+}

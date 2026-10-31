@@ -539,6 +539,15 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if err := hostHeadersInScope(fetch.Extra, rules); err != nil {
 		return err
 	}
+	// What a request file, a page list or a probe line brings is held to it too.
+	if *paramsFile != "" && *paramsTargets != "" {
+		if err := paramsTargetsInScope(*paramsTargets, rules); err != nil {
+			return err
+		}
+	}
+	if err := probeSpecInScope(spec, rules); err != nil {
+		return err
+	}
 	if !rules.Empty() {
 		// What the scope excludes is never touched, even when it was given
 		// as a target: it is listed in the summary instead.
@@ -2140,22 +2149,86 @@ func browserAgent() string {
 
 // hostHeaders are the request headers that name the host a front end
 // serves (a CDN or an ingress routes by them).
-var hostHeaders = []string{"Host", "X-Forwarded-Host", "X-Host", "X-Original-Host"}
+var hostHeaders = scope.HostHeaders
 
 // hostHeadersInScope refuses a -header that names a host the scope leaves
 // out: it would reach that host through an address the scope allows.
 func hostHeadersInScope(h http.Header, rules scope.Rules) error {
+	return hostHeadersFrom("-header", h, rules)
+}
+
+// hostHeadersFrom is hostHeadersInScope for headers that came from what
+// (a role, a request file): the same refusal, before anything is sent.
+func hostHeadersFrom(what string, h http.Header, rules scope.Rules) error {
 	if rules.Empty() {
 		return nil
 	}
-	for _, k := range hostHeaders {
-		for _, v := range h.Values(k) {
-			host := v
-			if hh, _, err := net.SplitHostPort(v); err == nil {
-				host = hh
+	keys := make([]string, 0, len(h))
+	for k := range h {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		for _, v := range h[k] {
+			if rules.HeaderOutside(k, v) != "" {
+				return usagef("%s %s: %s names a host outside the scope: a front end that routes by it serves that host; leave the header out, or name the host in the scope (-allow)", what, k, v)
 			}
-			if !rules.Allows(host) {
-				return usagef("-header %s: %s names a host outside the scope: a front end that routes by it serves that host", k, v)
+		}
+	}
+	return nil
+}
+
+// paramsTargetsInScope holds the headers of the pages a -params-targets file
+// (params -i writes it) names to the scope: a request that is imported
+// carries its own X-Forwarded-Host and the like.
+func paramsTargetsInScope(path string, rules scope.Rules) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil // the run reads it again and says
+	}
+	var targets map[string]paramcol.Target
+	if json.Unmarshal(raw, &targets) != nil {
+		return nil
+	}
+	urls := make([]string, 0, len(targets))
+	for u := range targets {
+		urls = append(urls, u)
+	}
+	sort.Strings(urls)
+	for _, u := range urls {
+		h := http.Header{}
+		for _, l := range targets[u].Header {
+			if k, v, ok := strings.Cut(l, ":"); ok {
+				h.Add(strings.TrimSpace(k), strings.TrimSpace(v))
+			}
+		}
+		if err := hostHeadersFrom("-i "+u+" header", h, rules); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// probeSpecInScope holds what a probe sends besides -header to the scope: the
+// headers of the request file (-rr) and the virtual hosts of -vi lines.
+func probeSpecInScope(spec *httpcol.Spec, rules scope.Rules) error {
+	if spec == nil {
+		return nil
+	}
+	if spec.Raw != nil {
+		if err := hostHeadersFrom("-rr header", spec.Raw.Header, rules); err != nil {
+			return err
+		}
+	}
+	hosts := make([]string, 0, len(spec.PerHost))
+	for h := range spec.PerHost {
+		hosts = append(hosts, h)
+	}
+	sort.Strings(hosts)
+	for _, h := range hosts {
+		for _, vh := range spec.PerHost[h].VHosts {
+			if err := hostHeadersFrom("-vi", http.Header{"Host": {vh}}, rules); err != nil {
+				return err
 			}
 		}
 	}

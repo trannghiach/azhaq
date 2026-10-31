@@ -152,7 +152,7 @@ func (s *httpSender) newRequest(ctx context.Context, req *Request) (*http.Reques
 		hr.URL.Opaque = opaque // the request line takes it as written
 	}
 	for _, h := range req.Headers {
-		if h.Name == "Host" {
+		if strings.EqualFold(h.Name, "Host") {
 			hr.Host = h.Value
 		}
 		hr.Header.Set(h.Name, h.Value)
