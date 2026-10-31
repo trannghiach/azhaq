@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -293,5 +295,98 @@ func TestProbeAsksOnlyWhatIsGiven(t *testing.T) {
 		if rep.Requests != 1 {
 			t.Errorf("%s: %d requests, want 1", in, rep.Requests)
 		}
+	}
+}
+
+// Every input line has one row, its own: a URL and a name that reach one
+// page, or two spellings of a URL, are not left with a "no answer" while
+// the other gets the answer.
+func TestProbeOneRowPerInput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := newProbeSite(t)
+	hp := strings.TrimPrefix(site.URL, "http://")
+	port := hp[strings.LastIndex(hp, ":")+1:]
+	local := "http://localhost:" + port + "/"
+	for _, tc := range []struct {
+		name     string
+		inputs   []string
+		flags    []string
+		failed   string // the input whose own request fails
+		requests int
+	}{
+		{"two spellings of a URL", []string{site.URL, site.URL + "/"}, nil, "", 1},
+		{"host:port and its URL", []string{"localhost:" + port, "http://localhost:" + port}, nil, "", 1},
+		{"a URL and a name, in two cases", []string{local, "localhost", "LOCALHOST"}, []string{"-p", port}, "", 1},
+		{"a URL that fails and a name that answers", []string{"https://localhost:" + port + "/", "localhost"}, []string{"-p", port}, "https://localhost:" + port + "/", 2},
+		{"a line twice", []string{site.URL + "/home", site.URL + "/home"}, nil, "", 1},
+	} {
+		args := []string{"probe"}
+		for _, in := range tc.inputs {
+			args = append(args, "-u", in)
+		}
+		out, rep, code := runContract(t, append(args, tc.flags...)...)
+		got := map[string]map[string]any{}
+		for _, r := range probeRows(t, out) {
+			in, _ := r["input"].(string)
+			if got[in] != nil {
+				t.Errorf("%s: two rows for %q\n%s", tc.name, in, out)
+			}
+			got[in] = r
+		}
+		distinct := map[string]bool{}
+		for _, in := range tc.inputs {
+			distinct[in] = true
+		}
+		if len(got) != len(distinct) {
+			t.Errorf("%s: %d rows for %d inputs\n%s", tc.name, len(got), len(distinct), out)
+		}
+		for in, r := range got {
+			failed, _ := r["failed"].(bool)
+			if failed != (in == tc.failed) {
+				t.Errorf("%s: %q failed %v\n%s", tc.name, in, failed, out)
+			}
+			if failed && strings.Contains(fmt.Sprint(r["error"]), "no answer") {
+				t.Errorf("%s: %q failed with %v, not with what its request got", tc.name, in, r["error"])
+			}
+		}
+		if wantCode := map[bool]int{true: exitPartial, false: exitOK}[tc.failed != ""]; code != wantCode || rep.Requests != int64(tc.requests) {
+			t.Errorf("%s: exit %d with %d requests, want %d with %d", tc.name, code, rep.Requests, wantCode, tc.requests)
+		}
+	}
+}
+
+// tunnel is a proxy that carries every CONNECT to target, so a name asked
+// on port 443 reaches a test server.
+func tunnel(t *testing.T, target string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		up, err := net.Dial("tcp", target)
+		if r.Method != http.MethodConnect || err != nil {
+			http.Error(w, "no tunnel", http.StatusBadGateway)
+			return
+		}
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		_, _ = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		go func() { _, _ = io.Copy(up, conn); up.Close() }()
+		go func() { _, _ = io.Copy(conn, up); conn.Close() }()
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// A bare name is asked over HTTPS, and over HTTP only when that fails:
+// two names that answer on the first try spend two requests and end the
+// run complete under -max-requests 2, not stopped with tasks left.
+func TestProbeBoundedRunThatAnsweredEverythingIsComplete(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<title>ok</title>"))
+	}))
+	t.Cleanup(site.Close)
+	resolvers := serveZone(t, fakeZone{a: map[string]string{"a.labtest.com": "192.0.2.1", "b.labtest.org": "192.0.2.2"}})
+	out, rep, code := runContract(t, "probe", "-u", "a.labtest.com", "-u", "b.labtest.org", "-max-requests", "2",
+		"-resolvers", resolvers, "-proxy", tunnel(t, strings.TrimPrefix(site.URL, "https://")))
+	if rows := probeRows(t, out); len(rows) != 2 || code != exitOK || rep.Requests != 2 || rep.Stopped != "" || !rep.Complete {
+		t.Errorf("exit %d, %d requests, stopped %q: %s", code, rep.Requests, rep.Stopped, out)
 	}
 }

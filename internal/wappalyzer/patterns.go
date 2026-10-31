@@ -72,10 +72,11 @@ func ParsePattern(pattern string) (*ParsedPattern, error) {
 			regexPattern = strings.ReplaceAll(regexPattern, verCap2Fill, verCap2Limited)
 
 			p.expr = "(?i)" + regexPattern
-			if _, err := syntax.Parse(p.expr, syntax.Perl); err != nil {
+			re, err := syntax.Parse(p.expr, syntax.Perl)
+			if err != nil {
 				return nil, err
 			}
-			p.literals = patternLiterals(p.expr)
+			p.literals = selectiveLiterals(cover(re))
 		} else {
 			keyValue := strings.SplitN(part, ":", 2)
 			if len(keyValue) < 2 {
@@ -145,7 +146,7 @@ func patternLiterals(pattern string) [][]string {
 	if err != nil {
 		return nil
 	}
-	return selectiveLiterals(cover(re.Simplify()))
+	return selectiveLiterals(cover(re))
 }
 
 // literalsPresent reports whether folded contains every literal of some group.
@@ -185,7 +186,7 @@ func cover(re *syntax.Regexp) [][]string {
 		if re.Min == 0 || len(re.Sub) == 0 {
 			return nil
 		}
-		return cover(re.Sub[0])
+		return coverConcat(flattenConcat(re, nil))
 	case syntax.OpConcat:
 		parts := flattenConcat(re, nil)
 		return coverConcat(parts)
@@ -204,10 +205,25 @@ func cover(re *syntax.Regexp) [][]string {
 	}
 }
 
+// optional stands for the tail of a bounded repeat: it proves nothing.
+var optional = &syntax.Regexp{Op: syntax.OpQuest}
+
+// flattenConcat lists the parts of a concatenation. A repeat that must
+// happen is written out as Min copies (what regexp/syntax's Simplify does,
+// without building the 250 copies of "x{1,250}" that cover never reads).
 func flattenConcat(re *syntax.Regexp, dst []*syntax.Regexp) []*syntax.Regexp {
-	if re.Op == syntax.OpConcat {
+	switch {
+	case re.Op == syntax.OpConcat:
 		for _, sub := range re.Sub {
 			dst = flattenConcat(sub, dst)
+		}
+		return dst
+	case re.Op == syntax.OpRepeat && re.Min > 0 && len(re.Sub) == 1:
+		for i := 0; i < re.Min; i++ {
+			dst = flattenConcat(re.Sub[0], dst)
+		}
+		if re.Max != re.Min && re.Max != -1 {
+			dst = append(dst, optional)
 		}
 		return dst
 	}

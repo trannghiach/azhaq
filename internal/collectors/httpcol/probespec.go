@@ -268,14 +268,40 @@ func TakeNames(source string) []string {
 	return v.([]string)
 }
 
-var evidence sync.Map // observation source → *Evidence
+// evidence is the answers kept for the observations not yet printed. Two
+// inputs that reach one URL each keep it, so it is counted: the last of
+// them to take it frees it.
+var (
+	evidenceMu sync.Mutex
+	evidence   = map[string]*evidenceSlot{} // observation source → the answer
+)
 
-// TakeEvidence is the answer kept for the observation with this source,
-// and forgets it.
+type evidenceSlot struct {
+	ev   *Evidence
+	left int
+}
+
+func keepEvidence(source string, ev *Evidence) {
+	evidenceMu.Lock()
+	defer evidenceMu.Unlock()
+	if s := evidence[source]; s != nil {
+		s.ev, s.left = ev, s.left+1
+		return
+	}
+	evidence[source] = &evidenceSlot{ev: ev, left: 1}
+}
+
+// TakeEvidence is the answer kept for the observation with this source;
+// it is forgotten when each who kept it has taken it.
 func TakeEvidence(source string) (*Evidence, bool) {
-	v, ok := evidence.LoadAndDelete(source)
-	if !ok {
+	evidenceMu.Lock()
+	defer evidenceMu.Unlock()
+	s := evidence[source]
+	if s == nil {
 		return nil, false
 	}
-	return v.(*Evidence), true
+	if s.left--; s.left <= 0 {
+		delete(evidence, source)
+	}
+	return s.ev, true
 }

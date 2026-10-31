@@ -257,6 +257,8 @@ What differs on purpose:
 - **Dead target.** Five unanswered requests in a row stop the run with exit 3. `-se` makes it twice `-t` failures of any kind, as ffuf's.
 - **Not in `fuzz`:** ffuf's scrapers, `-search` and its history files (`-db FILE` keeps the matches), and an audit log (the hash-chained `-ledger` is the record).
 - **`dirs` follows ffuf's counting and its defaults**: 40 guesses in flight, no pace, and the matcher `-mc 200-299,301,302,307,401,403,405,500`.
+- **Headers.** `fuzz` and `dirs` send what ffuf sends: no `Accept`, `Accept-Encoding: gzip`, your `-H`s. The `User-Agent` is a current Chrome's, not `Fuzz Faster U Fool` (a size does not depend on it unless the app answers by it), so a `-fs` taken from ffuf filters the same answers.
+- **Every word is asked.** A sweep requests `/logout` and the like, as ffuf does. Only with a session (`-cookie`, `-H 'Authorization: …'`) does `dirs` hold back the words that look like they change something; `-all-gets` asks them.
 
 Three command lines:
 

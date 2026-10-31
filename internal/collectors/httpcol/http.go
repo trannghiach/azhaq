@@ -147,12 +147,15 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			// task has (one cached from a redirect hop, tesla.com →
 			// www.tesla.com, never was), without keeping the URL's own task
 			// from recording it on its URL.
+			// Probe answers each input in a row of its own, so two inputs
+			// that reach one URL (a name and its URL) both report it.
+			once := c.Spec == nil
 			if seed.Type == types.TypeURL {
-				if _, dup := c.ownURL.LoadOrStore(obs.Source, true); dup {
+				if _, dup := c.ownURL.LoadOrStore(obs.Source, true); dup && once {
 					break
 				}
 				c.emitted.Store(obs.Source, true)
-			} else if _, dup := c.emitted.LoadOrStore(obs.Source, true); dup {
+			} else if _, dup := c.emitted.LoadOrStore(obs.Source, true); dup && once {
 				break
 			}
 			if err := emit(obs); err != nil {
@@ -173,7 +176,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 					lastErr = err
 					continue
 				}
-				if _, dup := c.emitted.LoadOrStore(o.Source, true); dup {
+				if _, dup := c.emitted.LoadOrStore(o.Source, true); dup && once {
 					continue
 				}
 				if err := emit(o); err != nil {

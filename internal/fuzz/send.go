@@ -133,8 +133,8 @@ func (s *httpSender) redirects() func(*http.Request, []*http.Request) error {
 	}
 }
 
-// newRequest is req as an HTTP request: its headers, the Host header as the
-// host asked for, and a default Accept.
+// newRequest is req as an HTTP request: its headers and the Host header as
+// the host asked for. No Accept unless one is given, as ffuf sends none.
 func (s *httpSender) newRequest(ctx context.Context, req *Request) (*http.Request, error) {
 	method := req.Method
 	if method == "" {
@@ -157,10 +157,7 @@ func (s *httpSender) newRequest(ctx context.Context, req *Request) (*http.Reques
 		}
 		hr.Header.Set(h.Name, h.Value)
 	}
-	if hr.Header.Get("Accept") == "" {
-		hr.Header.Set("Accept", "*/*") // not the page-oriented default: answers as ffuf's, which sends none
-	}
-	fetch.ApplyHeaders(hr)
+	fetch.ApplySweepHeaders(hr)
 	return hr, nil
 }
 

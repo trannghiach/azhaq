@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -442,7 +443,7 @@ func TestSenderCountsLikeFfuf(t *testing.T) {
 	if r.Status != 301 || r.Length != 20 || r.Words != 4 || r.Lines != 3 || string(r.Body) != "one two  three\nfour\n" {
 		t.Errorf("answer %+v", r)
 	}
-	if host != "v.lab.test" || method != "POST" || body != `{"k":"v"}` || ctype != "application/json" || accept != "*/*" {
+	if host != "v.lab.test" || method != "POST" || body != `{"k":"v"}` || ctype != "application/json" || accept != "" {
 		t.Errorf("sent host %q method %q body %q type %q accept %q", host, method, body, ctype, accept)
 	}
 	if loc := RedirectLocation(r, false); loc != "/a/" {
@@ -453,6 +454,52 @@ func TestSenderCountsLikeFfuf(t *testing.T) {
 	}
 	if r2, _ := s.Send(context.Background(), &req, false); r2.Body != nil || r2.Words != 4 {
 		t.Errorf("body kept without a regexp: %+v", r2)
+	}
+}
+
+// express answers a redirect with a body that depends on Accept, as
+// Express's res.redirect does: a page for a browser's, a line for none.
+func express(seen *atomic.Value) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if seen != nil {
+			seen.Store(r.Header.Clone())
+		}
+		w.Header().Set("Location", r.URL.Path+"/")
+		w.WriteHeader(http.StatusMovedPermanently)
+		if strings.Contains(r.Header.Get("Accept"), "text/html") {
+			fmt.Fprint(w, "<p>Moved Permanently. Redirecting to <a>/app/</a></p>")
+			return
+		}
+		fmt.Fprint(w, "Moved Permanently. Redirecting to /app/")
+	})
+}
+
+func TestSenderAsksAsFfufDoes(t *testing.T) {
+	var seen atomic.Value
+	srv := httptest.NewServer(express(&seen))
+	defer srv.Close()
+	fetch.Reset()
+	s := mustSender(t, HTTPOptions{Timeout: 5 * time.Second, Threads: 1})
+	tmpl, _ := NewTemplate("", srv.URL+"/FUZZ", "", nil, nil)
+	req := tmpl.Expand(map[string]string{"FUZZ": "app"})
+	r, err := s.Send(context.Background(), &req, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The body a ffuf-style request (no Accept) is answered with.
+	want := len("Moved Permanently. Redirecting to /app/")
+	if r.Length != int64(want) || r.Words != 5 || r.Lines != 1 {
+		t.Errorf("size %d words %d lines %d, want %d 5 1", r.Length, r.Words, r.Lines, want)
+	}
+	h := seen.Load().(http.Header)
+	if _, ok := h["Accept"]; ok || h.Get("Accept-Encoding") != "gzip" {
+		t.Errorf("sent Accept %q, Accept-Encoding %q", h.Values("Accept"), h.Get("Accept-Encoding"))
+	}
+	// A header the user gives wins.
+	tmpl, _ = NewTemplate("", srv.URL+"/FUZZ", "", []string{"Accept: text/html"}, nil)
+	req = tmpl.Expand(map[string]string{"FUZZ": "app"})
+	if r, _ = s.Send(context.Background(), &req, false); r.Length == int64(want) {
+		t.Errorf("-H Accept did not reach the server: size %d", r.Length)
 	}
 }
 

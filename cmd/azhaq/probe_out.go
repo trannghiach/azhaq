@@ -46,11 +46,11 @@ type probeOut struct {
 	cdn      map[string][2]string
 	cnames   map[string][]string
 	seen     map[string]bool
-	input    map[string]string // seed key → the target as given
-	order    []string          // the targets as given, in order
-	answered map[string]bool   // target as given → a row was printed or dropped by a filter
-	dropped  int               // rows a matcher or filter left out
-	condErr  error             // the first condition that could not be evaluated
+	input    map[string][]string // seed key → the targets as given (two lines can be one seed)
+	order    []string            // the targets as given, in order
+	answered map[string]bool     // target as given → a row was printed or dropped by a filter
+	dropped  int                 // rows a matcher or filter left out
+	condErr  error               // the first condition that could not be evaluated
 	condErrs int
 	sums     []uint64       // simhashes of the rows printed, for -fd
 	sent     map[string]int // methods other than GET sent, rows answered
@@ -105,8 +105,9 @@ func (p *probeOut) see(ent types.Entity, o types.Observation) {
 		}
 		m := payloadOf(o)
 		p.mu.Lock()
-		dup := p.seen[o.Source]
-		p.seen[o.Source] = true
+		seenKey := ent.Key + "\x00" + o.Source // two inputs that reach one URL each report it
+		dup := p.seen[seenKey]
+		p.seen[seenKey] = true
 		host := normalize.HostFromURL(r.URL)
 		c, known := p.cdn[host]
 		cn := p.cnames[host]
@@ -127,25 +128,28 @@ func (p *probeOut) see(ent types.Entity, o types.Observation) {
 			}
 		}
 		r.CDN, r.CDNType = c[0], c[1]
-		in := p.input[ent.Key]
-		if in == "" {
-			in = ent.Key
+		ins := p.input[ent.Key]
+		if len(ins) == 0 {
+			ins = []string{ent.Key}
 		}
 		ev, _ := httpcol.TakeEvidence(o.Source)
-		row := p.row(r, m, in, addrs, cn, ev)
-		p.mu.Lock()
-		p.answered[in] = true
-		p.mu.Unlock()
-		if !p.keep(row, r, ev) {
-			return
-		}
-		if p.pf.ss {
+		// A row for each line that gave this seed (http://h and http://h/).
+		for _, in := range ins {
+			row := p.row(r, m, in, addrs, cn, ev)
 			p.mu.Lock()
-			p.held = append(p.held, heldRow{row, r, ev})
+			p.answered[in] = true
 			p.mu.Unlock()
-			return
+			if !p.keep(row, r, ev) {
+				continue
+			}
+			if p.pf.ss {
+				p.mu.Lock()
+				p.held = append(p.held, heldRow{row, r, ev})
+				p.mu.Unlock()
+				continue
+			}
+			p.emit(row, r, ev)
 		}
-		p.emit(row, r, ev)
 	case "azhaq-shots":
 		if o.Kind == "screenshot" {
 			p.mu.Lock()

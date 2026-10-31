@@ -885,6 +885,17 @@ func ErrorPage(res Result) bool {
 
 // ApplyHeaders adds -cookie/-header values and the default User-Agent.
 func ApplyHeaders(req *http.Request) {
+	applyHeaders(req, !NoAccept)
+}
+
+// ApplySweepHeaders is ApplyHeaders for a wordlist sweep (dirs, fuzz): no
+// Accept unless one is given, as ffuf sends none, so a server that picks
+// its answer by Accept answers with the body ffuf counts.
+func ApplySweepHeaders(req *http.Request) {
+	applyHeaders(req, false)
+}
+
+func applyHeaders(req *http.Request, defaultAccept bool) {
 	for k, vs := range Extra {
 		for _, v := range vs {
 			req.Header.Add(k, v)
@@ -905,7 +916,7 @@ func ApplyHeaders(req *http.Request) {
 	if AutoReferer && req.Header.Get("Referer") == "" {
 		req.Header.Set("Referer", req.URL.String())
 	}
-	if req.Header.Get("Accept") == "" && !NoAccept {
+	if req.Header.Get("Accept") == "" && defaultAccept {
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	}
 }
