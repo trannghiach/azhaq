@@ -376,9 +376,10 @@ func keyed(s source) source {
 }
 
 // crtshSource asks crt.sh as subfinder does: its public PostgreSQL first,
-// and the JSON API only when the database fails or has nothing. The
-// database answers in seconds where the JSON API takes 20 to 40 s on a
-// large domain and now and then gives a 502.
+// limited to 10000 rows (which answers in seconds), and the JSON API when
+// the database fails or has nothing. A page that came back full has more
+// behind it: the rest is asked for without the limit, then from the JSON
+// API, within the source's time, and the note says which gave the names.
 func crtshSource() source {
 	return source{
 		name:    "crtsh",
@@ -386,18 +387,46 @@ func crtshSource() source {
 		deflt:   true,
 		recurse: true,
 		collect: func(ctx context.Context, domain string, _ []string, sess *subscraping.Session) ([]string, error) {
-			names, err := crtshDatabase(ctx, domain, sess.Client)
-			if len(names) > 0 {
-				return names, nil
+			page, rows, err := crtshDatabase(ctx, domain, sess.Client, crtshLimitedShare, crtshLimit)
+			if err == nil && len(page) > 0 && rows < crtshLimit {
+				return page, nil
+			}
+			if err == nil && len(page) > 0 {
+				return crtshRest(ctx, domain, page, sess)
 			}
 			if err != nil {
 				addNote(ctx, "crt.sh database: "+err.Error()+"; asked the JSON API")
 			} else {
 				addNote(ctx, "crt.sh database had no names; asked the JSON API")
 			}
-			return crtshJSON(ctx, domain, sess)
+			names, jerr := crtshJSON(ctx, domain, sess)
+			if jerr != nil && len(page) > 0 {
+				return page, nil // the names the database gave before it failed
+			}
+			return append(page, names...), jerr
 		},
 	}
+}
+
+// crtshRest asks for what lies behind a full page: the database without
+// the limit, then the JSON API. When neither answers the page is the
+// answer, and the note says it may be short.
+func crtshRest(ctx context.Context, domain string, page []string, sess *subscraping.Session) ([]string, error) {
+	all, _, err := crtshDatabase(ctx, domain, sess.Client, crtshRestShare, 0)
+	if err == nil && len(all) > 0 {
+		addNote(ctx, fmt.Sprintf("crt.sh database: the first %d rows were a full page; asked again without the limit for the rest", crtshLimit))
+		return append(page, all...), nil
+	}
+	if err == nil {
+		err = errors.New("no names")
+	}
+	names, jerr := crtshJSON(ctx, domain, sess)
+	if jerr == nil {
+		addNote(ctx, fmt.Sprintf("crt.sh database: the first %d rows were a full page; the unlimited query failed (%v), the JSON API gave the rest", crtshLimit, err))
+		return append(page, names...), nil
+	}
+	addNote(ctx, fmt.Sprintf("crt.sh database: the first %d rows were a full page and are all it gave: the rest failed (database: %v; JSON API: %v), so there may be more names", crtshLimit, err, jerr))
+	return page, nil
 }
 
 // crtshJSON asks crt.sh's JSON endpoint, again a few times on a 5xx.

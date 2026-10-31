@@ -78,7 +78,7 @@ func testSourcesInUse() []source {
 // DatabaseOff makes crt.sh's database fail at once, so a test that fakes
 // the JSON API never reaches crt.sh. For tests only.
 func DatabaseOff() {
-	crtshQuery = func(context.Context, string, *url.URL, time.Duration) ([]string, error) {
-		return nil, errors.New("crt.sh database: off in tests")
+	crtshQuery = func(context.Context, string, *url.URL, time.Duration, int) ([]string, int, error) {
+		return nil, 0, errors.New("crt.sh database: off in tests")
 	}
 }

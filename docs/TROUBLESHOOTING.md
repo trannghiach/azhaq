@@ -381,7 +381,7 @@ azhaq keeps the names it found in `names/DOMAIN.json`. The file is under `$AZHAQ
 
 **Why:** The run waits for its slowest source, and that is almost always crt.sh.
 
-- crt.sh is asked in its public PostgreSQL first (port 5432), which answers a large domain in a few seconds, and in its JSON API only when the database fails or has no names. On a large domain such as tesla.com or hackerone.com, the JSON answer takes 20 to 40 seconds. A note in `-v` says `crt.sh database: ...; asked the JSON API` when that happened.
+- crt.sh is asked in its public PostgreSQL first (port 5432), which answers a large domain in a few seconds, and in its JSON API only when the database fails or has no names. On a large domain such as tesla.com or hackerone.com, the JSON answer takes 20 to 40 seconds. The database query is limited to 10000 rows, as subfinder's is; a domain with more gets a second query for the rest, and then the JSON API. A note in `-v` says `crt.sh database: ...; asked the JSON API` when that happened, or that a full page was asked again.
 - The database needs a direct connection to crt.sh:5432 or a SOCKS5 `-source-proxy`. Behind an HTTP proxy, or a network that blocks that port, every run falls back to the JSON API and is as slow as it was.
 - The database may use 60% of `-source-timeout`, so that the JSON API still has the rest when the database hangs.
 - When crt.sh is busy, nothing comes back before the 30 seconds that `-source-timeout` allows. It is busy when several large domains are asked at once from one address.
