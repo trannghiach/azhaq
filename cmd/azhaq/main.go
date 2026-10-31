@@ -143,11 +143,20 @@ func run(args []string) error {
 	return c.run(args[1:])
 }
 
-func cmdRun(args []string) error {
+func cmdRun(args []string) error { return cmdRunAs("run", args) }
+
+// cmdRunAs is run for the resume of a run another command started: the
+// summary names that command, and the rows are the map's, as run prints
+// them.
+func cmdRunAs(command string, args []string) error {
 	rep := newReport("run")
 	var out runOut
 	if err := mapTarget(args, rep, &out); err != nil {
 		return err
+	}
+	if command != "run" {
+		rep.Command = command
+		rep.Notes = append(rep.Notes, fmt.Sprintf("a resumed %s run prints the rows of the map, as run does, not %s's own rows: azhaq query -db %s lists what the run found", command, command, rep.DB))
 	}
 	return rep.finish(out.json, false)
 }

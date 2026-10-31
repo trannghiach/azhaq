@@ -732,34 +732,7 @@ func cmdDirs(args []string) error {
 	if err != nil {
 		return err
 	}
-	failed, limited, requests := 0, 0, 0
-	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector == "azhaq-dirs" && o.Kind == "dirs" {
-			p := payloadOf(o)
-			failed += intOf(p["failed"])
-			limited += intOf(p["rate_limited"])
-			requests += intOf(p["requests"])
-			return
-		}
-		if o.Collector != "azhaq-dirs" || o.Kind != "url" {
-			return
-		}
-		p := payloadOf(o)
-		u, _ := p["url"].(string)
-		switch {
-		case u == "":
-		case w.json:
-			row := map[string]any{"url": u, "status": p["status"], "length": p["length"], "words": p["words"], "lines": p["lines"]}
-			if loc, ok := p["location"]; ok {
-				row["redirectlocation"] = loc
-			}
-			w.obj(row)
-		case c.silent:
-			w.line(u)
-		default:
-			w.line(fmt.Sprintf("%s [Status: %d, Size: %d, Words: %d, Lines: %d]", u, intOf(p["status"]), intOf(p["length"]), intOf(p["words"]), intOf(p["lines"])))
-		}
-	}
+	sink := &dirsSink{w: w, silent: c.silent, printed: map[string]bool{}}
 	rep := newReport("dirs")
 	rep.what = "paths"
 	rep.Notes = append(rep.Notes, notes...)
@@ -783,7 +756,7 @@ func cmdDirs(args []string) error {
 			}
 		}
 	}
-	_, done, err := runPreset(&c, append(run, extra...), rep, see)
+	_, done, err := runPreset(&c, append(run, extra...), rep, sink.see)
 	if err != nil {
 		return err
 	}
@@ -792,14 +765,138 @@ func cmdDirs(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
-	if failed > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d paths got no whole answer, after one retry: they were not judged (a service under load cuts answers off; run again or lower -t)", failed))
+	sink.settle(rep)
+	return rep.finish(c.json, c.silent)
+}
+
+// dirsSink prints the paths a sweep finds as they come, once each, and
+// counts what the summary says of the sweep. printed holds the paths an
+// earlier run of the sweep already printed: azhaq resume redoes a sweep
+// from the answers it kept, and finds them again.
+type dirsSink struct {
+	w                         *writer
+	silent                    bool
+	mu                        sync.Mutex
+	printed                   map[string]bool
+	failed, limited, requests int
+}
+
+func (d *dirsSink) see(_ types.Entity, o types.Observation) {
+	if o.Collector != "azhaq-dirs" {
+		return
+	}
+	p := payloadOf(o)
+	switch o.Kind {
+	case "dirs":
+		d.mu.Lock()
+		d.failed += intOf(p["failed"])
+		d.limited += intOf(p["rate_limited"])
+		d.requests += intOf(p["requests"])
+		d.mu.Unlock()
+	case "url":
+		u, _ := p["url"].(string)
+		if u == "" || !d.first(u) {
+			return
+		}
+		switch {
+		case d.w.json:
+			row := map[string]any{"url": u, "status": p["status"], "length": p["length"], "words": p["words"], "lines": p["lines"]}
+			if loc, ok := p["location"]; ok {
+				row["redirectlocation"] = loc
+			}
+			d.w.obj(row)
+		case d.silent:
+			d.w.line(u)
+		default:
+			d.w.line(fmt.Sprintf("%s [Status: %d, Size: %d, Words: %d, Lines: %d]", u, intOf(p["status"]), intOf(p["length"]), intOf(p["words"]), intOf(p["lines"])))
+		}
+	}
+}
+
+// first says u is new to the output, and notes it.
+func (d *dirsSink) first(u string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.printed[u] {
+		return false
+	}
+	d.printed[u] = true
+	return true
+}
+
+// settle adds to rep what the sweep's answers say.
+func (d *dirsSink) settle(rep *report) {
+	if d.failed > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d paths got no whole answer, after one retry: they were not judged (a service under load cuts answers off; run again or lower -t)", d.failed))
 		rep.warned = true
 	}
-	if limited > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d of %d guesses were answered 429 (too many requests) and not judged: the service is limiting the sweep; lower -rate or -t, and run again", limited, requests))
+	if d.limited > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d of %d guesses were answered 429 (too many requests) and not judged: the service is limiting the sweep; lower -rate or -t, and run again", d.limited, d.requests))
 		rep.warned = true
 	}
+}
+
+// resumeDirs continues a dirs run a limit stopped and prints what dirs
+// prints: the paths this run finds, with the summary of a dirs run. The
+// paths the earlier runs printed are in the workspace and are not printed
+// again, so the rows of the runs add up to the sweep's.
+func resumeDirs(db, id string, runArgs, rest []string) error {
+	c := common{json: wantsJSON(rest), db: db, silent: hasFlag(rest, "silent")}
+	rep := newReport("dirs")
+	rep.what = "paths"
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	sink := &dirsSink{w: w, silent: c.silent, printed: map[string]bool{}}
+	st, err := store.OpenExisting(db)
+	if err != nil {
+		return err
+	}
+	st.UseRun(id)
+	obs, err := st.Observations()
+	st.Close()
+	if err != nil {
+		return err
+	}
+	for _, o := range obs {
+		if o.Collector == "azhaq-dirs" && o.Kind == "url" {
+			if u, _ := payloadOf(types.Observation{Payload: o.Payload})["url"].(string); u != "" {
+				sink.printed[u] = true
+			}
+		}
+	}
+	filters := map[string]string{}
+	for i, a := range runArgs {
+		name, val, inline := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		if !strings.HasPrefix(name, "dirs-") || !strings.HasPrefix(a, "-") {
+			continue
+		}
+		if !inline && i+1 < len(runArgs) {
+			val = runArgs[i+1]
+		}
+		filters[strings.TrimPrefix(name, "dirs-")] = val
+	}
+	if dirsFiltered(filters) {
+		rep.Notes = append(rep.Notes, "no calibration: -fc, -fs, -fw, -fl or -fr was given, so the filters are yours and a catch-all answer they do not remove is listed")
+	}
+	var args []string
+	for _, a := range rest {
+		if k, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); !strings.HasPrefix(a, "-") || (k != "json" && k != "jsonl" && k != "silent") {
+			args = append(args, a)
+		}
+	}
+	args = append(append(slices.Clone(runArgs), args...), "-resume-run", id)
+	_, done, err := runPreset(&c, args, rep, sink.see)
+	if err != nil {
+		return err
+	}
+	defer done()
+	if err := w.close(); err != nil {
+		return err
+	}
+	rep.Results = w.count()
+	sink.settle(rep)
 	return rep.finish(c.json, c.silent)
 }
 

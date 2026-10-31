@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -327,5 +328,64 @@ func TestDirsDeadServiceStopsAtOnce(t *testing.T) {
 		if exitCode(err) != exitPartial || len(rep.Unreachable) != 1 || rep.Requests > 6 {
 			t.Errorf("%v: exit %d, unreachable %v, %d requests\n%s", filter, exitCode(err), rep.Unreachable, rep.Requests, errOut)
 		}
+	}
+}
+
+// azhaq resume of a dirs run prints as dirs: its rows, with command dirs.
+// The rows of the stopped run and of the resume are those of one run, none
+// twice.
+func TestDirsResumePrintsAsDirs(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/w") && strings.HasSuffix(r.URL.Path, "0") || strings.HasSuffix(r.URL.Path, "5") && strings.HasPrefix(r.URL.Path, "/w") {
+			fmt.Fprint(w, "found "+r.URL.Path)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	var words []string
+	for i := range 40 {
+		words = append(words, fmt.Sprintf("w%d", i))
+	}
+	wl := wlist(t, words...)
+	urls := func(out string) []string {
+		var got []string
+		for _, l := range lines(out) {
+			var m map[string]any
+			if json.Unmarshal([]byte(l), &m) == nil {
+				got = append(got, m["url"].(string))
+			}
+		}
+		sort.Strings(got)
+		return got
+	}
+	// -fs: no calibration, so a budget counts words.
+	base := []string{"-u", srv.URL + "/", "-w", wl, "-fs", "19", "-json", "-ledger", "off"}
+	want, _, err := captureBoth(t, func() error { return cmdDirs(base) })
+	if err != nil || len(urls(want)) != 8 {
+		t.Fatalf("one run: %v, %q", err, want)
+	}
+	db := filepath.Join(t.TempDir(), "d.db")
+	first, errOut, err := captureBoth(t, func() error { return cmdDirs(append(slices.Clone(base), "-db", db, "-max-requests", "25")) })
+	if exitCode(err) != exitLimit {
+		t.Fatalf("exit %d: %v\n%s", exitCode(err), err, errOut)
+	}
+	if rep := lastReport(t, errOut); rep.Command != "dirs" || rep.Results != len(urls(first)) {
+		t.Fatalf("the stopped run's summary: %+v", rep)
+	}
+	second, errOut, err := captureBoth(t, func() error { return cmdResume([]string{"-db", db, "-max-requests", "100", "-json"}) })
+	if err != nil {
+		t.Fatalf("resume: %v\n%s", err, errOut)
+	}
+	rep := lastReport(t, errOut)
+	if rep.Command != "dirs" || rep.Results != len(urls(second)) || rep.Exit != exitOK {
+		t.Errorf("the resume's summary: %+v", rep)
+	}
+	if len(urls(first)) == 0 || len(urls(second)) == 0 {
+		t.Errorf("rows: %d then %d", len(urls(first)), len(urls(second)))
+	}
+	got := urls(first + second)
+	if fmt.Sprint(got) != fmt.Sprint(urls(want)) {
+		t.Errorf("the two runs printed\n%v\none run printed\n%v", got, urls(want))
 	}
 }

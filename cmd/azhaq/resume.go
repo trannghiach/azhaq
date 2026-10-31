@@ -6,6 +6,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
@@ -59,7 +60,10 @@ func cmdResume(args []string) error {
 		}
 	}
 	id, runArgs, left, ok, err := st.Resumable()
-	ports := ok && st.GetMeta("command:"+id) == "ports"
+	command := ""
+	if ok {
+		command = st.GetMeta("command:" + id)
+	}
 	st.Close()
 	if err != nil {
 		return err
@@ -75,12 +79,23 @@ func cmdResume(args []string) error {
 			return err
 		}
 	}
-	if ports {
+	switch command {
+	case "ports":
 		return resumePorts(db, id, runArgs, rest)
+	case "dirs":
+		return resumeDirs(db, id, runArgs, rest)
+	}
+	if command != "" && command != "run" && !hasFlag(rest, "quiet") {
+		// The drop-in hushed its run to print its own rows: here the rows
+		// are the map's.
+		runArgs = slices.DeleteFunc(slices.Clone(runArgs), func(a string) bool { return a == "-quiet" })
 	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)
-	return cmdRun(all)
+	if command == "" {
+		command = "run"
+	}
+	return cmdRunAs(command, all)
 }
 
 // listFromWorkspace points the stored run's -list at the copy the
