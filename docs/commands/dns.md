@@ -93,6 +93,8 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `not asked` | Names left when a run stops. |
 | `wildcard answers left out` | Names that resolved only through a wildcard zone. |
 
+The summary counts names: `12 names`. When a line is a record (`-resp`, `-resp-only`, a transfer), it counts both: `13 records of 12 names`. `-json` has one row for each name, so its `results` is the number of names.
+
 The summary also lists failures per kind of error, and takeover candidates: a CNAME to a name that no longer exists.
 
 ## Details
