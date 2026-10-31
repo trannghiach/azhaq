@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
@@ -29,7 +30,8 @@ const (
 // ends (-seal-to), apart from the run's own files.
 type runLedger struct {
 	l        *ledger.Ledger
-	owned    bool // the run opened it, so the run closes it
+	owned    bool  // the run opened it, so the run closes it
+	from     int64 // lines the file held before this run's
 	stopKill func()
 	sealTo   string
 	writes   []ledger.Entry // writes of a killed run that a resume does not send again
@@ -120,7 +122,7 @@ func startLedger(ledgerFlag, killFlag, db string, scratch bool, rules scope.Rule
 	}
 	l.Match = rules.Match
 	ledger.Use(l)
-	r.l, r.owned = l, true
+	r.l, r.owned, r.from = l, true, l.Count()
 	return r, nil
 }
 
@@ -138,7 +140,7 @@ func rolesLedger(dir string, rep *report) (closeIt, rearm func()) {
 		return func() { r.stopKill() }, rearm
 	}
 	ledger.Use(l)
-	r.l, r.owned = l, true
+	r.l, r.owned, r.from = l, true, l.Count()
 	return func() { r.close(rep) }, rearm
 }
 
@@ -168,12 +170,69 @@ func (r *runLedger) close(rep *report) {
 	}
 	c, _ := ledger.Verify(path)
 	seal := r.l.Last()
-	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %d requests, connections and queries recorded in %s, sealed %s (azhaq ledger -verify %s -seal %s; the seal alone proves no line was later removed and the rest re-chained)", c.Entries, path, seal, path, seal))
+	what, targets := r.recorded(path)
+	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %s, sealed %s (azhaq ledger -verify %s -seal %s; the seal alone proves no line was later removed and the rest re-chained)", fmt.Sprintf(what, path), seal, path, seal))
+	if r.from > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %s holds %d lines in all, the lines of the runs before this one included", path, r.l.Count()))
+	}
+	if targets != int(rep.Requests) {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("the summary counts %d requests to targets and the ledger lists %d lines to them (azhaq ledger -summary %s lists them by kind)", rep.Requests, targets, path))
+	}
 	if r.sealTo != "" {
 		if err := sendSeal(r.sealTo, path, seal, c.Entries); err != nil {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("-seal-to %s: %v: the seal is only in %s, next to the run's own files", r.sealTo, err, path))
 		}
 	}
+}
+
+// recorded says what this run's part of the ledger holds, by what its lines
+// were sent to, as a format taking the file's path, and how many of them
+// went to targets: the number the summary's requests is checked against.
+func (r *runLedger) recorded(path string) (what string, targets int) {
+	var reqs, conns, sources, dns, own, all int
+	err := ledger.Read(path, func(e ledger.Entry) error {
+		if e.Seq <= r.from || e.Kind == ledger.KindSeal {
+			return nil
+		}
+		all++
+		switch e.Class {
+		case ledger.ClassSource:
+			sources++
+		case ledger.ClassDNS:
+			dns++
+		case ledger.ClassOwn:
+			own++
+		default:
+			if e.Kind == "tcp" || e.Kind == "udp" {
+				conns++
+			} else {
+				reqs++
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return "recorded in %s, not counted (" + strings.ReplaceAll(err.Error(), "%", "%%") + ")", int(r.l.Count() - r.from)
+	}
+	targets = reqs + conns
+	var parts []string
+	if targets > 0 {
+		parts = append(parts, fmt.Sprintf("%d to targets (%s, %s)", targets, nOf(reqs, "request", "requests"), nOf(conns, "connection", "connections")))
+	}
+	if sources > 0 {
+		parts = append(parts, nOf(sources, "to a third-party source", "to third-party sources"))
+	}
+	if dns > 0 {
+		parts = append(parts, nOf(dns, "DNS query", "DNS queries"))
+	}
+	if own > 0 {
+		parts = append(parts, nOf(own, "to an endpoint of your own", "to endpoints of your own"))
+	}
+	if all == 0 {
+		return "nothing recorded in %s: the run sent nothing", 0
+	}
+	what = fmt.Sprintf("%d recorded in %%s: %s", all, strings.ReplaceAll(strings.Join(parts, ", "), "%", "%%"))
+	return what, targets
 }
 
 // sealRecord is the one JSON line -seal-to writes or posts.

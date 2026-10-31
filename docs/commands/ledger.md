@@ -100,8 +100,13 @@ Each line has a class: `target` (a host the run was pointed at), `source` (a thi
 The summary of a run that wrote a ledger has this note:
 
 ```
-ledger: N requests, connections and queries recorded in FILE, sealed HASH (azhaq ledger -verify FILE -seal HASH; the seal alone proves no line was later removed and the rest re-chained)
+ledger: N recorded in FILE: T to targets (R requests, C connections), S to third-party sources, D DNS queries, sealed HASH (azhaq ledger -verify FILE -seal HASH; the seal alone proves no line was later removed and the rest re-chained)
 ```
+
+- `N` counts this run's lines, by what each was sent to. A class with no line is left out.
+- `T` is what the summary's `requests` counts: the requests and the connects (port scans, raw probes) sent to targets. The two numbers are one.
+- If they differ, a second note says so: `the summary counts 213 requests to targets and the ledger lists 214 lines to them`.
+- A run that continues a workspace adds a note that the file holds the lines of the runs before it too.
 
 ## Flags
 

@@ -146,7 +146,7 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 
 `notes` holds caps that were hit and other things worth knowing that are not failures. Examples:
 
-- `ledger: 148 requests, connections and queries recorded in app.db.ledger.jsonl (azhaq ledger -verify app.db.ledger.jsonl)`
+- `ledger: 148 recorded in app.db.ledger.jsonl: 146 to targets (142 requests, 4 connections), 2 DNS queries, sealed … (azhaq ledger -verify app.db.ledger.jsonl …)`: the lines to targets are the summary's `requests`.
 - `path checks: 28 skipped (an API description was already found)`: see [run](commands/run.md#notes-in-the-summary).
 - `screenshot of URL not taken: …`: see [shots](commands/shots.md#screenshots-and-the-budget).
 - `GraphQL URL: introspection disabled: schema recovered (…)`: see [run](commands/run.md#notes-in-the-summary).
