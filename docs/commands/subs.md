@@ -214,7 +214,7 @@ coverage: the independent sources hold about 1609 names; this run has 1400 of th
 ### `-live` and its time
 - subdomain.center answers a random 500 names per call, most of them made up.
 - Without a key it is asked again only while its last round gave a name that resolves and no other source had.
-- Every round's new names are looked up before the next round is asked, and no name is looked up twice.
+- The next round is asked while the last round's new names are looked up, so a round costs the longer of the two. When a round adds no live name, the call already made ahead is dropped, and the source's `calls` counts it. No name is looked up twice.
 - With `-dns-rate` the guesses may cost at most half what the real names reported cost, and not less than 1,000.
 - A live name has an address, directly or through its CNAME chain. A chain that ends without one is a takeover candidate, not a live name.
 - Answers too big for 512 bytes, such as a long CNAME chain, arrive with EDNS0, or over TCP when a server truncates them.

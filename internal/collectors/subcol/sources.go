@@ -239,8 +239,9 @@ func verified(s source) source {
 // sampled asks a keyless source again while its answers keep adding names
 // that resolve: subdomain.center answers a different random 500 per call
 // (2026-10-29: five calls gave 2135 tesla.com names, 49 live hosts one call
-// missed). Each round's new names are resolved before the next round is
-// asked (the checker in ctx); it stops when a round adds no new live name.
+// missed). Each round's new names are resolved (the checker in ctx) while
+// the next round is asked; it stops when a round adds no new live name, and
+// the call made ahead is dropped.
 // Without resolvers it stops when under a tenth of a round is new. The
 // source's bound (-source-timeout) is for asking: a request may take that
 // long and the asking half of it in all; resolving is paced by -dns-rate.
@@ -260,13 +261,30 @@ func sampled(s source) source {
 		var asking time.Duration
 		var names []string
 		seen := map[string]bool{}
-		for call := 0; call < sampleRounds; call++ {
+		// ask makes one call; the next one is made while the names of the
+		// last are looked up, so a round costs the longer of the two.
+		type reply struct {
+			got  []string
+			err  error
+			took time.Duration
+		}
+		ask := func() (<-chan reply, context.CancelFunc) {
 			countCall(ctx)
 			fctx, cancel := context.WithTimeout(ctx, timeout)
-			t0 := time.Now()
-			got, err := collect(fctx, domain, nil, sess)
-			cancel()
-			asking += time.Since(t0)
+			ch := make(chan reply, 1)
+			go func() {
+				t0 := time.Now()
+				got, err := collect(fctx, domain, nil, sess)
+				ch <- reply{got, err, time.Since(t0)}
+			}()
+			return ch, cancel
+		}
+		next, cancelNext := ask()
+		for call := 0; call < sampleRounds; call++ {
+			r := <-next
+			cancelNext()
+			got, err := r.got, r.err
+			asking += r.took
 			recordRound(ctx, got)
 			var fresh []string
 			for _, n := range got {
@@ -290,20 +308,34 @@ func sampled(s source) source {
 				// add more guesses.
 				return names, nil
 			}
+			var pending <-chan reply
+			var cancelPending context.CancelFunc
+			if call+1 < sampleRounds && ctx.Err() == nil && chk.room() {
+				pending, cancelPending = ask()
+			}
 			t1 := time.Now()
 			asked := chk.asked
 			st.Live = chk.check(cleaned(fresh, domain))
 			st.Asked = chk.asked - asked
 			st.Seconds = round(time.Since(t1).Seconds())
 			recordStat(ctx, st)
+			stop := false
 			switch {
 			case st.Live == 0:
-				return names, nil // this round found nothing new that resolves
+				stop = true // this round found nothing new that resolves
 			case !chk.room():
-				return names, nil // the guesses have cost what the real names did
+				stop = true // the guesses have cost what the real names did
 			case !chk.paced && time.Since(start) >= sampleBudget, asking >= timeout/2, ctx.Err() != nil:
+				stop = true
+			}
+			if stop || pending == nil {
+				if pending != nil {
+					cancelPending() // the call made ahead is not needed
+					<-pending
+				}
 				return names, nil
 			}
+			next, cancelNext = pending, cancelPending
 		}
 		return names, nil
 	}

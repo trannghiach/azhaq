@@ -427,8 +427,18 @@ func TestSampledStopsWhenARoundAddsNoLiveName(t *testing.T) {
 		return out, nil
 	}}, pad, fake("real", noKey, true, []string{"www.example.org"}, nil))
 	payload, _ := run(t, c, context.Background())
-	if got := strings.Join(log, " "); got != "ask check ask check ask check" {
-		t.Errorf("order %q", got)
+	// Each round's names are looked up once, and the next call is made
+	// while they are: three rounds, and a fourth call made ahead.
+	checks, asks := 0, 0
+	for _, l := range log {
+		if l == "check" {
+			checks++
+		} else {
+			asks++
+		}
+	}
+	if checks != 3 || asks < 3 || asks > 4 {
+		t.Errorf("%d checks and %d calls: %q", checks, asks, log)
 	}
 	for n, k := range sent {
 		if k != 1 {
@@ -442,7 +452,7 @@ func TestSampledStopsWhenARoundAddsNoLiveName(t *testing.T) {
 		t.Errorf("counts %v", payload)
 	}
 	row := payload["sources"].(map[string]any)["pad"].(map[string]any)
-	if row["calls"] != float64(3) || row["kept"] != float64(2) || row["error"] != nil {
+	if c := row["calls"].(float64); c < 3 || c > 4 || row["kept"] != float64(2) || row["error"] != nil {
 		t.Errorf("row %v", row)
 	}
 }
@@ -543,10 +553,12 @@ func TestSampledGuessBudgetFollowsThePace(t *testing.T) {
 		c := collector(Options{SourceTimeout: 5 * time.Second, NoHistory: true, DNSPaced: tc.paced, Verify: allLive}, mk(), fake("real", noKey, true, []string{"www.example.org"}, nil))
 		payload, _ := run(t, c, context.Background())
 		row := payload["sources"].(map[string]any)["pad"].(map[string]any)
-		if got := int(row["calls"].(float64)); got != tc.rounds {
-			t.Errorf("paced %v: %d rounds, want %d (%v)", tc.paced, got, tc.rounds, row)
-		}
+		// The next call is made while a round is looked up: the one that
+		// follows the last round is a call made ahead, and not used.
 		st := row["rounds"].([]any)
+		if got := int(row["calls"].(float64)); len(st) != tc.rounds || got < tc.rounds || got > tc.rounds+1 {
+			t.Errorf("paced %v: %d rounds and %d calls, want %d rounds (%v)", tc.paced, len(st), got, tc.rounds, row)
+		}
 		if first := st[0].(map[string]any); first["names"] != float64(500) || first["looked_up"] != float64(500) || first["new_live"] != float64(500) {
 			t.Errorf("round stats %v", st)
 		}
@@ -561,5 +573,45 @@ func TestDefaultSourceTimeoutIsSubfinders(t *testing.T) {
 	}
 	if DefaultSourceTimeout != 30*time.Second {
 		t.Errorf("DefaultSourceTimeout %s", DefaultSourceTimeout)
+	}
+}
+
+// A sampled source's next call is made while the last round's names are
+// looked up: five rounds of a 300 ms call and a 300 ms check take the longer
+// of the two each, 1.8 s, not 3 s.
+func TestSampledOverlapsTheCallWithTheCheck(t *testing.T) {
+	var mu sync.Mutex
+	asked := 0
+	pad := sampled(verified(source{name: "pad", deflt: true, collect: func(ctx context.Context, _ string, _ []string, _ *subscraping.Session) ([]string, error) {
+		mu.Lock()
+		asked++
+		n := asked
+		mu.Unlock()
+		select {
+		case <-time.After(300 * time.Millisecond):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		return []string{"live" + string(rune('a'+n)) + ".example.org", "dead" + string(rune('a'+n)) + ".example.org"}, nil
+	}}))
+	c := collector(Options{SourceTimeout: 10 * time.Second, NoHistory: true, Verify: func(_ context.Context, _ string, names []string) ([]string, []string) {
+		time.Sleep(300 * time.Millisecond)
+		var out []string
+		for _, n := range names {
+			// the fifth round gives no live name, and ends the asking
+			if strings.HasPrefix(n, "live") && !strings.HasPrefix(n, "livef") {
+				out = append(out, n)
+			}
+		}
+		return out, nil
+	}}, pad, fake("real", noKey, true, []string{"www.example.org"}, nil))
+	t0 := time.Now()
+	payload, _ := run(t, c, context.Background())
+	took := time.Since(t0)
+	if got := len(strs(payload["names"])); got != 5 {
+		t.Errorf("%d names, want www and four live: %v", got, payload["names"])
+	}
+	if took > 2400*time.Millisecond {
+		t.Errorf("five rounds took %s: the next call waited for the check", took)
 	}
 }
