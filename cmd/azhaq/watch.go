@@ -165,7 +165,12 @@ func diffRuns(path string) (changes, error) {
 	}
 	newFacts := factsByEntity(neu)
 	oldFacts := factsByEntity(old)
+	// A placeholder renamed ({id} to {orderId}) is no URL gone and no URL new.
+	oldFold, newFold := foldedURLs(old), foldedURLs(neu)
 	for _, e := range d.Added {
+		if e.Type == types.TypeURL && oldFold[foldURL(e.Key)] {
+			continue
+		}
 		switch e.Type {
 		case types.TypeHostname:
 			if ips := newFacts[e.ID].ips; len(ips) > 0 {
@@ -183,6 +188,9 @@ func diffRuns(path string) (changes, error) {
 		}
 	}
 	for _, e := range d.Removed {
+		if e.Type == types.TypeURL && newFold[foldURL(e.Key)] {
+			continue
+		}
 		f := oldFacts[e.ID]
 		switch {
 		case e.Type == types.TypeHostname && len(f.ips) > 0:
@@ -223,6 +231,35 @@ func diffRuns(path string) (changes, error) {
 		sort.Strings(xs)
 	}
 	return ch, nil
+}
+
+// foldURL is a URL with the names of its path's placeholders left out
+// ({id} and {orderId} are one): what renaming a placeholder leaves alone.
+func foldURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return raw
+	}
+	segs := strings.Split(u.Path, "/")
+	for i, s := range segs {
+		if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+			segs[i] = "{}"
+		}
+	}
+	u.Path, u.RawPath = strings.Join(segs, "/"), ""
+	return u.String()
+}
+
+// foldedURLs are the folded keys of a run's URL entities.
+func foldedURLs(st *store.Store) map[string]bool {
+	out := map[string]bool{}
+	ents, _ := st.Entities()
+	for _, e := range ents {
+		if e.Type == types.TypeURL {
+			out[foldURL(e.Key)] = true
+		}
+	}
+	return out
 }
 
 type facts struct {

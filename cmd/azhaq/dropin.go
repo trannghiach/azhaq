@@ -23,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
+	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/targets"
@@ -949,7 +950,17 @@ func cmdShots(args []string) error {
 		if w.json {
 			w.obj(p)
 		} else {
-			w.line(fmt.Sprintf("%v %v", p["url"], p["file"]))
+			line := fmt.Sprintf("%v %v", p["url"], p["file"])
+			if p["partial"] == true {
+				var hosts []string
+				if hs, ok := p["blocked_hosts"].([]any); ok {
+					for _, h := range hs {
+						hosts = append(hosts, fmt.Sprint(h))
+					}
+				}
+				line += "  partial (" + shotcol.PartialWhy(intOf(p["unloaded"]), intOf(p["resources"]), intOf(p["blocked"]), hosts) + ")"
+			}
+			w.line(line)
 		}
 	}
 	rep := newReport("shots")

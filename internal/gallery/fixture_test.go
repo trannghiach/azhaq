@@ -112,6 +112,10 @@ func makeWorkspace(t testing.TB, dir, name string, n int) ([]fixShot, string) {
 		if fs.Partial {
 			row["partial"], row["unloaded"], row["resources"], row["note"] = true, 2, 9, "screenshot of "+page+" is partial: 2 of 9 images were not loaded"
 		}
+		if i%22 == 3 { // drawn without the assets of a host outside the scope
+			row["unloaded"], row["resources"] = nil, nil
+			row["blocked"], row["blocked_hosts"] = 3, []string{"cdn.example.test"}
+		}
 		if i%7 == 0 {
 			fs.Body = fmt.Sprintf("welcome marker%d to the %s", i, fs.Title)
 			hf := filepath.Join(dir, fmt.Sprintf("%s_%d.html", name, i))

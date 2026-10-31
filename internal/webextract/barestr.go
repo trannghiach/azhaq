@@ -163,6 +163,8 @@ func Candidates(text string, page, src *url.URL, script bool) []Cand {
 				c.Link, c.Reason = "", ReasonCode
 			} else if searchedFor(text, s.Start) {
 				c.Link, c.Reason = "", ReasonSearched
+			} else if i < nScript && s.Start > 0 && s.End < len(text) && text[s.Start-1] == text[s.End] && HeadAt(text, s.Start-1, s.End+1) {
+				c.Link, c.Reason = "", ReasonPrefix
 			}
 		}
 		c.Resolved = c.Link

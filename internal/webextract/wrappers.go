@@ -141,6 +141,9 @@ func literal(ex string) (string, bool) {
 func stripStringify(ex string) string {
 	ex = strings.TrimSpace(ex)
 	if strings.HasPrefix(ex, "JSON.stringify(") && strings.HasSuffix(ex, ")") {
+		if args := callArgs(ex, len("JSON.stringify")); len(args) > 0 {
+			return strings.TrimSpace(args[0]) // JSON.stringify({…}, null, 2)
+		}
 		ex = strings.TrimSpace(ex[len("JSON.stringify(") : len(ex)-1])
 	}
 	return ex

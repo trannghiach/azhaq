@@ -22,6 +22,7 @@ const (
 	ReasonAsset      = "a script, style, image or data file name: listed only with -assets, not a page"
 	ReasonCode       = "unquoted script code the page pattern read as a path (a.number/t.doc), not a string"
 	ReasonSearched   = "a string a script searches for (indexOf, includes, replace), not a URL it requests"
+	ReasonPrefix     = "the start of a path a script joins more to (\"/rest/user/\"+id, a base other routes are built on), not a route"
 )
 
 // RejectedObs is the record of a string a collector read as a possible URL

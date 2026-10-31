@@ -2,6 +2,8 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"slices"
 	"sort"
 
@@ -12,15 +14,17 @@ import (
 // level any of its sources reaches.
 const (
 	EvAnswered  = "answered"  // the run fetched it and the server answered
+	EvBrowser   = "browser"   // Chrome, loading the page, sent the request (or a write)
 	EvDescribed = "described" // an API description the run read lists it
-	EvCalled    = "called"    // a script calls it, or Chrome saw the request
+	EvCalled    = "called"    // a script calls it
 	EvLinked    = "linked"    // a page, a script string or a form names it
 	EvArchived  = "archived"  // only archives hold it
 	EvGuessed   = "guessed"   // a wordlist guess that did not answer
+	EvGiven     = "given"     // the user named it, and nothing else holds it
 )
 
 // EvidenceLevels lists the levels, strongest first.
-var EvidenceLevels = []string{EvAnswered, EvDescribed, EvCalled, EvLinked, EvArchived, EvGuessed}
+var EvidenceLevels = []string{EvAnswered, EvBrowser, EvDescribed, EvCalled, EvLinked, EvArchived, EvGuessed, EvGiven}
 
 // EvidenceRank orders a level: 0 is the strongest, an unknown or empty
 // level is last.
@@ -55,11 +59,11 @@ func evidenceLevel(collector, kind, via, seen string, p evidenceFields) string {
 		return EvLinked
 	case "azhaq-render":
 		if seen == "request" || seen == "write" {
-			return EvCalled
+			return EvBrowser
 		}
 		return EvLinked
 	case "azhaq-shots":
-		return EvCalled
+		return EvBrowser
 	case "azhaq-crawl", "katana":
 		return EvLinked
 	case "azhaq-urls":
@@ -130,7 +134,7 @@ func evidenceIndex(obs []types.StoredObservation) map[string]*evidenceSource {
 
 // setEvidence fills a URL row's evidence from the index and, for a row
 // the run fetched, the collectors that fetched it.
-func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservation) {
+func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservation, given bool) {
 	m.Evidence, m.EvidenceFrom = "", nil
 	if src != nil {
 		m.Evidence = src.level
@@ -145,6 +149,9 @@ func (m *MapEntry) setEvidence(src *evidenceSource, own []types.StoredObservatio
 				m.EvidenceFrom = append(m.EvidenceFrom, o.Collector)
 			}
 		}
+	}
+	if m.Evidence == "" && given {
+		m.Evidence = EvGiven // a URL asked for that gave no answer: only the user's word
 	}
 	sort.Strings(m.EvidenceFrom)
 }
@@ -170,4 +177,35 @@ func (m MapEntry) EvidenceTag() string {
 		return ""
 	}
 	return "[" + m.Evidence + "]"
+}
+
+// answerNote qualifies a 5xx the run got from a plain request: when the
+// route takes names (query, body) and the request carried none, the
+// failure says little of the route, and the row says so ("500 without
+// input"). Only a row the run fetched has one.
+func answerNote(m MapEntry, key string) string {
+	if m.Coverage != "visited" || m.Status < 500 {
+		return ""
+	}
+	taken := map[string]bool{}
+	for _, n := range m.Params {
+		taken[n] = true
+	}
+	for _, n := range m.Body {
+		taken[n] = true
+	}
+	for _, o := range m.Ops {
+		for _, n := range append(slices.Clone(o.Query), o.Body...) {
+			taken[n] = true
+		}
+	}
+	if u, err := url.Parse(key); err == nil {
+		for n := range u.Query() {
+			delete(taken, n)
+		}
+	}
+	if len(taken) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d without input", m.Status)
 }

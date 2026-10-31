@@ -268,11 +268,22 @@ func (c *Collector) shoot(ctx context.Context, tries []string, isURL bool, emit 
 		row["html_file"] = hf
 	}
 	addRecord(row, p, c.NoTech)
+	var why []string
 	if p.Partial {
 		// Taken, and saved, but short of what the page draws: said in the
 		// summary, which then exits 3.
 		row["partial"], row["unloaded"], row["resources"] = true, p.Unloaded, p.Resources
-		row["note"] = fmt.Sprintf("screenshot of %s is partial: %d of %d images, styles and scripts were not loaded when it was taken (the pace, -max-requests or a slow server; -shot-timeout and -rate change it)", raw, p.Unloaded, p.Resources)
+		why = append(why, fmt.Sprintf("%d of %d images, styles and scripts were not loaded when it was taken (the pace, -max-requests or a slow server; -shot-timeout and -rate change it)", p.Unloaded, p.Resources))
+	}
+	if p.OffScope > 0 {
+		// Chrome is held to the scope: what the page loads from outside it
+		// (a CDN's styles, fonts, scripts) is not asked for, and the page
+		// is drawn without it.
+		row["partial"], row["blocked"], row["blocked_hosts"] = true, p.OffScope, p.OffScopeHosts
+		why = append(why, fmt.Sprintf("%d requests to %s outside the scope were blocked, so it is drawn without those assets; %s", p.OffScope, strings.Join(p.OffScopeHosts, ", "), allowAdvice(u, p.OffScopeHosts)))
+	}
+	if len(why) > 0 {
+		row["note"] = fmt.Sprintf("screenshot of %s is partial: %s", raw, strings.Join(why, "; "))
 	}
 	if h, ok := DHash(p.Image); ok {
 		row["phash"], row["perception_hash"] = h, h
@@ -281,6 +292,41 @@ func (c *Collector) shoot(ctx context.Context, tries []string, isURL bool, emit 
 	return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, emit(types.Observation{
 		Collector: Name, Source: raw, Kind: "screenshot", Payload: payload, Confidence: 0.9, ObservedAt: time.Now().UTC(),
 	})
+}
+
+// allowAdvice says how to let the page load the assets of hosts: -allow
+// names them, and with any -allow the page's own host must be named too.
+func allowAdvice(page *url.URL, hosts []string) string {
+	var flags []string
+	if fetch.Allow == nil && page != nil && page.Hostname() != "" {
+		flags = append(flags, "-allow "+page.Hostname()) // any -allow replaces the default scope, the page's site
+	}
+	for _, h := range hosts {
+		flags = append(flags, "-allow "+h)
+	}
+	return strings.Join(flags, " ") + " loads them"
+}
+
+// PartialWhy says in a few words what a picture lacks of its page: the
+// assets of hosts outside the scope that were blocked, and the images,
+// styles and scripts that had not loaded. "" for a whole one.
+func PartialWhy(unloaded, resources, blocked int, hosts []string) string {
+	var parts []string
+	if blocked > 0 {
+		what := "assets"
+		if blocked == 1 {
+			what = "asset"
+		}
+		shown := hosts
+		if len(shown) > 5 {
+			shown = append(slices.Clone(hosts[:5]), "…")
+		}
+		parts = append(parts, fmt.Sprintf("%d off-scope %s blocked: %s", blocked, what, strings.Join(shown, ", ")))
+	}
+	if unloaded > 0 {
+		parts = append(parts, fmt.Sprintf("%d of %d images, styles and scripts not loaded", unloaded, resources))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // baseName is the file a page's picture is kept in, without its

@@ -87,7 +87,7 @@ func TestScoringTable(t *testing.T) {
 			r.Forms = []engine.MapForm{{Method: "GET", Action: o + "/pw", Fields: []string{"password_new"}}}
 		}), "password-in-url", 30 + weights["input"]},
 		{"source map", urlRow(o+"/a.js.map", "sourcemap", "visited", 200, nil), "sourcemap", 45},
-		{"server error", urlRow(o+"/boom", "page", "visited", 500, func(r *engine.MapEntry) { r.Title = "TypeError" }), "server-error", 20},
+		{"server error", urlRow(o+"/boom", "page", "visited", 500, func(r *engine.MapEntry) { r.Title = "TypeError" }), "server-error", 10},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -253,7 +253,7 @@ func TestRolesRankFirst(t *testing.T) {
 			urlRow(o+"/.git/HEAD", "page", "visited", 200, nil),
 		},
 		Roles: []RoleRow{
-			{URL: o + "/books/v1/mine", Template: o + "/books/v1/{b}", Verdict: "reads another role's object", Evidence: "bob got alice's answer", Confidence: "proved"},
+			{URL: o + "/books/v1/mine", Template: o + "/books/v1/{b}", Verdict: "reads another role's object", Evidence: "bob got alice's answer", Confidence: "proved", Dir: "/w/azhaq-roles-1"},
 			{URL: o + "/other", Verdict: "same for every role"},
 		}})
 	if rows[0].Key != o+"/books/v1/{b}" || !has(&rows[0], "cross-role") {
@@ -263,7 +263,7 @@ func TestRolesRankFirst(t *testing.T) {
 	if !strings.Contains(d, "bob got alice's answer") || !strings.Contains(d, "(proved)") {
 		t.Errorf("the reason quotes evidence and confidence: %q", d)
 	}
-	if want := "azhaq roles show -dir DIR " + o + "/books/v1/mine"; rows[0].Next != want {
+	if want := "azhaq roles show -dir /w/azhaq-roles-1 " + o + "/books/v1/mine"; rows[0].Next != want {
 		t.Errorf("next = %q, want %q", rows[0].Next, want)
 	}
 	if find(rows, o+"/other") != nil {
@@ -281,7 +281,7 @@ func TestRolesRankFirst(t *testing.T) {
 		t.Error("cross-role verdicts outweigh the 60-90 band of open findings")
 	}
 	// A write verdict names the method.
-	r := Build(Input{Now: now, Roles: []RoleRow{{URL: o + "/x", Method: "PUT", Verdict: "writes another role's object", Confidence: "proved"}}})
+	r := Build(Input{Now: now, Roles: []RoleRow{{URL: o + "/x", Method: "PUT", Verdict: "writes another role's object", Confidence: "proved", Dir: "/w/r"}}})
 	if !strings.HasSuffix(r[0].Next, "-method PUT") {
 		t.Errorf("next for a write: %q", r[0].Next)
 	}

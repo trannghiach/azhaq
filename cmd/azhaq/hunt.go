@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,6 +45,14 @@ func cmdHunt(args []string) error {
 		fh.Close()
 		if err != nil {
 			return fmt.Errorf("-roles %s: %v", f, err)
+		}
+		// Rows an older roles printed carry no directory: the file's own,
+		// else the newest one the roles default names.
+		dir := rolesDirFor(f)
+		for i := range rs {
+			if rs[i].Dir == "" {
+				rs[i].Dir = dir
+			}
 		}
 		rows = append(rows, rs...)
 	}
@@ -88,6 +98,33 @@ func cmdHunt(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d rows have a signal; -limit %d printed the first %d (best first)", matched, *limit, len(list)))
 	}
 	return rep.finish(*asJSON, false)
+}
+
+// rolesDirFor finds the directory of the roles run behind a -roles file
+// that does not name it: the file's own folder when it holds roles.db,
+// else the newest azhaq-roles-* folder of the current directory that does.
+func rolesDirFor(file string) string {
+	holds := func(dir string) bool {
+		st, err := os.Stat(filepath.Join(dir, evidenceFile))
+		return err == nil && !st.IsDir()
+	}
+	abs := func(dir string) string {
+		if a, err := filepath.Abs(dir); err == nil {
+			return a
+		}
+		return dir
+	}
+	if d := filepath.Dir(file); holds(d) {
+		return abs(d)
+	}
+	dirs, _ := filepath.Glob("azhaq-roles-*")
+	sort.Strings(dirs) // the names end in a timestamp
+	for i := len(dirs) - 1; i >= 0; i-- {
+		if holds(dirs[i]) {
+			return abs(dirs[i])
+		}
+	}
+	return ""
 }
 
 func takeoverDetail(f takeover.Finding) string {

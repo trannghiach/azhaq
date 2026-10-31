@@ -44,6 +44,10 @@ type Shot struct {
 	HasFile   bool      `json:"has_file"`
 	HasBody   bool      `json:"body_kept"`
 
+	// PartialWhy says what a partial picture lacks: the assets of hosts
+	// outside the scope that were blocked, images and styles not loaded.
+	PartialWhy string `json:"partial_why,omitempty"`
+
 	src                          *source
 	obsID                        string
 	entityID                     string
@@ -96,6 +100,13 @@ type record struct {
 	Network     []struct{} `json:"network"`
 	NetworkMore int        `json:"network_more"`
 	Console     []struct{} `json:"console"`
+
+	// What the picture lacks: requests refused for the scope (and the
+	// hosts they went to), and assets not loaded.
+	Blocked      int      `json:"blocked"`
+	BlockedHosts []string `json:"blocked_hosts"`
+	Unloaded     int      `json:"unloaded"`
+	Resources    int      `json:"resources"`
 }
 
 // ErrNotWorkspace is a database that is not an azhaq workspace.
@@ -152,6 +163,7 @@ func (s *source) load(label bool) ([]*Shot, error) {
 		}
 		sh := &Shot{URL: r.URL, FinalURL: r.Final, Title: strings.TrimSpace(r.Title), Status: r.Status, Partial: r.Partial,
 			Hash: r.Phash, TakenAt: time.Unix(0, at).UTC(), src: s, obsID: id, entityID: ent, htmlFile: r.HTMLFile}
+		sh.PartialWhy = shotcol.PartialWhy(r.Unloaded, r.Resources, r.Blocked, r.BlockedHosts)
 		if u, err := url.Parse(r.URL); err == nil {
 			sh.Host = u.Host
 		}

@@ -29,9 +29,25 @@ var weights = map[string]int{
 	"param-callback":  15,
 	"input":           8,
 	"gated":           15, // 401/403: a session is needed, a target for azhaq roles
-	"server-error":    20, // a 5xx: the input reached code that failed
+	"server-error":    10, // a 5xx; more with corroboration: see serverError*
+	"path-auth":       45, // sign-in, tokens, password reset: see pathWords
+	"path-search":     35,
+	"xml":             40, // the route takes an XML body
 	"new":             5,  // a bonus; a row with only this never ranks
 }
+
+// A 5xx says little alone, and less when the plain request carried none of
+// the input the route takes. What the answer shows, or a different answer
+// for another session, makes it a lead.
+const (
+	serverErrorBare      = 3  // a 5xx to a request without the input the route takes
+	serverErrorStackBare = 15 // and a stack trace in the body
+	serverErrorStack     = 25 // a stack trace, the request had its input (or the route takes none)
+	serverErrorReflected = 30 // a parameter's value comes back in the answer
+	serverErrorDebug     = 35 // a framework's debug page
+	serverErrorFlip      = 40 // a role gets the 5xx where another gets an answer
+	serverErrorSQL       = 50 // SQL error text
+)
 
 const (
 	takeoverStrong  = 90
@@ -80,15 +96,19 @@ func init() {
 		words  string
 	}{
 		{"path-admin", 40, "admin administrator administration internal console actuator manager"},
+		// who may do what: sign in, tokens, resetting a password
+		{"path-auth", 45, "login signin signon logon auth authenticate authentication authorize oauth oauth2 sso saml token reset forgot recover register signup mfa 2fa otp"},
+		// what a query or a filter feeds into a database
+		{"path-search", 35, "search find filter query lookup autocomplete suggest"},
 		{"path-debug", 50, "debug phpinfo metrics"},
 		{"path-config", 40, "config configuration setup backup"},
 		{"path-env", 30, "staging dev test"},
 		// also seen by the api-description and graphql signals, so little here
 		{"path-doc", 15, "swagger graphiql api-docs"},
 		// what a request makes the server do with its input
-		{"path-function", 35, "redirect upload exec ping eval download proxy shell cmd sql import"},
+		{"path-function", 35, "redirect upload exec ping eval download proxy shell cmd sql import xml soap wsdl"},
 		// people, credentials and the things a user owns
-		{"path-data", 35, "user account password credential secret token session authentication"},
+		{"path-data", 35, "user account password credential secret session"},
 		{"path-data", 25, "profile customer member basket cart order payment card invoice wallet address"},
 	} {
 		for _, word := range strings.Fields(c.words) {

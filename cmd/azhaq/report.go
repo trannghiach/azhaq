@@ -352,6 +352,7 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("coverage", r.Coverage, r.Coverage != "")
 	set("role", r.Role, r.Role != "")
 	set("status", r.Status, r.Status != 0)
+	set("answer", r.Answer, r.Answer != "")
 	set("evidence", r.Evidence, r.Evidence != "")
 	set("evidence_from", r.EvidenceFrom, len(r.EvidenceFrom) > 0)
 	set("title", r.Title, r.Title != "")
@@ -482,14 +483,20 @@ func pageWords(f takeover.Finding) string {
 	return ""
 }
 
-// partialShots says a screenshot was taken before its page was loaded.
+// partialShots says a screenshot was taken before its page was loaded. A
+// picture that is partial only because the scope blocked assets of other
+// hosts is not one: the scope is the user's, and the row and a note say so.
 func partialShots(obs []types.StoredObservation) bool {
 	for _, o := range obs {
 		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
 			continue
 		}
-		var p struct{ Partial bool }
-		if json.Unmarshal(o.Payload, &p) == nil && p.Partial {
+		var p struct {
+			Partial  bool
+			Unloaded int
+			Blocked  int
+		}
+		if json.Unmarshal(o.Payload, &p) == nil && (p.Unloaded > 0 || p.Partial && p.Blocked == 0) {
 			return true
 		}
 	}

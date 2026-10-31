@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/url"
 	"os"
 	"os/exec"
@@ -256,6 +257,13 @@ type Page struct {
 	Unloaded, Resources int
 	Partial             bool
 	Record              Record // what Chrome saw: answer, headers, TLS, requests, console
+	// OffScope is how many requests of this page were refused for being
+	// outside the scope (its stylesheets, scripts and images from a CDN,
+	// a frame), whether or not an earlier page had them listed, and
+	// OffScopeHosts the hosts they went to, sorted: the page is drawn
+	// without them.
+	OffScope      int
+	OffScopeHosts []string
 }
 
 // sessionScript restores the login's sessionStorage in a new tab before
@@ -405,12 +413,18 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	}
 	mine := b.claim(t)
 	writes := b.writesOf(t)
+	hosts := map[string]bool{}
 	for _, r := range mine {
 		p.Capped = p.Capped || r.budget
 		if r.frame == main && r.doc && !r.budget && p.Left == "" {
 			p.Left = r.url
 		}
+		if !r.budget && !r.download && r.host != "" && !(r.frame == main && r.doc) {
+			p.OffScope++
+			hosts[r.host] = true
+		}
 	}
+	p.OffScopeHosts = slices.Sorted(maps.Keys(hosts))
 	if p.Capped {
 		// Its caller drops what a capped page gave, to load it again after
 		// azhaq resume: the run lists its refusals.

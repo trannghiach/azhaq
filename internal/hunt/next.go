@@ -15,7 +15,10 @@ func (c *cand) next(db, best string) string {
 		if u == "" {
 			u = c.key
 		}
-		cmd := "azhaq roles show -dir DIR " + quote(u)
+		if c.roleDir == "" {
+			return show // the roles run's directory is not known: the row's own view
+		}
+		cmd := "azhaq roles show -dir " + quote(c.roleDir) + " " + quote(u)
 		if c.roleM != "" {
 			cmd += " -method " + c.roleM
 		}

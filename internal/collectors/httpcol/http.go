@@ -638,6 +638,13 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech, ever
 	if n := len(res.Hops); n > 1 {
 		out["final_status"] = res.Hops[n-1].Status
 	}
+	if res.Status >= 500 {
+		// What a failed answer gives away (an SQL error, a stack trace, a
+		// debug page): its kind, and the 100 bytes that say so.
+		if kind, sample := webextract.ErrorText(res.Body); kind != "" {
+			out["error_text"], out["error_sample"] = kind, sample
+		}
+	}
 	last := res.FinalHeader
 	if last == nil {
 		last = res.Header

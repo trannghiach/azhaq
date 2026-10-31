@@ -58,6 +58,13 @@ func wordsOf(s string) []string {
 	if strings.Contains(strings.ReplaceAll(s, "_", "-"), "api-docs") {
 		out = append(out, "api-docs")
 	}
+	for i := 0; i+1 < len(out); i++ {
+		// sign-in, log_in, sign/up: one word written as two.
+		switch w := out[i] + out[i+1]; w {
+		case "signin", "signup", "signon", "login", "logon":
+			out = append(out, w)
+		}
+	}
 	return out
 }
 
@@ -106,6 +113,7 @@ func (h *hunter) url(r engine.MapEntry) {
 	fetched := r.Coverage == "visited"
 	ok := fetched && st >= 200 && st < 300
 	unfetched := r.Coverage == "hint" || r.Coverage == "skipped" || r.Coverage == "capped" || st == 0
+	known := unfetched && len(r.Methods) > 0 // not asked, but a script or a description says it takes requests
 	path := u.Path
 
 	if r.Role == "sourcemap" {
@@ -121,7 +129,7 @@ func (h *hunter) url(r engine.MapEntry) {
 			continue
 		}
 		switch {
-		case ok, st >= 500:
+		case ok, st >= 500, known:
 		case st == 401 || st == 403:
 			if !guardedWords[pw.signal] {
 				continue
@@ -152,7 +160,7 @@ func (h *hunter) url(r engine.MapEntry) {
 	case st == 401 || st == 403:
 		c.add("gated", fmt.Sprintf("answers %d: a session is needed", st))
 	case st >= 500:
-		c.add("server-error", fmt.Sprintf("answers %d: %s", st, clip(r.Title, 60)))
+		h.serverError(c, r, raw)
 	}
 	// Backup and secret-bearing files.
 	if w, what := exposedFile(path); w > 0 {
@@ -173,6 +181,7 @@ func (h *hunter) url(r engine.MapEntry) {
 	h.objects(c, r, path)
 	h.params(c, r, raw, u)
 	h.writes(c, r, ok, st)
+	h.bodies(c, r)
 	for _, f := range r.Forms {
 		if strings.EqualFold(f.Method, "GET") && passwordField(f.Fields) != "" {
 			c.add("password-in-url", "a GET form sends "+passwordField(f.Fields)+" in the URL")
@@ -188,7 +197,64 @@ func (h *hunter) url(r engine.MapEntry) {
 		}
 	}
 	if names := inputNames(r); len(names) > 0 {
-		c.add("input", "takes "+join(names, 5))
+		w := weights["input"]
+		if writesBody(r) {
+			w = writeInputWeight // a body sent with a write is input that matters more than a query name
+		}
+		c.addW("input", w, "takes "+join(names, 5))
+	}
+}
+
+// writeInputWeight is the input signal of a route a script or a description
+// writes to with named fields.
+const writeInputWeight = 12
+
+// writesBody says whether a write operation of the route sends named fields.
+func writesBody(r engine.MapEntry) bool {
+	for _, o := range r.Ops {
+		if writeMethods[strings.ToUpper(o.Method)] && len(o.Body) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// bodies reads the content types the operations take: XML, files.
+func (h *hunter) bodies(c *cand, r engine.MapEntry) {
+	for _, o := range r.Ops {
+		t := strings.ToLower(o.BodyType)
+		switch {
+		case strings.Contains(t, "xml"):
+			c.add("xml", fmt.Sprintf("%s takes %s", o.Method, o.BodyType))
+		case strings.Contains(t, "multipart") || strings.Contains(t, "octet-stream"):
+			c.add("upload", fmt.Sprintf("%s takes a file upload (%s)", o.Method, o.BodyType))
+		}
+	}
+}
+
+// serverError weighs a 5xx by what the row shows besides the status: the
+// body's error text, a parameter that came back in the answer; alone it is
+// a lead, and the weaker when the plain request lacked the input the route
+// takes.
+func (h *hunter) serverError(c *cand, r engine.MapEntry, raw string) {
+	st := r.Status
+	e := h.errs[r.Entity.ID]
+	without := r.Answer != ""
+	switch {
+	case e.kind == webextract.ErrSQL:
+		c.addW("server-error", serverErrorSQL, fmt.Sprintf("answers %d and the body has SQL error text: %q", st, e.sample))
+	case e.kind == webextract.ErrDebug:
+		c.addW("server-error", serverErrorDebug, fmt.Sprintf("answers %d with a framework's debug page: %q", st, e.sample))
+	case h.reflected[webextract.RouteKey(raw)]:
+		c.addW("server-error", serverErrorReflected, fmt.Sprintf("answers %d, and a parameter's value comes back in the answer", st))
+	case e.kind == webextract.ErrStack && without:
+		c.addW("server-error", serverErrorStackBare, fmt.Sprintf("answers %d to a request without its input, with a stack trace: %q", st, e.sample))
+	case e.kind == webextract.ErrStack:
+		c.addW("server-error", serverErrorStack, fmt.Sprintf("answers %d with a stack trace: %q", st, e.sample))
+	case without:
+		c.addW("server-error", serverErrorBare, fmt.Sprintf("answers %d to a request without the input it takes (%s): a lead, nothing in the answer points further", st, join(inputNames(r), 3)))
+	default:
+		c.add("server-error", fmt.Sprintf("answers %d: %s", st, clip(r.Title, 60)))
 	}
 }
 
@@ -408,7 +474,7 @@ func (h *hunter) host(r engine.MapEntry) {
 	}
 	for _, w := range wordsOf(strings.Join(labels[:len(labels)-2], ".")) {
 		pw, ok := pathWords[w]
-		if !ok || pw.signal == "path-function" || pw.signal == "path-data" {
+		if !ok || pw.signal == "path-function" || pw.signal == "path-data" || pw.signal == "path-auth" || pw.signal == "path-search" {
 			continue // for routes, not for names
 		}
 		if c == nil {

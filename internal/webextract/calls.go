@@ -120,12 +120,9 @@ func calls(script string, relative bool) []Call {
 			switch method {
 			case "POST", "PUT", "PATCH":
 				c.Body = objectKeys(opts)
-				if c.Body == nil && identChain.MatchString(opts) && len(opts) <= 2 {
-					// post(r,n) with n declared just before as an object.
-					ev := evaluator{src: script}
-					if rhs, _, ok := ev.declared(opts, m[0]); ok {
-						c.Body = objectKeys(rhs)
-					}
+				if c.Body == nil {
+					// post(r,n) with n set before to an object (or a FormData).
+					c.Body = evaluator{src: script}.bodyNames(opts, m[0], 0)
 				}
 				if strings.HasPrefix(opts, "{") && len(args) > 2 {
 					c.Query = append(c.Query, paramsOption(args[2])...)
@@ -153,20 +150,31 @@ func calls(script string, relative bool) []Call {
 		end := closeParen(script, m[1]-1) + 1
 		method := "GET"
 		var body []string
+		ev := evaluator{src: script}
+		opts := ""
 		if len(args) > 1 {
-			if mm := methodOpt.FindStringSubmatch(args[1]); mm != nil {
+			opts = strings.TrimSpace(args[1])
+			if identChain.MatchString(opts) {
+				// fetch(url, opts) with opts set to an object just before.
+				if rhs, ok := ev.assignedRHS(opts, m[0]); ok && strings.HasPrefix(rhs, "{") {
+					opts = rhs
+				}
+			}
+			if mm := methodOpt.FindStringSubmatch(opts); mm != nil {
 				method = strings.ToUpper(mm[1])
-			} else if !strings.HasPrefix(strings.TrimSpace(args[1]), "{") {
+			} else if !strings.HasPrefix(opts, "{") {
 				method = "" // fetch(url, opts): the options say, at run time
 			}
-			body = bodyOption(args[1])
+			if body = bodyOption(opts); body == nil {
+				body = ev.bodyNames(optionExpr(opts, "body"), m[0], 0)
+			}
 		}
 		c, ok := callOf(script, m[0], method, args[0], relative)
 		c.Body = body
 		direct := add(c, ok, at, end)
 		sh := shape{method: "GET", bodyKey: "body"}
 		if len(args) > 1 {
-			sh = settingsShape(args[1], "body")
+			sh = settingsShape(opts, "body")
 		}
 		sh.pageRel = true
 		wrap(m[0], args[0], sh, direct)
@@ -179,6 +187,9 @@ func calls(script string, relative bool) []Call {
 			end = e + 1
 		}
 		c, ok := callOf(script, m[0], script[m[2]:m[3]], rest, relative)
+		if ok {
+			c.Body = evaluator{src: script}.xhrBody(m[0], m[1])
+		}
 		wrap(m[0], rest, shape{method: script[m[2]:m[3]], pageRel: true}, add(c, ok, at, end))
 	}
 	var ajax [][]int
@@ -212,6 +223,9 @@ func calls(script string, relative bool) []Call {
 		// as the body and params as the query.
 		sh.dataQuery = strings.Contains(script[m[0]:m[1]], "ajax")
 		sh.pageRel = true
+		if sh.body == nil && sh.bodyEx != "" {
+			sh.body = evaluator{src: script}.bodyNames(sh.bodyEx, m[0], 0)
+		}
 		c, ok := callOf(script, m[0], sh.method, url, relative)
 		c.Body, c.Query = sh.body, append(c.Query, sh.query...)
 		if sh.dataQuery && (c.Method == "GET" || c.Method == "HEAD") {

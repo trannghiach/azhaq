@@ -35,20 +35,24 @@ URL http://localhost:3000/rest/2fa/verify  target  hint  api  POST
 
 ## Evidence: how Azhaq knows a URL
 
-Coverage says what Azhaq did with a URL. Evidence says how it knows the URL at all. Every URL row has an `evidence` field, and `evidence_from` lists the collectors behind it, sorted. A row takes the strongest level any of its sources reaches, in this order:
+Coverage says what Azhaq did with a URL. Evidence says how it knows the URL at all, and so what its status and size are worth: an `answered` row's are what the server returned to Azhaq's own request; every other level is something a script, a description or a page said, never asked. Every URL row has an `evidence` field, and `evidence_from` lists the collectors behind it, sorted. A row takes the strongest level any of its sources reaches, in this order:
 
 | Level | Meaning |
 | --- | --- |
 | `answered` | This run requested it and the server answered: a status, not the origin's any-path answer, not a 404 or 410. |
+| `browser` | Chrome, loading the page (`-browser`), sent the request itself, or the write it would have sent. Seen on the wire, not only written in a script. |
 | `described` | An API description the run read lists it (OpenAPI or Swagger, or a cloud inventory given to the run). |
-| `called` | A script calls it (a `fetch` or XHR call with its method), or Chrome saw the request. |
+| `called` | A script calls it (a `fetch` or XHR call with its method). Not asked, and not seen to happen. |
 | `linked` | A page links to it, a form submits to it, or a script names it in a string or as a route. |
 | `archived` | Only archive sources (Wayback, Common Crawl, OTX, urlscan, Arquivo) hold it. |
 | `guessed` | Only a wordlist guess found it, and the answer was a 404 or the origin's any-path answer. |
+| `given` | You named the URL and nothing else holds it (it did not answer: the row is `error`). |
 
-A 404 does not make a row `answered`: the server said it is not there, so the row keeps the level of whatever named it. A row folded into a template (`/product?id={n}`) takes the strongest level of its instances and lists the collectors of all of them. Only URL rows have a level.
+A 404 does not make a row `answered`: the server said it is not there, so the row keeps the level of whatever named it. A row folded into a template (`/product?id={n}`) takes the strongest level of its instances and lists the collectors of all of them. Only URL rows have a level. Coverage still says what was done (`skipped` is a URL deliberately not asked, with the level it was named at).
 
-It shows in `azhaq query -fields key,evidence,evidence_from` (`azhaq query -evidence answered,described` keeps the rows with those levels), at the end of a map row that is not `answered` (`[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]`), in `export -format jsonl` (`evidence`, `evidence_from`), in `export -format openapi` (`x-azhaq-evidence` on each operation) and in the Evidence column of `export -format html`.
+A 5xx that Azhaq's plain request got from a route that takes names (query or body) carries `answer`: `500 without input`. The request carried none of them, so the failure says little of the route; it is a lead only with something more (an error text in the body, a different answer for another session).
+
+It shows in `azhaq query -fields key,evidence,evidence_from` (`azhaq query -evidence answered,described` keeps the rows with those levels), at the end of a map row that is not `answered` (`[browser]`, `[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]`, `[given]`), in `export -format jsonl` (`evidence`, `evidence_from`, `answer`), in `export -format openapi` (`x-azhaq-evidence` on each operation) and in the Evidence column of `export -format html`.
 
 ## Kinds of URL
 

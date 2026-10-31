@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -20,6 +21,10 @@ type RoleRow struct {
 	Verdict    string   `json:"verdict"`
 	Evidence   string   `json:"evidence"`
 	Confidence string   `json:"confidence"`
+	// Status is each role's status for the row; Dir the -dir of the roles
+	// run that listed it, where `azhaq roles show` finds its answers.
+	Status map[string]int `json:"status"`
+	Dir    string         `json:"dir"`
 }
 
 // ReadRoles reads a roles output, one row per line. Lines that are not a
@@ -44,10 +49,38 @@ func ReadRoles(r io.Reader) ([]RoleRow, error) {
 	return out, sc.Err()
 }
 
+// statusFlip says what a role's 5xx is set against: "500 for anon, 200 for
+// user" when one role gets a server error where another gets an answer.
+func statusFlip(status map[string]int) string {
+	var bad, good string
+	for _, role := range sortedKeys(status) {
+		switch st := status[role]; {
+		case st >= 500 && bad == "":
+			bad = fmt.Sprintf("%d for %s", st, role)
+		case st > 0 && st < 500 && good == "":
+			good = fmt.Sprintf("%d for %s", st, role)
+		}
+	}
+	if bad == "" || good == "" {
+		return ""
+	}
+	return bad + ", " + good
+}
+
+func sortedKeys(m map[string]int) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (h *hunter) roles() {
 	for _, r := range h.in.Roles {
 		w, ok := verdictWeight[r.Verdict]
-		if !ok {
+		flip := statusFlip(r.Status)
+		if !ok && flip == "" {
 			continue
 		}
 		if s, ok := confidenceScale[r.Confidence]; ok {
@@ -65,8 +98,14 @@ func (h *hunter) roles() {
 				c.origin = u.Scheme + "://" + u.Host
 			}
 		}
+		if flip != "" {
+			c.addW("server-error", serverErrorFlip, flip+": the answer depends on who asks")
+		}
+		if !ok {
+			continue
+		}
 		if c.roleURL == "" {
-			c.roleURL, c.roleM = r.URL, r.Method
+			c.roleURL, c.roleM, c.roleDir = r.URL, r.Method, r.Dir
 		}
 		d := r.Verdict
 		switch {
