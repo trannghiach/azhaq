@@ -61,6 +61,7 @@ type roleRow struct {
 	// guess).
 	Evidence   string   `json:"evidence,omitempty"`
 	Confidence string   `json:"confidence,omitempty"`
+	Dir        string   `json:"dir,omitempty"`       // the -dir of the run, as an absolute path: where roles show and report find the answers
 	Control    *control `json:"control,omitempty"`   // what the readers got for a made-up identifier on the same route
 	BothWays   bool     `json:"both_ways,omitempty"` // the owner reads one of its reader's objects on the same route too
 	// SessionSuspect: an answer was asked after its role's session last
@@ -511,6 +512,11 @@ func cmdRoles(args []string) error {
 		var kf *neterr.Killed
 		errors.As(k, &kf)
 		rep.Stopped = "the kill switch: kill file " + kf.Path + " exists; the rows are what was compared before it (remove the file, then run roles again)"
+	}
+	if abs, err := filepath.Abs(*dir); err == nil {
+		for i := range shown {
+			shown[i].Dir = abs
+		}
 	}
 	if err := saveEvidence(*dir, roles, shown); err != nil {
 		rep.Notes = append(rep.Notes, "the answers behind the rows could not be kept: "+err.Error())

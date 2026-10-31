@@ -260,6 +260,7 @@ One row per endpoint whose answer depends on the session (`-all`: every endpoint
 | Field | Meaning |
 | --- | --- |
 | `status` | Each role's status; 0 for a role that was never asked. |
+| `dir` | The `-dir` of the run, as an absolute path: `roles show`, `report` and `hunt` find the answers behind the row there. |
 | `answers` | Each role's answer: `status`, `length`, `hash` of the body, `keys` (a JSON answer's field paths, nested: `data.user.email`, `data[].id`), `error` (a JSON answer shaped like an error, such as `{"status":"error"}`), `refusal` (a 2xx answer that is its origin's refusal page, or that `-refusal` matches; see below), `sensitive` (its fields that hold passwords, secrets, keys, tokens, card numbers), `location` (where a redirect sends the role), `session_suspect` (see below). Every answer is compared by its body: one the run kept without it (a URL the `-paths` list found keeps its status only) is asked again, with the role's session. |
 | `found_by` | The roles whose own runs reached the URL, or, for an object URL, whose answers held its identifier. |
 | `template` | The route an object URL fills: its path parameters filled with identifiers the roles' answers held, or given with `-id`. |
@@ -474,17 +475,19 @@ The score is the sum of the row's signals, each counted once at its highest weig
 | `graphql` | a GraphQL endpoint, whose schema was read, or whose IDE answers (weighs more), or that answers like GraphQL |
 | `object-id` | `{name}` in the path, or an `id` parameter; a route with no GET weighs less |
 | `unauth-write` | POST, PUT, PATCH or DELETE that no description asks credentials for, on a route that did not turn the plain request away; it weighs less when no GET showed that it answers |
-| `upload` | a file field in a form |
+| `upload` | a file field in a form, or an operation whose body is `multipart/form-data` or a file |
+| `xml` | an operation whose body is XML (`application/xml`, `text/xml`): a parser that may read entities |
 | `state-change` | a GET left alone because its name says it changes something (a logout is left out) |
 | `password-in-url` | a GET form with a password field: it lands in logs and history |
 | `gated` | a 401 or 403: a session is needed, a target for `azhaq roles` |
-| `server-error` | a 5xx: the input reached code that failed |
-| `input` | the route takes query, body or form names |
+| `server-error` | a 5xx, by what shows beside it: SQL error text in the body (50), a framework's debug page (35), a parameter whose value came back (30), a stack trace (25; 15 when the request lacked the input the route takes), another role's answer to the same route (a 5xx for one role, an answer for another: 40). Alone it weighs 10, and 3 when the plain request carried none of the input the route takes (the row's `answer` is `500 without input`): a lead, not a finding |
+| `input` | the route takes query, body or form names (more when a write sends named fields) |
 | `new` | first seen within `-since` |
+| `path-auth`, `path-search` | a word in the path says it signs in or issues a session (`login`, `signin`, `auth`, `oauth`, `sso`, `token`, `reset`, `forgot`, `register`, `2fa`, …: 45), or searches and filters (`search`, `find`, `filter`, `query`, `lookup`: 35). A route that a script or a description gives methods for counts in full even when it was not asked; a named route nobody calls weighs half |
 | `param-command`, `param-url`, `param-file`, `param-debug`, `param-redirect`, `param-query`, `param-callback` | a parameter name that says what it takes |
 | `path-admin`, `path-debug`, `path-config`, `path-env`, `path-doc`, `path-function`, `path-data` | a word in the path says what the route is for; the first five also read the labels of a host name that resolves |
 
-`next` is a real command, chosen by the signal that weighs most in the row: `azhaq roles show -dir DIR URL` (with `-method` for a write) for a `cross-role` row, where DIR is the `-dir` of the roles run; `azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url ORIGIN/` for `object-id`; `azhaq params -u URL -w WORDLIST` for `input`; `azhaq show -db FILE URL` for the rest.
+`next` is a real command, chosen by the signal that weighs most in the row: `azhaq roles show -dir /abs/azhaq-roles-… URL` (with `-method` for a write) for a `cross-role` row, with the `-dir` of the roles run that listed it (the row's `dir`, else the folder of the `-roles` file when it holds `roles.db`, else the newest `azhaq-roles-*` folder of the current directory; when none is found the row's command is `azhaq show`); `azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url ORIGIN/` for `object-id`; `azhaq params -u URL -w WORDLIST` for `input`; `azhaq show -db FILE URL` for the rest.
 
 ## ledger
 

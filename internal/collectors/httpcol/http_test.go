@@ -129,3 +129,37 @@ func TestRedirectToAnotherSiteIsNotFollowed(t *testing.T) {
 		}
 	}
 }
+
+// A 5xx's body that gives something away (an SQL error, a stack trace)
+// is noted by kind, with the text that says so; a plain error page is not,
+// and a 200 never is.
+func TestServerErrorBodyIsNoted(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/sql":
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte(`{"error":{"message":"SQLITE_ERROR: near \"'\": syntax error"}}`))
+		case "/trace":
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte("<pre>TypeError: x is undefined\n    at Object.f (/app/a.js:1:2)</pre>"))
+		case "/plain":
+			w.WriteHeader(500)
+			_, _ = w.Write([]byte("<html><title>Error</title>Internal Server Error</html>"))
+		default:
+			_, _ = w.Write([]byte("SQLITE_ERROR in a page that answered 200"))
+		}
+	}))
+	defer srv.Close()
+	c := New(srv.Client())
+	for path, want := range map[string]string{"/sql": "sql", "/trace": "stack", "/plain": "", "/ok": ""} {
+		p := payloadOf(t, c, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + path}})
+		got, _ := p["error_text"].(string)
+		if got != want {
+			t.Errorf("%s: error_text %q, want %q", path, got, want)
+		}
+		if want != "" && p["error_sample"] == "" {
+			t.Errorf("%s: no sample", path)
+		}
+	}
+}

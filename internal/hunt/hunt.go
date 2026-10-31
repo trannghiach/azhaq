@@ -4,11 +4,13 @@
 package hunt
 
 import (
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -61,17 +63,24 @@ type cand struct {
 	weights         map[string]int
 	reasons         []Reason
 	roleURL, roleM  string // the roles row behind a cross-role reason
+	roleDir         string // and the -dir of the roles run that listed it
 	origin          string
 	fresh           bool
 }
 
 type hunter struct {
-	in     Input
-	cands  map[string]*cand
-	apiDoc map[string]bool // entity IDs of API descriptions the run parsed
-	cut    time.Time
-	old    bool // some URL is older than the window: "new" tells rows apart
+	in        Input
+	cands     map[string]*cand
+	apiDoc    map[string]bool // entity IDs of API descriptions the run parsed
+	errs      map[string]errText
+	reflected map[string]bool // route keys with a parameter whose value came back
+	cut       time.Time
+	old       bool // some URL is older than the window: "new" tells rows apart
 }
+
+// errText is what a failed answer's body showed: its kind (webextract's
+// ErrSQL, ErrDebug, ErrStack) and the text that says so.
+type errText struct{ kind, sample string }
 
 // Build ranks the surface: best first, rows with no signal of their own
 // left out.
@@ -80,6 +89,7 @@ func Build(in Input) []Row {
 		in.Now = time.Now()
 	}
 	h := &hunter{in: in, cands: map[string]*cand{}, apiDoc: apiDescriptions(in.Obs), cut: in.Now.Add(-in.Since)}
+	h.errs, h.reflected = answersOf(in.Obs)
 	for _, r := range in.Rows {
 		if r.Entity.Type == types.TypeURL && r.Entity.FirstSeen.Before(h.cut) {
 			h.old = true
@@ -205,6 +215,39 @@ func apiDescriptions(obs []types.StoredObservation) map[string]bool {
 		}
 	}
 	return out
+}
+
+// answersOf reads what the observations say of failed answers and of
+// parameters found by a search: the error text of a 5xx body, per entity,
+// and the routes with a parameter whose value came back.
+func answersOf(obs []types.StoredObservation) (map[string]errText, map[string]bool) {
+	errs, reflected := map[string]errText{}, map[string]bool{}
+	for _, o := range obs {
+		switch o.Collector {
+		case "azhaq-http":
+			var p struct {
+				Kind   string `json:"error_text"`
+				Sample string `json:"error_sample"`
+			}
+			if json.Unmarshal(o.Payload, &p) == nil && p.Kind != "" {
+				errs[o.EntityID] = errText{p.Kind, p.Sample}
+			}
+		case "azhaq-params":
+			var p struct {
+				URL string            `json:"url"`
+				Why map[string]string `json:"why"`
+			}
+			if json.Unmarshal(o.Payload, &p) != nil {
+				continue
+			}
+			for _, why := range p.Why {
+				if strings.Contains(why, "reflected") {
+					reflected[webextract.RouteKey(p.URL)] = true
+				}
+			}
+		}
+	}
+	return errs, reflected
 }
 
 func clip(s string, n int) string {

@@ -76,8 +76,9 @@ func TestRolesOnAnApp(t *testing.T) {
 	}))
 	defer site.Close()
 
+	rolesDir := t.TempDir()
 	out, errOut, err := captureBoth(t, func() error {
-		return cmdRoles([]string{"-json", "-dir", t.TempDir(), "-role", "anon", "-role", "alice=Authorization: Bearer alice",
+		return cmdRoles([]string{"-json", "-dir", rolesDir, "-role", "anon", "-role", "alice=Authorization: Bearer alice",
 			"-role", "bob=Authorization: Bearer bob", "-role", "admin=Authorization: Bearer admin", "-id", "alice:note_id=n-alice",
 			"--", "-url", site.URL + "/"})
 	})
@@ -94,6 +95,9 @@ func TestRolesOnAnApp(t *testing.T) {
 		var row roleRow
 		if err := json.Unmarshal([]byte(l), &row); err != nil {
 			t.Fatalf("%v: %s", err, l)
+		}
+		if row.Dir != rolesDir {
+			t.Errorf("a row names the directory of the run (for roles show, hunt): %q, want %q", row.Dir, rolesDir)
 		}
 		v := row.Verdict
 		if len(row.Readers) > 0 {
