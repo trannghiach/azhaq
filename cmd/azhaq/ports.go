@@ -264,13 +264,14 @@ func cmdPorts(args []string) error {
 		run = append(run, "-ports-udp", portscan.Spec(udpPorts))
 	}
 	if !own {
-		hs := make([]string, 0, len(tg.ports))
-		for h := range tg.ports {
+		on := tg.portsOn(ports)
+		hs := make([]string, 0, len(on))
+		for h := range on {
 			hs = append(hs, h)
 		}
 		sort.Strings(hs)
 		for _, h := range hs {
-			run = append(run, portsOnFlag(h, tg.ports[h])...)
+			run = append(run, portsOnFlag(h, on[h])...)
 		}
 	}
 

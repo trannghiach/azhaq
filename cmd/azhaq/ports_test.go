@@ -396,3 +396,77 @@ func TestPortsSaysWhichUDPPortsWereClosed(t *testing.T) {
 		}
 	}
 }
+
+// A host given bare and again with a port is asked both: the default ports
+// for the bare one, the port for the other, the union for the address
+// given both ways. Lists and stdin are read the same way.
+func TestPortsOnMixesBareAndPinned(t *testing.T) {
+	def := []int{22, 80, 8080}
+	tg, err := parseTargets([]string{"127.0.0.1,127.0.0.1:10025", "10.0.0.7:80", "10.0.1.0/24", "10.0.1.5:9999", "a.test", "a.test:81", "b.test:82"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on := tg.portsOn(def)
+	want := map[string][]int{
+		"127.0.0.1": {22, 80, 8080, 10025},
+		"10.0.0.7":  {80},
+		"10.0.1.5":  {22, 80, 8080, 9999},
+		"a.test":    {22, 80, 81, 8080},
+		"b.test":    {82},
+	}
+	if !reflect.DeepEqual(on, want) {
+		t.Errorf("ports on %v, want %v", on, want)
+	}
+	// 10.0.1.5 is scanned inside its range, so no block of its own is made.
+	lines, _, err := tg.listLines()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range lines {
+		if l == "10.0.1.5/32" {
+			t.Errorf("an address of a given range is also listed alone: %v", lines)
+		}
+	}
+}
+
+func TestPortsMixedHostKeepsTheDefaultScan(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var def int
+	var l1 net.Listener
+	for _, p := range []int{8080, 8000, 8888, 8081, 8443} {
+		if l, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", p)); err == nil {
+			l1, def = l, p
+			break
+		}
+	}
+	if l1 == nil {
+		t.Skip("no top-100 port is free")
+	}
+	defer l1.Close()
+	l2, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer l2.Close()
+	for _, l := range []net.Listener{l1, l2} {
+		go func() {
+			for {
+				c, err := l.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+	}
+	pinned := l2.Addr().(*net.TCPAddr).Port
+	out, errOut, code := cli(t, "ports", "-host", fmt.Sprintf("127.0.0.1,127.0.0.1:%d", pinned), "-detect", "none", "-json", "-no-stdin")
+	if code != exitOK {
+		t.Fatalf("exit %d\n%s", code, errOut)
+	}
+	for _, p := range []int{def, pinned} {
+		if !strings.Contains(out, fmt.Sprintf(`"port":%d`, p)) {
+			t.Errorf("port %d is missing from\n%s", p, out)
+		}
+	}
+}

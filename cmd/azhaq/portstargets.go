@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,7 +25,8 @@ type portTargets struct {
 	v6     []netip.Prefix // IPv6 addresses and ranges
 	pinned []netip.Prefix // addresses that were given with a port of their own
 	ports  map[string][]int
-	n      int // targets given
+	bare   map[string]bool // names and addresses given with no port
+	n      int             // targets given
 }
 
 type ipRange struct{ lo, hi uint32 }
@@ -33,7 +35,7 @@ type ipRange struct{ lo, hi uint32 }
 // address, host:port, a URL, a CIDR range or an AS number, several to a
 // token when separated by commas.
 func parseTargets(tokens []string) (portTargets, error) {
-	t := portTargets{ports: map[string][]int{}}
+	t := portTargets{ports: map[string][]int{}, bare: map[string]bool{}}
 	for _, tok := range tokens {
 		for _, part := range strings.Split(tok, ",") {
 			part = strings.TrimSpace(part)
@@ -94,6 +96,7 @@ func (t *portTargets) add(tok string) error {
 			t.pinned = append(t.pinned, netip.PrefixFrom(a, a.BitLen()))
 			return nil
 		}
+		t.bare[key] = true
 		t.addPrefix(netip.PrefixFrom(a, a.BitLen()))
 		return nil
 	}
@@ -103,9 +106,68 @@ func (t *portTargets) add(tok string) error {
 	}
 	if only != nil {
 		t.ports[host] = appendPort(t.ports[host], only[0])
+	} else {
+		t.bare[host] = true
 	}
 	t.names = append(t.names, host)
 	return nil
+}
+
+// portsOn is the ports each host given with a port of its own is asked:
+// only that port, but an address that was also given bare (or lies in a
+// range that was given) gets def as well, so every target keeps what it
+// stands for.
+func (t *portTargets) portsOn(def []int) map[string][]int {
+	out := make(map[string][]int, len(t.ports))
+	for h, ps := range t.ports {
+		if t.asksBare(h) {
+			ps = append(append([]int(nil), def...), ps...)
+			sort.Ints(ps)
+			ps = slices.Compact(ps)
+		}
+		out[h] = ps
+	}
+	return out
+}
+
+// pinnedOnly are the addresses given only with a port, each once: one that
+// is also given bare or in a range is scanned there, with its ports added.
+func (t *portTargets) pinnedOnly() []netip.Prefix {
+	var out []netip.Prefix
+	seen := map[netip.Prefix]bool{}
+	for _, pf := range t.pinned {
+		if !seen[pf] && !t.asksBare(pf.Addr().String()) {
+			seen[pf] = true
+			out = append(out, pf)
+		}
+	}
+	return out
+}
+
+// asksBare says host was given with no port, or is an address in a range.
+func (t *portTargets) asksBare(host string) bool {
+	if t.bare[host] {
+		return true
+	}
+	a, err := netip.ParseAddr(host)
+	if err != nil {
+		return false
+	}
+	if a.Is4() {
+		n := binary.BigEndian.Uint32(a.AsSlice())
+		for _, r := range t.v4 {
+			if n >= r.lo && n <= r.hi {
+				return true
+			}
+		}
+		return false
+	}
+	for _, p := range t.v6 {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
 }
 
 func appendPort(ports []int, p int) []int {
@@ -179,7 +241,7 @@ func (t *portTargets) listLines() (lines, allow []string, err error) {
 	var prefixes []netip.Prefix
 	prefixes = append(prefixes, cover(t.v4)...)
 	prefixes = append(prefixes, t.v6...)
-	prefixes = append(prefixes, t.pinned...)
+	prefixes = append(prefixes, t.pinnedOnly()...)
 	for _, pf := range prefixes {
 		bs, err := portcol.Blocks(pf)
 		if err != nil {
@@ -204,7 +266,7 @@ func (t *portTargets) addresses() (n float64) {
 	for _, p := range t.v6 {
 		n += float64(uint64(1) << min(63, 128-p.Bits()))
 	}
-	return n + float64(len(t.pinned))
+	return n + float64(len(t.pinnedOnly()))
 }
 
 // addPrefixString adds a range given as text.
