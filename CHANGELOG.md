@@ -4,6 +4,8 @@
 
 ### Changed
 
+- One package, `internal/egress`, opens every outbound connection: HTTP clients for targets, third-party sources and the user's own endpoints, dialers, DNS exchanges and Chrome launches all come from the run's policy, which holds the scope, `-deny-path`, the budget, the pace, the proxies and the kill file. A lint rule and a test forbid building a client, a dialer, a DNS client or a Chrome allocator anywhere else, and a contract test runs every command that sends something behind a counting proxy: the server's count, the proxy's, the ledger's and the summary's must be one number, and the budget, `-deny-path`, the kill file and the scope must hold.
+- The ledger lists every request, connection and query a run sends, by class: `target`, `source` (subdomain sources, archives, RDAP, RIPEstat, search engines, scope platforms, notifications, crt.sh's database, a mail server) and `dns` (each query to a resolver, a zone transfer or a system lookup). Ledgers written before keep verifying and read as targets; an older azhaq cannot verify one with classes. `ledger -summary` counts by class, `-csv` has a `class` column.
 - Every GET found in scope is requested, `/logout` and `/createdb` included, by the map, `dirs`, `params` and Chrome (`-interact` clicks too): a URL's name says nothing reliable about what a GET does on the server, so no name keeps a URL out any more. Writes (POST, PUT, PATCH, DELETE, forms, a page's own writes in Chrome, the roles' write replay, body methods of `params`) are still sent only with their flags, by method. `plan` lists what will be sent and the ledger what was sent.
 - A signed-in run checks its session: a page that answers differently with and without it is asked every 50 requests, at the end, and after a 401, a redirect to the sign-in page or a response that clears a session cookie. With `-login` the run signs in again and asks again the pages sent since the last good check (`the session ended after /logout was requested; signed in again; 37 requests asked again`). With `-cookie` or `-header` it stops its signed-in work with a failure (`the session ended: …`), exit 3, and never goes on as an anonymous visitor. Workers of `run -serve` report what they see and the run renews or stops for them.
 - `coverage: skipped` and the `skipped` list now mean only a request a `-deny-path` rule kept out; `export -safe` leaves out exactly those routes. The summary line for requests azhaq did not send reads `not requested, REASON`, not `left alone`.
@@ -17,6 +19,7 @@
 
 ### Added
 
+- `dns -ledger FILE`, so its queries can be listed.
 - `-deny-path REGEX` (repeatable; `run`, `crawl`, `probe`, `dirs`, `fuzz`, `params`, `shots`, `roles` run options, `watch`, `mcp`, and the workers of `run -serve`): a URL whose path or query matches is never requested, by any collector or Chrome, and is listed under `skipped` with `-deny-path REGEX`. A bad regex is a usage error (exit 2). `plan` prints the rules.
 - `next:` lines in the text summary that follow from what the run measured, for a person at a terminal (at most two, never with `-silent`, `-json` or `-jsonl`, off a terminal only with `-v`, hidden by `AZHAQ_NO_HINTS=1`, not in the JSON summary): `subs` that found names without `-permute` suggests it, with two of the variations it would ask; `crawl` and `run` suggest `-browser -interact` when three or more URLs answered with the catch-all page behind an empty-shell front page; `fuzz` suggests `-preflight` when most answers were 403 or 419 and the request sends a fixed token field; a signed-in `run`, or `hunt` on a workspace with a signed-in run, suggests `roles`; a drop-in command on one target suggests `azhaq run`, once for each workspace.
 - A mistyped flag's error names the closest flags of the command, hidden ones included: `-proxyy` gets `did you mean -proxy?`.
@@ -32,6 +35,10 @@
 
 ### Fixed
 
+- A host outside the scope can no longer be reached through a header: every request to a target is refused when its `Host`, `X-Forwarded-Host`, `X-Host` or `X-Original-Host` header, or its `-sni`, names a host the scope leaves out, before it leaves. `fuzz` had that check only in its engine.
+- The kill file now stops DNS queries, zone transfers, third-party source requests, notifications, Chrome's connections and port connects as well as requests to targets.
+- The JARM, HTTP/2 and pipelining checks of `probe` are in the ledger; before, they connected without a line. `params -oB` sends its replay through the target client, so the scope and the kill file hold it.
+- Chrome: a URL that is itself a download was sometimes listed as a leftover with no page, when Chrome told of the download after the page was read; the page now waits for it.
 - `subs`: a signal or `-timeout` while names wait for DNS ended the run as complete (exit 0) with every name counted as "did not resolve". A cancelled DNS batch is now left undone: exit 4, `complete` false, the names are counted as `not asked`, and `azhaq resume` asks them again.
 - `subs -live`: names every resolver failed on (timeout, REFUSED) were counted as "did not resolve" with exit 0. They are now `no answer`, exit 3, with a note naming the resolver, the number of names and the reason. A first DNS pass that mostly failed is no longer repeated at a quarter of the speed.
 - `probe -ip`: `host_ip` and `a` were blank for a literal IP through a proxy; a literal IP is now its own address, and a name's `host_ip` is its first resolved address when no connection address is known.
