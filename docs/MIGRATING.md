@@ -397,11 +397,15 @@ Behaviour, fields and edge cases: [`azhaq urls`](commands/urls.md).
 <!-- azhaq: urls -->
 
 - A fifth archive, arquivo.pt, is asked.
+- gau sends one filter for each value of `-mc 200,301`, and the archive ANDs them, so it keeps nothing. azhaq sends the values as alternatives of one filter.
+- gau's `--blacklist png` matches nothing, because it compares `.png` with `png`. `-blacklist` takes either spelling.
+- gau's `--fp` prints nothing in version 2.2.4. azhaq's `-fp` keeps the first URL of each host and path.
+- TLS certificates are checked.
 - The output is de-duplicated and has no scanner payloads or trailing punctuation. `-raw` prints what the archives gave, unchanged. The benchmark in the README counts how many of gau's URLs azhaq's list holds.
 - An archive that keeps no status or type, such as OTX or urlscan.io, is asked all the same. Its URLs are kept unfiltered, as gau keeps them. A note says so: `otx has no status of its captures: its 13 URLs are not filtered by -mc`.
 - A 429 or a 503 is asked again after its `Retry-After`, however long, or after 2, 5, 10, 20 and 30 seconds. This lasts as long as the archive's `-urls-timeout` and the run's `-timeout` allow. A network error is asked again 3 times.
 - A source that still failed is named in the summary with its tries and the server's words, and the exit code is 3. gau exits 0. An example is `wayback: failed after 4 tries, 429 Too Many Requests`.
-- Each archive is asked at its own pace, at most 2 requests a second by default. `-urls-pause` changes the wait between one archive's requests.
+- Each archive is asked at its own pace. The default pause between one archive's requests is 1 s for the Wayback Machine and Common Crawl, 0.5 s for OTX, 2 s for urlscan.io and none for Arquivo. `-urls-pause` changes it: [urls](commands/urls.md#flags).
 
 ### Examples
 

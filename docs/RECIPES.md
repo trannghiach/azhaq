@@ -434,10 +434,8 @@ azhaq urls -d example.com -urls-pause 0 -urls-pages 0 -retries 5        # as fas
 - On a terminal, or with `-sort`, it waits for every archive and prints the URLs sorted.
 - The domain alone is the default, as in gau. `-subs` asks for `*.DOMAIN` too. `azhaq run` keeps asking for the subdomains.
 
-[MIGRATING.md](MIGRATING.md#gau-azhaq-urls) sets each gau flag beside its azhaq flag, and [commands/urls.md](commands/urls.md#flags) lists every azhaq flag. What differs from gau:
+[MIGRATING.md](MIGRATING.md#gau-azhaq-urls) sets each gau flag beside its azhaq flag, and [commands/urls.md](commands/urls.md#flags) lists every azhaq flag. Its "What differs on purpose" lists where azhaq departs from gau. In short:
 
-- gau sends one filter for each value of `-mc 200,301`, and the archive ANDs them, so it keeps nothing. azhaq sends the values as alternatives of one filter.
-- gau's `--blacklist png` matches nothing, because it compares `.png` with `png`. Its `--fp` prints nothing in version 2.2.4. `-blacklist` takes either spelling, and `-fp` keeps the first URL of each host and path.
 - OTX keeps no status, type or date, and urlscan.io keeps dates only. Such an archive is asked all the same and its URLs are kept unfiltered, as gau keeps them. A note says so, such as `otx has no status of its captures: its 13 URLs are not filtered by -mc`.
 - URLs are normalized and the scanner junk archives hold is dropped. `-raw` turns both off, and the deduplication too.
 - A URL that two archives hold is printed once.
