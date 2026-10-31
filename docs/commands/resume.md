@@ -33,6 +33,15 @@ As the command that started the run. A run that `ports` started prints the open 
 
 The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
+## Details
+
+### Which flags come back
+
+- The run's flags are stored without its secrets: `-cookie`, `-login-pass`, `-worker-token`, and a `-header` whose name holds `auth`, `cookie`, `token`, `key`, `session`, `secret`, `csrf` or `xsrf`. Give them again after `-db`.
+- Files and directories are stored as full paths, so `resume` works from another directory.
+- A `-list` file is also copied into the workspace. If the file is gone or changed, the run continues the copy, and a note says so.
+- `-all-gets` and `-get-words` are dropped from a run an older azhaq stored, with a note: every GET found in scope is requested now.
+
 ## Flags
 
 <!-- flags:begin resume -->

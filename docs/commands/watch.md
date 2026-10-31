@@ -60,13 +60,13 @@ The first run of a workspace is the baseline. Everything in it is new, and it li
 | --- | --- |
 | `+ hostnames that resolve` | Names that resolve now and did not in the previous run. |
 | `+ web services` | Front pages that answer now and did not before. |
-| `+ URLs` | URLs found now that were not before. |
+| `+ URLs` | URLs found now that were not before. Scripts, assets, source maps, catch-all pages and URLs listed as routes are left out. |
 | `~ API routes` | New, changed or removed routes, each tied to its script. See below. |
 | `~ hosts whose open ports changed` | Hosts scanned in both runs whose open ports differ. |
 | `~ pages that answer differently` | Pages whose status, title or item count changed. |
 | `- hostnames gone` | Names that resolved in the previous run and do not now. |
 | `- web services gone` | Front pages that answered in the previous run and do not now. |
-| `- URLs gone` | URLs the previous run requested and answered, not found this time. |
+| `- URLs gone` | URLs the previous run requested and answered, not found this time. Left out the same way. |
 
 ### Lines of the API routes section
 

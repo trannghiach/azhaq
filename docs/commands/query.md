@@ -43,7 +43,7 @@ Plain output is the matching rows of the map. `-json` prints one JSON object per
 | `-json -fields A,B` | Only the fields you ask for. |
 | `-failed` | Every failed target instead of map rows. See the table below. |
 
-`query -failed` prints one line for each failed target: the target, the collector (with `source` and the source's name for a source), the error, and `retryable`, tab separated. With `-json` each row has these fields:
+`query -failed` reads the newest run. It prints one line for each failed target, sorted by target, once for each collector, source and error. A line is tab separated: the target, the collector (`COLLECTOR source NAME` for a source), the error, and the word `retryable` when a later try may work. With `-json` each row has these fields:
 
 | Field | Meaning |
 | --- | --- |
@@ -51,7 +51,7 @@ Plain output is the matching rows of the map. `-json` prints one JSON object per
 | `collector` | The collector that did the work. |
 | `source` | The third-party source, when a source failed. |
 | `error` | What went wrong. |
-| `retryable` | True for timeouts, dropped connections, 429 and 5xx. |
+| `retryable` | True for timeouts, resets, dropped connections, work cut short by `-timeout`, 429 and 5xx. |
 
 The fields mean what they mean in the `failed` list of the summary: see [OUTPUT.md](../OUTPUT.md).
 

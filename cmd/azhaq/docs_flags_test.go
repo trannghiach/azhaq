@@ -31,6 +31,7 @@ var publicDocs = append([]string{
 var foreignFlags = map[string]bool{
 	"scraperfile": true, "scrapers": true, "search": true, "audit-log": true,
 	"preflight-anyhost": true, "jc": true, "jsl": true, "headless": true, "cwu": true, "xhr": true, "sV": true,
+	"all-gets": true, "get-words": true, // removed: resume drops them from a stored run
 }
 
 var flagTok = regexp.MustCompile(`^--?[A-Za-z][A-Za-z0-9-]*(=.*)?$`)

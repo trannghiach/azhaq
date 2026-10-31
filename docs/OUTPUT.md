@@ -76,7 +76,7 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 - A limit stopped the run: `-max-requests`, `-timeout`, `-daily-requests` or `-max-items`.
 - The kill file stopped it: `-kill-file`, default `DB.stop`. See [the kill file](CONCEPTS.md#the-kill-file).
 - A signal stopped it: Ctrl-C, `kill` or SIGHUP. All three stop a command the same way, with its summary printed and its ledger sealed.
-- `gallery` and `mcp` are servers, and a signal is how they end: they exit 0. `mcp` first interrupts the commands in flight, which seal their ledgers.
+- `gallery`, `mcp` and `watch -every` are servers, and a signal is how they end: they exit 0 ([gallery](commands/gallery.md#summary-and-exit-codes), [mcp](commands/mcp.md#summary-and-exit-codes), [watch](commands/watch.md#summary-and-exit-codes)). `mcp` first interrupts the commands in flight, which seal their ledgers.
 - Work is left. `azhaq resume -db FILE` continues. See [Workspaces, runs and resuming](CONCEPTS.md#workspaces-runs-and-resuming).
 
 ## The summary
@@ -205,4 +205,5 @@ A workspace is one SQLite file, set with `-db`. Its files:
 
 - A drop-in command (`subs`, `probe`, `dirs`, …) without `-db` uses a temporary database and cannot be resumed.
 - `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or uses the file `$AZHAQ_DB` names.
+- A new `azhaq-TIME-PID.db` is remembered in `.azhaq-last` in the current directory, and `query`, `show`, `export`, `hunt` and `gallery` without `-db`, and `diff` without `-b`, read that file. `ingest` into a new file writes it too. A file named by `-db` or `$AZHAQ_DB` is not remembered.
 - `azhaq roles` keeps its files in its `-dir`: `roles.ledger.jsonl`, `roles.stop` and `roles.db`.

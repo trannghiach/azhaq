@@ -44,6 +44,14 @@ Files are arguments (`azhaq ingest a.jsonl b.jsonl`). `-` is stdin, and `-in FIL
 
 The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
+## Details
+
+### Where the facts go
+
+- Into an existing workspace, they go to its newest run, so `query`, `show` and `export` see them with what that run found.
+- A new file gets a run of its own.
+- A line that cannot be read is skipped and named in a note, never a failure: the exit code stays 0.
+
 ## Flags
 
 <!-- flags:begin ingest -->

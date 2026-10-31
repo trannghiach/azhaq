@@ -58,7 +58,7 @@ What the gallery cannot show, it says. A banner and `/api/stats` count the pages
 
 | Exit | When |
 | --- | --- |
-| 0 | Stopped with Ctrl-C, and everything could be read. |
+| 0 | Stopped with Ctrl-C, and everything could be read. The gallery is a server: a signal is its normal end, not a stop by a limit (exit 4). |
 | 1 | No workspace could be read, or it holds no screenshot. |
 | 3 | A workspace was skipped, or picture files are missing. Said on stderr and on the page. |
 
@@ -171,12 +171,13 @@ The query parameters:
 
 `GET /api/stats` returns:
 
-- pages, and workspaces with their sizes
+- `pages`, `pages_in_groups` and `workspaces` with their sizes
 - `statuses`, `technologies`, `groups` and `largest_groups`
 - `partial`, `headers`, `network_requests` and `console_lines`
 - `not_taken` and `files_missing`
 - `body_text`, with `kept`, `indexed` and `ready`
 - `warnings`, each with `message` and `partial`
+- `loaded_at`, when the gallery read the workspaces
 
 ## Flags
 

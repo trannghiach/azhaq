@@ -260,7 +260,7 @@ Behaviour, fields and edge cases: [`azhaq crawl`](commands/crawl.md).
 - **Every URL found is asked.** Like katana and Burp's crawler, `crawl` requests every GET URL it finds in scope, `/logout` and `/delete?id=1` included: azhaq cannot know what a GET does on the server, so no name keeps a URL out. Writes go only with their flags. `-deny-path REGEX` keeps paths out of every request. With a session, a request that ends it is noticed and the session is renewed or the run stops: [Sessions](CONCEPTS.md#sessions).
 - A URL with a scanner's payload in it never enters the map.
 - Chrome sends only GET, HEAD and OPTIONS unless you give `-browser-writes`.
-- A page with many query variants, such as `/item?id=N`, is asked for every URL, as katana does. `-per-template N` limits it, and the rest are listed.
+- A page with many query variants, such as `/item?id=N`, is asked for every URL, as katana does. `-per-template N` limits it (the rest are listed) and `-iqp` asks one for each path.
 - `crawl` asks only what a crawler asks. `-sweep` adds the 32 built-in path checks and the source map next to each script, as `run` does. The checks cover `robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `admin` and more.
 - **Time at a low `-rate`.** The number of requests sets the time. On Juice Shop at `-rate 5`, azhaq sends 91 requests in 21 s. katana `-jc -jsl -d 3 -rl 5` sends about 80 in 17 s.
 - The extra azhaq requests are the API routes katana does not find, such as `/rest/…` and `/api/…`: about 60 more endpoints. They also include one check per directory that tells a real answer from the page the app gives every unknown path.
@@ -609,20 +609,22 @@ Behaviour and fields: [`azhaq asn`](commands/asn.md).
 
 | asnmap | azhaq | Note |
 | --- | --- | --- |
-| `-a AS64500` | `-a AS64500` | Repeatable. azhaq also takes `as64500` and `64500`. |
-| `-f FILE` | `-l FILE` | A file of AS numbers. `-l -` reads stdin, and so does a pipe with no `-a`. |
-| `-json` | `-json` | `{"as_number","as_name","prefix"}`, one object for each prefix. |
-| `-o FILE` | `-o FILE` | |
-| `-silent`, `-v` | `-silent`, `-v` | |
+| `-a AS64500`, `-asn` | `-a AS64500` | Repeatable. azhaq also takes `as64500` and `64500`. |
+| `-f FILE`, `-file` | `-l FILE` | A file of AS numbers. `-l -` reads stdin, and so does a pipe with no `-a`. |
+| `-j`, `-json` | `-json` | `{"as_number","as_name","prefix"}`, one object for each prefix. |
+| `-o FILE`, `-output` | `-o FILE` | |
+| `-silent`, `-v` | `-silent`, `-v` | `-v` prints a line for every finished task. |
 | `-i`, `-d`, `-org` | | Not in azhaq. |
-| `-csv`, `-v6`, `-r`, `-p`, `-config`, `-auth` | | Not in azhaq. |
+| `-c`, `-v6`, `-r`, `-p`, `-config`, `-auth`, `-up`, `-duc`, `-version` | | Not in azhaq. |
 
 ### What differs on purpose
 
 <!-- azhaq: asn -->
 
 - `azhaq asn` takes AS numbers only. It does not look up an IP address, a domain or an organization, as `asnmap -i`, `asnmap -d` and `asnmap -org` do.
-- It lists the prefixes an autonomous system announces, from RIPEstat. It needs no key.
+- It lists the prefixes an autonomous system announces, from RIPEstat. It needs no key. asnmap asks ProjectDiscovery's service and needs a `PDCP_API_KEY`.
+- It prints every prefix, IPv4 and IPv6. asnmap prints IPv6 ranges only with `asnmap -v6`.
+- azhaq takes the short flags only. asnmap's long forms of them, such as file, output and verbose, are not accepted.
 - `-json` prints one object for each prefix. `asnmap -json` prints one object for each AS, with the prefixes in an `as_range` list, and adds `input` and `as_country`.
 
 ### Examples

@@ -26,7 +26,7 @@ azhaq scope -scope scope.csv
    - a JSON list of programs, as bounty-targets publishes it;
    - a JSON object, as Burp's target options hold it;
    - lines of rules: one rule a line, `#` for a comment, `!` or `-` before a rule to exclude it.
-3. When the source lists several programs, `-program` takes one by its handle, name or URL.
+3. When the source lists several programs, `-program` takes one by its handle, name or URL. A list of one program needs none. A list of several with no `-program` is an error, exit 1.
 4. Prints how a run would read it: the allow and deny rules, the domains to enumerate, the targets to probe, and the entries that cannot be used.
 
 ## Output
