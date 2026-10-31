@@ -203,10 +203,11 @@ var (
 // commands built on it print rep.
 func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs := newFlags("run")
-	url := fs.String("url", "", "seed URL")
-	org := fs.String("org", "", "seed Organization name")
-	in := fs.String("in", "", "JSONL seeds")
-	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
+	var urls stringsFlag
+	fs.Var(&urls, "url", "seed URL (repeatable)")
+	org := onceString(fs, "org", "seed Organization name")
+	in := onceString(fs, "in", "JSONL seeds")
+	list := onceString(fs, "list", "targets, one per line: URL, host, host:port or IP (- for stdin)")
 	var asns, cidrs stringsFlag
 	fs.Var(&asns, "asn", "seed an autonomous system: its announced prefixes (repeatable)")
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
@@ -451,7 +452,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	var seeds []types.Seed
 	var listLines []string // kept in the workspace, for azhaq resume
 	if *demo {
-		if *url != "" || *org != "" || *in != "" {
+		if len(urls) > 0 || *org != "" || *in != "" {
 			fmt.Fprintln(os.Stderr, "azhaq: -demo ignores -url/-org/-in")
 		}
 		srv := demoServer()
@@ -460,7 +461,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		seeds = []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}}
 	} else {
 		var err error
-		seeds, err = loadSeeds(*url, *org, *in)
+		seeds, err = loadSeeds(urls, *org, *in)
 		if err != nil {
 			return err
 		}
@@ -1841,9 +1842,9 @@ func demoServer() *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func loadSeeds(url, org, path string) ([]types.Seed, error) {
+func loadSeeds(urls []string, org, path string) ([]types.Seed, error) {
 	var seeds []types.Seed
-	if url != "" {
+	for _, url := range urls {
 		u, err := parseCLIURL(url)
 		if err != nil {
 			return nil, err
@@ -1973,6 +1974,35 @@ func parsePorts(raw string) ([]int, error) {
 }
 
 type stringsFlag []string
+
+// onceFlag is a flag that takes one value: given again with another, it is
+// a usage error, not the last one silently kept.
+type onceFlag struct {
+	val string
+	set bool
+}
+
+func (o *onceFlag) String() string {
+	if o == nil {
+		return ""
+	}
+	return o.val
+}
+
+func (o *onceFlag) Set(v string) error {
+	if o.set && v != o.val {
+		return fmt.Errorf("given twice (%q, then %q) and takes one value: combine them in one", o.val, v)
+	}
+	o.val, o.set = v, true
+	return nil
+}
+
+// onceString registers a flag like fs.String that refuses a second value.
+func onceString(fs *flag.FlagSet, name, usage string) *string {
+	o := &onceFlag{}
+	fs.Var(o, name, usage)
+	return &o.val
+}
 
 func (s *stringsFlag) String() string { return strings.Join(*s, ", ") }
 

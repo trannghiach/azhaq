@@ -33,7 +33,7 @@ func cmdCrawl(args []string) error {
 	c.register(fs)
 	var urls stringsFlag
 	fs.Var(&urls, "u", "start URL (repeatable, or comma-separated)")
-	list := fs.String("l", "", "file of start URLs (- for stdin)")
+	list := onceString(fs, "l", "file of start URLs (- for stdin)")
 	given := inherit(fs, append([]string{"depth", "max-items", "parallel", "host-parallel", "delay", "paths", "browser", "browser-writes",
 		"login", "login-user", "login-pass", "per-template", "proxy", "retry", "backoff", "cookie-jar", "host-rate", "max-host-requests", "request-timeout", "max-response-size", "submit-forms", "path-climb", "no-map-guess", "interact", "interact-clicks", "resolvers", "no-follow",
 		"kf=known-files", "fs=crawl-scope", "ns=crawl-any-host", "c=host-parallel", "p=parallel", "rl=rate", "ct=timeout", "dr=no-follow", "r=resolvers"},

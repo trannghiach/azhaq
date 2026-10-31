@@ -86,7 +86,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-url` | string |  | seed URL |
+| `-url` | string, repeatable |  | seed URL |
 | `-domain` | string, repeatable |  | seed Domain, for subdomain discovery |
 | `-list` | string |  | targets, one per line: URL, host, host:port or IP (- for stdin) |
 | `-in` | string |  | JSONL seeds |

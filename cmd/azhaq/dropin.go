@@ -568,7 +568,7 @@ func cmdURLs(args []string) error {
 	fs.Lookup("o").Usage = "also write results to this file, appending to it as gau does"
 	var domains stringsFlag
 	fs.Var(&domains, "d", "domain (repeatable; domains may also be given as arguments, as gau takes them)")
-	list := fs.String("dL", "", "file of domains (- for stdin)")
+	list := onceString(fs, "dL", "file of domains (- for stdin)")
 	subs := fs.Bool("subs", false, "also the subdomains of each domain: the archives are asked for *.DOMAIN (default: the name given, as gau does without --subs; azhaq run keeps the broader default)")
 	providers := fs.String("providers", "", "the archives to ask, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all five). A value that names a file, or has a / in it, is the API-key file, as -providers meant before; -provider-config says that without doubt")
 	threads := new(int)
@@ -740,7 +740,7 @@ func cmdDirs(args []string) error {
 	c.register(fs)
 	var urls stringsFlag
 	fs.Var(&urls, "u", "web service, such as https://app.example.com/ (repeatable)")
-	list := fs.String("l", "", "file of services (- for stdin)")
+	list := onceString(fs, "l", "file of services (- for stdin)")
 	words := fs.String("w", "", "wordlist (default: SecLists' common.txt, built in: "+strconv.Itoa(len(dirscol.DefaultWords()))+" words)")
 	specs := []string{"ac=dirs-ac", "e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate",
 		"H=header", "cookie", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "deny-path", "ledger", "kill-file"}
@@ -971,7 +971,7 @@ func cmdASN(args []string) error {
 	c.register(fs)
 	var asns stringsFlag
 	fs.Var(&asns, "a", "AS number such as AS64500 (repeatable)")
-	list := fs.String("l", "", "file of AS numbers (- for stdin)")
+	list := onceString(fs, "l", "file of AS numbers (- for stdin)")
 	given := inherit(fs, "timeout", "v")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -1022,7 +1022,7 @@ func cmdShots(args []string) error {
 	c.register(fs)
 	var urls, nmapFiles, nessusFiles stringsFlag
 	fs.Var(&urls, "u", "target: URL (its path and query are kept), host, host:port, IP or address range such as 192.0.2.0/24 (repeatable)")
-	list := fs.String("l", "", "file of targets (- for stdin)")
+	list := onceString(fs, "l", "file of targets (- for stdin)")
 	dir := fs.String("dir", "screenshots", "directory for the picture files")
 	csvOut := fs.String("csv", "", "also write one row per page to this CSV file (url, final_url, response_code, title, technologies, file, phash, partial)")
 	ports := fs.String("p", "", "web ports to try on each host, comma-separated: numbers, ranges, small (80, 443), medium or large (default: 443, then 80)")

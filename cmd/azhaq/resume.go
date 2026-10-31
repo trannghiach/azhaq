@@ -78,6 +78,12 @@ func cmdResume(args []string) error {
 	if len(gone) > 0 && !wantsJSON(rest) {
 		fmt.Fprintf(os.Stderr, "azhaq: the run was started with %s, which azhaq no longer has: %s; ignored\n", strings.Join(gone, ", "), removedWhy(gone))
 	}
+	// A flag that takes one value, given to resume, replaces the stored one.
+	for _, name := range []string{"list", "in", "org"} {
+		if hasFlag(rest, name) {
+			runArgs = dropFlag(runArgs, name)
+		}
+	}
 	if !hasFlag(rest, "list") {
 		if runArgs, err = listFromWorkspace(db, id, runArgs); err != nil {
 			return err
@@ -100,6 +106,22 @@ func cmdResume(args []string) error {
 		command = "run"
 	}
 	return cmdRunAs(command, all)
+}
+
+// dropFlag is args without the flag name, as -name=value or -name value.
+func dropFlag(args []string, name string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		k, _, inline := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		if strings.HasPrefix(args[i], "-") && k == name {
+			if !inline && i+1 < len(args) {
+				i++
+			}
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
 }
 
 // listFromWorkspace points the stored run's -list at the copy the

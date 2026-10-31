@@ -122,7 +122,7 @@ func cmdSubs(args []string) error {
 	c.register(fs)
 	var domains stringsFlag
 	fs.Var(&domains, "d", "domain (repeatable; a comma list, a URL or a name with a trailing dot is cleaned, as subfinder does)")
-	list := fs.String("dL", "", "file of domains (- for stdin)")
+	list := onceString(fs, "dL", "file of domains (- for stdin)")
 	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out); without it nothing is looked up, and the names only subdomain.center guessed or only the name history held are listed unverified")
 	nW := fs.Bool("nW", false, "same as -live (subfinder's name)")
 	words := fs.String("w", "", "also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live)")

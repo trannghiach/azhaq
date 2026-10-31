@@ -83,7 +83,7 @@ func cmdPorts(args []string) error {
 	fs.BoolVar(&c.json, "j", false, "same as -json")
 	var hosts stringsFlag
 	fs.Var(&hosts, "host", "hosts, addresses, CIDR ranges, AS numbers or host:port, comma-separated and repeatable")
-	list := fs.String("l", "", "file of targets (- for stdin)")
+	list := onceString(fs, "l", "file of targets (- for stdin)")
 	noStdin := fs.Bool("no-stdin", false, "do not read targets from stdin when none is given")
 	spec := fs.String("p", "top-100", "ports: top-100, top-1000, full, - (all), none, or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888; u:53 is a UDP port")
 	topPorts := fs.String("tp", "", "the most common TCP ports: 100, 1000 or full (added to -p)")

@@ -34,6 +34,8 @@ azhaq run -url https://app.example.com/ -browser -login https://app.example.com/
 6. Sends nothing to a host outside the scope, Chrome's requests included. `-passive` sends nothing to the targets at all.
 7. Prints the ranked map when it ends and the summary on stderr.
 
+`-url`, `-domain`, `-cidr` and `-asn` repeat, and each value is a seed. `-list`, `-in` and `-org` take one value: a second, different one is a usage error (exit 2), never the last one kept silently. The same holds for `-l` and `-dL` of the commands that read targets from a file.
+
 [What azhaq sends](../CONCEPTS.md#what-azhaq-sends) lists every request by kind. `azhaq plan` prints what a run would do and send before anything goes out.
 
 ## Output
@@ -273,7 +275,7 @@ Examples of what `notes` holds for a run:
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-url` | string |  | seed URL |
+| `-url` | string, repeatable |  | seed URL |
 | `-domain` | string, repeatable |  | seed Domain, for subdomain discovery |
 | `-list` | string |  | targets, one per line: URL, host, host:port or IP (- for stdin) |
 | `-in` | string |  | JSONL seeds |

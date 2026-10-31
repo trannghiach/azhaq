@@ -422,7 +422,7 @@ func cmdProbe(args []string) error {
 	var urls stringsFlag
 	fs.Var(&urls, "u", "target: URL, host, host:port, IP, address range or AS number (repeatable, or comma-separated)")
 	fs.Var(&urls, "target", "target (as -u)")
-	list := fs.String("l", "", "file of targets (- for stdin; a glob such as 'hosts-*.txt')")
+	list := onceString(fs, "l", "file of targets (- for stdin; a glob such as 'hosts-*.txt')")
 	var pf probeFlags
 	pf.register(fs)
 	rl := fs.Float64("rl", 0, "services asked per second, as httpx -rl: each target's first request waits its turn, its favicon, redirects and second scheme do not (-rate paces every request)")

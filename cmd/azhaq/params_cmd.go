@@ -44,7 +44,7 @@ func cmdParams(args []string) error {
 	c.register(fs)
 	var urls stringsFlag
 	fs.Var(&urls, "u", "page URL (repeatable)")
-	list := fs.String("l", "", "file of page URLs (- for stdin)")
+	list := onceString(fs, "l", "file of page URLs (- for stdin)")
 	imp := fs.String("i", "", "import pages: a file of URLs, a Burp Suite XML export (HTML, JSON and XML items) or a raw HTTP request (GET or POST)")
 	words := fs.String("w", "large", "parameter names: a file, one per line, or small (1,000 names), medium (3,000) or large (6,500, the default)")
 	method := fs.String("X", "GET", "how names are sent: GET (query), POST (form body), JSON or XML. A body sends requests that may change data on the target, and needs -allow or -scope, or a single page")
