@@ -2197,9 +2197,20 @@ func chromeRefused(rep *report, b *browser.Browser) {
 			rep.Skipped = append(rep.Skipped, s)
 		}
 	}
+	if n, hosts := b.GuardDenied(); n > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("Chrome's own services reached for %d connections outside the scope (%s); all were refused, none was sent", n, listOfHosts(hosts, 3)))
+	}
 	if n, listed, more := b.Refused(); more {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("Chrome was refused %d requests %s; the first %d URLs are listed", n, strings.TrimSuffix(browser.Reason(), " (Chrome)"), listed))
 	}
+}
+
+// listOfHosts is up to n hosts, then how many more.
+func listOfHosts(hosts []string, n int) string {
+	if len(hosts) <= n {
+		return strings.Join(hosts, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(hosts[:n], ", "), len(hosts)-n)
 }
 
 // browserAgent is the User-Agent Chrome sends: the run's, not Chrome's

@@ -273,3 +273,43 @@ func TestChromeSignInPassesThroughTheRunsProxy(t *testing.T) {
 		t.Errorf("the server got %v, %d came through the proxy", srv.got(), len(requests))
 	}
 }
+
+// Chrome's own services (updates, time, sign-in) reach for Google while a
+// page loads and the browser idles, whatever flags turn off: the guard
+// refuses each connection and counts it, and the proxy is asked for the
+// target and nothing else.
+func TestChromeBackgroundConnectionsAreRefusedAndCounted(t *testing.T) {
+	b := startChrome(t)
+	target := newRecorder(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, "<html><body>quiet</body></html>")
+	})
+	defer target.Close()
+	prox := newProxyLog()
+	defer prox.Close()
+	pu, _ := url.Parse(prox.URL)
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	fetch.ProxyURL = pu
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	_ = fetch.Spend(ctx)
+	if _, err := b.Load(ctx, target.URL+"/", false); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(6 * time.Second) // the updater and the time service start within seconds
+	n, hosts := b.GuardDenied()
+	b.Close()
+	t.Logf("Chrome opened %d connections of its own, all refused: %v", n, hosts)
+	for _, h := range hosts {
+		if h == "127.0.0.1" {
+			t.Errorf("the target's own address was counted as outside the scope")
+		}
+	}
+	requests, connects := prox.seen()
+	for _, r := range append(requests, connects...) {
+		if !strings.Contains(r, "127.0.0.1") {
+			t.Errorf("the proxy was asked for %q: a connection outside the scope got through", r)
+		}
+	}
+}

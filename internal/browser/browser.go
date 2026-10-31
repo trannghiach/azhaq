@@ -127,6 +127,13 @@ type Browser struct {
 	unlisted bool                 // more URLs were refused than are listed
 }
 
+// chromeOff are Chrome features that ask a Google service for something
+// (the time, translations, hints, models, certificate lists, casting).
+const chromeOff = "Translate,BlinkGenPropertyTrees,OptimizationHints,OptimizationHintsFetching,OptimizationGuideModelDownloading," +
+	"OptimizationTargetPrediction,NetworkTimeServiceQuerying,AutofillServerCommunication,CertificateTransparencyComponentUpdater," +
+	"MediaRouter,DialMediaRouteProvider,GlobalMediaControls,InterestFeedContentSuggestions,PrivacySandboxSettings4,Fledge," +
+	"PreconnectToSearch,Prerender2,NoStatePrefetch,PrefetchProxy,ExtensionUpdater,IdentityStatus"
+
 func (b *Browser) start() error {
 	b.once.Do(func() {
 		path, err := b.chrome()
@@ -166,6 +173,26 @@ func (b *Browser) start() error {
 			chromedp.Flag("ignore-certificate-errors", true),
 			chromedp.Flag("disable-extensions", true),
 			chromedp.Flag("mute-audio", true),
+			// Chrome's own traffic (updates, time, sync, field trials, safe
+			// browsing, telemetry) is not the run's: none is asked for.
+			chromedp.Flag("disable-background-networking", true),
+			chromedp.Flag("disable-component-update", true),
+			chromedp.Flag("disable-sync", true),
+			chromedp.Flag("disable-default-apps", true),
+			chromedp.Flag("no-default-browser-check", true),
+			chromedp.Flag("no-first-run", true),
+			chromedp.Flag("metrics-recording-only", true),
+			chromedp.Flag("disable-domain-reliability", true),
+			chromedp.Flag("disable-client-side-phishing-detection", true),
+			chromedp.Flag("disable-breakpad", true),
+			chromedp.Flag("disable-field-trial-config", true),
+			chromedp.Flag("disable-search-engine-choice-screen", true),
+			chromedp.Flag("no-pings", true),
+			chromedp.Flag("disable-background-mode", true),
+			chromedp.Flag("dns-prefetch-disable", true),
+			chromedp.Flag("disable-component-extensions-with-background-pages", true),
+			chromedp.Flag("safebrowsing-disable-auto-update", true),
+			chromedp.Flag("disable-features", chromeOff),
 			// Every connection, loopback ones too, through the guard; and
 			// no WebRTC packet outside it.
 			chromedp.ProxyServer("socks5://"+b.guard.addr()),

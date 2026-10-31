@@ -1157,7 +1157,7 @@ When Chrome starts, every request of the browser is paused through the DevTools 
 
 ### Connections the Fetch domain does not see
 
-What connects without a request the Fetch domain sees is stopped by a SOCKS5 proxy on loopback. This covers a WebSocket, a preconnect, and Chrome's own update and sign-in services. Chrome makes every connection through it, loopback ones too. It connects only to hosts the same predicate admits (`internal/browser/guard.go`).
+What connects without a request the Fetch domain sees is stopped by a SOCKS5 proxy on loopback. This covers a WebSocket, a preconnect, and Chrome's own update and sign-in services. Chrome makes every connection through it, loopback ones too. It connects only to hosts the same predicate admits (`internal/browser/guard.go`). Chrome is also started with the flags that turn its background networking off (component and extension updates, sync, field trials, domain reliability, safe browsing, the time service). A current Chrome still reaches for accounts.google.com and update.googleapis.com at start-up whatever the flags say, so the guard refuses those connections and counts them: the summary says `Chrome's own services reached for N connections outside the scope (…); all were refused, none was sent`.
 
 1. The guard connects once Chrome has sent its first bytes, as the run's own requests would.
 2. TLS goes through the environment's `HTTPS_PROXY`. Plain HTTP goes through `HTTP_PROXY`, whatever the port. Without a proxy, it connects directly with the run's DNS answers.

@@ -793,3 +793,13 @@ func (b *Browser) Refused() (requests, listed int, more bool) {
 	defer b.refMu.Unlock()
 	return b.refused, len(b.listed), b.unlisted
 }
+
+// GuardDenied is how many connections Chrome itself opened to hosts outside
+// the scope (a page's are refused earlier, as requests): its own services
+// reaching out. All were refused; the hosts are sorted.
+func (b *Browser) GuardDenied() (n int, hosts []string) {
+	if b.guard == nil {
+		return 0, nil
+	}
+	return b.guard.Denied()
+}

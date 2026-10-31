@@ -41,6 +41,30 @@ type guard struct {
 	mu     sync.Mutex
 	closed bool
 	wg     sync.WaitGroup // connections being handled
+	denied map[string]int // host → connections refused for being outside the scope
+}
+
+// refuse counts a connection to a host outside the scope.
+func (g *guard) refuse(host string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.denied == nil {
+		g.denied = map[string]int{}
+	}
+	g.denied[host]++
+}
+
+// Denied is how many connections Chrome opened to hosts outside the scope,
+// all refused, and the hosts, sorted.
+func (g *guard) Denied() (n int, hosts []string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for h, c := range g.denied {
+		n += c
+		hosts = append(hosts, h)
+	}
+	slices.Sort(hosts)
+	return n, hosts
 }
 
 func newGuard(allowed func(string) bool) (*guard, error) {
@@ -159,6 +183,7 @@ func (g *guard) handle(c net.Conn) {
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(int(binary.BigEndian.Uint16(port))))
 	if !g.allowed(host) {
+		g.refuse(host)
 		reply(socksNotAllowed)
 		return
 	}
