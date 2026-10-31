@@ -672,10 +672,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 	}
 	for _, h := range named {
 		k, _, _ := strings.Cut(h, ":")
-		for _, hh := range hostHeaders {
-			if strings.EqualFold(strings.TrimSpace(k), hh) {
-				return nil, fmt.Errorf("headers: %s is not accepted: it names the host a front end serves; give the target in url or targets", hh)
-			}
+		if scope.NamesHost(k) {
+			return nil, fmt.Errorf("headers: %s is not accepted: it names the host a front end serves; give the target in url or targets", strings.TrimSpace(k))
 		}
 	}
 	result := func(r cmdResult, extra map[string]any) (map[string]any, error) {

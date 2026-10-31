@@ -2230,10 +2230,6 @@ func browserAgent() string {
 	return fetch.UserAgent
 }
 
-// hostHeaders are the request headers that name the host a front end
-// serves (a CDN or an ingress routes by them).
-var hostHeaders = scope.HostHeaders
-
 // hostHeadersInScope refuses a -header that names a host the scope leaves
 // out: it would reach that host through an address the scope allows. With no
 // -allow, -deny or -scope the host a header names joins the targets instead
