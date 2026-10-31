@@ -105,6 +105,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 - A target that got no answer, such as a name that does not resolve or a closed port, is a row with `failed: true` and an `error`.
 - The summary counts it under `without an answer`.
+- A bare host, IP or `host:port` is asked over both schemes, the likelier first (https on port 443 and on ports below 1024, http on 80, 8080 and above 1024). When neither answers, the row's `url` and `scheme`, the summary's `failed` target and `unreachable` entry name the scheme asked last, as httpx does, and the `error` is that try's: `127.0.0.1:9` is `http://127.0.0.1:9`, `127.0.0.1:8081` is `https://127.0.0.1:8081`.
 - Every target given ends as a row, a failure or a skip.
 - A target that resolved and got neither an answer nor a recorded failure is listed as failed, with `no answer and no failure recorded`.
 

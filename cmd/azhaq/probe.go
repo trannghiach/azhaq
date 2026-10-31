@@ -758,4 +758,34 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 		sort.Strings(parts)
 		rep.Notes = append(rep.Notes, "requests other than GET were sent to the targets ("+strings.Join(parts, ", ")+"): they can change data on a target")
 	}
+	o.nameLastTried(rep)
+}
+
+// nameLastTried gives a bare input's failed URL in the summary as the row
+// has it: the one asked last (see lastTried), not the first guess.
+func (o *probeOut) nameLastTried(rep *report) {
+	last := map[string]string{}
+	for key, ins := range o.input {
+		if len(ins) != 1 || strings.Contains(ins[0], "://") || !strings.HasPrefix(key, "http") {
+			continue
+		}
+		if u, err := normalize.URL(o.lastTried(ins[0])); err == nil && u != key {
+			last[key] = u
+		}
+	}
+	swap := func(t string) string {
+		if u, ok := last[t]; ok {
+			return u
+		}
+		return t
+	}
+	for i := range rep.Failed {
+		rep.Failed[i].Targets = slices.Clone(rep.Failed[i].Targets)
+		for j, t := range rep.Failed[i].Targets {
+			rep.Failed[i].Targets[j] = swap(t)
+		}
+	}
+	for i, t := range rep.Unreachable {
+		rep.Unreachable[i] = swap(t)
+	}
 }

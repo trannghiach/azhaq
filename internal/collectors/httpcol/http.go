@@ -404,6 +404,10 @@ func (c *Collector) baseTargets(seed types.Seed) [][]string {
 	return nil
 }
 
+// PortGroup is the URLs probe asks of one web port of a host, in order: the
+// last is the one httpx names when none answers.
+func PortGroup(h string, ps PortSpec) []string { return portGroup(h, ps, true) }
+
 // portGroup is the URLs of one web port of a host, in the order they are
 // tried: the scheme given, or both, the likelier first.
 func portGroup(h string, ps PortSpec, probe bool) []string {

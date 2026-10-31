@@ -525,14 +525,40 @@ func urlAsGiven(input, url string) (string, bool) {
 	return input, true
 }
 
+// lastTried is the URL a bare input (host, IP or host:port) was asked
+// last: httpx tries the likelier scheme and then the other, and a target
+// that answered neither is named by the second try, with its error.
+func (p *probeOut) lastTried(input string) string {
+	host, port := strings.Trim(input, "[]"), ""
+	if h, pt, err := net.SplitHostPort(input); err == nil {
+		host, port = h, pt
+	}
+	ps := httpcol.PortSpec{}
+	switch n, err := strconv.Atoi(port); {
+	case err == nil:
+		ps.Port = n
+	case len(p.spec.Ports) > 0:
+		ps = p.spec.Ports[0]
+	default:
+		h := host
+		if strings.Contains(h, ":") {
+			h = "[" + h + "]"
+		}
+		return "http://" + h + "/"
+	}
+	h := host
+	if strings.Contains(h, ":") {
+		h = "[" + h + "]"
+	}
+	group := httpcol.PortGroup(h, ps)
+	return group[len(group)-1]
+}
+
 // failedRow is the row of a target that got no answer.
 func (p *probeOut) failedRow(input, why string) {
 	u := input
 	if !strings.Contains(u, "://") {
-		u = "https://" + input
-		if len(p.spec.Ports) > 0 && !strings.Contains(input, ":") || len(p.spec.Ports) > 0 && net.ParseIP(input) != nil {
-			u = "https://" + net.JoinHostPort(strings.Trim(input, "[]"), fmt.Sprint(p.spec.Ports[0].Port))
-		}
+		u = p.lastTried(input)
 	}
 	shown := strings.TrimSuffix(u, "/")
 	if strings.Contains(input, "://") {

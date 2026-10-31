@@ -164,6 +164,47 @@ func TestProbeFailureRows(t *testing.T) {
 	}
 }
 
+// A bare host:port nothing answers is named as httpx names it: by the
+// scheme asked last, in the row and in the summary's failed target, with
+// that try's error. A port that asks https first ends on http, one that
+// asks http first ends on https.
+func TestProbeFailedBareHostPortNamesTheLastScheme(t *testing.T) {
+	t.Chdir(t.TempDir())
+	closed := func() string {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer l.Close()
+		return l.Addr().String()
+	}
+	cases := []struct{ input, args, scheme string }{
+		{"127.0.0.1:9", "", "http"},   // https first
+		{closed(), "", "https"},       // a high port asks http first
+		{"127.0.0.1:443", "", "http"}, // https first
+		{"127.0.0.1", "-p 9", "http"}, // -p: the same order
+	}
+	for _, c := range cases {
+		args := append([]string{"probe", "-u", c.input}, strings.Fields(c.args)...)
+		out, rep, code := runContract(t, args...)
+		rows := probeRows(t, out)
+		if len(rows) != 1 || rows[0]["failed"] != true {
+			t.Fatalf("%v: rows %s", args, out)
+		}
+		host, port, _ := net.SplitHostPort(c.input)
+		if port == "" {
+			host, port = c.input, "9"
+		}
+		want := c.scheme + "://" + net.JoinHostPort(host, port)
+		if rows[0]["scheme"] != c.scheme || rows[0]["url"] != want || code != exitPartial {
+			t.Errorf("%v: scheme %v url %v (want %s), exit %d", args, rows[0]["scheme"], rows[0]["url"], want, code)
+		}
+		if len(rep.Unreachable) != 1 || rep.Unreachable[0] != want+"/" || len(rep.Failed) != 1 || rep.Failed[0].Targets[0] != want+"/" {
+			t.Errorf("%v: the summary names %v, %+v", args, rep.Unreachable, rep.Failed)
+		}
+	}
+}
+
 // -x, -body and -rr send what is asked, to the targets given: counted,
 // and said in the summary.
 func TestProbeSendsWhatIsAsked(t *testing.T) {
