@@ -95,6 +95,48 @@ def dns_ready(ctx, d, apex):
     return False
 
 
+def fence_rules(key, plan, agent="runner"):
+    """iptables rules so that in each estate's range only its hosts' own
+    ports answer: a runner service that listens on every address (sshd)
+    would otherwise answer on all 256 addresses, and an address with no
+    host answers no ping. The reverse proxy's backends are kept from the
+    agent's user: they are reached through the proxy by name only."""
+    rules = [["-N", "AZQ"]]
+    seen = set()
+    for est in key["estates"]:
+        addrs = set()
+        for h in est["hosts"]:
+            a = h.get("address")
+            if not a or not a.startswith(est["net"].rsplit(".", 1)[0] + "."):
+                continue
+            addrs.add(a)
+            for p in h.get("ports", []):
+                r = (a, p.get("transport", "tcp"), p["port"])
+                if r not in seen:
+                    seen.add(r)
+                    rules.append(["-A", "AZQ", "-d", a, "-p", r[1], "--dport", str(r[2]), "-j", "ACCEPT"])
+        for a in sorted(addrs):
+            rules.append(["-A", "AZQ", "-d", a, "-p", "icmp", "-j", "ACCEPT"])
+        net = est["net"]
+        rules += [["-A", "AZQ", "-d", net, "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"],
+                  ["-A", "AZQ", "-d", net, "-p", "udp", "-j", "REJECT", "--reject-with", "icmp-port-unreachable"],
+                  ["-A", "AZQ", "-d", net, "-j", "DROP"]]
+    for net in sorted({e["address"].rsplit(".", 1)[0] + ".0/24" for e in plan["envs"] if e.get("backend")}):
+        rules.append(["-A", "AZQ", "-d", net, "-m", "owner", "--uid-owner", agent, "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"])
+        rules.append(["-A", "AZQ", "-d", net, "-m", "owner", "--uid-owner", agent, "-j", "DROP"])
+    rules.append(["-I", "OUTPUT", "1", "-j", "AZQ"])
+    return rules
+
+
+def fence(ctx, key, plan):
+    for r in fence_rules(key, plan):
+        rc, out = ctx.run(["sudo", "-n", "iptables"] + r, timeout=30)
+        if rc != 0:
+            ctx.note("iptables %s: %s" % (" ".join(r), out[-300:]))
+            return False
+    return True
+
+
 def run(ctx, plan, key, labdns, run_as, workers=4):
     envs = plan["envs"]
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
@@ -117,7 +159,7 @@ def run(ctx, plan, key, labdns, run_as, workers=4):
     for d in plan["dns"]:
         est = next(x for x in key["estates"] if x["index"] == d["estate"])
         dns_ok[d["estate"]] = dns_ready(ctx, d, est["domain"] + ".")
-    key["up"] = {"envs": result, "dns": {str(k): v for k, v in dns_ok.items()}}
+    key["up"] = {"envs": result, "dns": {str(k): v for k, v in dns_ok.items()}, "fence": fence(ctx, key, plan)}
     for est in key["estates"]:
         for h in est["hosts"]:
             if h.get("env"):
@@ -156,6 +198,9 @@ def main(argv=None):
         print("estate %d: %d of %d environments answer, resolver %s" % (i, up, len(mine), "answers" if dns_ok[i] else "DOES NOT ANSWER"))
         if not dns_ok[i] or up < a.min_up * len(mine):
             bad += 1
+    if not key["up"]["fence"]:
+        print("::error title=estates::the estates' ranges are not fenced (iptables)")
+        bad += 1
     if bad:
         print("::error title=estates::an estate is not up enough to review")
     return 1 if bad else 0

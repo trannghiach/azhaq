@@ -623,3 +623,20 @@ class Grade(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FenceTest(unittest.TestCase):
+    def test_only_the_hosts_ports_answer(self):
+        import up
+        key = {"estates": [{"net": "127.31.0.0/24", "hosts": [
+            {"address": "127.31.0.5", "ports": [{"port": 8080}, {"port": 161, "transport": "udp"}]},
+            {"kind": "dangling-cname"}]}]}
+        plan = {"envs": [{"address": "127.200.0.10", "backend": True}, {"address": "127.31.0.5"}]}
+        rules = [" ".join(r) for r in up.fence_rules(key, plan)]
+        self.assertIn("-A AZQ -d 127.31.0.5 -p tcp --dport 8080 -j ACCEPT", rules)
+        self.assertIn("-A AZQ -d 127.31.0.5 -p udp --dport 161 -j ACCEPT", rules)
+        self.assertIn("-A AZQ -d 127.31.0.0/24 -p tcp -j REJECT --reject-with tcp-reset", rules)
+        self.assertTrue(any("127.200.0.0/24 -m owner --uid-owner runner" in r for r in rules))
+        self.assertLess(rules.index("-A AZQ -d 127.31.0.5 -p tcp --dport 8080 -j ACCEPT"),
+                        rules.index("-A AZQ -d 127.31.0.0/24 -p tcp -j REJECT --reject-with tcp-reset"))
+        self.assertEqual(rules[-1], "-I OUTPUT 1 -j AZQ")
