@@ -27,6 +27,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
+	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/takeover"
@@ -70,7 +71,7 @@ func (c *Collector) turn(ctx context.Context) error {
 		return nil
 	}
 	c.turnOnce.Do(func() { c.turns = rate.NewLimiter(rate.Limit(c.Spec.TargetRate), 1) })
-	return c.turns.Wait(ctx)
+	return limit.Wait(ctx, c.turns)
 }
 
 func New(client *http.Client) *Collector {

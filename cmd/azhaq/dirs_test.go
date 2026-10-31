@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
+	"github.com/trannghiach/azhaq/store"
 )
 
 func dirsServer(t *testing.T, status map[string]int) *httptest.Server {
@@ -160,5 +162,104 @@ func TestDirsFilterTurnsCalibrationOff(t *testing.T) {
 	})
 	if err != nil || strings.TrimSpace(out) != srv.URL+"/admin" || len(paths) <= 4 {
 		t.Errorf("default: %q %v, %d requests", out, err, len(paths))
+	}
+}
+
+// A -timeout that ends a sweep is a stop, not a finish: exit 4, the words
+// not asked are left, and resume asks exactly those.
+func TestDirsTimeoutStopsAndResumeFinishes(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path]++
+		mu.Unlock()
+		if strings.HasPrefix(r.URL.Path, "/w") && strings.HasSuffix(r.URL.Path, "0") {
+			fmt.Fprint(w, "found "+r.URL.Path)
+			return
+		}
+		if r.URL.Path == "/" {
+			fmt.Fprint(w, "front page")
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	var words []string
+	for i := range 50 {
+		words = append(words, fmt.Sprintf("w%d", i))
+	}
+	wl := wlist(t, words...)
+	hitsOf := func(out string) []string {
+		var got []string
+		for _, l := range lines(out) {
+			var m map[string]any
+			if json.Unmarshal([]byte(l), &m) == nil {
+				got = append(got, m["url"].(string))
+			}
+		}
+		sort.Strings(got)
+		return got
+	}
+	// What one uninterrupted run finds.
+	want, _, err := captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", wl, "-json", "-ledger", "off"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	seen = map[string]int{}
+	mu.Unlock()
+
+	db := filepath.Join(t.TempDir(), "d.db")
+	_, errOut, err := captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", wl, "-json", "-ledger", "off", "-db", db, "-rate", "5", "-timeout", "1s"})
+	})
+	if exitCode(err) != exitLimit {
+		t.Fatalf("exit %d, want %d: %v\n%s", exitCode(err), exitLimit, err, errOut)
+	}
+	rep := lastReport(t, errOut)
+	if rep.Complete || rep.Stopped == "" || !strings.Contains(rep.Resume, "azhaq resume -db") {
+		t.Fatalf("a stopped run says %+v", rep)
+	}
+	mu.Lock()
+	first := 0
+	for p := range seen {
+		if strings.HasPrefix(p, "/w") {
+			first++
+		}
+	}
+	mu.Unlock()
+	if first == 0 || first >= 50 {
+		t.Fatalf("%d of 50 words asked before the stop", first)
+	}
+	_, errOut, err = captureBoth(t, func() error { return cmdResume([]string{"-db", db, "-json", "-timeout", "0", "-dirs-rate", "1000"}) })
+	if err != nil {
+		t.Fatalf("resume: %v\n%s", err, errOut)
+	}
+	mu.Lock()
+	for _, w := range words {
+		if seen["/"+w] != 1 {
+			t.Errorf("/%s asked %d times", w, seen["/"+w])
+		}
+	}
+	mu.Unlock()
+	// The stopped run's hits and the resume's together are one run's.
+	st, err := store.OpenExisting(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	ents, _ := st.Entities()
+	var found []string
+	for _, e := range ents {
+		if strings.Contains(e.Key, "/w") {
+			found = append(found, e.Key)
+		}
+	}
+	sort.Strings(found)
+	if fmt.Sprint(found) != fmt.Sprint(hitsOf(want)) {
+		t.Errorf("after the resume %v, one run %v", found, hitsOf(want))
 	}
 }

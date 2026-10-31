@@ -56,3 +56,20 @@ func TestWaitHonoursContext(t *testing.T) {
 		t.Fatal("want a context error")
 	}
 }
+
+// A wait the deadline would cut short lasts to the deadline, so the caller
+// sees its context end instead of an early refusal while ctx is still live.
+func TestWaitUntilDeadlineEndsTheContext(t *testing.T) {
+	l := New(1, 1)
+	_ = l.Wait(context.Background(), "k")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
+	defer cancel()
+	t0 := time.Now()
+	err := l.Wait(ctx, "k")
+	if err == nil || ctx.Err() == nil {
+		t.Fatalf("err %v, ctx.Err %v: the context must have ended", err, ctx.Err())
+	}
+	if d := time.Since(t0); d < 50*time.Millisecond {
+		t.Fatalf("returned after %s, before the deadline", d)
+	}
+}

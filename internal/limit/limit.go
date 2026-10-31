@@ -50,7 +50,21 @@ func (l *Limiter) Wait(ctx context.Context, key string) error {
 	if l == nil {
 		return ctx.Err()
 	}
-	return l.bucket(key).Wait(ctx)
+	return Wait(ctx, l.bucket(key))
+}
+
+// Wait is lim.Wait, but a wait that would pass ctx's deadline lasts until
+// the deadline and returns ctx's error: rate refuses at once without
+// ending ctx, which made a sweep stop early and look finished.
+func Wait(ctx context.Context, lim *rate.Limiter) error {
+	err := lim.Wait(ctx)
+	if err != nil && ctx.Err() == nil {
+		if _, ok := ctx.Deadline(); ok {
+			<-ctx.Done()
+			return ctx.Err()
+		}
+	}
+	return err
 }
 
 func (l *Limiter) bucket(key string) *rate.Limiter {

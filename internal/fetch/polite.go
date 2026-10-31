@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
@@ -142,7 +143,7 @@ func beforeSend(ctx context.Context, raw string) error {
 	}
 	politeMu.Unlock()
 	if lim != nil {
-		if err := lim.Wait(ctx); err != nil {
+		if err := limit.Wait(ctx, lim); err != nil {
 			return err
 		}
 	}

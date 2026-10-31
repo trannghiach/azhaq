@@ -409,3 +409,20 @@ func TestNoRepeatPassWithoutFinds(t *testing.T) {
 		t.Errorf("%v requests with nothing found", n)
 	}
 }
+
+// A deadline that falls while the run waits for its pace stops the run:
+// the search is cut, not reported as finished with the names not asked.
+func TestDeadlineInThePaceIsAStop(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "<html><body>same</body></html>")
+	}))
+	defer srv.Close()
+	c := New(srv.Client(), Options{Words: noise(3000), Rate: 5})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	meta, err := c.Run(ctx, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(types.Observation) error { return nil })
+	if ctx.Err() == nil || err == nil || meta.Status != types.StatusCancelled {
+		t.Fatalf("status %q, err %v, ctx %v: the run ended before its deadline as if done", meta.Status, err, ctx.Err())
+	}
+}

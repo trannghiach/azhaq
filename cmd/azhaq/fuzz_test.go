@@ -496,3 +496,17 @@ func TestFuzzResumeAsksNothingTwice(t *testing.T) {
 		}
 	}
 }
+
+// -maxtime that falls while the run waits for -rate is a stop: exit 4 with
+// the words not asked left to the resume.
+func TestFuzzMaxtimeInThePaceStops(t *testing.T) {
+	srv := fuzzServer(t)
+	var words []string
+	for i := range 50 {
+		words = append(words, fmt.Sprintf("w%d", i))
+	}
+	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, words...), "-ac=false", "-rate", "5", "-maxtime", "1", "-t", "1")
+	if exitCode(err) != exitLimit || rep.Stopped == "" || rep.Complete || rep.Requests >= 50 || rep.Resume == "" {
+		t.Errorf("exit %d, %+v", exitCode(err), rep)
+	}
+}
