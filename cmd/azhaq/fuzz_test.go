@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/store"
@@ -413,5 +414,35 @@ func TestFuzzRequestFile(t *testing.T) {
 	rows, _, err := fuzzRows(t, "-request", p, "-request-proto", "http", "-w", wlist(t, "v"), "-ac=false")
 	if err != nil || len(rows) != 1 || got != "PUT /x?y=1 1 k=v" {
 		t.Errorf("rows %q got %q err %v", rows, got, err)
+	}
+}
+
+// -rate holds the calibration's guesses as it holds every request: the whole
+// sweep, calibration included, keeps to the user's rate (ffuf's calibration
+// is unpaced; the docs say so). The pace lets a burst of rate/5 through.
+func TestFuzzRatePacesCalibration(t *testing.T) {
+	srv := fuzzServer(t)
+	start := time.Now()
+	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "x"), "-ac", "-rate", "20", "-t", "1")
+	took := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Requests <= 3 {
+		t.Fatalf("%d requests: no calibration went out", rep.Requests)
+	}
+	if min := time.Duration(float64(rep.Requests-4) / 20 * 0.9 * float64(time.Second)); took < min {
+		t.Errorf("%d requests at -rate 20 took %s, under %s: the calibration was not paced", rep.Requests, took, min)
+	}
+}
+
+// The docs say what -rate does to calibration, and how it differs from ffuf.
+func TestDocsSayRatePacesCalibration(t *testing.T) {
+	for _, f := range []string{"../../docs/OUTPUT.md", "../../docs/MIGRATING.md"} {
+		doc := readDoc(t, f)
+		if !strings.Contains(doc, "`-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced") ||
+			!strings.Contains(doc, "(guesses ÷ rate) seconds longer than ffuf's") && !strings.Contains(doc, "(guesses ÷ 5) seconds longer") {
+			t.Errorf("%s does not say that -rate paces the calibration", f)
+		}
 	}
 }
