@@ -1,0 +1,19 @@
+# Commit messages follow Conventional Commits; CONTRIBUTING.md has the rules.
+# The commit-msg hook (.githooks) and the ci workflow both run commitlint on it.
+# The rules are config-conventional's, written out so nothing has to be installed.
+rules:
+  type-empty: [2, never]
+  type-case: [2, always, lower-case]
+  type-enum:
+    - 2
+    - always
+    - [feat, fix, perf, refactor, docs, test, bench, ci, build, chore, revert]
+  scope-case: [2, always, kebab-case]
+  subject-empty: [2, never]
+  subject-case: [2, always, lower-case]
+  subject-full-stop: [2, never, "."]
+  header-max-length: [2, always, 72]
+  header-trim: [2, always]
+  body-leading-blank: [2, always]
+  body-max-line-length: [2, always, 100]
+  footer-leading-blank: [2, always]

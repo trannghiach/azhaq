@@ -1,0 +1,6 @@
+#!/bin/sh
+# core.hooksPath=.githooks hides the global hooks, so the global pre-push
+# (it guards main) is run from here.
+g=${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks/pre-push
+[ -x "$g" ] && exec "$g" "$@"
+exit 0

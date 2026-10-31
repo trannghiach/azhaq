@@ -1,0 +1,7 @@
+#!/bin/sh
+# Checks the message against .commitlintrc.yml (CONTRIBUTING.md has the rules).
+# Enable with: git config core.hooksPath .githooks
+case $(sed -n 1p "$1") in
+"Merge "* | "fixup! "* | "squash! "*) exit 0 ;;
+esac
+exec npx --yes --package @commitlint/cli@19.8.1 -- commitlint --edit "$1"

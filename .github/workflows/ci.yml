@@ -18,6 +18,13 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
+      - name: commit messages
+        # Every commit of the push, against .commitlintrc.yml (CONTRIBUTING.md).
+        if: github.event_name == 'push' && !startsWith(github.event.before, '0000000')
+        run: |
+          git fetch -q --depth=50 origin "${{ github.event.before }}" || git fetch -q --unshallow origin
+          npx --yes --package @commitlint/cli@19.8.1 -- \
+            commitlint --from "${{ github.event.before }}" --to HEAD
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: vet
