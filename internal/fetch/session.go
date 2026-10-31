@@ -53,6 +53,9 @@ const (
 	defaultEvery = 50
 	maxAsked     = 4096 // GET URLs kept to be asked again
 	maxRenewals  = 5
+	maxProbes    = 6 // answers measured to find a check page when the start gave none
+	maxVerifies  = 3 // times a 401 is tested by signing in again when there is no check page
+	maxEnders    = 8 // times the search for a request that ends the session may sign in again
 )
 
 type sessionGuard struct {
@@ -64,6 +67,7 @@ type sessionGuard struct {
 	due      atomic.Bool  // an answer looked like the end of the session
 
 	renewing atomic.Bool // signing in again: its own requests pass
+	probing  atomic.Bool // a candidate for the check page is being measured
 
 	// remote: a worker's guard. It measures nothing and renews nothing: it
 	// keeps what its requests were answered and tells the run (TakeReport).
@@ -78,6 +82,18 @@ type sessionGuard struct {
 	lost     error
 	redo     []string
 	renewals int
+	probes   int             // candidates measured so far
+	suspects []suspect       // answers that looked like the end of the session, no check page to say
+	proven   map[string]bool // suspects that answered alike once signed in again
+	verifies int
+	enders   map[string]bool // requests that end the session whenever they are sent
+}
+
+// suspect is a URL answered as if the session were over (a 401, a redirect to
+// the sign-in page), with the answer.
+type suspect struct {
+	url string
+	was Print
 }
 
 var guardP atomic.Pointer[sessionGuard]
@@ -97,7 +113,7 @@ func WatchSession(s Session) {
 	if s.Every <= 0 {
 		s.Every = defaultEvery
 	}
-	guardP.Store(&sessionGuard{s: s})
+	guardP.Store(&sessionGuard{s: s, proven: map[string]bool{}})
 }
 
 func resetSession() { guardP.Store(nil) }
@@ -298,9 +314,10 @@ func askPrint(ctx context.Context, raw string, session bool) (Print, error) {
 }
 
 // EndCheck checks the session once more when requests were sent since the
-// last check, so that the end of a run is not taken on trust.
+// last check, or an answer asked for one after it, so that the end of a run
+// is not taken on trust.
 func EndCheck(ctx context.Context) {
-	if g := guardP.Load(); g != nil && g.since.Load() > 0 {
+	if g := guardP.Load(); g != nil && !g.remote && (g.since.Load() > 0 || g.due.Load()) {
 		_ = g.check(ctx)
 	}
 }
@@ -325,7 +342,13 @@ func (g *sessionGuard) tick(ctx context.Context) error {
 	return g.check(ctx)
 }
 
-func (g *sessionGuard) alive(p Print) bool { return p == g.s.Want }
+// page is the check page and its answer with the session; a probe may set
+// it after the run began.
+func (g *sessionGuard) page() (string, Print) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.s.Check, g.s.Want
+}
 
 // check asks the check and, when the session is gone, signs in again or
 // stops the run's signed-in work.
@@ -344,12 +367,12 @@ func (g *sessionGuard) check(ctx context.Context) error {
 	endedBy := g.endedBy
 	g.mu.Unlock()
 	var got Print
-	if g.s.Check != "" {
-		p, err := askPrint(ctx, g.s.Check, true)
+	if page, want := g.page(); page != "" {
+		p, err := askPrint(ctx, page, true)
 		if err != nil {
 			return nil // not answered: nothing is judged from it
 		}
-		if g.alive(p) {
+		if p == want {
 			g.mu.Lock()
 			g.asked, g.endedBy = nil, ""
 			g.mu.Unlock()
@@ -357,7 +380,7 @@ func (g *sessionGuard) check(ctx context.Context) error {
 		}
 		got = p
 	} else if endedBy == "" {
-		return nil
+		return g.verify(ctx, int(sent))
 	}
 	return g.lose(ctx, got, endedBy, int(sent))
 }
@@ -368,8 +391,9 @@ func (g *sessionGuard) lose(ctx context.Context, got Print, endedBy string, sent
 	n := len(g.asked)
 	g.mu.Unlock()
 	unrecorded := max(0, sent-n)
-	how := "the check " + pathOf(g.s.Check) + " answered " + describe(got) + ", where it answered " + describe(g.s.Want) + " with the session"
-	if g.s.Check == "" {
+	page, want := g.page()
+	how := "the check " + pathOf(page) + " answered " + describe(got) + ", where it answered " + describe(want) + " with the session"
+	if page == "" {
 		how = "a response cleared the session cookie"
 	}
 	what := fmt.Sprintf("the session ended (%s)", how)
@@ -394,19 +418,41 @@ func (g *sessionGuard) lose(ctx context.Context, got Print, endedBy string, sent
 	if over {
 		return fail(fmt.Sprintf("it ended %d times, and signing in again did not hold", maxRenewals))
 	}
-	g.renewing.Store(true)
-	err := g.s.Renew(ctx)
-	g.renewing.Store(false)
-	if err != nil {
+	if err := g.renew(ctx); err != nil {
 		return fail("signing in again failed: " + err.Error())
 	}
-	if p, err := askPrint(ctx, g.s.Check, true); g.s.Check != "" && (err != nil || !g.alive(p)) {
+	if p, err := askPrint(ctx, page, true); page != "" && (err != nil || p != want) {
 		return fail("signed in again, but the check still answers " + describe(p))
+	}
+	g.resume(ctx, what, endedBy, unrecorded)
+	return nil
+}
+
+// renew signs in again; its own requests pass the guard.
+func (g *sessionGuard) renew(ctx context.Context) error {
+	g.renewing.Store(true)
+	defer g.renewing.Store(false)
+	return g.s.Renew(ctx)
+}
+
+// resume asks again what was asked since the last good check, now that the
+// session is back.
+func (g *sessionGuard) resume(ctx context.Context, what, endedBy string, unrecorded int) {
+	g.mu.Lock()
+	second := g.renewals >= 2
+	asked := slices.Clone(g.asked)
+	g.mu.Unlock()
+	// A request that ends the session every time it is sent would end the
+	// new one too. The first loss cannot tell which it was; one that follows
+	// a renewal can: the requests asked since are searched.
+	var enders []string
+	if second {
+		enders = g.findEnders(ctx, asked)
 	}
 	g.mu.Lock()
 	// The request whose answer cleared the session is not asked again: its
-	// answer, to a live session, is the one it gives.
-	redo := slices.DeleteFunc(g.asked, func(u string) bool { return u == endedBy })
+	// answer, to a live session, is the one it gives. Nor is one found to end it.
+	redo := slices.DeleteFunc(g.asked, func(u string) bool { return u == endedBy || g.enders[u] })
 	g.asked, g.endedBy = nil, ""
 	g.redo = append(g.redo, redo...)
 	g.mu.Unlock()
@@ -415,11 +461,126 @@ func (g *sessionGuard) lose(ctx context.Context, got Print, endedBy string, sent
 	}
 	g.gen.Add(1)
 	msg := what + "; signed in again; " + plural(len(redo), "request") + " asked again"
+	if len(enders) > 0 {
+		paths := make([]string, len(enders))
+		for i, u := range enders {
+			paths[i] = pathOf(u)
+		}
+		msg += "; " + strings.Join(paths, ", ") + " ended the new session when asked again and is not asked again"
+	}
 	if unrecorded > 0 {
 		msg += fmt.Sprintf(" (%s sent in the same stretch, path or parameter guesses, are not)", plural(unrecorded, "request"))
 	}
 	Note(msg)
+}
+
+// verify tests the answers that looked like the end of the session when no
+// check page tells: it signs in again and asks them once more. One that now
+// answers differently was the session ending, and becomes the check page;
+// answers alike were the page's own, whatever the session.
+func (g *sessionGuard) verify(ctx context.Context, sent int) error {
+	g.mu.Lock()
+	sus := g.suspects
+	g.suspects = nil
+	if g.s.Renew == nil || g.verifies >= maxVerifies || len(sus) == 0 {
+		g.mu.Unlock()
+		return nil
+	}
+	g.verifies++
+	if len(sus) > 6 {
+		sus = sus[len(sus)-6:] // the latest are the likeliest to follow the end
+	}
+	g.mu.Unlock()
+	if g.renew(ctx) != nil {
+		return nil // nothing is judged from a sign-in that failed
+	}
+	for _, sp := range sus {
+		p, err := askPrint(ctx, sp.url, true)
+		if err != nil {
+			continue
+		}
+		if p == sp.was {
+			g.mu.Lock()
+			g.proven[sp.url] = true
+			g.mu.Unlock()
+			continue
+		}
+		g.mu.Lock()
+		g.s.Check, g.s.Want = sp.url, p
+		g.renewals++
+		n := len(g.asked)
+		g.mu.Unlock()
+		what := fmt.Sprintf("the session ended (%s answered %s with the session, and %s once signed in again)", pathOf(sp.url), describe(sp.was), describe(p))
+		g.resume(ctx, what, "", max(0, sent-n))
+		return nil
+	}
 	return nil
+}
+
+// findEnders asks urls, which were sent since the session was last renewed,
+// with the new session, checking it after every request (after every few
+// when there are many, then one by one in the chunk that failed). A request
+// after which the check fails ends the session: it is kept (enders), the run
+// signs in again and goes on, and it is returned. The session is live on
+// return unless signing in again failed or was needed more than maxEnders times.
+func (g *sessionGuard) findEnders(ctx context.Context, urls []string) []string {
+	page, want := g.page()
+	if page == "" {
+		return nil
+	}
+	urls = slices.DeleteFunc(slices.Compact(slices.Clone(urls)), func(u string) bool { return u == page })
+	var found []string
+	signIns := 0
+	live := func() bool {
+		p, err := askPrint(ctx, page, true)
+		return err != nil || p == want
+	}
+	restore := func() bool {
+		signIns++
+		return signIns <= maxEnders && g.renew(ctx) == nil
+	}
+	send := func(us []string) {
+		for _, u := range us {
+			if ctx.Err() != nil {
+				return
+			}
+			_, _ = askPrint(ctx, u, true)
+		}
+	}
+	chunk := max(1, len(urls)/32)
+	for i := 0; i < len(urls) && ctx.Err() == nil; i += chunk {
+		part := urls[i:min(i+chunk, len(urls))]
+		send(part)
+		if live() {
+			continue
+		}
+		if !restore() {
+			return found
+		}
+		if len(part) > 1 { // one by one, now that the chunk is known to hold one
+			for _, u := range part {
+				send([]string{u})
+				if live() {
+					continue
+				}
+				found = append(found, u)
+				if !restore() {
+					break
+				}
+			}
+		} else {
+			found = append(found, part[0])
+		}
+	}
+	g.mu.Lock()
+	if g.enders == nil {
+		g.enders = map[string]bool{}
+	}
+	for _, u := range found {
+		g.enders[u] = true
+	}
+	g.mu.Unlock()
+	return found
 }
 
 func describe(p Print) string {
@@ -462,11 +623,12 @@ var redoKeys sync.Map
 
 // sessionSaw tells the guard a request was answered: it keeps the URL to ask
 // again, and notices an answer that looks like the end of the session.
-func sessionSaw(raw string, res Result) {
+func sessionSaw(ctx context.Context, raw string, res Result) {
 	g := guardP.Load()
 	if g == nil {
 		return
 	}
+	defer g.probe(ctx, raw, res)
 	g.mu.Lock()
 	if len(g.asked) < maxAsked {
 		g.asked = append(g.asked, raw)
@@ -486,8 +648,60 @@ func sessionSaw(raw string, res Result) {
 		return h.Location != "" && pathOf(h.Location) == pathOf(g.s.SignIn)
 	}) {
 		g.due.Store(true)
+		g.suspect(raw, res)
 		g.notify("")
 	}
+}
+
+// probe looks for the check page when the start found none: a page that
+// the run starts from answers alike with and without a session, an API
+// route it finds later (/api/me) often does not. A JSON answer of 200 is
+// measured with the session and without it, up to maxProbes times.
+func (g *sessionGuard) probe(ctx context.Context, raw string, res Result) {
+	if g.remote || res.Status != http.StatusOK || len(res.Hops) > 1 || len(res.Header["Set-Cookie"]) > 0 ||
+		!strings.Contains(strings.ToLower(res.Header.Get("Content-Type")), "json") {
+		return
+	}
+	if page, _ := g.page(); page != "" || g.renewing.Load() || g.checking.Load() || !g.probing.CompareAndSwap(false, true) {
+		return
+	}
+	defer g.probing.Store(false)
+	g.mu.Lock()
+	if g.probes >= maxProbes || g.lost != nil {
+		g.mu.Unlock()
+		return
+	}
+	g.probes++
+	g.mu.Unlock()
+	with, without, err := Measure(ctx, raw)
+	if err != nil || with == without || with.Status == 0 {
+		return
+	}
+	g.mu.Lock()
+	if g.s.Check == "" {
+		g.s.Check, g.s.Want = raw, with
+	}
+	g.mu.Unlock()
+}
+
+// suspect keeps an answer that looked like the end of the session, to be
+// tested when there is no check page.
+func (g *sessionGuard) suspect(raw string, res Result) {
+	if g.remote {
+		return
+	}
+	p := Print{Status: res.Status}
+	if len(res.Hops) > 0 {
+		if loc, err := url.Parse(res.Hops[0].Location); err == nil {
+			p.Loc = loc.Path
+		}
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.s.Check != "" || g.proven[raw] || len(g.suspects) >= 64 || slices.ContainsFunc(g.suspects, func(s suspect) bool { return s.url == raw }) {
+		return
+	}
+	g.suspects = append(g.suspects, suspect{raw, p})
 }
 
 // notify tells the run, from a worker, that an answer looked like the end

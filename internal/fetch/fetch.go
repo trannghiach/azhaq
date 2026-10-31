@@ -528,7 +528,7 @@ func DoReq(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, bo
 	close(wait)
 	cacheMu.Unlock()
 	if err == nil {
-		sessionSaw(raw, res)
+		sessionSaw(ctx, raw, res)
 	}
 	if err == nil && Tap != nil {
 		Tap(raw, res)

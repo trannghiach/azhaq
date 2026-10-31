@@ -44,7 +44,7 @@ func watchSession(ctx context.Context, seeds []types.Seed, home, loginURL string
 		tried = append(tried, c)
 	}
 	if s.Check == "" && len(candidates) > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("session check: %s answered the same with the session and without it, so a lost session is noticed only when a response clears the session cookie", strings.Join(tried, ", ")))
+		rep.Notes = append(rep.Notes, fmt.Sprintf("session check: %s answered the same with the session and without it, so the run looks for a JSON answer that tells, tests a 401 by signing in again, and notices a response that clears the session cookie", strings.Join(tried, ", ")))
 	}
 	fetch.WatchSession(s)
 }

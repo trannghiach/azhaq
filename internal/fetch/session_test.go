@@ -162,3 +162,34 @@ func TestSessionGenCountsRenewals(t *testing.T) {
 		t.Errorf("lines %q", got)
 	}
 }
+
+// With no check page at the start, a JSON answer that a visitor without the
+// session is refused becomes the check; a static page, and a JSON answer
+// both get alike, do not.
+func TestProbeFindsTheCheckPage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch c, _ := r.Cookie("sid"); {
+		case r.URL.Path == "/status":
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		case c == nil:
+			w.WriteHeader(http.StatusUnauthorized)
+		default:
+			_, _ = w.Write([]byte(`{"me":"x"}`))
+		}
+	}))
+	defer srv.Close()
+	Reset()
+	defer Reset()
+	Extra = http.Header{"Cookie": {"sid=abc"}}
+	WatchSession(Session{Every: 1000})
+	for _, p := range []string{"/status", "/me"} {
+		if _, _, err := Do(context.Background(), srv.Client(), srv.URL+p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, want := guardP.Load().page()
+	if page != srv.URL+"/me" || want.Status != 200 {
+		t.Errorf("check page %q answering %v, want /me answering 200", page, want)
+	}
+}
