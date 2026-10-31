@@ -21,6 +21,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -56,7 +57,7 @@ func cmdCrawl(args []string) error {
 	excludeFields := fs.String("eof", "", "leave these fields out of -json and -jsonl lines, comma-separated (request.tag, response.forms, tech, …)")
 	noFill := fs.Bool("no-form-fill", false, "do not ask the action of GET forms with neutral values")
 	d := fs.Int("d", -1, "katana's -d: link levels below the start URL to visit (3 by default); -depth N is -d N-1")
-	assets := fs.Bool("assets", false, "also list scripts, styles and images")
+	assets := fs.Bool("assets", false, "also list images, fonts and media, and the source maps and build manifests azhaq reads (scripts and stylesheets are listed by default, as katana lists them)")
 	noShell := fs.Bool("no-catchall", false, "leave out URLs that answer with the page every unknown path gets (client-side routes of a single-page app)")
 	sweep := fs.Bool("sweep", false, "also ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, admin, …) and for the source map next to each script, as run does; crawl asks only what a crawler does")
 	showOut := fs.Bool("do", false, "also list the URLs found and left out of the crawl's scope (never requested)")
@@ -67,7 +68,7 @@ func cmdCrawl(args []string) error {
 	storeFields := fs.String("sf", "", "also write these fields, one file each, to the -sfd directory: katana_field/SCHEME_HOST_FIELD.txt")
 	storeDir := fs.String("sfd", "katana_field", "directory for -sf")
 	tmpl := fs.String("ot", "", "print each URL through this template, {{url}} or any field name in braces ({{rdn}} {{path}} …)")
-	extMatch := fs.String("em", "", "list only URLs with these extensions, comma-separated (none: URLs without one); also shows scripts and styles")
+	extMatch := fs.String("em", "", "list only URLs with these extensions, comma-separated (none: URLs without one)")
 	extFilter := fs.String("ef", "", "leave out URLs with these extensions, comma-separated, besides the default list (images, fonts, archives, media, .pdf, .txt, .map, …)")
 	noDefExt := fs.Bool("ndef", false, "do not leave out the default extensions")
 	matchRe := fs.String("mr", "", "list only URLs that match this regex (regex of the printed URL; the crawl itself is not limited)")
@@ -188,6 +189,7 @@ func cmdCrawl(args []string) error {
 	leftover, _ := st.LoadLeftover()
 	rows := engine.BuildMap(ents, engine.ScopeSeeds(seeds, ents, edges), obs, leftover, false)
 	outOpts.exclude = splitList(*excludeFields)
+	outOpts.assets = *assets
 	out, err := newCrawlOutput(&c, outOpts)
 	if err != nil {
 		return err
@@ -198,7 +200,7 @@ func cmdCrawl(args []string) error {
 		if r.Entity.Type != types.TypeURL || (*noShell && r.Coverage == "catchall") || r.Scope != "target" {
 			continue
 		}
-		if !outOpts.showAssets && !*assets && (r.Role == "script" || r.Role == "asset" || r.Role == "sourcemap" || r.Role == "manifest") {
+		if outOpts.hidden(r) {
 			continue
 		}
 		if !c.json && !outOpts.jsonl && strings.Contains(r.Entity.Key, "{") {
@@ -364,13 +366,44 @@ var crawlFieldNames = []string{"url", "path", "fqdn", "rdn", "rurl", "qurl", "qp
 var defaultDenyExt = strings.Fields(".3g2 .3gp .7z .apk .arj .avi .axd .bmp .csv .deb .dll .doc .drv .eot .exe .flv .gif .gifv .gz .h264 .ico .iso .jar .jpeg .jpg .lock .m4a .m4v .map .mkv .mov .mp3 .mp4 .mpeg .mpg .msi .ogg .ogm .ogv .otf .pdf .pkg .png .ppt .psd .rar .rm .rpm .svg .swf .sys .tar.gz .tar .tif .tiff .ttf .txt .vob .wav .webm .webp .wmv .woff .woff2 .xcf .xls .xlsx .zip")
 
 type crawlOpts struct {
-	jsonl, rejected, showAssets bool
-	fields, store               []string
-	dir, tmpl                   string
-	match, deny, defDeny        map[string]bool
-	hasMatch                    bool
-	mr, fr                      *regexp.Regexp
-	exclude                     []string
+	jsonl, rejected, showAssets, assets bool
+	fields, store                       []string
+	dir, tmpl                           string
+	match, deny, defDeny                map[string]bool
+	hasMatch                            bool
+	mr, fr                              *regexp.Regexp
+	exclude                             []string
+}
+
+// hidden: a row the crawl does not list unless -assets, -em or -ndef asks. Scripts and
+// stylesheets are listed, found or fetched, as katana lists them; what is left out is what
+// the default extension list leaves out (images, fonts, media) and the source maps and
+// build manifests azhaq guesses at, which no page names.
+func (o crawlOpts) hidden(r engine.MapEntry) bool {
+	if o.showAssets || o.assets {
+		return false
+	}
+	switch r.Role {
+	case "sourcemap", "manifest":
+		return true
+	case "asset":
+		return o.defDeny[urlExt(r.Entity.Key)]
+	}
+	return false
+}
+
+func urlExt(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return strings.ToLower(path.Ext(u.Path))
+}
+
+// assetExt: an extension -assets brings back to the list, an image, font or media file
+// (a source map is not one: no page loads it).
+func assetExt(ext string) bool {
+	return ext != ".map" && webextract.ClassifyURL("http://h/x"+ext) == "asset"
 }
 
 func crawlOutOpts(jsonl bool, fields, store, dir, tmpl, em, ef string, ndef bool, mr, fr string, rejected bool) (crawlOpts, error) {
@@ -450,17 +483,16 @@ func newCrawlOutput(c *common, o crawlOpts) (*crawlOutput, error) {
 // they limit what is printed, not the crawl.
 func (c *crawlOutput) keep(raw string) bool {
 	o := c.o
-	u, err := url.Parse(raw)
-	if err != nil {
+	if _, err := url.Parse(raw); err != nil {
 		return true
 	}
-	ext := strings.ToLower(path.Ext(u.Path))
+	ext := urlExt(raw)
 	switch {
 	case o.hasMatch:
 		if !o.match[ext] {
 			return false
 		}
-	case o.deny[ext], o.defDeny[ext] && !(c.json && !o.jsonl):
+	case o.deny[ext], o.defDeny[ext] && !(c.json && !o.jsonl) && !(o.assets && assetExt(ext)):
 		// -json lists the map's rows as they are: the default list is for the lines a crawler prints.
 		return false
 	}
