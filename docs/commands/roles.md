@@ -190,6 +190,7 @@ On a cookie-session app, the visitor sent to `/login` makes a page `signed-in on
 - Or use `-role-login`. It carries the cookies and the token the login stored.
 - `-role-cmd 'alice=./token.sh alice'` gives a role whose headers a shell command prints: one `Header: value` per line, or a bare token sent as `Authorization: Bearer`.
 - The `-role-cmd` command runs before the role's run and again before the replay. It suits tokens that live minutes.
+- A `-role-cmd` command's own requests are not azhaq's and are not in the ledger or held to the scope; give tokens directly or use `-role-login` to keep every request in the ledger. What the command prints is still held to the scope (see below).
 - `-role-cmd` is not offered over MCP.
 
 ### Headers that name a host
@@ -581,7 +582,7 @@ The diff lines look like this:
 | `-replay-writes` | string |  | also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks |
 | `-replay-writes-canary` | bool |  | with -replay-writes: change one short string field of a PUT or PATCH body to a unique value for each role it is replayed with, before it is sent, so a write that would otherwise replay the owner's own value back (no change to read back) can still be proved; never on by default, since it changes data, and restoring the field afterward is not done |
 | `-role` | string, repeatable |  | NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: … |
-| `-role-cmd` | string, repeatable |  | NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes |
+| `-role-cmd` | string, repeatable |  | NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes; the command's own requests are not azhaq's: not in the ledger, not held to the scope |
 | `-role-login` | string, repeatable |  | NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left |
 <!-- flags:end -->
 

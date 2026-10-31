@@ -158,7 +158,7 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 
 ## The ledger
 
-The ledger is one JSON line for each request or connection sent to a target. What it is, the chain of hashes and the seal are in [Concepts](CONCEPTS.md#the-ledger-and-its-seal). `azhaq ledger` checks, counts and exports it: see the [`ledger` page](commands/ledger.md).
+The ledger is one JSON line for each request or connection sent to a target. What it is, the chain of hashes and the seal are in [Concepts](CONCEPTS.md#the-ledger-and-its-seal). `azhaq ledger` checks, counts and exports it: see the [`ledger` page](commands/ledger.md). It records what azhaq sends: the requests of a helper outside azhaq, such as a `-role-cmd` command logging in, are not in it.
 
 A line has:
 

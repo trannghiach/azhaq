@@ -154,7 +154,7 @@ func cmdRoles(args []string) error {
 	fs := newFlags("roles")
 	var specs, logins, cmds, idSpecs, hars, burps, allows, canarySpecs stringsFlag
 	fs.Var(&specs, "role", "NAME, or NAME=Header: value (repeat a name to add headers; a role with none is anonymous). Only these headers are sent: a session the app reads from a cookie needs NAME=Cookie: …")
-	fs.Var(&cmds, "role-cmd", "NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes")
+	fs.Var(&cmds, "role-cmd", "NAME=COMMAND: a role whose headers a shell command prints, one Header: value per line (a bare token is sent as Authorization: Bearer); run before the role's run and again before the replay, for tokens that live minutes; the command's own requests are not azhaq's: not in the ledger, not held to the scope")
 	fs.Var(&logins, "role-login", "NAME=USER:PASSWORD: a role that signs in on the -login page with Chrome, and sends the cookies and the token the login left")
 	fs.Var(&idSpecs, "id", "[ROLE:]NAME=VALUE: also fill routes with this identifier. NAME is a path parameter (book_title), a JSON field holding such values (basket_id) or a route (/rest/basket/{id}); with ROLE, VALUE names ROLE's own object, and another role that reads it is listed")
 	loginURL := fs.String("login", "", "the login page for -role-login")
