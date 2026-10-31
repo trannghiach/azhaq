@@ -123,6 +123,8 @@ type Stats struct {
 	Requests   int               // sent, retries and calibration included
 	Matches    int               // results given
 	Errors     int               // requests that failed, after one retry
+	Answered   int               // inputs that got an answer, matched or not
+	Refused    int               // of those, answers with status 403 or 419
 	OutOfScope int               // inputs not sent for their host
 	Denied     map[string]int    // inputs not sent for a -deny-path rule, by rule
 	DeniedURL  map[string]string // the first URL each rule kept out
@@ -437,6 +439,12 @@ func (e *engine) task(ctx context.Context, j job, tmpl Template, input map[strin
 	if err != nil {
 		return !errors.Is(err, neterr.ErrBudget) && ctx.Err() == nil
 	}
+	e.count(func(s *Stats) {
+		s.Answered++
+		if resp.Status == 403 || resp.Status == 419 {
+			s.Refused++
+		}
+	})
 	switch resp.Status {
 	case 403:
 		e.n403.Add(1)

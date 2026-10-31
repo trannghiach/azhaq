@@ -231,6 +231,10 @@ func runPreset(c *common, args []string, rep *report, see func(types.Entity, typ
 	if runs, err := st.Runs(); err == nil && len(runs) > 0 {
 		st.UseRun(runs[len(runs)-1].ID)
 	}
+	rep.hintsVrb, rep.hintsOff = hasFlag(args, "v"), c.json || c.silent
+	if t := runTargetOf(args); t != "" && rep.Command != "run" {
+		rep.lateHint(func() string { return runHint(st, c.db, t) })
+	}
 	return st, func() {
 		st.Close()
 		if dir != "" {

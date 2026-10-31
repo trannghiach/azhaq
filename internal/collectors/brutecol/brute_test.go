@@ -101,3 +101,25 @@ func TestVariants(t *testing.T) {
 		}
 	}
 }
+
+// The sample a hint shows is two of the names Permute asks: a number next to
+// the first label, and an environment word joined to it.
+func TestPermuteSampleIsWhatPermuteAsks(t *testing.T) {
+	got := PermuteSample("api.example.org")
+	want := []string{"api1.example.org", "api-dev.example.org"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("sample %v, want %v", got, want)
+	}
+	asked := map[string]bool{}
+	for _, n := range variants("api.example.org", PermuteWords) {
+		asked[n] = true
+	}
+	for _, n := range got {
+		if !asked[n] {
+			t.Errorf("%s is not one Permute asks for", n)
+		}
+	}
+	if s := PermuteSample("example"); len(s) != 0 {
+		t.Errorf("a name with no dot: %v", s)
+	}
+}

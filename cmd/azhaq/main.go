@@ -388,6 +388,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return usagef("%v", err)
 	}
 	out.json, out.quiet = *jsonOut, *quiet
+	rep.hintsOff, rep.hintsVrb = *jsonOut, *verbose
 	// Port lists are checked before anything is sent (a sign-in comes first).
 	if _, err := portscan.Ports(*portsSpec); *portsSpec != "" && err != nil {
 		return usagef("-ports: %v", err)
@@ -723,6 +724,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 		if err := st.SetRunArgs(keptArgs(args)); err != nil {
 			return err
+		}
+		if signedIn(*login, cookies, headers) {
+			// The sign-in itself is not kept; hunt reads that the run had one.
+			_ = st.SetMeta(signedInKey(st.RunID()), "1")
 		}
 		if rep.Command != "run" {
 			// The command that started the run: azhaq resume prints as it does.
@@ -1206,6 +1211,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if hint := engine.LoginHint(rows); hint != "" {
 			rep.Next = append(rep.Next, hint)
 		}
+	}
+	if !out.embedded && rep.Command == "run" {
+		runHints(rep, rows, obs, *interact, signedIn(*login, cookies, headers))
 	}
 	rep.RunID = stats.RunID
 	if opts.Browser != nil {

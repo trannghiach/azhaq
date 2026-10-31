@@ -51,6 +51,12 @@ type report struct {
 	// failOnErrors: -fail-on-errors was given, so no failure is made up for.
 	failOnErrors bool
 	start        time.Time
+
+	// hints are measured suggestions, printed as "next:" lines for a person
+	// (see hints.go); they are never in the JSON summary.
+	hints              []string
+	late               []func() string
+	hintsOff, hintsVrb bool
 }
 
 func newReport(command string) *report {
@@ -97,6 +103,7 @@ func (r *report) err() error {
 // and complete. It returns the command's error.
 func (r *report) finish(asJSON, silent bool) error {
 	r.settle()
+	r.hintsOff = r.hintsOff || asJSON || silent
 	switch {
 	case asJSON:
 		raw, _ := json.Marshal(r)
@@ -220,6 +227,9 @@ func (r *report) print(w io.Writer) {
 	}
 	for _, n := range r.Next {
 		fmt.Fprintf(w, "  next: %s\n", n)
+	}
+	for _, h := range r.shownHints() {
+		fmt.Fprintf(w, "  next: %s\n", h)
 	}
 	if r.Sources != nil && r.Sources.failures() > 0 {
 		fmt.Fprintf(w, "  %s\n", r.Sources.line(r.Exit, r.ownFailures(), r.failOnErrors, r.Command == "urls"))

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -544,7 +545,36 @@ func cmdSubs(args []string) error {
 	if c.db != "" {
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db+" -type Hostname")
 	}
+	if !*permute && rep.Stopped == "" {
+		rep.hint(permuteHint(rep.Results, apexes, seen, c.db))
+	}
 	return rep.finish(c.json, c.silent)
+}
+
+// permuteHint is the command that also resolves variations of the names a
+// run found, with two of the variations it would ask, or "".
+func permuteHint(found int, apexes []string, names map[string]bool, db string) string {
+	if found == 0 || len(apexes) == 0 || len(apexes) > 3 {
+		return ""
+	}
+	var host string
+	for n := range names {
+		if !slices.Contains(apexes, n) && (host == "" || n < host) {
+			host = n
+		}
+	}
+	if host == "" {
+		return ""
+	}
+	cmd := "azhaq subs -d " + strings.Join(apexes, ",") + " -permute"
+	if db != "" {
+		cmd += " -db " + db
+	}
+	why := fmt.Sprintf("try variations of the %s found", plural(found, "name"))
+	if v := brutecol.PermuteSample(host); len(v) == 2 {
+		why += ", such as " + v[0] + " and " + v[1] + " for " + host
+	}
+	return cmd + "   (" + why + ")"
 }
 
 // nameSum is the note that lets a reader check the counts: the names the

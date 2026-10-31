@@ -581,6 +581,10 @@ func cmdFuzz(args []string) error {
 			return err
 		}
 	}
+	if len(flights.pre) == 0 {
+		rep.hint(tokenHint(tmpl, st.Answered, st.Refused))
+	}
+	rep.hintsVrb = *verbose
 	if c.db != "" {
 		hitsMu.Lock()
 		kept := append([]fuzz.Result(nil), hits...)

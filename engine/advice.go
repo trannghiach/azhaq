@@ -96,6 +96,62 @@ func BrowserHint(rows []MapEntry, obs []types.StoredObservation) string {
 	return ""
 }
 
+// CatchAll is an origin whose unknown paths all answer with one page.
+type CatchAll struct {
+	Origin string
+	Routes int  // target URLs that answered with that page
+	Chrome bool // the run had Chrome
+}
+
+// CatchAllShell finds the origin with the most target URLs that answered
+// with the page every unknown path gets (at least three) and whose front
+// page is an empty shell its scripts draw: a single-page app. The zero
+// value says there is none.
+func CatchAllShell(rows []MapEntry, obs []types.StoredObservation) CatchAll {
+	const minCatchAll = 3
+	routes := map[string]int{}
+	target := map[string]bool{}
+	for _, r := range rows {
+		if r.Entity.Type != types.TypeURL || r.Scope != "target" {
+			continue
+		}
+		target[r.Entity.Key] = true
+		switch r.Role {
+		case "asset", "script", "sourcemap", "manifest", "client-route", "websocket":
+		default:
+			if r.Coverage == "catchall" {
+				routes[originOf(r.Entity.Key)]++
+			}
+		}
+	}
+	var out CatchAll
+	shell := map[string]bool{}
+	for _, o := range obs {
+		switch {
+		case o.Collector == "azhaq-render":
+			out.Chrome = true
+		case o.Collector == "azhaq-crawl" && o.Kind == "meta":
+			var p struct {
+				URL        string                 `json:"url"`
+				Unrendered *webextract.Unrendered `json:"unrendered"`
+			}
+			if json.Unmarshal(o.Payload, &p) == nil && p.Unrendered != nil && p.Unrendered.Shell && target[p.URL] {
+				shell[originOf(p.URL)] = true
+			}
+		}
+	}
+	best := ""
+	for o, n := range routes {
+		if n >= minCatchAll && shell[o] && (n > routes[best] || n == routes[best] && o < best) {
+			best = o
+		}
+	}
+	if best == "" {
+		return CatchAll{Chrome: out.Chrome}
+	}
+	return CatchAll{Origin: best, Routes: routes[best], Chrome: out.Chrome}
+}
+
 // GraphQLHint is the command to read the schema of the GraphQL endpoints a
 // run found and did not introspect, and why, or "". Recognising an
 // endpoint is a GET; its schema is a POST, behind -graphql and a scope

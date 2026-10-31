@@ -186,6 +186,19 @@ func variants(host string, words []string) []string {
 	return out
 }
 
+// PermuteSample is two of the names Permute would ask for host: a number
+// next to its first label and an environment word joined to it.
+func PermuteSample(host string) []string {
+	v := variants(host, PermuteWords[:1])
+	var out []string
+	for _, n := range v {
+		if len(out) == 0 || strings.HasSuffix(strings.SplitN(n, ".", 2)[0], "-"+PermuteWords[0]) && len(out) == 1 {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
 func pad(n, width int) string {
 	s := strconv.Itoa(n)
 	for len(s) < width {

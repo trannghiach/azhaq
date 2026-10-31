@@ -154,7 +154,18 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 
 ### next
 
-`next` suggests a command to run after this one. `run` suggests three: see [run](commands/run.md#next-in-the-summary).
+`next` suggests a command to run after this one. `run` suggests three: see [run](commands/run.md#next-in-the-summary). In the text summary each is a line `next: COMMAND   (why)`. A suggestion is not an instruction: nothing runs it, and it may widen what azhaq sends, so read the command before you run it.
+
+A second kind of `next:` line follows from what this run measured. It is for a person at a terminal, and it is not in the JSON summary. At most two are printed. It is not printed with `-silent`, `-json` or `-jsonl`, and not when stderr is not a terminal unless `-v` is given. `AZHAQ_NO_HINTS=1` hides it everywhere.
+
+| Command | The line | It appears when |
+| --- | --- | --- |
+| `subs` | `azhaq subs -d example.com -permute   (try variations of the 412 names found, such as …)` | the run found names and did not use `-permute`. The two names it shows are two that `-permute` would ask for one of the names found. |
+| `crawl`, `run` | `… -browser -interact   (3 URLs of ORIGIN answered with the page every unknown path gets; …)` | three or more URLs of one origin answered with the page every unknown path gets, the origin's front page is an empty shell its scripts draw, and `-interact` was not given. `run` says nothing when its older `-browser` line above already points to Chrome. |
+| `fuzz` | `azhaq fuzz … -preflight PAGE.req -preflight-var-auto TOKEN:csrf_token   (the request sends csrf_token with a fixed value and 98 of 100 answers were 403 or 419; …)` | at least 10 answers came back, 80% or more of them 403 or 419, the request sends a field named like a token (`csrf`, `xsrf`, `_token`, `authenticity_token`, `nonce`) with a value fixed on the command line, and no `-preflight` was given. It says what was measured, not that the token is the cause. |
+| `run` | `azhaq roles -role anon -role 'user=…' -- RUN FLAGS   (the run was signed in: …)` | the run had a sign-in, a cookie or an `Authorization` or `Cookie` header, and found no `auth` row (the line for those is the one in [run](commands/run.md#next-in-the-summary)). |
+| `hunt` | the same | a run in the workspace was signed in, and `-roles` was not given. |
+| `subs`, `probe`, `crawl`, `dirs`, `urls`, `params`, `shots`, … | `azhaq run -domain example.com   (one command: names, services, crawl, files and a ranked map, in one workspace)` | a drop-in command ran on one domain or URL. With `-db` it is shown once for the workspace, and recorded in it only when it was shown; without `-db` there is no workspace, so it is shown each time. It is the last line, and is left out when two others are printed. |
 
 ## The ledger
 

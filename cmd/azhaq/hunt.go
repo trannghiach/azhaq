@@ -97,6 +97,9 @@ func cmdHunt(args []string) error {
 	if matched > len(list) {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d rows have a signal; -limit %d printed the first %d (best first)", matched, *limit, len(list)))
 	}
+	if len(roles) == 0 && signedWorkspace(path) {
+		rep.hint(rolesHint)
+	}
 	return rep.finish(*asJSON, false)
 }
 

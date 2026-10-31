@@ -259,6 +259,9 @@ func cmdCrawl(args []string) error {
 	if n := len(offsite); n > 0 && !*showOut {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d links found outside the crawl's scope were not followed (-do lists them)", n))
 	}
+	if ca := engine.CatchAllShell(rows, obs); ca.Origin != "" && !hasFlag(args, "interact") {
+		rep.hint(catchAllHint("azhaq crawl -u "+ca.Origin+"/ -browser -interact", ca))
+	}
 	return rep.finish(c.json, c.silent)
 }
 
