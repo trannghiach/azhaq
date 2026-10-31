@@ -1022,7 +1022,8 @@ func pathProbes(obs []types.StoredObservation) map[string][]types.StoredObservat
 func apiOperations(obs []types.StoredObservation) map[string]apiOp {
 	out := map[string]apiOp{}
 	for _, o := range obs {
-		if o.Kind != "url" {
+		// "params": the names the -params search found on a page (azhaq-params).
+		if o.Kind != "url" && o.Kind != "params" {
 			continue
 		}
 		var p struct {
