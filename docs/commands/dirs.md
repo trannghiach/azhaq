@@ -28,6 +28,8 @@ azhaq dirs -l services.txt -json
 3. Calibrates on paths that cannot exist, as ffuf's `-ac` does, unless you give a filter (`-fc`, `-fs`, `-fw`, `-fl` or `-fr`). Then the filters are yours: no guess is sent, and every answer they do not remove and a matcher keeps is listed, catch-all answers included. The summary says so in a note.
 4. Applies the matchers and filters to the answers and prints the paths that pass.
 
+Nothing else is sent: no front page is asked first, so with a filter given a sweep of N words is N requests, and `-max-requests N` is enough. The calibration guesses (or, with a filter, the first two words) double as the check that the service answers: if none of them gets an answer, the sweep stops there, the service is listed under `unreachable`, and the exit is 3.
+
 The request is ffuf's, so a ffuf command line carries over: [Details](#details) lists what it sends.
 
 ## Output

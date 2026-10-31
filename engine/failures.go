@@ -439,7 +439,9 @@ func Unreachable(seeds []types.Seed, ents []types.Entity, obs []types.StoredObse
 		keys[e.ID] = e.Key
 	}
 	for _, o := range obs {
-		if o.Collector != "azhaq-http" {
+		// A sweep that found the service dead (dirs asks first words, not
+		// a page) says so as the page request does.
+		if o.Collector != "azhaq-http" && !(o.Collector == "azhaq-dirs" && o.Kind == "error") {
 			continue
 		}
 		k := keys[o.EntityID]

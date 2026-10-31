@@ -321,7 +321,10 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 	host := schemeHost(dir)
 	cal := calibration{echo: map[int]bool{}, vary: map[int]bool{}}
 	if !c.Opts.NoCalibration {
-		cal = c.calibrate(ctx, dir, host)
+		var dead error
+		if cal, dead = c.calibrate(ctx, dir, host); dead != nil {
+			return nil, 0, 0, 0, 0, nil, false, dead
+		}
 	}
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
@@ -377,10 +380,58 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			}
 		}
 	}()
+	// ask sends one word and judges the answer; it returns the error of a
+	// request that got none.
+	ask := func(word string) error {
+		target := dir + escapeWord(word)
+		r, err := c.get(ctx, target, "")
+		if errors.Is(err, neterr.ErrBudget) {
+			out.Store(true)
+		}
+		if err != nil {
+			if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrEndsSession) {
+				nfailed.Add(1)
+			}
+			return err
+		}
+		if r.Status == http.StatusTooManyRequests {
+			nlimited.Add(1)
+		}
+		if !c.matches(r) {
+			return nil
+		}
+		if cal.explains(r, word) {
+			filtered.Add(1)
+			return nil
+		}
+		pending <- hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location}
+		return nil
+	}
+	// With no calibration the first words ask whether the service answers
+	// at all, so a dead one is one failed request, not the whole list, and
+	// no request is spent on a check apart from the sweep.
+	var dead error
+	first := 0
+	if c.Opts.NoCalibration {
+		var lost error
+		for first < min(2, len(targets)) && ctx.Err() == nil && !out.Load() {
+			if c.limiter.Wait(ctx, host) != nil {
+				break
+			}
+			err := ask(targets[first])
+			first++
+			if err == nil || errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrEndsSession) || ctx.Err() != nil {
+				lost = nil
+				break
+			}
+			lost = err
+		}
+		dead = lost
+	}
 	sem := make(chan struct{}, c.Opts.Threads)
 	var wg sync.WaitGroup
-	for _, t := range targets {
-		if ctx.Err() != nil || out.Load() || halt.Load() {
+	for _, t := range targets[first:] {
+		if ctx.Err() != nil || out.Load() || halt.Load() || dead != nil {
 			break
 		}
 		if err := c.limiter.Wait(ctx, host); err != nil {
@@ -391,33 +442,15 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 		go func(word string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			target := dir + escapeWord(word)
-			r, err := c.get(ctx, target, "")
-			if errors.Is(err, neterr.ErrBudget) {
-				out.Store(true)
-			}
-			if err != nil {
-				if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrEndsSession) {
-					nfailed.Add(1)
-				}
-				return
-			}
-			if r.Status == http.StatusTooManyRequests {
-				nlimited.Add(1)
-			}
-			if !c.matches(r) {
-				return
-			}
-			if cal.explains(r, word) {
-				filtered.Add(1)
-				return
-			}
-			pending <- hit{URL: target, Status: r.Status, Length: r.Length, Words: r.Words, Lines: r.Lines, Location: r.Location}
+			_ = ask(word)
 		}(t)
 	}
 	wg.Wait()
 	close(pending)
 	<-written
+	if dead != nil && err == nil {
+		err = dead
+	}
 	return hits, len(targets), int(filtered.Load()), int(nfailed.Load()), int(nlimited.Load()), held, out.Load(), err
 }
 
@@ -556,8 +589,8 @@ type calibration struct {
 // admin…, .htaccess…, a directory) and one per extension, at the sweep's
 // pace. A file that exists keeps its place even when its content equals
 // the catch-all page.
-func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration {
-	cal := calibration{echo: map[int]bool{}, vary: map[int]bool{}}
+func (c *Collector) calibrate(ctx context.Context, dir, host string) (cal calibration, dead error) {
+	cal = calibration{echo: map[int]bool{}, vary: map[int]bool{}}
 	probes := []string{randWord(), randWord(), randWord(), randWord()}
 	shapes := []string{probes[0], "admin" + probes[1], ".htaccess" + probes[2], probes[3] + "/"}
 	for _, ext := range c.Opts.Extensions {
@@ -568,8 +601,8 @@ func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration
 	// Asked together, up to the sweep's threads (a round trip, not one per
 	// shape), and read in the order of the shapes.
 	type answer struct {
-		r  response
-		ok bool
+		r   response
+		err error
 	}
 	answers := make([]answer, len(shapes))
 	sem := make(chan struct{}, max(1, min(c.Opts.Threads, len(shapes))))
@@ -584,12 +617,24 @@ func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration
 			defer wg.Done()
 			defer func() { <-sem }()
 			r, err := c.get(ctx, dir+s, probes[i])
-			answers[i] = answer{r, err == nil}
+			answers[i] = answer{r, err}
 		}()
 	}
 	wg.Wait()
+	// None of them answered: the service does not, and the sweep would
+	// ask every word for nothing.
+	var lost error
+	for _, a := range answers {
+		if a.err == nil {
+			lost = nil
+			break
+		}
+		if lost == nil && !errors.Is(a.err, neterr.ErrBudget) && !errors.Is(a.err, neterr.ErrEndsSession) && ctx.Err() == nil {
+			lost = a.err
+		}
+	}
 	for i, a := range answers {
-		if !a.ok {
+		if a.err != nil {
 			continue
 		}
 		r := a.r
@@ -603,7 +648,7 @@ func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration
 			cal.echo[r.Status] = true
 		}
 	}
-	return cal
+	return cal, lost
 }
 
 // explains is true when r looks like an answer to a path that does not

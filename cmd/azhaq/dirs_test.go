@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -131,12 +132,7 @@ func TestDirsFilterTurnsCalibrationOff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%v\n%s", err, errOut)
 	}
-	var asked []string // the service's own front page is probed first, not swept
-	for _, p := range paths {
-		if p != "/" {
-			asked = append(asked, p)
-		}
-	}
+	asked := append([]string(nil), paths...)
 	sort.Strings(asked)
 	if fmt.Sprint(asked) != "[/admin /bar /foo]" {
 		t.Errorf("requests %v: calibration guesses were sent", paths)
@@ -261,5 +257,75 @@ func TestDirsTimeoutStopsAndResumeFinishes(t *testing.T) {
 	sort.Strings(found)
 	if fmt.Sprint(found) != fmt.Sprint(hitsOf(want)) {
 		t.Errorf("after the resume %v, one run %v", found, hitsOf(want))
+	}
+}
+
+// A sweep sends one request for each word and nothing else: no page is
+// asked first (a redirecting front page would add its target), so -fs and
+// -max-requests with the words' count are enough, as with ffuf.
+func TestDirsSendsOneRequestPerWord(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path]++
+		mu.Unlock()
+		if r.URL.Path == "/" {
+			http.Redirect(w, r, "/login", http.StatusFound)
+			return
+		}
+		fmt.Fprint(w, "sign in")
+	}))
+	defer srv.Close()
+	words := []string{"", "login"}
+	for i := range 18 {
+		words = append(words, fmt.Sprintf("w%d", i))
+	}
+	wl := wlist(t, words...)
+	_, errOut, err := captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", wl, "-mc", "all", "-fs", "28", "-max-requests", "20", "-json", "-ledger", "off"})
+	})
+	if err != nil {
+		t.Fatalf("a budget of the 20 words stopped the sweep: %v\n%s", err, errOut)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	total := 0
+	for p, n := range seen {
+		total += n
+		if n != 1 {
+			t.Errorf("%s asked %d times", p, n)
+		}
+	}
+	if total != 20 {
+		t.Errorf("%d requests for 20 words: %v", total, seen)
+	}
+	if rep := lastReport(t, errOut); rep.Requests != 20 {
+		t.Errorf("the summary counts %d requests", rep.Requests)
+	}
+}
+
+// A service that does not answer ends the sweep after its first words, and
+// is listed as unreachable, as the front page check did.
+func TestDirsDeadServiceStopsAtOnce(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := l.Addr().String()
+	l.Close()
+	words := make([]string, 50)
+	for i := range words {
+		words[i] = fmt.Sprintf("w%d", i)
+	}
+	wl := wlist(t, words...)
+	for _, filter := range [][]string{{"-fs", "7"}, nil} {
+		_, errOut, err := captureBoth(t, func() error {
+			return cmdDirs(append([]string{"-u", "http://" + addr + "/", "-w", wl, "-json", "-ledger", "off"}, filter...))
+		})
+		rep := lastReport(t, errOut)
+		if exitCode(err) != exitPartial || len(rep.Unreachable) != 1 || rep.Requests > 6 {
+			t.Errorf("%v: exit %d, unreachable %v, %d requests\n%s", filter, exitCode(err), rep.Unreachable, rep.Requests, errOut)
+		}
 	}
 }

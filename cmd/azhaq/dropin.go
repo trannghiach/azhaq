@@ -767,7 +767,7 @@ func cmdDirs(args []string) error {
 		rep.Notes = append(rep.Notes, "no calibration: -fc, -fs, -fw, -fl or -fr was given, so the filters are yours and a catch-all answer they do not remove is listed")
 	}
 	// Paths, not technologies: probe names those (the fingerprints are 40 MB to load).
-	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-http", "azhaq-dirs"), "-dirs", wordsFile}
+	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-dirs"), "-dirs", wordsFile}
 	extra := given()
 	if !hasFlag(extra, "allow", "scope") {
 		// The services given are the scope.
