@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
@@ -100,5 +103,62 @@ func TestDirsBlankWordAsksTheBase(t *testing.T) {
 	rep := lastReport(t, errOut)
 	if rep.Requests < 3 || rep.Results != 2 {
 		t.Errorf("summary %+v, want the blank word counted", rep)
+	}
+}
+
+// A filter given by hand turns calibration off, as in ffuf: no guesses are
+// sent, and every word the filter does not remove is listed.
+func TestDirsFilterTurnsCalibrationOff(t *testing.T) {
+	var mu sync.Mutex
+	var paths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths = append(paths, r.URL.Path)
+		mu.Unlock()
+		if r.URL.Path == "/admin" {
+			fmt.Fprint(w, strings.Repeat("a", 99))
+			return
+		}
+		fmt.Fprint(w, strings.Repeat("c", 50)) // every unknown path: one size
+	}))
+	defer srv.Close()
+	words := wlist(t, "admin", "foo", "bar")
+	out, errOut, err := captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-fs", "7", "-mc", "all", "-silent", "-json"})
+	})
+	if err != nil {
+		t.Fatalf("%v\n%s", err, errOut)
+	}
+	var asked []string // the service's own front page is probed first, not swept
+	for _, p := range paths {
+		if p != "/" {
+			asked = append(asked, p)
+		}
+	}
+	sort.Strings(asked)
+	if fmt.Sprint(asked) != "[/admin /bar /foo]" {
+		t.Errorf("requests %v: calibration guesses were sent", paths)
+	}
+	var got []string
+	for _, l := range lines(out) {
+		var m map[string]any
+		if json.Unmarshal([]byte(l), &m) == nil {
+			got = append(got, strings.TrimPrefix(m["url"].(string), srv.URL))
+		}
+	}
+	sort.Strings(got)
+	if fmt.Sprint(got) != "[/admin /bar /foo]" {
+		t.Errorf("listed %v", got)
+	}
+	if !strings.Contains(errOut, "no calibration") {
+		t.Errorf("the summary does not say so:\n%s", errOut)
+	}
+	// Without a filter the catch-all size is calibrated away.
+	paths = nil
+	out, _, err = captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-silent"})
+	})
+	if err != nil || strings.TrimSpace(out) != srv.URL+"/admin" || len(paths) <= 4 {
+		t.Errorf("default: %q %v, %d requests", out, err, len(paths))
 	}
 }

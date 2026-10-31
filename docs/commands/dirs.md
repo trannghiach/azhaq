@@ -25,7 +25,7 @@ azhaq dirs -l services.txt -json
 
 1. Takes each service from `-u`, `-l` or stdin. A URL with a path is swept from that path.
 2. Asks every word of the wordlist, with each `-e` extension if you give any. An empty line is a word too: it asks the base URL itself, as in ffuf, and is counted like the rest.
-3. Calibrates on paths that cannot exist. The calibration is always on: it is ffuf's `-ac`.
+3. Calibrates on paths that cannot exist, as ffuf's `-ac` does, unless you give a filter (`-fc`, `-fs`, `-fw`, `-fl` or `-fr`). Then the filters are yours: no guess is sent, and every answer they do not remove and a matcher keeps is listed, catch-all answers included. The summary says so in a note.
 4. Applies the matchers and filters to the answers and prints the paths that pass.
 
 The request is ffuf's, so a ffuf command line carries over: [Details](#details) lists what it sends.
@@ -72,7 +72,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - `-u https://h/api/` asks `https://h/api/WORD`. A query or fragment on the URL is dropped, and a note says so.
 
 ### Pace
-- `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced. Calibration asks 4 guesses for each directory, and one more for each extension. At a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
+- `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced. With a filter given there are no guesses. Calibration asks 4 guesses for each directory, and one more for each extension. At a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
 
 ## Flags
 

@@ -216,9 +216,9 @@ The same exit and a note also say when requests got no answer. A server that dro
 - the same word and line counts, where the not-found pages differ in size among themselves;
 - a size within the path's length, where the not-found pages repeat the path.
 
-A real page that is byte-for-byte the not-found page cannot be told apart by any size or count. `-fs`, `-fw` and `-fl` do not undo the calibration.
+A real page that is byte-for-byte the not-found page cannot be told apart by any size or count.
 
-**Fix:** Use `fuzz -mc all` to see every answer.
+**Fix:** Give a filter of your own, such as `-fs 2410`: a filter turns the calibration off and every other answer is listed. Or use `fuzz -mc all` to see every answer.
 
 ### `dirs` says `N of M guesses were answered 429`
 

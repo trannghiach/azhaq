@@ -70,6 +70,9 @@ type Options struct {
 	// action (delete, reset, logout…); by default they are listed, not
 	// requested.
 	AllGets bool
+	// NoCalibration skips the guesses at paths that cannot exist: the user
+	// set the filters by hand (-fc -fs -fw -fl -fr), as in ffuf without -ac.
+	NoCalibration bool
 }
 
 // DefaultStatus is ffuf's default -mc.
@@ -316,7 +319,10 @@ const (
 // matcher keeps; err is what found returned.
 func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) error) (_ []hit, _ int, _ int, failed, limited int, held []string, spent bool, err error) {
 	host := schemeHost(dir)
-	cal := c.calibrate(ctx, dir, host)
+	cal := calibration{echo: map[int]bool{}, vary: map[int]bool{}}
+	if !c.Opts.NoCalibration {
+		cal = c.calibrate(ctx, dir, host)
+	}
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
 	for _, w := range c.Opts.Words {

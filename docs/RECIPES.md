@@ -400,7 +400,7 @@ azhaq dirs -u https://app.example.com/ -w big.txt -fs 4242 -fc 404 -e .php,.bak
 
 `big.txt` is a wordlist of yours.
 
-`dirs` calibrates like `ffuf -ac`. `fuzz` calibrates only with `-ac`, as ffuf does. With `-fs`, `-fw` and `-fl` the sizes, word counts and line counts are ffuf's, so a filter value moves over from a ffuf run.
+`dirs` calibrates like `ffuf -ac`, unless you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr`. `fuzz` calibrates only with `-ac`, as ffuf does. With `-fs`, `-fw` and `-fl` the sizes, word counts and line counts are ffuf's, so a filter value moves over from a ffuf run.
 
 ## Find the parameters a page reads
 

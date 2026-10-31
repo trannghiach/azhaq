@@ -877,6 +877,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if opts.Dirs.Set, err = dirsSet(given, "-dirs-"); err != nil {
 			return err
 		}
+		opts.Dirs.NoCalibration = dirsFiltered(given)
 	}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
@@ -2455,6 +2456,17 @@ var dirsMatchers = []struct {
 	{"fw", "word", "hide these word counts", true},
 	{"fl", "line", "hide these line counts", true},
 	{"fr", "regexp", "hide answers whose headers or body match this regular expression", true},
+}
+
+// dirsFiltered says a filter (-fc -fs -fw -fl -fr) was given: the user set
+// the filters by hand, so a sweep does not calibrate, as ffuf does not.
+func dirsFiltered(given map[string]string) bool {
+	for _, m := range dirsMatchers {
+		if m.filter && given[m.flag] != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // dirsSet is the matchers and filters the flags given (by name, without

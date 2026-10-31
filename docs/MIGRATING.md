@@ -333,14 +333,14 @@ azhaq crawl -u https://app.example.com/ -fs rdn -do -f rdn,path -rl 5
 <!-- azhaq: fuzz dirs -->
 
 - **Calibration.** `dirs` calibrates by default, as ffuf does with `-ac`. `fuzz` does not calibrate unless you give `-ac`, as in ffuf, so a command line moved over returns ffuf's matches.
-- `dirs` switches calibration off when you give `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft`. A command line moved from ffuf that has its own filters is calibrated by hand. The summary says so.
+- `dirs` switches calibration off when you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr` (`dirs` has no `-ft`). A command line moved from ffuf that has its own filters is filtered by hand, and sends no calibration guesses. The summary says so.
 - Either command needs the keyword `FUZZ`, or the one `-ack` names. Without it a note says nothing was calibrated.
 - **Scope.** The host in `-u` is the scope, unless `-allow`, `-deny` or `-scope` say otherwise. An input that would go to another host is counted and not sent.
 - A header that names a host is held to the scope too, because a front end routes by it. These are `Host`, `X-Forwarded-Host`, `X-Host` and `X-Original-Host`. With no `-allow`, `-deny` or `-scope`, a host you name in a header joins the targets you named. With a rule, a header naming a host outside it is refused before anything is sent. See [Concepts](CONCEPTS.md).
 - So `-u https://10.0.0.5/ -H 'Host: app.example.com'` and `-H 'Host: FUZZ.example.com'` run as in ffuf. With `-allow 10.0.0.5`, a word that names another host is counted and not sent.
 - A `Host` from a `-request` file is not typed by you. One that differs from `-u` is refused unless `-allow` names it.
 - **Budget and pace.** Every request, calibration included, counts against `-max-requests` and `-rate`, goes in the ledger and stops at the kill file.
-- `-rate` also paces the calibration guesses. ffuf sends its calibration unpaced, so a low-rate sweep takes longer than ffuf's and stays within your rate. This holds for `dirs`, which always calibrates, and for `fuzz -ac`. See [dirs](commands/dirs.md).
+- `-rate` also paces the calibration guesses. ffuf sends its calibration unpaced, so a low-rate sweep takes longer than ffuf's and stays within your rate. This holds for `dirs` without a filter, and for `fuzz -ac`. See [dirs](commands/dirs.md).
 - **Dead target.** Five unanswered requests in a row stop the run with exit 3. `-se` makes it twice `-t` failures of any kind, as in ffuf.
 - **Not in `fuzz`.** ffuf's scrapers, `-search` and its history files are not there. `-db FILE` keeps the matches. There is no audit log: the hash-chained `-ledger` is the record.
 - **`dirs` follows ffuf's counting and its defaults.** That is 40 guesses in flight, no pace, and the matcher `-mc 200-299,301,302,307,401,403,405,500`.
