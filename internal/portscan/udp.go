@@ -9,8 +9,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // UDPTop is the default UDP list: the services that answer a harmless
@@ -250,7 +248,6 @@ func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pas
 // for the first ask of a port, up to 3 for the fourth.
 func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port, pass int) (UDPPort, string) {
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
-	ledger.UDP(ctx, host, addr)
 	raddr, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return UDPPort{}, UDPOpenFiltered
@@ -258,10 +255,10 @@ func (s *Scanner) udpProbe(ctx context.Context, host, ip string, port, pass int)
 	req, _ := udpAsk(port, pass)
 	var conn *net.UDPConn
 	if req.anySource {
-		if conn, err = listenAnySource(raddr); err != nil {
+		if conn, err = s.pd.UDPAnySource(ctx, host, raddr); err != nil {
 			return UDPPort{}, UDPOpenFiltered
 		}
-	} else if conn, err = net.DialUDP("udp", nil, raddr); err != nil {
+	} else if conn, err = s.pd.UDP(ctx, host, raddr); err != nil {
 		return UDPPort{}, UDPOpenFiltered
 	}
 	defer conn.Close()

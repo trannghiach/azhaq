@@ -17,9 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/net/proxy"
-
-	"github.com/trannghiach/azhaq/internal/ledger"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/limit"
 )
 
@@ -185,7 +183,7 @@ type Scanner struct {
 	loopPaced  bool
 	conns      chan struct{} // connections in flight, over every address
 	udpWorkers int
-	proxy      proxy.ContextDialer
+	pd         *egress.PortDialer // every connect of the scan is made by it
 	runSeed    int64
 
 	mu      sync.Mutex
@@ -244,16 +242,6 @@ func (s *Scanner) init() {
 		}
 		s.Workers = min(s.Workers, fdBudget())
 		s.conns = make(chan struct{}, s.Workers)
-		if s.Proxy != "" {
-			var auth *proxy.Auth
-			if u, p, ok := strings.Cut(s.ProxyAuth, ":"); ok || u != "" {
-				auth = &proxy.Auth{User: u, Password: p}
-			}
-			base := &net.Dialer{Timeout: s.Timeout}
-			if d, err := proxy.SOCKS5("tcp", s.Proxy, auth, base); err == nil {
-				s.proxy, _ = d.(proxy.ContextDialer)
-			}
-		}
 		s.runSeed = s.Seed
 		if s.runSeed == 0 {
 			s.runSeed = time.Now().UnixNano()
@@ -265,6 +253,7 @@ func (s *Scanner) init() {
 			s.Banner = 1500 * time.Millisecond
 		}
 		s.limiter = limit.New(s.Rate, max(1, int(s.Rate/10)))
+		s.pd = egress.NewPortDialer(s.Timeout, s.SourceIP, s.Proxy, s.ProxyAuth)
 	})
 }
 
@@ -442,29 +431,6 @@ const (
 	portTimedOut // no answer either way within the timeout
 )
 
-// dialer is a net.Dialer for a connect to ip, from the scanner's source
-// address when it has one of ip's family.
-func (s *Scanner) dialer(ip string) net.Dialer {
-	d := net.Dialer{Timeout: s.Timeout}
-	if s.SourceIP != nil {
-		if t := net.ParseIP(ip); t != nil && (t.To4() == nil) == (s.SourceIP.To4() == nil) {
-			d.LocalAddr = &net.TCPAddr{IP: s.SourceIP}
-		}
-	}
-	return d
-}
-
-// connect opens a TCP connection to addr, through the proxy when there is one.
-func (s *Scanner) connect(ctx context.Context, ip, addr string) (net.Conn, error) {
-	if s.proxy != nil {
-		cctx, cancel := context.WithTimeout(ctx, s.Timeout)
-		defer cancel()
-		return s.proxy.DialContext(cctx, "tcp", addr)
-	}
-	d := s.dialer(ip)
-	return d.DialContext(ctx, "tcp", addr)
-}
-
 // selfConnect says a dial connected the socket to itself: a connect from
 // the ephemeral range to a closed local port can pick that port as its
 // source and meet itself (simultaneous open). Nothing listens there.
@@ -481,9 +447,8 @@ func refused(err error) bool {
 
 func (s *Scanner) probe(ctx context.Context, host, ip string, port int) (Open, portState) {
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
-	ledger.TCP(ctx, host, addr)
 	t0 := time.Now()
-	conn, err := s.connect(ctx, ip, addr)
+	conn, err := s.pd.TCP(ctx, host, addr)
 	rtt := time.Since(t0)
 	if err != nil {
 		if refused(err) || ctx.Err() != nil {
@@ -587,8 +552,7 @@ func (s *Scanner) secondLook(ctx context.Context, host, ip string, open []Open) 
 
 func (s *Scanner) greetAgain(ctx context.Context, host, ip string, o *Open) {
 	addr := net.JoinHostPort(ip, strconv.Itoa(o.Port))
-	ledger.TCP(ctx, host, addr)
-	conn, err := s.connect(ctx, ip, addr)
+	conn, err := s.pd.TCP(ctx, host, addr)
 	if err != nil || selfConnect(conn) {
 		if err == nil {
 			conn.Close()

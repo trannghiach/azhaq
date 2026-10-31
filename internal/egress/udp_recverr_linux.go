@@ -1,6 +1,6 @@
 //go:build linux
 
-package portscan
+package egress
 
 import (
 	"net"

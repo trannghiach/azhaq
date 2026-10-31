@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"sync"
 	"time"
-
-	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // maxProbes is how many more connects an open port that said nothing may
@@ -215,18 +213,14 @@ func (s *Scanner) dialWait(ctx context.Context, host, ip string, port int, secur
 		host = ip
 	}
 	addr := net.JoinHostPort(ip, strconv.Itoa(port))
-	ledger.TCP(ctx, host, addr)
-	d := s.dialer(ip)
 	if !secure {
-		return d.DialContext(ctx, "tcp", addr)
+		return s.pd.TCPDirect(ctx, host, addr)
 	}
 	cfg := &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS10}
 	if net.ParseIP(host) == nil {
 		cfg.ServerName = host
 	}
-	hctx, cancel := context.WithTimeout(ctx, handshake)
-	defer cancel()
-	return (&tls.Dialer{NetDialer: &d, Config: cfg}).DialContext(hctx, "tcp", addr)
+	return s.pd.TLS(ctx, host, addr, cfg, handshake)
 }
 
 // talk writes req (when there is one) and reads the answer until frame

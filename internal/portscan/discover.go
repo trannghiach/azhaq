@@ -5,8 +5,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-
-	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // DiscoveryPorts are the ports a host is asked on to tell it is there: a
@@ -45,8 +43,7 @@ func (s *Scanner) Up(ctx context.Context, host, ip string) (bool, error) {
 				defer wg.Done()
 				defer func() { <-s.conns }()
 				addr := net.JoinHostPort(ip, strconv.Itoa(p))
-				ledger.TCP(ctx, host, addr)
-				c, err := s.connect(ctx, ip, addr)
+				c, err := s.pd.TCP(ctx, host, addr)
 				self := err == nil && selfConnect(c)
 				if err == nil {
 					c.Close()

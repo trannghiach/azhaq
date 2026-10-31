@@ -72,7 +72,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if err := egress.Killed(); err != nil {
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}
-	ledger.TCP(ctx, host, addr)
 	dctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	hs := timing.Start(ctx, "tls.handshake", host)
@@ -81,16 +80,14 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var conn net.Conn
 	var err error
 	if c.Dial != nil {
+		ledger.TCP(ctx, host, addr)
 		conn, err = c.Dial(dctx, "tcp", addr)
 	} else {
-		dialer := &tls.Dialer{
-			Config: &tls.Config{
-				ServerName:         serverName,
-				InsecureSkipVerify: true, // observe the presented cert
-				MinVersion:         tls.VersionTLS12,
-			},
-		}
-		conn, err = dialer.DialContext(dctx, "tcp", addr)
+		conn, err = egress.DialTLS(dctx, host, addr, &tls.Config{
+			ServerName:         serverName,
+			InsecureSkipVerify: true, // observe the presented cert
+			MinVersion:         tls.VersionTLS12,
+		}, 8*time.Second)
 	}
 	if err != nil {
 		if neterr.UnknownHost(err) || isIP {
