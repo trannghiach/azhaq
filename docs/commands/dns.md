@@ -93,6 +93,8 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `not asked` | Names left when a run stops. |
 | `wildcard answers left out` | Names that resolved only through a wildcard zone. |
 
+The summary counts names: `12 names`. When a line is a record (`-resp`, `-resp-only`, a transfer), it counts both: `13 records of 12 names`. `-json` has one row for each name, so its `results` is the number of names.
+
 The summary also lists failures per kind of error, and takeover candidates: a CNAME to a name that no longer exists.
 
 ## Details
@@ -113,6 +115,7 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 
 ### Words and inputs left out
 - With `-d DOMAIN -w WORDS` it resolves `WORD.DOMAIN` for each word, as `dnsx -d -w` does.
+- `-dns-rate N` holds back the queries of `-d` with `-w` too: 20 names at 1 a second took 19 s. In one test run dnsx 1.x did not slow those down with `-rl` (20 names at `-rl 1` took 0.46 s), so the same flag gives a faster run there. See [Migrating](../MIGRATING.md#dnsx-azhaq-dns).
 - `left out` counts inputs that were not asked about:
   - an address or range without `-ptr`
   - a word that makes no name

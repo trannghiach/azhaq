@@ -156,17 +156,26 @@ func JunkReason(raw string) string {
 			// segment, it resolves it first.
 			return JunkDot
 		}
+		if len(seg) > 2 && strings.Trim(seg, ".") == "" {
+			return JunkMalformed
+		}
 	}
 	for _, bad := range []string{"%e2%80%a6", "\u2026", "*", "%2a", "%3c", "%3e", "<", ">", "\\", "%5c", "%22", "%27"} {
 		if strings.Contains(lp, bad) {
 			return JunkMalformed
 		}
 	}
+	if strings.HasSuffix(lp, "...") {
+		return JunkMalformed // a link shortened to "..." where it was shown
+	}
 	last := strings.NewReplacer("%28", "(", "%29", ")", "%5b", "[", "%5d", "]").Replace(lp[strings.LastIndex(lp, "/")+1:])
 	if strings.Count(last, ")") > strings.Count(last, "(") || strings.Count(last, "]") > strings.Count(last, "[") {
 		return JunkSentence // the end of the sentence the link sat in
 	}
-	for _, tail := range []string{").", "),", ".[", "[", "'", ",", ";"} {
+	if strings.HasSuffix(u.RawQuery, ".") {
+		return JunkSentence
+	}
+	for _, tail := range []string{".", ").", "),", ".[", "[", "'", ",", ";"} {
 		if strings.HasSuffix(last, tail) {
 			return JunkSentence
 		}

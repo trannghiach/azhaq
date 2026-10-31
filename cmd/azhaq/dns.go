@@ -722,7 +722,7 @@ type dnsRun struct {
 	kept       []dnsKept
 	watermark  int
 	finished   map[int]bool
-	counts     struct{ done, resolved, wildcard, failed, noAnswer, broken, otherCode atomic.Int64 }
+	counts     struct{ done, resolved, wildcard, failed, noAnswer, broken, otherCode, names atomic.Int64 }
 	lastRows   atomic.Int64
 	notes      []string
 	axfrNotes  []string
@@ -1090,6 +1090,12 @@ func (row *dnsRow) cdn(d *dnsr.Data) {
 // output prints the name as dnsx would, given what the flags selected.
 func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 	cf := r.cf
+	lines := 0 // what this name printed: a name is one row, or one line for each record
+	defer func() {
+		if lines > 0 {
+			r.counts.names.Add(1)
+		}
+	}()
 	// JSON, -raw and templates print a name as one row; with a type flag
 	// only names that have such a record, unless -rcode asked for others.
 	whole := cf.json || cf.raw || cf.template != ""
@@ -1102,13 +1108,16 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 	switch {
 	case cf.template != "":
 		r.w.line(r.tmpl.render(row))
+		lines++
 		return
 	case cf.json:
 		raw, _ := json.Marshal(row)
 		r.w.lineRaw(raw)
+		lines++
 		return
 	case cf.raw:
 		r.w.line(strings.TrimRight(d.Raw, "\n"))
+		lines++
 		return
 	}
 	details := ""
@@ -1121,6 +1130,7 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 	if len(cf.rcodes) > 0 {
 		if name, ok := dns.RcodeToString[d.StatusCodeRaw]; ok {
 			r.w.line(host + " [" + name + "]")
+			lines++
 		}
 		return
 	}
@@ -1130,11 +1140,14 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 			switch {
 			case cf.ro:
 				r.w.line(item + details)
+				lines++
 			case cf.resp:
 				r.w.line(host + " [" + typ + "] [" + item + "]" + details)
+				lines++
 			default:
 				if !printed {
 					r.w.line(host + details)
+					lines++
 				}
 				printed = true
 				return // the name has one: that is the line
@@ -1192,6 +1205,7 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 				if !seen[rec] {
 					seen[rec] = true
 					r.w.line(rec)
+					lines++
 				}
 			}
 		}
@@ -1392,6 +1406,15 @@ func stringifyField(v any) string {
 func (r *dnsRun) summarize(ctx context.Context, args []string, maxtime float64) {
 	rep, in := r.rep, r.in
 	rep.Results = r.w.count()
+	if names := int(r.counts.names.Load()); names != rep.Results {
+		// One line for each record (-resp, -ro, a transfer): the lines are
+		// not the names, and -json counts the names.
+		noun := "names"
+		if names == 1 {
+			noun = "name"
+		}
+		rep.what = fmt.Sprintf("records of %d %s", names, noun)
+	}
 	asked := int(in.asked.Load())
 	rep.Counts = map[string]int{"asked": asked}
 	if n := asked - int(r.counts.done.Load()); n > 0 {

@@ -604,3 +604,40 @@ func TestDNSAllNamesOutsideTheScope(t *testing.T) {
 		t.Errorf("exit %d\n%s", code, errOut)
 	}
 }
+
+// A line for each record is not a name: the summary counts the lines as
+// records of so many names, the way -json counts the rows.
+func TestDNSSummaryCountsRecordsAndNames(t *testing.T) {
+	t.Chdir(t.TempDir())
+	lab := startLab(t)
+	labZoneMu.Lock()
+	labZone["two.lab.zz."] = []string{"A 192.0.2.7", "A 192.0.2.8"}
+	labZone["one.lab.zz."] = []string{"A 192.0.2.9"}
+	labZoneMu.Unlock()
+	t.Cleanup(func() {
+		labZoneMu.Lock()
+		delete(labZone, "two.lab.zz.")
+		delete(labZone, "one.lab.zz.")
+		labZoneMu.Unlock()
+	})
+	l := writeList(t, "two.lab.zz", "one.lab.zz")
+	summary := func(args ...string) ([]string, string) {
+		out, errOut, err := captureBoth(t, func() error { return run(append([]string{"dns", "-l", l, "-r", lab.addr}, args...)) })
+		if err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return lines(out), errOut
+	}
+	ls, head := summary("-a", "-resp")
+	if len(ls) != 3 || !strings.Contains(head, "3 records of 2 names") {
+		t.Errorf("-resp: %d lines, summary %q", len(ls), head)
+	}
+	ls, head = summary("-a")
+	if len(ls) != 2 || !strings.Contains(head, "2 names") || strings.Contains(head, "records") {
+		t.Errorf("one line each: %d lines, summary %q", len(ls), head)
+	}
+	ls, rep, _ := dnsOut(t, "-l", l, "-r", lab.addr, "-a", "-resp", "-json")
+	if len(ls) != 2 || rep.Results != 2 {
+		t.Errorf("-json: %d rows, results %d", len(ls), rep.Results)
+	}
+}

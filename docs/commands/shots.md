@@ -108,7 +108,7 @@ A page that was not fully loaded when the picture was taken has these fields, an
 ### Chrome, ports and file names
 - `AZHAQ_CHROME` names the browser. In a container where Chrome cannot start its sandbox, `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one. Do that only where you accept that the pages it loads are untrusted.
 - Chrome refuses some ports, such as 6000, 6666 and 10080, with `net::ERR_UNSAFE_PORT`. `-unsafe-ports` allows them by default.
-- A URL you give is shot as given, one file for each page, named like `http_host_port_path_hash.png`. The URLs a run finds itself are shot only when they are front pages.
+- A URL you give is shot as given, one file for each page, named like `http_host_port_path_hash.png`; with a scheme it is one target and one row (where Chrome ended is in `final_url`), and only a bare name or `host:port` is tried on both schemes. The URLs a run finds itself are shot only when they are front pages.
 - A page that calls `alert()` on load has its dialog accepted and is shot. Nothing waits for a click.
 
 ### Pace

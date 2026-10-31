@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -457,19 +458,33 @@ func gate(obs []types.StoredObservation) int {
 }
 
 // proofOf summarizes a row's facts: the first value of each key, so a page
-// fetched by two collectors shows status=403 once; the open ports are the
-// newest scan's, as a scan a limit stopped is followed by the one that
-// finishes it.
+// fetched by two collectors shows status=403 once. The open ports are the
+// newest azhaq scan's (a scan a limit stopped is followed by the one that
+// finishes it) joined with every port an imported row names, as a tool
+// like naabu writes one row per port.
 func proofOf(e types.Entity, obs []types.StoredObservation) string {
 	keys := []string{"status", "title", "role", "ips", "cname", "open", "count", "error", "skipped", "word", "warning", "note", "auth", "via"}
 	vals := map[string]string{}
+	var own, imported []string
+	var haveOwn, haveImported bool
+	via := map[string]bool{}
 	for _, o := range obs {
 		var m map[string]any
 		if json.Unmarshal(o.Payload, &m) != nil {
 			continue
 		}
 		if v, ok := m["open"]; ok && v != nil && o.Kind == "ports" && m["range"] != true {
-			vals["open"] = fmt.Sprint(v)
+			ports := openPorts(v)
+			if o.Collector == "azhaq-ports" {
+				own, haveOwn = ports, true
+			} else {
+				imported, haveImported = append(imported, ports...), true
+				name := o.Collector
+				if s, ok := m["via"].(string); ok && s != "" {
+					name = s
+				}
+				via[name] = true
+			}
 		}
 		for _, k := range keys {
 			if _, done := vals[k]; done {
@@ -483,6 +498,17 @@ func proofOf(e types.Entity, obs []types.StoredObservation) string {
 			}
 		}
 	}
+	if haveOwn || haveImported {
+		vals["open"] = "[" + strings.Join(portUnion(own, imported), " ") + "]"
+	}
+	if haveOwn && haveImported {
+		names := []string{"azhaq"}
+		for n := range via {
+			names = append(names, n)
+		}
+		sort.Strings(names[1:])
+		vals["via"] = strings.Join(names, ",")
+	}
 	var parts []string
 	for _, k := range keys {
 		if v, ok := vals[k]; ok {
@@ -490,6 +516,42 @@ func proofOf(e types.Entity, obs []types.StoredObservation) string {
 		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// openPorts reads a payload's open list as strings.
+func openPorts(v any) []string {
+	list, ok := v.([]any)
+	if !ok {
+		return []string{fmt.Sprint(v)}
+	}
+	out := make([]string, 0, len(list))
+	for _, p := range list {
+		out = append(out, fmt.Sprint(p))
+	}
+	return out
+}
+
+// portUnion joins port lists without repeats, in port order.
+func portUnion(lists ...[]string) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, l := range lists {
+		for _, p := range l {
+			if !seen[p] {
+				seen[p] = true
+				out = append(out, p)
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		a, ea := strconv.Atoi(out[i])
+		b, eb := strconv.Atoi(out[j])
+		if ea != nil || eb != nil {
+			return out[i] < out[j]
+		}
+		return a < b
+	})
+	return out
 }
 
 func statusOf(raw json.RawMessage) int {

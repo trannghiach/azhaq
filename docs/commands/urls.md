@@ -78,8 +78,10 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - `"directory listing sort link"`.
 - `"script placeholder (NaN, undefined, null)"`.
 - `"dot segment"`.
-- `"malformed link (wildcard, quote, bracket, ellipsis)"`.
-- `"link cut at the end of its sentence"`.
+- `"malformed link (wildcard, quote, bracket, ellipsis)"`: the ellipsis is `…` or a `...` that ends the path or is a segment of its own.
+- `"link cut at the end of its sentence"`: a path or query that ends in `.`, `,`, `;`, `'` or an unmatched `)` or `]`.
+
+Every source's URLs go through these rules, OTX's too.
 
 `counts` has the total as `dropped as junk`, and a note says it: `7 URLs dropped as junk (…; -raw keeps them)`. `-raw` prints them and drops none.
 

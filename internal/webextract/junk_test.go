@@ -183,6 +183,12 @@ func TestJunkReason(t *testing.T) {
 		"http://example.org/a/../b":                           JunkDot,
 		"http://example.org/1234567890*~1*/x":                 JunkMalformed,
 		"http://example.org/login.php).":                      JunkSentence,
+		"http://example.org/reports/2307813.":                 JunkSentence,
+		"http://example.org/search?q=cats.":                   JunkSentence,
+		"http://example.org/reports/...":                      JunkMalformed,
+		"http://example.org/.../x":                            JunkMalformed,
+		"http://example.org/reports/abc...":                   JunkMalformed,
+		"http://example.org/v1.2/a.b":                         "",
 		"http://example.org/login.php":                        "",
 		"http://example.org/products/nessus":                  "",
 	} {
