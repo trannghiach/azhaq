@@ -86,7 +86,7 @@ The map has one row per entity, best first: the target's own pages and APIs, the
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two things are specific to `run`:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). Two things are specific to `run`:
 
 - The summary counts `client routes` and `websockets` apart from `URLs`.
 - It counts the path checks it skipped, as a note ([Path checks](#path-checks-stop-at-their-answer)).

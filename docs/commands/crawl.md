@@ -54,7 +54,7 @@ The fields of a `-json` row are the map row's. [run](run.md#output) defines them
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary of a crawl:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). The summary of a crawl:
 
 - counts the rejected strings and the links outside the scope;
 - names a host that answered 429 or 503, and what was done about it;

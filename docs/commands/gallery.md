@@ -62,7 +62,7 @@ What the gallery cannot show, it says. A banner and `/api/stats` count the pages
 | 1 | No workspace could be read, or it holds no screenshot. |
 | 3 | A workspace was skipped, or picture files are missing. Said on stderr and on the page. |
 
-The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the other exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Details
 

@@ -66,7 +66,7 @@ Every takeover candidate is also in the summary, under `takeover`.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). These points are specific to `subs`. The counts themselves are in [Details](#details).
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). These points are specific to `subs`. The counts themselves are in [Details](#details).
 
 - The summary has `degraded` when `sources failed` is above 0.
 - Names past `-max-names` are left out, and the run ends with exit 3.

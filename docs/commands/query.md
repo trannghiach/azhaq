@@ -59,7 +59,7 @@ The fields mean what they mean in the `failed` list of the summary: see [OUTPUT.
 
 `query` prints every row that matches, unless `-limit` says otherwise. The summary then says how many matched.
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Flags
 

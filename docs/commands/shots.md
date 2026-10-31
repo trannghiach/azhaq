@@ -69,7 +69,7 @@ All of it is read from events Chrome already sends. It costs no request.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two cases are specific to `shots`:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). Two cases are specific to `shots`:
 
 - A page whose own in-scope assets did not load is `partial`, and the run exits 3.
 - A page that is partial only because assets of hosts outside the scope were blocked is marked and noted. The run still exits 0, because the scope is yours.

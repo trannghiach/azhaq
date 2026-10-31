@@ -110,7 +110,7 @@ With `-every`, `watch` runs until a signal stops it, and that exits 0. A run tha
 
 A notification that did not arrive is named on stderr. Without `-every` the exit code is then 3, and the run's own 3 or 4 wins. With `-every` it stays on stderr.
 
-The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the other exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Details
 

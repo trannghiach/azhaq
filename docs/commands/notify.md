@@ -55,7 +55,7 @@ Exit 2 and nothing sent when:
 - `-p` names something that is no provider
 - `-p` or `-id` is a filter that matches nothing
 
-The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the other exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Details
 

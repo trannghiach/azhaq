@@ -53,7 +53,7 @@ NAME: N rules in, N out; N domains to enumerate, N targets to probe as given; N 
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Without `-scope`, the command exits 2. These are errors, exit 1: a platform with no `-program`, and a scope with no in-scope web target (`no in-scope web targets found`).
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). Without `-scope`, the command exits 2. These are errors, exit 1: a platform with no `-program`, and a scope with no in-scope web target (`no in-scope web targets found`).
 
 ## Flags
 

@@ -149,7 +149,7 @@ With `-replay-writes`, these verdicts join the list. Proved cross writes keep th
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). What is specific to `roles`:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). What is specific to `roles`:
 
 - **Exit 3:** a signed-in role was refused wherever a session matters. The summary names it in a note. See [Dead sessions](#dead-sessions).
 - **Exit 3:** a token has expired and nothing more can be said of it. A note says so. See [Expired tokens](#expired-tokens).

@@ -66,7 +66,7 @@ One row per line, with the columns `seq`, `time`, `kind`, `method`, `target`, `h
 
 Lines follow the last seal when a run was killed, crashed or is still running, or when lines were cut from the end.
 
-The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the other exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Details
 

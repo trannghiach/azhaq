@@ -45,7 +45,7 @@ Plain output is one URL per line with its status, size, words and lines. With `-
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two cases end with exit 3.
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). Two cases end with exit 3.
 
 - **Cut-off answers.** An answer cut off before its body ended, by a server going down or a dropped connection, is asked once more. It is never counted as a hit. The summary says how many paths still got no whole answer: `12 paths got no whole answer, after one retry: they were not judged`.
 - **429 answers.** A sweep whose guesses were answered 429 says so the same way: `6 of 6 guesses were answered 429 …`. A 429 is outside the default `-mc`, so those paths were not judged.

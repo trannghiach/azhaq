@@ -91,7 +91,7 @@ On request:
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary counts the targets that got no answer under `without an answer`, and says how many rows the matchers and filters left out.
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). The summary counts the targets that got no answer under `without an answer`, and says how many rows the matchers and filters left out.
 
 ## Details
 

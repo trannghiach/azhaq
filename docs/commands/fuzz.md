@@ -60,7 +60,7 @@ One line looks like this:
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). With `-json` the summary is one JSON line on stderr. These cases are specific to `fuzz`:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). With `-json` the summary is one JSON line on stderr. These cases are specific to `fuzz`:
 
 - Five unanswered requests in a row stop the run, because the target is down. The exit code is 3 and the origin is listed under "did not answer".
 - With `-se` the run stops after twice `-t` failures of any kind in a row, as in ffuf. `-se-after N` names that number.

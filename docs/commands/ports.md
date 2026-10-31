@@ -72,7 +72,7 @@ The fields of a `-json` row, which are naabu's plus azhaq's:
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary of `ports` says:
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). The summary of `ports` says:
 
 | Summary | Says |
 | --- | --- |

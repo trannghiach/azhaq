@@ -63,7 +63,7 @@ Two files can be written as well:
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). These cases are specific to `params`.
+The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes). These cases are specific to `params`.
 
 - A page that rate-limits (429, 418, 503) or leaves requests unanswered fails with exit 3. The failure is listed as `failed` and retryable, with a note.
 - A page left alone has a note that says why: it changes by itself, is not text, or is past `-params-per-host`.
