@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- `dirs` and `fuzz` send no `Accept` header, as ffuf does: an app that picks its answer by it (Express's redirect body: 56 bytes to a browser's `Accept`, 28 to ffuf) now gives the size ffuf counts, so a `-fs` taken from ffuf filters the same hits. The `User-Agent` stays a Chrome's, and `-H` wins. The docs say that a wordlist sweep asks every word, `/logout` included, as ffuf does; only the map leaves state-changing GETs alone.
+- `dirs` asks its calibration guesses together, up to `-t` at once, so a slow service is waited on for one round trip instead of four (28 requests to a server taking 300 ms each: 1.84 s, now 0.94 s).
+- The technology fingerprints load in about a quarter of the time and allocation (0.6 s and 154 MB, now 0.14 s and 42 MB): the literal prefilter no longer unrolls every `x{1,250}`. A 5-URL `probe` takes 0.2 s, not 0.46 s; the prefilter and the results are the same.
+- `probe` gives every input line a row of its own: `https://h/`, `h` and `h:443` that reach one page were one answer and `no answer` rows (exit 3) for the others; each is now a row from the one request.
 - A webhook that fails a send no longer has its answer printed: only a bare error code is kept (`channel_not_found`), since a server may echo anything (`500 Internal Server Error echoed SECRET_ECHO_TOKEN` was printed whole).
 - A port scan that `-max-requests` or the kill file stops keeps the open ports it found and the ports it asked; `azhaq resume` asks only the others and its row holds every open port. Before, the stopped scan's results were dropped and `resume` asked every port again, so a scan larger than the budget never finished.
 - `roles` sends every request through `-proxy`: the role runs, the history reads and the replay. The replay went direct (a proxy saw 93 requests of 144); `roles -proxy URL` sets it for all of them, and `params -proxy` is accepted.
