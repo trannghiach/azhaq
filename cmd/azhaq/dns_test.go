@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,6 +54,10 @@ func startLab(t *testing.T) *dnsLab {
 	lab.addr = pc.LocalAddr().String()
 	return lab
 }
+
+// labZoneMu guards labZone: a test adds names while earlier labs' servers
+// may still answer.
+var labZoneMu sync.RWMutex
 
 var labZone = map[string][]string{
 	"lab.zz.":           {"A 192.0.2.1", "NS ns.lab.zz.", "MX 10 mail.lab.zz.", `TXT "v=spf1 -all"`, "SOA ns.lab.zz. h.lab.zz. 5 1 2 3 4", `CAA 0 issue "ca.test"`},
@@ -109,7 +114,9 @@ func (lab *dnsLab) handle(w dns.ResponseWriter, r *dns.Msg) {
 	case "refused.lab.zz.":
 		m.Rcode = dns.RcodeRefused
 	default:
+		labZoneMu.RLock()
 		recs, ok := labZone[name]
+		labZoneMu.RUnlock()
 		if !ok && strings.HasSuffix(name, ".wild.lab.zz.") {
 			recs, ok = []string{"A 192.0.2.99"}, true
 		}
@@ -126,7 +133,10 @@ func (lab *dnsLab) handle(w dns.ResponseWriter, r *dns.Msg) {
 				m.Answer = append(m.Answer, rr)
 			}
 			if c, ok := rr.(*dns.CNAME); ok && q.Qtype == dns.TypeA {
-				for _, t := range labZone[c.Target] {
+				labZoneMu.RLock()
+				target := labZone[c.Target]
+				labZoneMu.RUnlock()
+				for _, t := range target {
 					if rr, err := dns.NewRR(c.Target + " 60 IN " + t); err == nil && rr.Header().Rrtype == dns.TypeA {
 						m.Answer = append(m.Answer, rr)
 					}
@@ -268,8 +278,10 @@ func TestDNSTextFormsKeepTheCaseOfValues(t *testing.T) {
 		"alias.lab.zz.": {"CNAME Target.Lab.ZZ."},
 	}
 	for k, v := range added {
+		labZoneMu.Lock()
 		labZone[k] = v
-		t.Cleanup(func() { delete(labZone, k) })
+		labZoneMu.Unlock()
+		t.Cleanup(func() { labZoneMu.Lock(); delete(labZone, k); labZoneMu.Unlock() })
 	}
 	for _, tt := range []struct {
 		host, flag string
