@@ -296,6 +296,103 @@ func TestMCPMapAndResume(t *testing.T) {
 	}
 }
 
+// azhaq_status reports the scope, the budget and each workspace's state:
+// complete or stopped by a limit (with what resumes it) from this
+// session's own calls, when it made one, else from what the database on
+// disk says is left to do.
+func TestMCPStatus(t *testing.T) {
+	dir := t.TempDir()
+	s := &mcpServer{exe: fakeAzhaq(t, dir), dir: dir, lock: []string{"-allow", "127.0.0.1"}, locked: true, budget: 500, rate: 5}
+
+	// The fake azhaq does not write real databases: make the files azhaq_map
+	// would, so azhaq_status's glob of the directory finds them; this
+	// session's own record (richer: it can say "stopped") still wins over
+	// what the empty file alone would show (a database with no runs looks
+	// "complete").
+	for _, name := range []string{"capped", "done"} {
+		st, err := store.Open(filepath.Join(dir, name+".db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		st.Close()
+	}
+
+	t.Setenv("FAKE_SUMMARY", `{"type":"summary","command":"run","exit":4,"requests":20,"db":"`+filepath.Join(dir, "capped.db")+
+		`","stopped":"the request budget of 500 is spent, 5 tasks left","resume":"azhaq resume -db capped.db"}`)
+	if _, isErr := callText(t, s, "azhaq_map", map[string]any{"targets": []any{"127.0.0.1:1"}, "workspace": "capped"}); isErr {
+		t.Fatal("map failed")
+	}
+	t.Setenv("FAKE_SUMMARY", `{"type":"summary","command":"run","complete":true,"exit":0,"requests":5,"db":"`+filepath.Join(dir, "done.db")+`"}`)
+	if _, isErr := callText(t, s, "azhaq_map", map[string]any{"targets": []any{"127.0.0.1:2"}, "workspace": "done"}); isErr {
+		t.Fatal("map failed")
+	}
+
+	// A workspace this session never touched: its state comes from its
+	// database alone (resumable tasks it has, or not).
+	mkDB := func(name string, leftover bool) {
+		st, err := store.Open(filepath.Join(dir, name+".db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer st.Close()
+		if leftover {
+			if err := st.BeginRun("r1", 4, 0); err != nil {
+				t.Fatal(err)
+			}
+			_ = st.SetRunArgs([]string{"-url", "http://127.0.0.1/"})
+			seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": "http://127.0.0.1/"}}
+			if err := st.SaveTasks([]store.Task{{ID: "t1", Collector: "azhaq-http", Seed: seed}}, nil, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	mkDB("fromdisk-left", true)
+	mkDB("fromdisk-done", false)
+
+	text, isErr := callText(t, s, "azhaq_status", nil)
+	if isErr {
+		t.Fatalf("azhaq_status failed: %s", text)
+	}
+	var got struct {
+		Scope struct {
+			Locked bool     `json:"locked"`
+			Rules  []string `json:"rules"`
+		} `json:"scope"`
+		Budget struct {
+			Limit, Used, Left int64
+			Rate              float64
+		} `json:"budget"`
+		Workspaces []struct {
+			Name, State, Detail, Resume string
+		} `json:"workspaces"`
+	}
+	if err := json.Unmarshal([]byte(text), &got); err != nil {
+		t.Fatalf("%v: %s", err, text)
+	}
+	if !got.Scope.Locked || strings.Join(got.Scope.Rules, " ") != "-allow 127.0.0.1" {
+		t.Errorf("scope %+v", got.Scope)
+	}
+	if got.Budget.Limit != 500 || got.Budget.Used != 25 || got.Budget.Left != 475 || got.Budget.Rate != 5 {
+		t.Errorf("budget %+v", got.Budget)
+	}
+	byName := map[string]struct{ State, Detail, Resume string }{}
+	for _, w := range got.Workspaces {
+		byName[w.Name] = struct{ State, Detail, Resume string }{w.State, w.Detail, w.Resume}
+	}
+	if w := byName["capped"]; w.State != "stopped by a limit" || w.Detail == "" || !strings.Contains(w.Resume, `"workspace":"capped"`) {
+		t.Errorf("capped %+v", w)
+	}
+	if w := byName["done"]; w.State != "complete" {
+		t.Errorf("done %+v", w)
+	}
+	if w := byName["fromdisk-left"]; w.State != "stopped by a limit" || !strings.Contains(w.Resume, `"workspace":"fromdisk-left"`) {
+		t.Errorf("fromdisk-left %+v", w)
+	}
+	if w := byName["fromdisk-done"]; w.State != "complete" {
+		t.Errorf("fromdisk-done %+v", w)
+	}
+}
+
 // An export is returned in pages of whole lines past 16 KB, offset counts
 // lines, and it is written once with its own extension; limit is capped
 // and query rows are compact by default.

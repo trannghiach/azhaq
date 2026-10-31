@@ -144,5 +144,8 @@ func mcpTools() []map[string]any {
 		{"name": "azhaq_workspaces", "title": "List workspaces",
 			"description": "The workspaces this server has written.",
 			"inputSchema": obj(map[string]any{}), "annotations": annotations(true, false, "List workspaces")},
+		{"name": "azhaq_status", "title": "Server and workspace status",
+			"description": "A compact status of this server and every workspace it has written: the scope (locked, the allow and deny rules), the request budget (limit, used, left) and the pace, and each workspace's state -- complete, stopped by a limit with tasks left (and the azhaq_resume call that continues it), or failed, when this session ran a command for it; a workspace from before this session or untouched since shows what its database on disk says is left to do. Sends nothing and starts no command.",
+			"inputSchema": obj(map[string]any{}), "annotations": annotations(true, false, "Server and workspace status")},
 	}
 }

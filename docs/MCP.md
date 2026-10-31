@@ -38,6 +38,7 @@ Any client that takes a JSON configuration:
 | Tool | What it does |
 | --- | --- |
 | `azhaq_scope` | the scope, budget and pace fixed at start, and how much of the budget is used |
+| `azhaq_status` | a compact status: the scope (locked, allow and deny rules), the request budget (limit, used, left) and the pace, and every workspace this server's directory holds, each with its state (`complete`, `stopped by a limit` with tasks left and the `azhaq_resume` call that continues it, or `failed`, for a workspace this session ran a command for; a workspace from before this session, or one no call here has touched, shows what its database on disk says is left to do). Sends nothing and starts no command |
 | `azhaq_plan` | what a map would take, leave out and send, without sending anything |
 | `azhaq_map` | map a URL, a domain or a list into a workspace; returns the summary and the highlights (auth-gated, forbidden, API routes). `browser` loads pages in Chrome too; `graphql` asks each GraphQL endpoint for its schema (an introspection POST, counted; recovered from validation errors where introspection is off) |
 | `azhaq_resume` | continue the run of a workspace that the budget, `timeout_seconds` or a cancellation stopped, where it stopped, with the server's scope, pace and what is left of its budget; returns what `azhaq_map` returns. A workspace keeps no session: give `headers` or `login` again. A run started with a scope wider than the server's is not resumed |

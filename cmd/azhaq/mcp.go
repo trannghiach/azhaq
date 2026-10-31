@@ -40,7 +40,8 @@ type mcpServer struct {
 	budget  int64 // requests to targets over the server's life; 0: none
 	mu      sync.Mutex
 	used    int64
-	sending chan struct{} // one command that touches targets at a time
+	runs    map[string]runRecord // workspace → its latest command's outcome, for azhaq_status
+	sending chan struct{}        // one command that touches targets at a time
 	out     *json.Encoder
 	outMu   sync.Mutex
 	running map[string]context.CancelFunc // request id → its command
@@ -410,21 +411,64 @@ wait:
 			res.summary = sum
 		}
 	}
-	if res.summary != nil {
+	var runErr error
+	switch {
+	case res.summary != nil:
 		if n, ok := res.summary["requests"].(float64); ok {
 			s.mu.Lock()
 			s.used += int64(n)
 			s.mu.Unlock()
 		}
 		if msg, _ := res.summary["error"].(string); msg != "" {
-			return res, stderrError(msg, nil) // the command could not do its job
+			runErr = stderrError(msg, nil) // the command could not do its job
 		}
-		return res, nil // the summary says how it went, exit code included
+		// else: the summary says how it went, exit code included
+	case waitErr != nil:
+		runErr = stderrError(res.stderr, waitErr)
 	}
-	if waitErr != nil {
-		return res, stderrError(res.stderr, waitErr)
+	s.noteRun(args[0], res, runErr)
+	return res, runErr
+}
+
+// runRecord is a workspace's latest command in this server's session: a
+// call's own outcome, which nothing on disk records (a workspace's
+// database cannot say a call failed outright, only what work is left).
+type runRecord struct {
+	tool   string
+	state  string // "complete", "stopped by a limit", "failed"
+	detail string
+	resume string
+}
+
+// noteRun keeps the outcome of a command that touched a workspace, for
+// azhaq_status: complete, stopped by a limit (with what azhaq_resume would
+// continue), or failed.
+func (s *mcpServer) noteRun(tool string, r cmdResult, callErr error) {
+	db, _ := r.summary["db"].(string)
+	if db == "" {
+		return // named no workspace: azhaq_scope, azhaq_workspaces and the like
 	}
-	return res, nil
+	ws := strings.TrimSuffix(filepath.Base(db), ".db")
+	rec := runRecord{tool: tool}
+	switch {
+	case callErr != nil:
+		rec.state, rec.detail = "failed", callErr.Error()
+	default:
+		if stopped, _ := r.summary["stopped"].(string); stopped != "" {
+			rec.state, rec.detail = "stopped by a limit", stopped
+		} else {
+			rec.state = "complete"
+		}
+	}
+	if _, ok := r.summary["resume"]; ok {
+		rec.resume = s.resumeHint(ws)
+	}
+	s.mu.Lock()
+	if s.runs == nil {
+		s.runs = map[string]runRecord{}
+	}
+	s.runs[ws] = rec
+	s.mu.Unlock()
 }
 
 // output runs a command that reads a workspace and returns its stdout as
@@ -974,6 +1018,8 @@ func (s *mcpServer) call(ctx context.Context, name string, a map[string]any, pro
 		data := map[string]any{"workspaces": names, "dir": s.dir}
 		out, _ := json.Marshal(data)
 		return toolText(string(out), false), nil
+	case "azhaq_status":
+		return s.status()
 	}
 	return nil, fmt.Errorf("%w %q", errUnknownTool, name)
 }
@@ -994,6 +1040,74 @@ func (s *mcpServer) mapped(ctx context.Context, r cmdResult, db string, limit in
 		extra["more"] = "call azhaq_query on this workspace for the rest of the map"
 	}
 	return result(r, extra)
+}
+
+// status is azhaq_status: the scope, the request budget and how much of it
+// is used, the pace, and every workspace in this server's directory with
+// its state, read-only and sending nothing (no command runs for it).
+func (s *mcpServer) status() (map[string]any, error) {
+	s.mu.Lock()
+	used, runs := s.used, make(map[string]runRecord, len(s.runs))
+	for k, v := range s.runs {
+		runs[k] = v
+	}
+	s.mu.Unlock()
+	files, _ := filepath.Glob(filepath.Join(s.dir, "*.db"))
+	sort.Strings(files)
+	workspaces := make([]map[string]any, 0, len(files))
+	for _, f := range files {
+		ws := strings.TrimSuffix(filepath.Base(f), ".db")
+		workspaces = append(workspaces, s.workspaceStatus(ws, f, runs[ws]))
+	}
+	budget := map[string]any{"rate": s.rate}
+	if s.budget > 0 {
+		budget["limit"], budget["used"], budget["left"] = s.budget, used, max(0, s.budget-used)
+	} else {
+		budget["used"] = used
+	}
+	raw, _ := json.Marshal(map[string]any{
+		"scope":      map[string]any{"locked": s.locked, "rules": s.lock},
+		"budget":     budget,
+		"workspaces": workspaces,
+	})
+	return toolText(string(raw), false), nil
+}
+
+// workspaceStatus is one workspace's row for azhaq_status: rec, when this
+// session has already run a command for it (the only way to know a
+// command failed outright); else what its database on disk shows left to
+// do, the most azhaq_resume could tell without running anything.
+func (s *mcpServer) workspaceStatus(ws, path string, rec runRecord) map[string]any {
+	row := map[string]any{"name": ws}
+	if rec.state != "" {
+		row["state"] = rec.state
+		if rec.detail != "" {
+			row["detail"] = rec.detail
+		}
+		if rec.resume != "" {
+			row["resume"] = rec.resume
+		}
+		return row
+	}
+	st, err := store.OpenExisting(path)
+	if err != nil {
+		row["state"], row["detail"] = "unknown", err.Error()
+		return row
+	}
+	_, _, left, ok, err := st.Resumable()
+	st.Close()
+	if err != nil {
+		row["state"], row["detail"] = "unknown", err.Error()
+		return row
+	}
+	if ok && left > 0 {
+		row["state"] = "stopped by a limit"
+		row["detail"] = fmt.Sprintf("%d tasks left", left)
+		row["resume"] = fmt.Sprintf("azhaq_resume {\"workspace\":%q} continues it", ws)
+	} else {
+		row["state"] = "complete"
+	}
+	return row
 }
 
 // resumable checks that a workspace has a run to continue, inside this
@@ -1062,19 +1176,25 @@ var mcpRunFlags = map[string]bool{
 // forMCP rewrites what a summary says for the command line into what a
 // client of the server can do: azhaq_resume continues a stopped run, and
 // the next steps are tool calls.
+// resumeHint is the azhaq_resume call that continues workspace ws, with a
+// note when this server's own budget would refuse it right away.
+func (s *mcpServer) resumeHint(ws string) string {
+	hint := fmt.Sprintf(`azhaq_resume {"workspace":%q} continues it`, ws)
+	s.mu.Lock()
+	spent := s.budget > 0 && s.used >= s.budget
+	s.mu.Unlock()
+	if spent {
+		hint += ", once azhaq mcp is restarted with a larger -max-requests: this server's budget is spent"
+	}
+	return hint
+}
+
 func (s *mcpServer) forMCP(sum map[string]any, ws string) {
 	if sum == nil {
 		return
 	}
 	if _, ok := sum["resume"]; ok {
-		hint := fmt.Sprintf(`azhaq_resume {"workspace":%q} continues it`, ws)
-		s.mu.Lock()
-		spent := s.budget > 0 && s.used >= s.budget
-		s.mu.Unlock()
-		if spent {
-			hint += ", once azhaq mcp is restarted with a larger -max-requests: this server's budget is spent"
-		}
-		sum["resume"] = hint
+		sum["resume"] = s.resumeHint(ws)
 	}
 	next, _ := sum["next"].([]any)
 	var out []string
