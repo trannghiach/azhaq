@@ -174,10 +174,10 @@ func runWithWorker(t *testing.T, app *sessionApp, s fetch.Session, until func() 
 // and asks again the pages the worker asked since the last good check.
 func TestWorkersSessionEndsAndIsRenewed(t *testing.T) {
 	app := newSessionApp(t)
-	renewed := 0
+	var renewed atomic.Int32 // Renew runs on the scheduler's goroutine
 	s := fetch.Session{Check: app.srv.URL + "/", Want: fetch.Print{Status: 200}, Every: 1000, SignIn: app.srv.URL + "/login",
 		Renew: func(context.Context) error {
-			renewed++
+			renewed.Add(1)
 			app.mu.Lock()
 			app.live["s2"] = true
 			app.mu.Unlock()
@@ -185,13 +185,13 @@ func TestWorkersSessionEndsAndIsRenewed(t *testing.T) {
 			return nil
 		}}
 	st, gens, err := runWithWorker(t, app, s, func() bool {
-		return renewed > 0 && len(app.signedInAsked()) >= 4 && fetch.SessionLost() == nil && redone(app)
+		return renewed.Load() > 0 && len(app.signedInAsked()) >= 4 && fetch.SessionLost() == nil && redone(app)
 	}, func() {})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if renewed != 1 || fetch.SessionGen() != 1 {
-		t.Fatalf("signed in again %d times, generation %d", renewed, fetch.SessionGen())
+	if renewed.Load() != 1 || fetch.SessionGen() != 1 {
+		t.Fatalf("signed in again %d times, generation %d", renewed.Load(), fetch.SessionGen())
 	}
 	late := 0
 	for _, g := range gens {
