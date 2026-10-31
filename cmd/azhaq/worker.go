@@ -30,11 +30,15 @@ import (
 
 // workerConfig is what a worker needs to build the run's collectors: the
 // options (without seeds, sessions or coordinator-only ones), the files
-// they name, and the session headers.
+// they name, the run's -deny-path rules, and the session: its headers (the
+// run's current ones, and how many sessions it has had) and its sign-in URL.
 type workerConfig struct {
-	Args    []string          `json:"args"`
-	Files   map[string][]byte `json:"files,omitempty"` // flag → file contents
-	Headers []string          `json:"headers,omitempty"`
+	Args     []string          `json:"args"`
+	Files    map[string][]byte `json:"files,omitempty"` // flag → file contents
+	Headers  []string          `json:"headers,omitempty"`
+	DenyPath []string          `json:"deny_path,omitempty"`
+	SignIn   string            `json:"sign_in,omitempty"`
+	Session  int               `json:"session,omitempty"`
 }
 
 // Options a worker never takes: seeds, outputs, the database, sessions
@@ -50,7 +54,7 @@ var coordinatorOnly = map[string]bool{
 	"urls-proxy": true, "urls-max": true, "urls-archive": true, "urls-raw": true, "screenshots": true, "browser": true, "browser-writes": true, "tabs": true,
 	"max-requests": true, "daily-requests": true, "json": true, "quiet": true, "obs": true,
 	"providers": true, "sources": true, "exclude-sources": true, "all-sources": true,
-	"allow": true, "deny": true, "parallel": true, "fail-on-errors": true, "fail-on-capped": true,
+	"allow": true, "deny": true, "deny-path": true, "parallel": true, "fail-on-errors": true, "fail-on-capped": true,
 }
 
 // isFile says whether s names a file that exists.
@@ -110,17 +114,13 @@ func forWorkers(fs *flag.FlagSet, args, allow, deny []string) (workerConfig, err
 	for _, r := range deny {
 		cfg.Args = append(cfg.Args, "-deny="+r)
 	}
-	for k, vs := range fetch.Extra {
-		for _, v := range vs {
-			cfg.Headers = append(cfg.Headers, k+": "+v)
-		}
-	}
+	cfg.Headers = fetch.ExtraLines()
 	return cfg, nil
 }
 
 // serveWorkers lets azhaq worker processes take the run's work over HTTP;
 // every request carries the token.
-func serveWorkers(addr, token string, w *engine.Workers, cfg workerConfig) (stop func(), err error) {
+func serveWorkers(addr, token string, w *engine.Workers, cfg workerConfig, onSession func(fetch.SessionReport)) (stop func(), err error) {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -135,7 +135,26 @@ func serveWorkers(addr, token string, w *engine.Workers, cfg workerConfig) (stop
 			http.Error(rw, "token", http.StatusUnauthorized)
 			return
 		}
-		_ = json.NewEncoder(rw).Encode(cfg)
+		live := cfg // the session may have been renewed since the run began
+		live.Headers, live.Session = fetch.ExtraLines(), fetch.SessionGen()
+		_ = json.NewEncoder(rw).Encode(live)
+	})
+	// A worker saw an answer that looks like the end of the session: the run
+	// makes its check now, not when the task ends.
+	mux.HandleFunc("POST /v1/session", func(rw http.ResponseWriter, r *http.Request) {
+		if !auth(r) {
+			http.Error(rw, "token", http.StatusUnauthorized)
+			return
+		}
+		var rep fetch.SessionReport
+		if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&rep); err != nil {
+			http.Error(rw, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if onSession != nil {
+			onSession(rep)
+		}
+		rw.WriteHeader(http.StatusNoContent)
 	})
 	mux.HandleFunc("POST /v1/claim", func(rw http.ResponseWriter, r *http.Request) {
 		if !auth(r) {
@@ -184,7 +203,11 @@ func newToken() string {
 }
 
 // The worker side: set by cmdWorker for the cmdRun it starts.
-var workerHeaders []string
+var (
+	workerHeaders []string
+	workerSignIn  string
+	workerGen     int
+)
 
 // cmdWorker joins a run started with -serve and runs the work it hands out.
 //
@@ -221,7 +244,10 @@ func cmdWorker(args []string) error {
 		}
 		runArgs = append(runArgs, "-"+name+"="+p)
 	}
-	workerHeaders = cfg.Headers
+	workerHeaders, workerSignIn, workerGen = cfg.Headers, cfg.SignIn, cfg.Session
+	for _, r := range cfg.DenyPath {
+		runArgs = append(runArgs, "-deny-path="+r)
+	}
 	runArgs = append(runArgs, "-worker-of="+base, "-worker-token="+*token, "-parallel="+strconv.Itoa(*slots),
 		"-db="+filepath.Join(dir, "worker.db"), "-quiet")
 	return cmdRun(runArgs)
@@ -233,6 +259,37 @@ func runWorker(cat *catalog.Catalog, base, token string, slots int) error {
 	ctx, stop := stopContext()
 	defer stop()
 	fmt.Fprintf(os.Stderr, "azhaq worker: joined %s, %d slots\n", base, slots)
+	// What the rules kept this process from requesting goes back with the
+	// outcomes, to be listed as not requested; so does what its answers
+	// said of the session.
+	sink := &denials{seen: map[string]bool{}}
+	fetch.OnDenied = sink.add
+	defer func() { fetch.OnDenied = nil }()
+	if fetch.HasSession() {
+		fetch.WatchRemote(workerSignIn, func(rep fetch.SessionReport) {
+			c, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			_ = call(c, http.MethodPost, base+"/v1/session", token, rep, nil)
+		})
+	}
+	var have atomic.Int64
+	have.Store(int64(workerGen))
+	var renewMu sync.Mutex
+	// holdSession makes this process hold the session the task was lent under.
+	holdSession := func(gen int) error {
+		renewMu.Lock()
+		defer renewMu.Unlock()
+		if int(have.Load()) == gen {
+			return nil
+		}
+		var cfg workerConfig
+		if err := call(ctx, http.MethodGet, base+"/v1/run", token, nil, &cfg); err != nil {
+			return err
+		}
+		fetch.SetExtraLines(cfg.Headers)
+		have.Store(int64(cfg.Session))
+		return nil
+	}
 	var done atomic.Int64
 	var wg sync.WaitGroup
 	errs := make(chan error, slots)
@@ -260,7 +317,13 @@ func runWorker(cat *catalog.Catalog, base, token string, slots int) error {
 					continue
 				}
 				failures = 0
-				out := engine.Execute(ctx, cat, task.Item)
+				var out engine.Outcome
+				if err := holdSession(task.Session); err != nil {
+					out = engine.Outcome{Error: "the run's session was renewed and this worker could not fetch the new one: " + err.Error()}
+				} else {
+					out = engine.Execute(ctx, cat, task.Item)
+					out.Denied, out.Session = sink.take(), fetch.TakeReport()
+				}
 				if err := call(ctx, http.MethodPost, base+"/v1/done?id="+task.ID, token, out, nil); err != nil && !errors.Is(err, errGone) && !errors.Is(err, errNoContent) {
 					fmt.Fprintf(os.Stderr, "azhaq worker: sending %s: %v\n", task.Item.Collector, err)
 				}
@@ -278,6 +341,31 @@ func runWorker(cat *catalog.Catalog, base, token string, slots int) error {
 	default:
 		return nil
 	}
+}
+
+// denials collects the URLs -deny-path kept a worker from requesting.
+type denials struct {
+	mu   sync.Mutex
+	seen map[string]bool
+	list []engine.Denial
+}
+
+func (d *denials) add(raw, rule string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.seen[raw] || len(d.seen) >= 100000 {
+		return
+	}
+	d.seen[raw] = true
+	d.list = append(d.list, engine.Denial{URL: raw, Rule: rule})
+}
+
+func (d *denials) take() []engine.Denial {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := d.list
+	d.list = nil
+	return out
 }
 
 var (

@@ -155,6 +155,7 @@ type scheduler struct {
 type lease struct {
 	t     task
 	until time.Time
+	gen   int // the session the task was lent under
 }
 
 // record notes a planned task for the store.
@@ -514,7 +515,9 @@ func (s *scheduler) redoSession() {
 // lend hands a worker the next task it may run: one that contacts
 // targets, is not Local, and is not a batch.
 func (s *scheduler) lend(ctx context.Context, c claim) {
-	if ctx.Err() != nil {
+	// A signed-in run that lost its session lends nothing: its requests
+	// would be answered without it.
+	if ctx.Err() != nil || fetch.SessionLost() != nil {
 		c.reply <- nil
 		return
 	}
@@ -547,8 +550,9 @@ func (s *scheduler) lend(ctx context.Context, c claim) {
 			if hold <= 0 {
 				hold = 15 * time.Minute
 			}
-			s.leases[id] = lease{t: t, until: time.Now().Add(hold)}
-			c.reply <- &Task{ID: id, Item: types.WorkItem{ID: workID(t.col, t.seed), Collector: t.col, Seed: t.seed}}
+			gen := fetch.SessionGen()
+			s.leases[id] = lease{t: t, until: time.Now().Add(hold), gen: gen}
+			c.reply <- &Task{ID: id, Item: types.WorkItem{ID: workID(t.col, t.seed), Collector: t.col, Seed: t.seed}, Session: gen}
 			return
 		}
 	}
@@ -567,6 +571,11 @@ func (s *scheduler) giveBack(ctx context.Context, d remoteDone) {
 	d.ok <- true
 	item := types.WorkItem{ID: workID(l.t.col, l.t.seed), Collector: l.t.col, Seed: l.t.seed}
 	meta, err := s.e.Record(item, d.out)
+	// The worker's requests count toward the session check, and the check
+	// is made here: with all the work remote, no request of this process
+	// would make it.
+	fetch.AbsorbReport(d.out.Session, d.out.Requests, l.gen == fetch.SessionGen())
+	_ = fetch.CheckDue(ctx)
 	printItem(ctx, item, 0, meta, err)
 	s.handle(finished{tasks: []task{l.t}, metas: []types.RunMeta{meta}, errs: []error{err}})
 }

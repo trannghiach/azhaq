@@ -64,6 +64,13 @@ type sessionGuard struct {
 
 	renewing atomic.Bool // signing in again: its own requests pass
 
+	// remote: a worker's guard. It measures nothing and renews nothing: it
+	// keeps what its requests were answered and tells the run (TakeReport).
+	remote bool
+	tell   func(SessionReport) // remote: tells the run at once, not with the task's outcome
+	told   atomic.Bool         // remote: the run was told since the last TakeReport
+	gen    atomic.Int64        // sessions the run has had after the first: workers fetch the new headers
+
 	mu       sync.Mutex
 	asked    []string // GETs that came through Do since the last good check
 	endedBy  string   // a URL whose answer cleared the session cookie
@@ -93,6 +100,132 @@ func WatchSession(s Session) {
 }
 
 func resetSession() { guardP.Store(nil) }
+
+// WatchRemote gives a worker process the part of the session check that
+// only needs its own answers: the GETs it sent, and whether an answer looked
+// like the end of the session (a 401, a redirect to signIn, a cleared
+// cookie). The run's process makes the check and signs in again; the worker
+// sends TakeReport with each outcome.
+//
+// tell, when set, is called as soon as an answer looks like the end of the
+// session (once until the next TakeReport), so that the run notices while
+// the task is still running.
+func WatchRemote(signIn string, tell func(SessionReport)) {
+	guardP.Store(&sessionGuard{s: Session{SignIn: signIn}, remote: true, tell: tell})
+}
+
+// SessionReport is what a worker saw of the session while it ran a task.
+type SessionReport struct {
+	Asked   []string `json:"asked,omitempty"`    // GETs sent, answered with the session it had
+	Due     bool     `json:"due,omitempty"`      // an answer looked like the end of the session
+	EndedBy string   `json:"ended_by,omitempty"` // a URL whose answer cleared the session cookie
+}
+
+// TakeReport is what this worker's requests were answered since the last
+// call, or nil when there is nothing to tell.
+func TakeReport() *SessionReport {
+	g := guardP.Load()
+	if g == nil || !g.remote {
+		return nil
+	}
+	g.mu.Lock()
+	r := &SessionReport{Asked: g.asked, EndedBy: g.endedBy, Due: g.due.Swap(false)}
+	g.asked, g.endedBy = nil, ""
+	g.mu.Unlock()
+	g.told.Store(false)
+	if len(r.Asked) == 0 && !r.Due {
+		return nil
+	}
+	return r
+}
+
+// AbsorbReport counts what a worker's task did into the run's session
+// check: its requests, its GETs (asked again if the session ends) and what
+// its answers looked like. current is false for a task lent before the
+// session was last renewed: its answers may have come without the session,
+// so its GETs are asked again.
+func AbsorbReport(r *SessionReport, requests int, current bool) {
+	g := guardP.Load()
+	if g == nil || g.remote {
+		return
+	}
+	if !current {
+		if r != nil {
+			g.mu.Lock()
+			g.redo = append(g.redo, r.Asked...)
+			g.mu.Unlock()
+			for _, u := range r.Asked {
+				evict(u)
+			}
+		}
+		return
+	}
+	g.since.Add(int64(requests))
+	if r == nil {
+		return
+	}
+	g.mu.Lock()
+	g.asked = append(g.asked, r.Asked[:min(len(r.Asked), max(0, maxAsked-len(g.asked)))]...)
+	if r.EndedBy != "" && g.endedBy == "" {
+		g.endedBy = r.EndedBy
+	}
+	g.mu.Unlock()
+	if r.Due {
+		g.due.Store(true)
+	}
+}
+
+// CheckDue makes the session check when enough requests passed (also those
+// of workers) or an answer asked for it. The run's own requests make it by
+// themselves; this is for a run whose work is done by workers. The error is
+// the one that ends signed-in work, nil while the session holds.
+func CheckDue(ctx context.Context) error {
+	g := guardP.Load()
+	if g == nil || g.remote {
+		return nil
+	}
+	if g.since.Load() >= int64(g.s.Every) || g.due.Load() {
+		return g.check(ctx)
+	}
+	return SessionLost()
+}
+
+// SessionGen is how many times the session was renewed: a worker that
+// holds an older one fetches the new headers before its next task.
+func SessionGen() int {
+	if g := guardP.Load(); g != nil {
+		return int(g.gen.Load())
+	}
+	return 0
+}
+
+// ExtraLines are the run's session and other headers as "Name: value".
+func ExtraLines() []string {
+	extraMu.RLock()
+	defer extraMu.RUnlock()
+	var out []string
+	for k, vs := range Extra {
+		for _, v := range vs {
+			out = append(out, k+": "+v)
+		}
+	}
+	return out
+}
+
+// SetExtraLines replaces the headers every request carries with lines of
+// "Name: value", and drops the answers kept under the old ones.
+func SetExtraLines(lines []string) {
+	h := http.Header{}
+	for _, l := range lines {
+		if k, v, ok := strings.Cut(l, ":"); ok {
+			h.Add(strings.TrimSpace(k), strings.TrimSpace(v))
+		}
+	}
+	SetExtra(h)
+	cacheMu.Lock()
+	cache = map[string]cacheEnt{}
+	cacheMu.Unlock()
+}
 
 // SessionLost is the error of a run whose session ended and could not be
 // brought back, nil otherwise. Every request after it is refused with it.
@@ -174,7 +307,7 @@ func EndCheck(ctx context.Context) {
 // tick counts a request about to be sent and, when a check is due, makes
 // it. It returns the error that refuses the request.
 func (g *sessionGuard) tick(ctx context.Context) error {
-	if g.renewing.Load() {
+	if g.remote || g.renewing.Load() {
 		return nil
 	}
 	g.gate.RLock() // waits while a check or a new sign-in runs
@@ -279,6 +412,7 @@ func (g *sessionGuard) lose(ctx context.Context, got Print, endedBy string, sent
 	for _, u := range redo {
 		evict(u)
 	}
+	g.gen.Add(1)
 	msg := what + "; signed in again; " + plural(len(redo), "request") + " asked again"
 	if unrecorded > 0 {
 		msg += fmt.Sprintf(" (%s sent in the same stretch, path or parameter guesses, are not)", plural(unrecorded, "request"))
@@ -344,12 +478,22 @@ func sessionSaw(raw string, res Result) {
 		}
 		g.mu.Unlock()
 		g.due.Store(true)
+		g.notify(raw)
 		return
 	}
 	if res.Status == http.StatusUnauthorized || g.s.SignIn != "" && slices.ContainsFunc(res.Hops, func(h Hop) bool {
 		return h.Location != "" && pathOf(h.Location) == pathOf(g.s.SignIn)
 	}) {
 		g.due.Store(true)
+		g.notify("")
+	}
+}
+
+// notify tells the run, from a worker, that an answer looked like the end
+// of the session.
+func (g *sessionGuard) notify(endedBy string) {
+	if g.tell != nil && !g.told.Swap(true) {
+		go g.tell(SessionReport{Due: true, EndedBy: endedBy})
 	}
 }
 

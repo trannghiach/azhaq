@@ -32,7 +32,8 @@ func TestForWorkers(t *testing.T) {
 	fs.Int("depth", 4, "")
 	fs.String("login-pass", "", "")
 	fs.String("serve", "", "")
-	args := []string{"-url", "https://app.test/", "-db", "x.db", "-dirs", words, "-no-tech", "-depth=2", "-login-pass", "pw", "-serve", ":7777"}
+	fs.Var(new(stringsFlag), "deny-path", "")
+	args := []string{"-url", "https://app.test/", "-db", "x.db", "-dirs", words, "-no-tech", "-depth=2", "-login-pass", "pw", "-serve", ":7777", "-deny-path", "^/x"}
 	if err := parse(fs, args); err != nil {
 		t.Fatal(err)
 	}
@@ -43,6 +44,7 @@ func TestForWorkers(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// -deny-path travels as its own setting (workerConfig.DenyPath), not twice.
 	if want := []string{"-no-tech", "-depth=2", "-allow=app.test", "-deny==admin.app.test"}; !reflect.DeepEqual(cfg.Args, want) {
 		t.Errorf("args %q", cfg.Args)
 	}
@@ -74,7 +76,7 @@ func TestWorkerProtocol(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
 	ln.Close()
-	stop, err := serveWorkers(addr, "tok", w, workerConfig{Args: []string{"-no-tech"}})
+	stop, err := serveWorkers(addr, "tok", w, workerConfig{Args: []string{"-no-tech"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

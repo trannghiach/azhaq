@@ -1045,8 +1045,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if err != nil {
 			return err
 		}
+		cfg.DenyPath, cfg.SignIn = budgets.Scope.DenyPath, *login
 		eng.Workers = engine.NewWorkers()
-		stopServe, err := serveWorkers(*serve, *workerToken, eng.Workers, cfg)
+		stopServe, err := serveWorkers(*serve, *workerToken, eng.Workers, cfg, func(rep fetch.SessionReport) {
+			// Made now, though the work is lent: the run's own requests would not.
+			fetch.AbsorbReport(&rep, 0, true)
+			_ = fetch.CheckDue(context.Background())
+		})
 		if err != nil {
 			return fmt.Errorf("-serve: %w", err)
 		}

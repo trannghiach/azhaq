@@ -22,6 +22,16 @@ type Outcome struct {
 	Refused      bool                `json:"refused,omitempty"` // a request was refused by the budget
 	Requests     int                 `json:"requests"`          // requests to targets it sent
 	Cancelled    bool                `json:"cancelled,omitempty"`
+	// Denied are the URLs a -deny-path rule kept the worker from requesting.
+	Denied []Denial `json:"denied,omitempty"`
+	// Session is what the worker's answers said of the session (signed-in runs).
+	Session *fetch.SessionReport `json:"session,omitempty"`
+}
+
+// Denial is a URL a -deny-path rule kept out, and the rule.
+type Denial struct {
+	URL  string `json:"url"`
+	Rule string `json:"rule"`
 }
 
 // Execute runs one work item with the collectors of cat and keeps what it
@@ -81,6 +91,9 @@ func (e *Engine) Record(item types.WorkItem, o Outcome) (types.RunMeta, error) {
 	idKey := workID(col.Name(), seed)
 	meta := types.RunMeta{ItemID: item.ID, Status: types.StatusOK}
 	fetch.Count(o.Requests) // the run's budget counts every process's requests
+	for _, d := range o.Denied {
+		e.noteDenied(d.URL, d.Rule) // listed as not requested, as one the run kept out itself
+	}
 	if o.Refused {
 		meta.Status, meta.Error, meta.Requests = types.StatusCapped, neterr.ErrBudget.Error(), o.Requests
 		e.markCapped()
@@ -144,6 +157,9 @@ type Workers struct {
 type Task struct {
 	ID   string         `json:"id"`
 	Item types.WorkItem `json:"item"`
+	// Session is how many times the run's session was renewed when the task
+	// was lent: a worker that has an older one fetches the new headers first.
+	Session int `json:"session,omitempty"`
 }
 
 type claim struct {

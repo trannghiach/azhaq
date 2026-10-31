@@ -353,7 +353,9 @@ A worker:
 The run stores that as if it had run the task itself (`Engine.Record`).
 
 - Workers take only tasks that contact targets. Third-party sources and their keys, batch DNS and `Local` collectors (screenshots, `-browser`) stay with the run.
-- A worker gets the run's options without seeds, outputs or sessions. It also gets the files they name, such as wordlists, the scope as `-allow` and `-deny` rules, and the session as headers (`GET /v1/run`).
+- A worker gets the run's options without seeds, outputs or sessions. It also gets the files they name, such as wordlists, the scope as `-allow` and `-deny` rules, the run's `-deny-path` rules, and the session as headers (`GET /v1/run`).
+- A worker holds the `-deny-path` rules as the run does: a URL one keeps out is never sent, and the worker reports it with its outcome. The run lists it as not requested, with the rule.
+- A signed-in run keeps its session check with workers. A worker notes the GETs it sent and whether an answer looked like the end of the session (a 401, a redirect to the `-login` page, a cleared session cookie), and sends that with its outcome. An answer that looks like the end of the session is sent at once with `POST /v1/session`, so the run does not wait for the task to end. The run counts the worker's requests toward the check (every 50, and at the end), makes the check, and on a failure signs in again with `-login`. The new headers reach each worker through `GET /v1/run`: a task carries the number of sessions the run has had, and a worker that holds an older one fetches the headers and drops its cached answers first. The pages the workers asked since the last good check are asked again, and so are those of tasks lent before the new session. A session given with `-cookie` or `-header` cannot be renewed: the run lends no more work, ends signed-in work with a failure and exits 3.
 - A task a worker holds longer than its lease (15 minutes) is queued again. Tasks lent when the run stops are left for `azhaq resume`.
 - The request budget counts every process's requests. `-rate` and `-host-parallel` apply per process.
 
@@ -379,6 +381,7 @@ One rule set, enforced where every request passes:
 - Chrome's Fetch domain fails the request (`internal/browser/scope.go`), pages and scripts alike.
 - The scheduler keeps a matching URL seed out of the queue; the path sweep leaves a matching word unsent; `fuzz` does not send a matching input; a parameter search skips a matching page.
 - Each URL kept out is told to `fetch.OnDenied`, which the engine writes as a `skipped` observation (`-deny-path REGEX`), so it is `skipped` in the map and listed in the summary. `fuzz` counts its inputs per rule.
+- A worker holds the same rules (they travel in `GET /v1/run`) and sends the URLs it kept out with its outcome (`Outcome.Denied`); `Engine.Record` writes them as the run would.
 - `roles` holds the rules over each replay it sets up (`holdDeny`), `azhaq mcp -deny-path` hands them to every tool call, and `plan` prints them.
 
 ### Probing
