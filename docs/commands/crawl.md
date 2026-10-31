@@ -166,7 +166,7 @@ These filters limit what is printed, not what is crawled.
 | `-em` | string |  | list only URLs with these extensions, comma-separated (none: URLs without one) |
 | `-eof` | string |  | leave these fields out of -json and -jsonl lines, comma-separated (request.tag, response.forms, tech, …) |
 | `-f` | string |  | print these fields of each URL instead of the URL, comma-separated: url,path,fqdn,rdn,rurl,qurl,qpath,file,ufile,key,value,kv,dir,udir,method (katana's -f) |
-| `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one request per form, GET only |
+| `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
 | `-fr` | string |  | leave out URLs that match this regex (printed URLs only) |
 | `-fs` | string |  | the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address) |
 | `-fx` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies |
