@@ -163,22 +163,23 @@ func TargetClient(o TargetOptions) *http.Client {
 // TargetFrom is c, a client someone else made (a test's server client, one
 // the run was given), with its requests held to the target controls: c
 // itself when it already is.
-func TargetFrom(c *http.Client) *http.Client {
-	if _, ok := c.Transport.(*guarded); ok {
+func TargetFrom(c *http.Client) *http.Client { return from(Target, c) }
+
+// from is c with its transport held to the controls of class. Its transport
+// is kept: an *http.Transport is guarded, any other RoundTripper is wrapped.
+func from(class Class, c *http.Client) *http.Client {
+	if g, ok := c.Transport.(*guarded); ok && g.class == class {
 		return c
 	}
 	cp := *c
-	var base *http.Transport
 	switch t := Unwrap(c.Transport).(type) {
 	case *http.Transport:
-		base = t
+		cp.Transport = newGuarded(class, t, "")
 	case nil:
-		base = http.DefaultTransport.(*http.Transport)
+		cp.Transport = newGuarded(class, http.DefaultTransport.(*http.Transport), "")
 	default:
-		cp.Transport = &foreign{rt: ledger.WrapAs(string(Target), t), g: newGuarded(Target, &http.Transport{}, "")}
-		return &cp
+		cp.Transport = &foreign{rt: ledger.WrapAs(string(class), t), g: newGuarded(class, &http.Transport{}, "")}
 	}
-	cp.Transport = newGuarded(Target, base, "")
 	return &cp
 }
 
@@ -194,7 +195,9 @@ func (f *foreign) RoundTrip(req *http.Request) (*http.Response, error) {
 		if req.Body != nil {
 			req.Body.Close()
 		}
-		Refund()
+		if f.g.class == Target {
+			Refund()
+		}
 		return nil, err
 	}
 	return f.rt.RoundTrip(req)
@@ -253,18 +256,7 @@ func SourceClient(o SourceOptions) *http.Client {
 // SourceFrom is c, a client someone else made, with its requests held to
 // the source controls and recorded as a source's; c itself when it
 // already is.
-func SourceFrom(c *http.Client) *http.Client {
-	if g, ok := c.Transport.(*guarded); ok && g.class == Source {
-		return c
-	}
-	cp := *c
-	base := http.DefaultTransport.(*http.Transport)
-	if t, ok := Unwrap(c.Transport).(*http.Transport); ok {
-		base = t
-	}
-	cp.Transport = newGuarded(Source, base, "")
-	return &cp
-}
+func SourceFrom(c *http.Client) *http.Client { return from(Source, c) }
 
 // OwnOptions are what a client to the user's own endpoint can be set apart by.
 type OwnOptions struct {

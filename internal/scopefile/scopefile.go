@@ -19,6 +19,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // Scope is what a run takes from a program's scope.
@@ -51,7 +53,7 @@ func Fetch(ctx context.Context, platform string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := egress.SourceClient(egress.SourceOptions{}).Do(req)
 	if err != nil {
 		return nil, err
 	}

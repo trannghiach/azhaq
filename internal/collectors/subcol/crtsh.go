@@ -5,14 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/lib/pq"
-	"golang.org/x/net/proxy"
 
 	"github.com/trannghiach/azhaq/internal/egress"
 )
@@ -75,7 +71,7 @@ func crtshProxy(client *http.Client) (*url.URL, error) {
 		tr = rt.next
 	}
 	var fn func(*http.Request) (*url.URL, error)
-	switch t := tr.(type) {
+	switch t := egress.Unwrap(tr).(type) {
 	case *http.Transport:
 		fn = t.Proxy
 	case nil:
@@ -99,16 +95,10 @@ func crtshProxy(client *http.Client) (*url.URL, error) {
 // proxy, and returns the names the certificates there hold for domain.
 func queryCrtsh(ctx context.Context, domain string, via *url.URL, budget time.Duration, limit int) ([]string, int, error) {
 	dsn := fmt.Sprintf("host=crt.sh user=guest dbname=certwatch sslmode=disable binary_parameters=yes connect_timeout=%d", max(1, int(budget/time.Second)))
-	c, err := pq.NewConnector(dsn)
+	db, err := egress.OpenSourceDB(dsn, via)
 	if err != nil {
 		return nil, 0, err
 	}
-	d, err := crtshDialer(via)
-	if err != nil {
-		return nil, 0, err
-	}
-	c.Dialer(d)
-	db := sql.OpenDB(c)
 	defer db.Close()
 	return namesFromDB(ctx, db, domain, budget, limit)
 }
@@ -145,40 +135,4 @@ func namesFromDB(ctx context.Context, db *sql.DB, domain string, budget time.Dur
 		names = append(names, strings.Split(v, "\n")...)
 	}
 	return names, n, rows.Err()
-}
-
-// pgDialer connects as the run's HTTP client does (the resolver's
-// addresses), or through a SOCKS5 proxy.
-type pgDialer struct{ via proxy.ContextDialer }
-
-func crtshDialer(via *url.URL) (*pgDialer, error) {
-	if via == nil {
-		return &pgDialer{}, nil
-	}
-	d, err := proxy.FromURL(via, &net.Dialer{Timeout: 10 * time.Second})
-	if err != nil {
-		return nil, err
-	}
-	cd, ok := d.(proxy.ContextDialer)
-	if !ok {
-		return nil, errors.New("the proxy dialer takes no context")
-	}
-	return &pgDialer{via: cd}, nil
-}
-
-func (d *pgDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	if d.via != nil {
-		return d.via.DialContext(ctx, network, addr)
-	}
-	return egress.DialProxy(ctx, network, addr)
-}
-
-func (d *pgDialer) Dial(network, addr string) (net.Conn, error) {
-	return d.DialContext(context.Background(), network, addr)
-}
-
-func (d *pgDialer) DialTimeout(network, addr string, timeout time.Duration) (net.Conn, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return d.DialContext(ctx, network, addr)
 }

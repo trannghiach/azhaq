@@ -23,6 +23,7 @@ import (
 	"github.com/projectdiscovery/subfinder/v2/pkg/subscraping"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -112,20 +113,17 @@ type Collector struct {
 
 func New(o Options) *Collector {
 	if o.Client == nil {
-		tr := http.DefaultTransport.(*http.Transport).Clone()
+		var pu *url.URL
 		if p, err := url.Parse(o.Proxy); err == nil && o.Proxy != "" {
-			tr.Proxy = http.ProxyURL(p)
+			pu = p
 		}
-		o.Client = &http.Client{Timeout: 60 * time.Second, Transport: tr}
+		o.Client = egress.SourceClient(egress.SourceOptions{Timeout: 60 * time.Second, Proxy: pu})
 	}
-	// Every source's request goes through the transport that waits out a 429.
-	cl := *o.Client
+	// Every source's request goes through the transport that waits out a 429,
+	// and the controls of a source (the kill file, the ledger) under it.
+	cl := *egress.SourceFrom(o.Client)
 	if _, ok := cl.Transport.(*retryTransport); !ok {
-		base := cl.Transport
-		if base == nil {
-			base = http.DefaultTransport
-		}
-		cl.Transport = &retryTransport{next: base}
+		cl.Transport = &retryTransport{next: cl.Transport}
 	}
 	o.Client = &cl
 	if o.SourceTimeout <= 0 {

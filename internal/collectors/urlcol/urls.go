@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -70,7 +71,11 @@ type Collector struct {
 func New(o Options) *Collector {
 	if o.Client == nil {
 		// A Wayback page of a large domain is tens of MB and takes minutes.
-		o.Client = &http.Client{Timeout: 5 * time.Minute, Transport: transport(o.Proxy)}
+		var pu *url.URL
+		if u, err := ParseProxy(o.Proxy); err == nil && o.Proxy != "" {
+			pu = u
+		}
+		o.Client = egress.SourceClient(egress.SourceOptions{Timeout: 5 * time.Minute, Proxy: pu})
 	}
 	if o.Timeout <= 0 {
 		o.Timeout = 3 * time.Minute

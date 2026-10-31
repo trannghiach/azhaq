@@ -21,6 +21,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
@@ -58,7 +59,7 @@ type Collector struct {
 }
 
 func New(keys map[string][]string) *Collector {
-	return &Collector{Client: &http.Client{Timeout: 60 * time.Second}, Keys: keys, Pages: 1}
+	return &Collector{Client: egress.SourceClient(egress.SourceOptions{Timeout: 60 * time.Second}), Keys: keys, Pages: 1}
 }
 
 func (c *Collector) Name() string { return Name }

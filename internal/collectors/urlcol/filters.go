@@ -2,7 +2,6 @@ package urlcol
 
 import (
 	"fmt"
-	"net/http"
 	"net/url"
 	"path"
 	"regexp"
@@ -184,15 +183,6 @@ func ParseProxy(raw string) (*url.URL, error) {
 		return u, nil
 	}
 	return nil, fmt.Errorf("proxy scheme %q: use http, https or socks5", u.Scheme)
-}
-
-// transport is the default one, through proxy when one is given.
-func transport(proxy string) http.RoundTripper {
-	t := http.DefaultTransport.(*http.Transport).Clone()
-	if u, err := ParseProxy(proxy); err == nil && proxy != "" {
-		t.Proxy = http.ProxyURL(u)
-	}
-	return t
 }
 
 // Sources names the archives a run can ask.

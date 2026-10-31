@@ -22,6 +22,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
@@ -45,7 +46,9 @@ type ASN struct {
 
 func NewASN(client *http.Client) *ASN {
 	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+		client = egress.SourceClient(egress.SourceOptions{Timeout: 60 * time.Second})
+	} else {
+		client = egress.SourceFrom(client)
 	}
 	return &ASN{Client: client, Base: "https://stat.ripe.net"}
 }
