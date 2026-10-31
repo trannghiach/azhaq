@@ -4,4 +4,10 @@
 case $(sed -n 1p "$1") in
 "Merge "* | "fixup! "* | "squash! "*) exit 0 ;;
 esac
-exec npx --yes --package @commitlint/cli@19.8.1 -- commitlint --edit "$1"
+cl=$(command -v commitlint 2>/dev/null)
+[ -n "$cl" ] || cl="$(npm prefix -g 2>/dev/null)/bin/commitlint"
+if [ ! -x "$cl" ]; then
+  echo "commit-msg: commitlint is not installed: npm i -g @commitlint/cli@19.8.1 (CONTRIBUTING.md)" >&2
+  exit 1
+fi
+exec "$cl" --edit "$1"

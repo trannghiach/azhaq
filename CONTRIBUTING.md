@@ -38,7 +38,7 @@ The check runs twice: as a `commit-msg` hook, and on CI for every pushed commit.
 git config core.hooksPath .githooks
 ```
 
-It needs Node (`npx`); the first run downloads commitlint. Merge, `fixup!` and `squash!` commits are not checked.
+It needs commitlint, installed once: `npm i -g @commitlint/cli@19.8.1`. Merge, `fixup!` and `squash!` commits are not checked.
 
 ## Code
 
