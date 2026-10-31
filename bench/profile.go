@@ -110,6 +110,44 @@ func timed(target string, timeout time.Duration, dir, name string, args ...strin
 	return timedArgs(target, timeout, dir, name, func(int) []string { return args })
 }
 
+// timedPair times two tools on one target as timedArgs times one, with
+// their runs taken in turn (a, b, a, b, a, b). A target that slows down or
+// speeds up as the bench goes on (a dev server warming, memory growing)
+// then costs both tools the same; three runs of a and then three of b
+// charged all of the drift to one of them.
+func timedPair(target string, timeout time.Duration, dir, a, b string, aArgs, bArgs []string) (aOut []byte, am runMeasure, bOut []byte, bm runMeasure) {
+	once := func(name string, args []string) ([]byte, runMeasure) {
+		if beforeEach != nil {
+			beforeEach()
+		}
+		return run(target, timeout, dir, name, args...)
+	}
+	// A run that failed, or took slowRun seconds, is its tool's one measure.
+	again := func(m runMeasure) bool { return (m.Error == "" || benignExit(m.Error)) && m.Seconds < slowRun }
+	aOut, am = once(a, aArgs)
+	bOut, bm = once(b, bArgs)
+	aSecs, bSecs := []float64{am.Seconds}, []float64{bm.Seconds}
+	runA, runB := again(am), again(bm)
+	noCache = true
+	for i := 1; i < 3; i++ {
+		if runA {
+			if _, m := once(a, aArgs); m.Error == "" || benignExit(m.Error) {
+				aSecs = append(aSecs, m.Seconds)
+			}
+		}
+		if runB {
+			if _, m := once(b, bArgs); m.Error == "" || benignExit(m.Error) {
+				bSecs = append(bSecs, m.Seconds)
+			}
+		}
+	}
+	noCache = false
+	sort.Float64s(aSecs)
+	sort.Float64s(bSecs)
+	am.Seconds, bm.Seconds = aSecs[len(aSecs)/2], bSecs[len(bSecs)/2]
+	return
+}
+
 // benignExit: azhaq's exit 3 and 4 say the run was partial or stopped, and
 // the output is still a result; a refused command line (exit 2) is not.
 func benignExit(e string) bool {

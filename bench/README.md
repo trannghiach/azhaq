@@ -33,7 +33,7 @@ Public test sites (ginandjuice.shop, testphp.vulnweb.com, demo.testfire.net) are
 Each comparison row is two checks.
 
 - **Results**: azhaq's results are at least the reference's, counting only results that something other than azhaq confirms: a server's own log, a second resolver, `ss -ltn`, the app's own routes or planted parameters, a GET to the host itself. Not 95%.
-- **Time**: azhaq's time is at most 1.05 times the reference's: the median of three runs when the first took under 20 s, one run above. A run of azhaq that failed (a flag or a command a stream has not delivered) is no time to compare, and fails the check.
+- **Time**: azhaq's time is at most 1.05 times the reference's: the median of three runs when the first took under 20 s, one run above; for `dirs` and `fuzz` the two tools' runs alternate (azhaq, ffuf, azhaq, ffuf, …), so a target that slows down or speeds up as the bench goes on costs both the same. A run of azhaq that failed (a flag or a command a stream has not delivered) is no time to compare, and fails the check.
 
 Every check names the exact commands, so a reviewer can run them again. The record still has the old numbers (shares of the reference's results, ratios of times).
 

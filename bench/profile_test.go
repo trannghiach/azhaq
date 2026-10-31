@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBenignExitAndRefused(t *testing.T) {
@@ -162,5 +163,33 @@ func TestReadmeBlockCarriesTheLabelTheDriftCheckReads(t *testing.T) {
 	}
 	if !strings.Contains(b, "| default |") || !strings.Contains(b, "| polite |") || !strings.Contains(b, "1 of 2 checks pass") {
 		t.Fatal(b)
+	}
+}
+
+// Two tools are timed in turn, so a target that drifts costs both the same.
+func TestTimedPairTakesTheRunsInTurn(t *testing.T) {
+	oldRec, oldFresh, oldWork := rec, fresh, work
+	defer func() { rec, fresh, work = oldRec, oldFresh, oldWork }()
+	rec, fresh, work = record{}, true, t.TempDir() // fresh: nothing replayed from a cache
+	order := filepath.Join(t.TempDir(), "order")
+	say := func(who string) []string { return []string{"-c", "echo " + who + " >> " + order + "; echo out-" + who} }
+	aOut, am, bOut, bm := timedPair("t", time.Minute, t.TempDir(), "sh", "sh", say("a"), say("b"))
+	got, _ := os.ReadFile(order)
+	if string(got) != "a\nb\na\nb\na\nb\n" {
+		t.Errorf("runs in this order: %q", got)
+	}
+	if string(aOut) != "out-a\n" || string(bOut) != "out-b\n" || am.Seconds <= 0 || bm.Seconds <= 0 {
+		t.Errorf("outputs %q %q, seconds %v %v", aOut, bOut, am.Seconds, bm.Seconds)
+	}
+	if noCache {
+		t.Error("the cache is left off")
+	}
+
+	// A run that failed is its tool's only measure; the other tool goes on.
+	os.Remove(order)
+	_, am, _, _ = timedPair("t", time.Minute, t.TempDir(), "sh", "sh", []string{"-c", "echo a >> " + order + "; exit 2"}, say("b"))
+	got, _ = os.ReadFile(order)
+	if string(got) != "a\nb\nb\nb\n" || am.Error == "" {
+		t.Errorf("a failed tool is run once: %q, error %q", got, am.Error)
 	}
 }

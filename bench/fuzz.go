@@ -66,11 +66,9 @@ func benchFuzz(apps []string) *fuzzRow {
 			var am, fm runMeasure
 			beforeEach = func() { freshApp(app) }
 			legWithApp(app, func() {
-				var out []byte
-				out, am = timed(app, 40*time.Minute, work, azhaq, aa...)
-				az = fuzzHits(out, app)
-				out, fm = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
-				ff = fuzzHits(out, app)
+				var azOut, ffOut []byte
+				azOut, am, ffOut, fm = timedPair(app, 40*time.Minute, work, azhaq, ref("ffuf"), aa, fa)
+				az, ff = fuzzHits(azOut, app), fuzzHits(ffOut, app)
 			})
 			beforeEach = nil
 			leg.AzhaqSecs, leg.FfufSecs = am.Seconds, fm.Seconds

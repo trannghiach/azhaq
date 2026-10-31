@@ -82,12 +82,11 @@ func benchDirs(apps []string) *dirsRow {
 		beforeEach = func() { freshApp(app) }
 		legWithApp(app, func() {
 			aa := append([]string{"dirs", "-u", app, "-w", words, "-silent"}, rate...)
-			out, m := timed(app, 40*time.Minute, work, azhaq, aa...)
-			aOut, aSecs, azCmd = out, m.Seconds, cmdLine(azhaq, aa...)
-			azBad = azFail(m)
 			fa := append([]string{"-u", app + "FUZZ", "-w", words, "-ac", "-s"}, pick([]string(nil), []string{"-rate", politeHTTP})...)
-			out, m = timed(app, 40*time.Minute, work, ref("ffuf"), fa...)
-			fOut, fSecs, ffCmd = out, m.Seconds, cmdLine("ffuf", fa...)
+			out, am, fout, fm := timedPair(app, 40*time.Minute, work, azhaq, ref("ffuf"), aa, fa)
+			aOut, aSecs, azCmd = out, am.Seconds, cmdLine(azhaq, aa...)
+			azBad = azFail(am)
+			fOut, fSecs, ffCmd = fout, fm.Seconds, cmdLine("ffuf", fa...)
 		})
 		beforeEach = nil
 		row.AzhaqSecs += aSecs
