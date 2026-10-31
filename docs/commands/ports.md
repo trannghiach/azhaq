@@ -145,7 +145,7 @@ A service that speaks first (`ssh`, `ftp`, `smtp`, `telnet`, `irc`, …) is name
 - `-detect` says what is asked of an open port:
   - `none` connects and closes: one connect per port, as naabu without `-sV`.
   - `banner` reads what the service says on that connection.
-  - `all` is the default. It also asks a silent port for HTTP and TLS, then one request of each protocol that waits to be asked. Each goes on a connection of its own, several at once while the scan has workers free.
+  - `all` is the default, and costs a second or two on top of the connect scan. `-detect none` (`-port-detect none` in `run`) matches naabu's time and output. It also asks a silent port for HTTP and TLS, then one request of each protocol that waits to be asked. Each goes on a connection of its own, several at once while the scan has workers free.
 - `-proxy host:port` (SOCKS5) and `-source-ip` make the TCP connects go through that proxy or from that address. The service probes beyond the first connection dial on their own, so with either the scan asks the banner only, and the summary says so.
 - UDP is not sent through a proxy. `-proxy` with `-udp` is refused.
 

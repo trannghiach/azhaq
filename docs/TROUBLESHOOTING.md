@@ -352,6 +352,12 @@ azhaq keeps the names it found in `names/DOMAIN.json`. The file is under `$AZHAQ
 
 **Fix:** `-no-history` turns the file off.
 
+### `subs -live` takes longer on a later run
+
+**Why:** `-live` also resolves the names the history holds, so after a first run the second has more names to ask. At a low `-dns-rate` the pace is the same and the time grows with the names.
+
+**Fix:** `-no-history` resolves only the names of this run. A higher `-dns-rate` shortens the wait where the resolvers allow it.
+
 ### `subs` lists names with `"unverified": true`
 
 **Why:** Without `-live`, `subs` does not look names up in DNS. Two kinds of name are then listed, flagged, and counted in `unverified`:

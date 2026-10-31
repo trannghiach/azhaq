@@ -132,6 +132,7 @@ Behaviour, fields and edge cases: [`azhaq dns`](commands/dns.md).
 - **Wildcards.** Wildcard answers are always left out, per parent zone, with no domain to give. `-no-wildcard` prints them. `-aw` is accepted and changes nothing. dnsx prints wildcard answers unless it is given `-wd` or `-aw`.
 - **`-timeout`.** It is the wait for one answer, as in dnsx. In the other azhaq commands it is how long the run may take. Here the run's bound is `-maxtime SECONDS`.
 - **`-rl` and `-dns-rate`.** `-rl` counts names, as dnsx's does. `-dns-rate N` is a second pace: N queries a second to each resolver. With 6 resolvers that is up to 6 times N.
+- **Pace, as observed.** With dnsx 1.x, `-rl` did not hold back the queries of `-d` with `-w` in one test run: 20 names at `-rl 1` took 0.46 s, and 40 at `-rl 10` took 0.64 s. azhaq's `-dns-rate` paced them: 20 names at 1 a second took 19 s. That is what was measured, not a statement about every dnsx version or input.
 - **A polite run.** Give both `-rl 5` and `-t 5`. Add a `-resolvers` list of one address if you want 5 queries a second in all.
 - **`-retry` and failures.** `-retry` is 3 where dnsx's is 2. A name that no resolver answers is a failure in the summary, and the exit code is 3.
 
@@ -522,6 +523,7 @@ Behaviour, fields and edge cases: [`azhaq ports`](commands/ports.md).
 - The ports of a host are asked in a random order, likeliest first. `-order asc` asks them by number, and `-seed N` repeats an order.
 - By default one pass is made, and one more over the ports that neither accepted nor refused. naabu's `-retries` default is 3 passes. `-retries N` changes the number.
 - Open ports are named by what they answer, with products and versions. No copy of nmap's data is used: see the next section.
+- By default `ports` names the service of each open port, as `nmap -sV` does. That costs a second or two on top of the connect scan. `-detect none` connects and closes, and matches naabu's time and output.
 - A host that answers every port is cut with `-pts N`, which stops after N open ports.
 
 ### Examples
