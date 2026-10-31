@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -43,14 +44,18 @@ type getter struct {
 	client   *http.Client
 	pause    time.Duration
 	maxPages int
-	retries  int
+	retries  int // asked again after a refusal or a network error; -1: a 429 or 503 until the time is spent, a network error 3 times
 	last     time.Time
-	header   http.Header
-	apex     bool    // the domain's own host only, not its subdomains
-	filters  Filters // sent to the archive
-	base     string  // replaces the source's address
-	capped   bool    // the source stopped at its page cap with more to read
-	raw      bool    // only what gau would print: urlscan's page URLs, not its task URLs
+	// What the requests cost, for the source's row.
+	tries   int           // requests sent, retries included
+	retried int           // sent again
+	waited  time.Duration // spent waiting between tries
+	header  http.Header
+	apex    bool    // the domain's own host only, not its subdomains
+	filters Filters // sent to the archive
+	base    string  // replaces the source's address
+	capped  bool    // the source stopped at its page cap with more to read
+	raw     bool    // only what gau would print: urlscan's page URLs, not its task URLs
 }
 
 // at is the source's address: the override, or def.
@@ -87,22 +92,43 @@ func (e errAnswer) Error() string {
 	return fmt.Sprintf("%s answered 200 with an error, not URLs: %s", e.host, e.why)
 }
 
-// errLimited is a source that kept answering 429 or 503.
-type errLimited struct {
-	status int
-	pages  int
+// errTried is a request that kept failing: what it was told, how many
+// tries it took, and why it stopped.
+type errTried struct {
+	tries  int
+	why    string        // "429 Too Many Requests", "connection refused"
+	waited time.Duration // spent waiting between the tries
+	short  string        // why it stopped before its tries were spent
+	pages  int           // read before it
 }
 
-func (e errLimited) Error() string {
-	return fmt.Sprintf("rate limited (%d) after %d pages", e.status, e.pages)
+func (e errTried) Error() string {
+	try := "tries"
+	if e.tries == 1 {
+		try = "try"
+	}
+	s := fmt.Sprintf("failed after %d %s, %s", e.tries, try, e.why)
+	if e.waited >= time.Second/2 {
+		s += fmt.Sprintf(" (waited %s)", e.waited.Round(time.Second))
+	}
+	if e.short != "" {
+		s += "; " + e.short
+	}
+	if e.pages > 0 {
+		s += fmt.Sprintf("; %d pages were read before", e.pages)
+	}
+	return s
 }
 
-var backoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+// backoff is the wait before each retry when the server names none; past
+// the table the last wait repeats.
+var backoff = []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second, 20 * time.Second, 30 * time.Second}
 
-const maxRetryAfter = 20 * time.Second
+// netTries is how many times a network error is retried when -retries is
+// not given.
+const netTries = 3
 
-// waitFor is the wait before retry number attempt; past the table the
-// last wait repeats.
+// waitFor is the wait before retry number attempt.
 func waitFor(attempt int) time.Duration { return backoff[min(attempt, len(backoff)-1)] }
 
 func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
@@ -114,9 +140,46 @@ func (g *getter) get(ctx context.Context, raw string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(body, 64<<20))
 }
 
-// open sends the request, waiting and retrying as get does, and returns
-// the body of a 200 answer for the caller to read and close.
+// open sends the request and returns the body of a 200 answer for the
+// caller to read and close. A 429 or 503 is asked again after the
+// Retry-After it names (seconds or a date, however long) or after 2, 5, 10,
+// 20 and then 30 s, for as long as the time of the source and of the run
+// allows (-retries N makes it N times); a network error is asked again 3
+// times (or N). A wait that is longer than the time left ends the request
+// at once, with the reason, and not at the deadline with none.
 func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
+	var waited time.Duration
+	// retry says whether another try may follow the one numbered attempt,
+	// and if so after what wait; short says why not, when time is the reason.
+	retry := func(attempt int, limited bool, hinted time.Duration, why string) (wait time.Duration, err error) {
+		allowed := g.retries
+		if g.retries < 0 {
+			allowed = netTries
+			if limited {
+				allowed = math.MaxInt
+			}
+		}
+		if attempt >= allowed {
+			return 0, errTried{tries: attempt + 1, why: why, waited: waited}
+		}
+		wait = waitFor(attempt)
+		if hinted > 0 {
+			wait = hinted
+		}
+		if dl, ok := ctx.Deadline(); ok && time.Until(dl) <= wait {
+			return 0, errTried{tries: attempt + 1, why: why, waited: waited, short: fmt.Sprintf("the %s to wait is more than the %s left (-urls-timeout or -timeout)", wait.Round(time.Second), max(time.Until(dl), 0).Round(time.Second))}
+		}
+		return wait, nil
+	}
+	pause := func(d time.Duration, attempt int, why string) error {
+		if err := sleep(ctx, d); err != nil {
+			return errTried{tries: attempt + 1, why: why, waited: waited, short: "the time (-urls-timeout or -timeout) ran out while waiting"}
+		}
+		waited += d
+		g.waited += d
+		g.retried++
+		return nil
+	}
 	for attempt := 0; ; attempt++ {
 		if wait := g.pause - time.Since(g.last); wait > 0 {
 			if err := sleep(ctx, wait); err != nil {
@@ -133,14 +196,20 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		for k, vs := range g.header {
 			req.Header[k] = vs
 		}
+		g.tries++
 		resp, err := g.client.Do(req)
 		if err != nil {
 			// An archive that refuses or drops connections for a while
 			// (after a large query) is asked again, as a 503 would be.
-			if ctx.Err() != nil || attempt >= g.retries {
+			if ctx.Err() != nil {
 				return nil, err
 			}
-			if err := sleep(ctx, waitFor(attempt)); err != nil {
+			why := netReason(err)
+			wait, stop := retry(attempt, false, 0, why)
+			if stop != nil {
+				return nil, stop
+			}
+			if err := pause(wait, attempt, why); err != nil {
 				return nil, err
 			}
 			continue
@@ -157,20 +226,52 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 		resp.Body.Close()
 		switch {
 		case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable:
-			if attempt >= g.retries {
-				return nil, errLimited{status: resp.StatusCode}
+			why := statusReason(resp)
+			hinted := retryAfter(resp.Header.Get("Retry-After"))
+			if hinted > 0 {
+				why += fmt.Sprintf(", Retry-After %s", hinted.Round(time.Second))
 			}
-			wait := waitFor(attempt)
-			if n, err := strconv.Atoi(strings.TrimSpace(resp.Header.Get("Retry-After"))); err == nil && n > 0 {
-				wait = min(time.Duration(n)*time.Second, maxRetryAfter)
+			wait, stop := retry(attempt, true, hinted, why)
+			if stop != nil {
+				return nil, stop
 			}
-			if err := sleep(ctx, wait); err != nil {
+			if err := pause(wait, attempt, why); err != nil {
 				return nil, err
 			}
 		default:
 			return nil, errStatus{host: hostOf(raw), code: resp.StatusCode}
 		}
 	}
+}
+
+// statusReason is "429 Too Many Requests".
+func statusReason(resp *http.Response) string {
+	if resp.Status != "" {
+		return resp.Status
+	}
+	return fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
+}
+
+// netReason is a network error without the URL it names.
+func netReason(err error) string {
+	var ue *url.Error
+	if errors.As(err, &ue) && ue.Err != nil {
+		err = ue.Err
+	}
+	return err.Error()
+}
+
+// retryAfter reads a Retry-After header: seconds, or an HTTP date; 0 when
+// there is none.
+func retryAfter(h string) time.Duration {
+	h = strings.TrimSpace(h)
+	if n, err := strconv.Atoi(h); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	if at, err := http.ParseTime(h); err == nil {
+		return max(time.Until(at), 0)
+	}
+	return 0
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -191,9 +292,9 @@ func hostOf(raw string) string {
 	return raw
 }
 
-// limited marks how many pages a rate-limited source had read.
+// limited marks how many pages a source had read before a request failed.
 func limited(err error, pages int) error {
-	if l, ok := err.(errLimited); ok {
+	if l, ok := err.(errTried); ok {
 		l.pages = pages
 		return l
 	}

@@ -374,7 +374,7 @@ func TestRetriesZeroMakesARefusalFinal(t *testing.T) {
 	if n := len(m.asked("/wayback")); n != 1 || time.Since(t0) > time.Second {
 		t.Errorf("%d requests in %v with -retries 0", n, time.Since(t0))
 	}
-	if row := summary["sources"].(map[string]any)["wayback"].(map[string]any); !strings.Contains(fmt.Sprint(row["error"]), "rate limited (429)") {
+	if row := summary["sources"].(map[string]any)["wayback"].(map[string]any); fmt.Sprint(row["error"]) != "failed after 1 try, 429 Too Many Requests" {
 		t.Errorf("%v", row)
 	}
 	// More retries than the table has repeat its last wait.

@@ -6,7 +6,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 )
@@ -114,6 +116,10 @@ func TestURLsSummaryHasArchiveHealth(t *testing.T) {
 	if !strings.Contains(errOut, "1 of 2 archives answered, 1 failed (listed above); exit 3 because an archive that failed is not made up for by the others") {
 		t.Errorf("summary:\n%s", errOut)
 	}
+	// B3: the counts per archive and the failure with its tries.
+	if !strings.Contains(errOut, "URLs by archive: otx 2, wayback 0 (failed after 1 try, 429 Too Many Requests)") {
+		t.Errorf("no per-archive counts:\n%s", errOut)
+	}
 }
 
 // crt.sh is a source like the others: its failure, with other sources
@@ -133,5 +139,38 @@ func TestCrtshFailureDoesNotMakeExit3(t *testing.T) {
 	}
 	if _, _, code = runContract(t, "subs", "-d", "example.org", "-no-history", "-fail-on-errors"); code != exitPartial {
 		t.Errorf("-fail-on-errors: exit %d", code)
+	}
+}
+
+// A Wayback 429 with a Retry-After is waited out, and its URLs are in the
+// result with the others': the run does not collapse to one archive.
+func TestURLsWaitsOutAWaybackRateLimit(t *testing.T) {
+	var asked atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/wayback") && asked.Add(1) == 1:
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+		case r.URL.Path == "/wayback" && r.URL.Query().Get("page") == "0":
+			fmt.Fprint(w, `[["original"],["http://example.org/from-wayback?id=1"]]`)
+		case strings.HasPrefix(r.URL.Path, "/wayback"):
+			w.WriteHeader(http.StatusBadRequest)
+		default:
+			fmt.Fprint(w, `{"has_next":false,"url_list":[{"url":"http://example.org/from-otx"}]}`)
+		}
+	}))
+	defer srv.Close()
+	t0 := time.Now()
+	lines, errOut, err := urlsRun(t, "-d", "example.org", "-providers", "wayback,otx", "-urls-pause", "0", "-json",
+		"-archive", "wayback="+srv.URL+"/wayback", "-archive", "otx="+srv.URL+"/otx")
+	if err != nil || len(lines) != 2 {
+		t.Fatalf("%v %v", lines, err)
+	}
+	if took := time.Since(t0); took < 900*time.Millisecond {
+		t.Errorf("the Retry-After was not waited for: %s", took)
+	}
+	rep := lastReport(t, errOut)
+	if h := rep.Sources; h == nil || h.Answered != 2 || h.URLs["wayback"] != 1 {
+		t.Errorf("health %+v", h)
 	}
 }

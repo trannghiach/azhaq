@@ -294,7 +294,7 @@ What differs on purpose:
 
 - A fifth archive, arquivo.pt, is asked.
 - The output is de-duplicated and has no scanner payloads or trailing punctuation. `-raw` prints what the archives gave, unchanged. The benchmark in the README counts how many of gau's URLs azhaq's list holds.
-- A 429, a 503 or a network error is asked again after 2, 5 and 10 seconds (or the `Retry-After`), and a source that still failed is named in the summary with exit 3. gau exits 0.
+- A 429 or a 503 is asked again after its `Retry-After` (however long) or 2, 5, 10, 20 and 30 seconds, for as long as the archive's `-urls-timeout` and the run's `-timeout` allow; a network error is asked again 3 times. A source that still failed is named in the summary with its tries and the server's words (`wayback: failed after 4 tries, 429 Too Many Requests`) and exit 3. gau exits 0.
 - Each archive is asked at its own pace, at most 2 requests a second by default. `-urls-pause` changes the wait between one archive's requests.
 - `-timeout` stops the whole run; the time an archive gets for a domain is `-urls-timeout`.
 

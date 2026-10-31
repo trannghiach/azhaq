@@ -127,3 +127,30 @@ func archiveHealth(ps []map[string]any) *sourceHealth {
 	}
 	return t.result()
 }
+
+// archivesNote says what each archive gave, and why one that failed gave
+// less, so a result that came from one archive is read as that.
+func (h *sourceHealth) archivesNote() string {
+	if h == nil || len(h.URLs) == 0 || (len(h.URLs) == 1 && h.failures() == 0) {
+		return ""
+	}
+	names := make([]string, 0, len(h.URLs))
+	for n := range h.URLs {
+		names = append(names, n)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if h.URLs[names[i]] != h.URLs[names[j]] {
+			return h.URLs[names[i]] > h.URLs[names[j]]
+		}
+		return names[i] < names[j]
+	})
+	parts := make([]string, 0, len(names))
+	for _, n := range names {
+		p := fmt.Sprintf("%s %d", n, h.URLs[n])
+		if why := h.FailedSources[n]; why != "" {
+			p += " (" + why + ")"
+		}
+		parts = append(parts, p)
+	}
+	return "URLs by archive: " + strings.Join(parts, ", ")
+}

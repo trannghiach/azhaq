@@ -48,7 +48,7 @@ type Options struct {
 	Filters   Filters           // sent to the archives that can apply them
 	Blacklist []string          // drop URLs whose path ends in one of these extensions
 	FirstPath bool              // keep one URL for each host and path
-	Retries   *int              // per request, on 429, 503 and network errors; default 3
+	Retries   *int              // per request, on 429, 503 and network errors; default: a 429 or 503 until the source's time is spent, a network error 3 times
 	Pause     *time.Duration    // between a source's requests; default per source, 0 none
 	Proxy     string            // http, https or socks5 address, when no Client is given
 	Bases     map[string]string // replaces a source's address (a mirror, a test server)
@@ -143,11 +143,13 @@ func (c *Collector) skips(s source) string {
 }
 
 type outcome struct {
-	count, pages int
-	err          error
-	took         time.Duration
-	capped       bool
-	skipped      string
+	count, pages   int
+	err            error
+	took           time.Duration
+	capped         bool
+	skipped        string
+	tries, retried int // requests sent, and sent again
+	waited         time.Duration
 }
 
 // cutGrace is how long before the run's deadline the sources stop, so
@@ -213,7 +215,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				defer cancel()
 				byRun = true
 			}
-			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: 3,
+			g := &getter{client: c.opts.Client, pause: c.pauses[s.name], maxPages: c.opts.MaxPages, retries: -1,
 				apex: c.opts.Apex, filters: c.opts.Filters, base: c.opts.Bases[s.name], raw: c.opts.Raw}
 			if c.opts.Retries != nil {
 				g.retries = *c.opts.Retries
@@ -267,7 +269,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				}
 			}
 			mu.Lock()
-			results[i] = outcome{count: count, pages: pages, err: err, took: time.Since(t0), capped: g.capped && err == nil}
+			results[i] = outcome{count: count, pages: pages, err: err, took: time.Since(t0), capped: g.capped && err == nil,
+				tries: g.tries, retried: g.retried, waited: g.waited}
 			mu.Unlock()
 		}(i, s)
 	}
@@ -294,6 +297,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			continue
 		}
 		row := map[string]any{"count": r.count, "pages": r.pages, "seconds": float64(r.took.Milliseconds()/100) / 10}
+		if r.tries > 0 {
+			row["requests"] = r.tries
+		}
+		if r.retried > 0 {
+			row["retried"] = r.retried
+			row["waited_seconds"] = float64(r.waited.Milliseconds()/100) / 10
+		}
 		if r.err != nil {
 			row["error"] = shorten(r.err.Error())
 			failed = append(failed, s.name)
