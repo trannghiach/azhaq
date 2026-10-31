@@ -150,8 +150,9 @@ func (c progressCfg) paceLine(rate float64) string {
 func startProgress(ctx context.Context, cfg progressCfg, w io.Writer, snap func() progressSnap) func() {
 	done := make(chan struct{})
 	var once sync.Once
+	every := stderrProgressEvery // read here, not in the goroutine: a test resets it
 	go func() {
-		t := time.NewTicker(stderrProgressEvery)
+		t := time.NewTicker(every)
 		defer t.Stop()
 		prev := progressSnap{Left: -1}
 		for {
