@@ -1,6 +1,6 @@
 # azhaq dirs
 
-Paths from a wordlist (SecLists' common.txt built in) that answer unlike a path that cannot exist; a URL with a path is swept from that path. Replaces ffuf -ac (see [Migrating](../MIGRATING.md#ffuf-azhaq-fuzz-and-azhaq-dirs)).
+Sweeps a wordlist of paths and reports those that answer unlike a path that cannot exist. SecLists' `common.txt` is built in. A URL with a path is swept from that path. Replaces `ffuf -ac` (see [Migrating](../MIGRATING.md#ffuf-azhaq-fuzz-and-azhaq-dirs)).
 
 ## Synopsis
 
@@ -11,19 +11,68 @@ azhaq dirs -u URL | -l FILE | stdin  [-w WORDLIST] [-e EXT] [-depth N] [-mc/-ms/
 ## Examples
 
 ```
+# sweep a site with the built-in wordlist
 azhaq dirs -u https://app.example.com/
+
+# sweep below /api/, try two extensions, hide one size, send 20 requests a second
 azhaq dirs -u https://app.example.com/api/ -w common.txt -e php,bak -fs 4242 -rate 20
+
+# several services from a file, as JSON
+azhaq dirs -l services.txt -json
 ```
+
+## What it does
+
+1. Takes each service from `-u`, `-l` or stdin. A URL with a path is swept from that path.
+2. Asks every word of the wordlist, with each `-e` extension if you give any.
+3. Calibrates on paths that cannot exist. The calibration is always on: it is ffuf's `-ac`.
+4. Applies the matchers and filters to the answers and prints the paths that pass.
+
+The request is ffuf's, so a ffuf command line carries over: [Details](#details) lists what it sends.
 
 ## Output
 
-One URL per line with status, size, words and lines; -json: {"url","status","length","words","lines","redirectlocation"}. Sizes, words and lines are counted as ffuf counts them, so a -fs or -fl value carries over. The calibration is on (it is ffuf's -ac); -mc defaults to ffuf's 200-299,301,302,307,401,403,405,500.
+Plain output is one URL per line with its status, size, words and lines. With `-json` you get one object per URL. The sizes, words and lines are counted as ffuf counts them, so a `-fs` or `-fl` value carries over. `-mc` defaults to ffuf's `200-299,301,302,307,401,403,405,500`.
 
-`url`, `status`, `length` (the whole body, as ffuf; up to 64 MB), `words` (spaces + 1) and `lines` (newlines + 1), both over the whole body as ffuf counts them, `redirectlocation`. `-ms -mw -ml -mr` and `-fc -fs -fw -fl -fr` read these numbers (with `-mr`, the response headers and the first MB of the body), so a ffuf line carries over: the request is ffuf's, with no `Accept` header (an app that picks its answer by it, such as Express's redirect body, answers with the same size as to ffuf) and `Accept-Encoding: gzip`, decoded before counting; a `-H` of yours wins. The `User-Agent` is a current Chrome's, not `Fuzz Faster U Fool`: sizes do not change with it unless the app answers by it, and `-H 'User-Agent: …'` sends another. A sweep asks every word, `/logout` and `/delete` included, as ffuf does; only with a session (`-cookie`, `-H 'Authorization: …'`) are the words that look like they change something held back and listed as `skipped`, and `-all-gets` asks them too. A URL with a path is swept from that path (`-u https://h/api/` asks `https://h/api/WORD`); a query or fragment on it is dropped, and a note says so. An answer cut off before its body ended (a server going down, a dropped connection) is asked once more, and never counted as a hit; the summary says how many paths still got no whole answer (`12 paths got no whole answer, after one retry: they were not judged`), and the exit code is 3. A sweep whose guesses were answered 429 says so the same way (`6 of 6 guesses were answered 429 …`, exit 3): a 429 is outside the default `-mc`, so those paths were not judged. `fuzz` asks a cut-off answer once more too, then counts it as an error. `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced, so at a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
+| Field | Meaning |
+| --- | --- |
+| `url` | The URL that answered. |
+| `status` | The HTTP status. |
+| `length` | The size of the whole body, as ffuf counts it, up to 64 MB. |
+| `words` | The number of spaces in the whole body, plus one. |
+| `lines` | The number of newlines in the whole body, plus one. |
+| `redirectlocation` | Where a redirect points. |
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two cases end with exit 3.
+
+- **Cut-off answers.** An answer cut off before its body ended, by a server going down or a dropped connection, is asked once more. It is never counted as a hit. The summary says how many paths still got no whole answer: `12 paths got no whole answer, after one retry: they were not judged`.
+- **429 answers.** A sweep whose guesses were answered 429 says so the same way: `6 of 6 guesses were answered 429 …`. A 429 is outside the default `-mc`, so those paths were not judged.
+
+`fuzz` asks a cut-off answer once more too, then counts it as an error.
+
+## Details
+
+### What a match is
+- `length` is the whole body, as ffuf counts it, up to 64 MB.
+- `words` is the number of spaces plus one, and `lines` the number of newlines plus one. Both count the whole body.
+- The matchers `-ms -mw -ml -mr` and the filters `-fc -fs -fw -fl -fr` read these numbers.
+- With `-mr` they read the response headers and the first MB of the body.
+
+### The request
+- The request is ffuf's, with no `Accept` header. An app that picks its answer by that header, such as Express's redirect body, answers with the same size as to ffuf.
+- It sends `Accept-Encoding: gzip` and decodes the answer before counting.
+- A `-H` of yours wins over these headers.
+- The `User-Agent` is a current Chrome's, not `Fuzz Faster U Fool`. Sizes do not change with it unless the app answers by it. `-H 'User-Agent: …'` sends another.
+
+### Which words are asked
+- A sweep asks every word, `/logout` and `/delete` included, as ffuf does.
+- Only with a session (`-cookie`, `-H 'Authorization: …'`) are the words that look like they change something held back and listed as `skipped`. `-all-gets` asks them too.
+- `-u https://h/api/` asks `https://h/api/WORD`. A query or fragment on the URL is dropped, and a note says so.
+
+### Pace
+- `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced. At a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
 
 ## Flags
 
