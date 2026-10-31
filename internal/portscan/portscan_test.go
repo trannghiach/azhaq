@@ -538,12 +538,21 @@ func TestEphemeralRangeHasNoPhantomPorts(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := listeners()
+	selfPorts, reached := tcpPairs()
 	for _, o := range r.Open {
 		if before[o.Port] || after[o.Port] {
 			continue
 		}
-		// Another test's server may have come and gone during the scan; a
-		// phantom port does not accept a second connection.
+		if selfPorts[o.Port] {
+			t.Errorf("port %d reported open from a connection to itself", o.Port)
+			continue
+		}
+		// Another package's test server may have come and gone during the
+		// scan: the scan's closed connection to it, from another local port,
+		// is still in TIME_WAIT.
+		if reached[o.Port] {
+			continue
+		}
 		c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(o.Port)), time.Second)
 		if err == nil {
 			self := selfConnect(c)
@@ -554,4 +563,34 @@ func TestEphemeralRangeHasNoPhantomPorts(t *testing.T) {
 		}
 		t.Errorf("port %d reported open and nothing listens on it", o.Port)
 	}
+}
+
+// tcpPairs reads the loopback TCP entries in every state: the ports a
+// socket connected to itself on (local and remote port equal), and the
+// remote ports reached from another local port.
+func tcpPairs() (self, reached map[int]bool) {
+	self, reached = map[int]bool{}, map[int]bool{}
+	port := func(addr string) int {
+		n, _ := strconv.ParseInt(addr[strings.LastIndex(addr, ":")+1:], 16, 32)
+		return int(n)
+	}
+	for _, file := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {
+		raw, err := os.ReadFile(file)
+		if err != nil {
+			continue
+		}
+		for _, l := range strings.Split(string(raw), "\n")[1:] {
+			f := strings.Fields(l)
+			if len(f) < 4 || f[3] == "0A" {
+				continue
+			}
+			lp, rp := port(f[1]), port(f[2])
+			if lp == rp {
+				self[lp] = true
+			} else {
+				reached[rp] = true
+			}
+		}
+	}
+	return self, reached
 }
