@@ -197,10 +197,12 @@ func cmdCrawl(args []string) error {
 	facts, rejected, offsite := crawlFacts(obs)
 	counts := map[string]int{}
 	var otherMethod, scriptsOnly int
+	var kinds crawlKinds
 	for _, r := range rows {
 		if r.Entity.Type != types.TypeURL || (*noShell && r.Coverage == "catchall") || r.Scope != "target" {
 			continue
 		}
+		kinds.add(r)
 		if outOpts.hidden(r) {
 			continue
 		}
@@ -244,6 +246,7 @@ func cmdCrawl(args []string) error {
 		return err
 	}
 	rep.Results, rep.Counts = out.w.count(), counts
+	kinds.put(counts, len(rejected))
 	if otherMethod > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d listed URLs are routes scripts call with a method other than GET, so a GET may answer 404 or 405 (-json has methods; -ot '{{method}} {{url}}' prints them)", otherMethod))
 	}
@@ -257,6 +260,42 @@ func cmdCrawl(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d links found outside the crawl's scope were not followed (-do lists them)", n))
 	}
 	return rep.finish(c.json, c.silent)
+}
+
+// crawlKinds sorts every URL row of the crawl's scope into what it is, so a
+// reader compares like with like (katana's records are the requested ones):
+// requested + not requested + templates is every row, and assets are a
+// count of their own.
+type crawlKinds struct{ requested, answered, notRequested, templates, assets int }
+
+func (k *crawlKinds) add(r engine.MapEntry) {
+	switch r.Role {
+	case "asset", "sourcemap", "manifest":
+		k.assets++
+	}
+	answered := r.Status > 0 || r.Coverage == "visited" || r.Coverage == "gone" || r.Coverage == "catchall"
+	switch {
+	case strings.Contains(r.Entity.Key, "{"):
+		k.templates++ // a route with a placeholder is never requested as written
+	case answered || r.Coverage == "error":
+		k.requested++
+		if answered {
+			k.answered++
+		}
+	default:
+		k.notRequested++
+	}
+}
+
+// put adds the kinds to the summary's counts, and the strings kept out of
+// the URLs.
+func (k *crawlKinds) put(c map[string]int, rejected int) {
+	for name, n := range map[string]int{"requested": k.requested, "answered": k.answered, "not requested": k.notRequested,
+		"templates": k.templates, "assets": k.assets, "rejected strings": rejected} {
+		if n > 0 {
+			c[name] = n
+		}
+	}
 }
 
 // crawlFact is what the run's observations say about a URL beyond its map

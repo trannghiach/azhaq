@@ -59,6 +59,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - counts the rejected strings and the links outside the scope;
 - names a host that answered 429 or 503, and what was done about it;
 - counts both kinds of listed URL, and says where to look: routes that scripts call with other methods, and strings that scripts only name;
+- counts what the rows are, apart: see [What the counts compare](#what-the-counts-compare);
 - says how many POST forms `-submit-forms` sent, and which POST forms it did not send and why.
 
 A crawl never drops links without a word. When `-max-items`, `-max-requests`, `-mdp` or the run's `-timeout` stops it, the run exits 4 and `azhaq resume` continues it.
@@ -74,6 +75,25 @@ A crawl never drops links without a word. When `-max-items`, `-max-requests`, `-
 - `-json` is the map's rows. The extension list does not cut it. Its script and stylesheet rows are there by default, and an image's with `-assets`.
 - `run`'s map lists every row, scripts and images included.
 - Views (`client-route`) and sockets (`websocket`) are listed with `-json` only, as routes with a parameter are. No GET gets them.
+
+### What the counts compare
+
+A crawl's rows are not all URLs that were requested, so the number of rows is no number to set beside katana's. The summary's `counts` sort every URL row of the crawl's scope:
+
+| Count | Rows |
+| --- | --- |
+| `requested` | URLs the crawl sent a request for, whatever the answer. These are katana's records, scripts and stylesheets included. |
+| `answered` | Of `requested`, those that got an answer, a 404 too. The others failed with no answer. |
+| `not requested` | URLs found in a page, a script or an API description and not asked: a hint, a URL past a limit, or a URL a `-deny-path` rule kept out. |
+| `templates` | Routes with a placeholder, `/api/Cards/{id}`: never requested as written. |
+| `assets` | Images, fonts, media, source maps and build manifests, requested or not. Each is also one of the three above. |
+| `rejected strings` | Strings read from scripts and pages and kept out of the URLs, each with a reason. They are no row. `-rejected` lists them. |
+
+`requested`, `not requested` and `templates` add up to every URL row. The older counts, `visited` and `hint`, are of the rows that were printed, after the filters.
+
+Which rows plain output prints, and so `-silent` too: `requested` and `not requested` rows, scripts and stylesheets included, less the default extension list (images, fonts, archives, media, `.pdf`, `.txt`, `.map`) unless `-assets`, `-ndef` or `-em` says otherwise. Templates, views and sockets are left out. `-json` prints every row, templates included, and `-rejected` adds the rejected strings as lines of their own, which the number of results counts.
+
+To compare with katana, count `requested`: the lines of `-silent` also hold the `not requested` rows.
 
 ### Filters
 
