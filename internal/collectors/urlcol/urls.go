@@ -108,7 +108,8 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
 // Asks names the archives a run asks about a domain: every one, keyed or
-// not.
+// not. A filter an archive cannot apply does not leave it out (see
+// unfiltered).
 func (c *Collector) Asks(seed types.Seed) []string {
 	domain := normalize.Hostname(seed.Keys["domain"])
 	if domain == "" || normalize.SpecialUse(domain) {
@@ -116,30 +117,35 @@ func (c *Collector) Asks(seed types.Seed) []string {
 	}
 	out := make([]string, 0, len(c.sources))
 	for _, s := range c.sources {
-		if c.skips(s) == "" {
-			out = append(out, s.name)
-		}
+		out = append(out, s.name)
 	}
 	return out
 }
 
-// skips says why a source is not asked: it cannot apply a filter that was
-// given, and its URLs would pass it unfiltered.
-func (c *Collector) skips(s source) string {
-	if lack := c.opts.Filters.needs() &^ s.can; lack != 0 {
-		var what []string
-		if lack&byStatus != 0 {
-			what = append(what, "status")
-		}
-		if lack&byMime != 0 {
-			what = append(what, "type")
-		}
-		if lack&byDate != 0 {
-			what = append(what, "date")
-		}
-		return "holds no " + strings.Join(what, " or ") + " of its captures to filter on"
+// unfiltered says what a filter that was given reaches in an archive that
+// holds none of it: what the archive lacks ("status or type") and the flags
+// that were given for it ("-mc, -ft"), both "" when it applies every filter.
+// It is asked all the same and its URLs are kept unfiltered, as gau keeps
+// them: dropping the archive would lose URLs the filter never judged.
+func (c *Collector) unfiltered(s source) (what, flags string) {
+	lack := c.opts.Filters.needs() &^ s.can
+	if lack == 0 {
+		return "", ""
 	}
-	return ""
+	var kinds []string
+	for _, k := range []struct {
+		bit  int
+		name string
+	}{{byStatus, "status"}, {byMime, "type"}, {byDate, "date"}} {
+		if lack&k.bit != 0 {
+			kinds = append(kinds, k.name)
+		}
+	}
+	what = kinds[0]
+	if n := len(kinds); n > 1 {
+		what = strings.Join(kinds[:n-1], ", ") + " or " + kinds[n-1]
+	}
+	return what, strings.Join(c.opts.Filters.flagsFor(lack), ", ")
 }
 
 type outcome struct {
@@ -147,7 +153,6 @@ type outcome struct {
 	err            error
 	took           time.Duration
 	capped         bool
-	skipped        string
 	tries, retried int // requests sent, and sent again
 	waited         time.Duration
 }
@@ -201,10 +206,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	results := make([]outcome, len(c.sources))
 	var wg sync.WaitGroup
 	for i, s := range c.sources {
-		if why := c.skips(s); why != "" {
-			results[i].skipped = why
-			continue
-		}
 		wg.Add(1)
 		go func(i int, s source) {
 			defer wg.Done()
@@ -298,11 +299,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var failed, capped []string
 	for i, s := range c.sources {
 		r := results[i]
-		if r.skipped != "" {
-			status[s.name] = map[string]any{"skipped": r.skipped}
-			continue
-		}
 		row := map[string]any{"count": r.count, "pages": r.pages, "seconds": float64(r.took.Milliseconds()/100) / 10}
+		if what, flags := c.unfiltered(s); what != "" {
+			row["unfiltered"], row["unfiltered_by"] = what, flags
+		}
 		if r.tries > 0 {
 			row["requests"] = r.tries
 		}

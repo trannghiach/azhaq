@@ -217,7 +217,7 @@ Piped, `urls` prints each URL once, as soon as its page arrives, so the next too
 | `gau example.com a.com` | `urls example.com a.com`, `-d` (repeatable), `-dL FILE`, or domains on stdin |
 | `--subs` | `-subs` |
 | `--providers wayback,otx` | `-providers wayback,otx` (the archives are `wayback`, `commoncrawl`, `otx`, `urlscan`, `arquivo`; the API-key file moved to `-provider-config`, and `-providers FILE` still works for a path) |
-| `--mc/--fc/--mt/--ft`, `--from/--to` | `-mc -fc -mt -ft -from -to`; an archive that keeps no status, type or date (OTX; urlscan.io keeps dates only) is not asked, and the summary says so |
+| `--mc/--fc/--mt/--ft`, `--from/--to` | `-mc -fc -mt -ft -from -to`; an archive that keeps no status, type or date (OTX; urlscan.io keeps dates only) is asked all the same and its URLs are kept unfiltered, as gau keeps them, and a note says so (`otx has no status of its captures: its 13 URLs are not filtered by -mc`) |
 | `--blacklist ttf,woff` | `-blacklist ttf,woff` (with or without the dot) |
 | `--fp` | `-fp` (the first URL of each host and path) |
 | `--threads N` | `-threads N` (domains asked at once; the five archives of a domain always run together) |

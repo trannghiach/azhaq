@@ -279,7 +279,7 @@ On top: `-db FILE` keeps the matches in the workspace; `azhaq fuzz` with `-maxti
 | `example.com` | `example.com` | Domains as arguments, or `-d`, `-dL FILE`, or stdin. |
 | `--subs` | `-subs` | The default is the name given, as gau's. |
 | `--providers wayback,otx` | `-providers wayback,otx` | `commoncrawl`, `urlscan` and `arquivo` too; all five by default. |
-| `--mc 200`, `--fc 404`, `--mt text/html`, `--ft image/png` | `-mc 200`, `-fc 404`, `-mt text/html`, `-ft image/png` | An archive that keeps no status or type (OTX, urlscan.io) is not asked when one of these is given. |
+| `--mc 200`, `--fc 404`, `--mt text/html`, `--ft image/png` | `-mc 200`, `-fc 404`, `-mt text/html`, `-ft image/png` | An archive that keeps no status or type (OTX, urlscan.io) is asked all the same and its URLs are kept unfiltered, as gau keeps them; a note says so (`otx has no status of its captures: its 13 URLs are not filtered by -mc`). |
 | `--from 202401`, `--to 202412` | `-from 202401`, `-to 202412` | |
 | `--blacklist png,jpg` | `-blacklist png,jpg` | |
 | `--fp` | `-fp` | One URL for each host and path. |
