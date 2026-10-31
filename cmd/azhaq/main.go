@@ -1252,28 +1252,49 @@ func printMap(rows []engine.MapEntry) {
 // output, Azhaq's own export, connector facts or plain lists.
 func cmdIngest(args []string) error {
 	fs := newFlags("ingest")
-	in := fs.String("in", "", "a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report or -json lines, azhaq export, connector facts, or lines of URLs, hostnames and addresses")
+	in := fs.String("in", "", "a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report or -json lines, azhaq export, connector facts, or lines of URLs, hostnames and addresses; files may also be given as arguments, several at once")
 	dbPath := fs.String("db", "", "the database to add to (default: a new file)")
 	asJSON := fs.Bool("json", false, "the summary as JSON")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
-	if *in == "" {
-		return usagef("need -in FILE (or -in - for stdin)")
+	files := fs.Args()
+	if *in != "" {
+		files = append([]string{*in}, files...)
 	}
-	var raw []byte
-	var err error
-	if *in == "-" {
-		raw, err = io.ReadAll(os.Stdin)
-	} else {
-		raw, err = os.ReadFile(*in)
+	if len(files) == 0 {
+		return usagef("give a FILE to ingest (azhaq ingest FILE…; - for stdin)")
 	}
-	if err != nil {
-		return err
-	}
-	facts, formats, skipped, err := connector.ReadLines(raw)
-	if err != nil {
-		return usagef("%s: %v", *in, err)
+	var facts []connector.Fact
+	formats := map[string]int{}
+	var skipped []string
+	for _, f := range files {
+		var raw []byte
+		var err error
+		if f == "-" {
+			raw, err = io.ReadAll(os.Stdin)
+		} else {
+			raw, err = os.ReadFile(f)
+		}
+		if err != nil {
+			return err
+		}
+		got, fm, sk, err := connector.ReadLines(raw)
+		if err != nil {
+			return usagef("%s: %v", f, err)
+		}
+		facts = append(facts, got...)
+		for k, n := range fm {
+			formats[k] += n
+		}
+		for _, x := range sk {
+			if len(files) > 1 {
+				x = f + " " + x
+			}
+			if len(skipped) < 5 {
+				skipped = append(skipped, x)
+			}
+		}
 	}
 	path, remember := resolveDB(*dbPath)
 	if remember {
@@ -1297,7 +1318,7 @@ func cmdIngest(args []string) error {
 		if err := st.BeginRun(newRunID(), 0, 0); err != nil {
 			return err
 		}
-		_ = st.SetRunArgs([]string{"ingest", *in})
+		_ = st.SetRunArgs(append([]string{"ingest"}, files...))
 	} else {
 		st.UseRun(runs[len(runs)-1].ID)
 	}

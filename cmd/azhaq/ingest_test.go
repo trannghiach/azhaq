@@ -119,3 +119,33 @@ func TestIngestFeedsExports(t *testing.T) {
 		t.Errorf("katana's POST row: %+v", r)
 	}
 }
+
+// Files are arguments, as for other tools: several at once, the same
+// facts as -in, and no file is a usage error that says how to give one.
+func TestIngestTakesFilesAsArguments(t *testing.T) {
+	fx := func(f string) string { return filepath.Join("..", "..", "fixtures", f) }
+	count := func(db string, args ...string) int {
+		t.Helper()
+		out, errOut, code := cli(t, append(append([]string{"ingest"}, args...), "-db", db, "-json")...)
+		if code != exitOK {
+			t.Fatalf("%v: exit %d\n%s", args, code, errOut)
+		}
+		_ = out
+		return int(sumMap(t, errOut)["results"].(float64))
+	}
+	dir := t.TempDir()
+	one := count(filepath.Join(dir, "a.db"), "-in", fx("httpx.jsonl"))
+	two := count(filepath.Join(dir, "b.db"), "-in", fx("katana.jsonl"))
+	if one == 0 || two == 0 {
+		t.Fatalf("fixtures read %d and %d facts", one, two)
+	}
+	if got := count(filepath.Join(dir, "c.db"), fx("httpx.jsonl")); got != one {
+		t.Errorf("a file as an argument gave %d facts, -in gave %d", got, one)
+	}
+	if got := count(filepath.Join(dir, "d.db"), fx("httpx.jsonl"), fx("katana.jsonl")); got != one+two {
+		t.Errorf("two files gave %d facts, want %d", got, one+two)
+	}
+	if _, errOut, code := cli(t, "ingest"); code != exitUsage || !strings.Contains(errOut, "azhaq ingest FILE") {
+		t.Errorf("no file: exit %d\n%s", code, errOut)
+	}
+}
