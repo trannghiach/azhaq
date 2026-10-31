@@ -2,6 +2,8 @@ package subcol
 
 import (
 	"context"
+	"errors"
+	"net/url"
 	"sync"
 	"time"
 
@@ -71,4 +73,12 @@ func testSourcesInUse() []source {
 	testMu.Lock()
 	defer testMu.Unlock()
 	return testSources
+}
+
+// DatabaseOff makes crt.sh's database fail at once, so a test that fakes
+// the JSON API never reaches crt.sh. For tests only.
+func DatabaseOff() {
+	crtshQuery = func(context.Context, string, *url.URL, time.Duration) ([]string, error) {
+		return nil, errors.New("crt.sh database: off in tests")
+	}
 }

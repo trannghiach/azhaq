@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"testing"
+
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 )
 
 // The name history (subcol) is per user: tests keep theirs in a temp dir.
@@ -15,6 +17,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("AZHAQ_DATA_DIR", dir)
+	subcol.DatabaseOff() // no test reaches crt.sh
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

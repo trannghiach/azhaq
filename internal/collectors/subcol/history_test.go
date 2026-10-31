@@ -20,6 +20,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	os.Setenv("AZHAQ_DATA_DIR", dir)
+	DatabaseOff()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
