@@ -24,6 +24,9 @@ linters:
         - pattern: ^net\.(Dial|DialTimeout|DialTCP|DialUDP|DialIP|DialUnix|Dialer|ListenPacket|ListenUDP)$
           pkg: ^net$
           msg: "connect through internal/egress (DialTarget, PortDialer, DialSource)"
+        - pattern: ^net\.(Lookup(Host|IP|Addr|CNAME|MX|NS|TXT|SRV|Port)|DefaultResolver|Resolver)$
+          pkg: ^net$
+          msg: "resolve through egress (SystemLookup, DNSExchanger)"
         - pattern: ^tls\.(Dial|DialWithDialer|Dialer)$
           pkg: ^crypto/tls$
           msg: "connect through internal/egress"

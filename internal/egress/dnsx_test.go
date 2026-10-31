@@ -98,3 +98,34 @@ func TestCheckDNSProxyTakesSocks5Only(t *testing.T) {
 		t.Errorf("an http proxy: %v", err)
 	}
 }
+
+// A name for the system's resolver is a query too: a dns line, and the
+// kill file stops it.
+func TestSystemLookupIsInTheLedgerAndKilled(t *testing.T) {
+	Reset()
+	defer Reset()
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	if _, err := SystemLookup(context.Background(), "localhost"); err != nil {
+		t.Fatal(err)
+	}
+	kill := filepath.Join(t.TempDir(), "run.stop")
+	if err := os.WriteFile(kill, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer SetKill(kill)()
+	if _, err := SystemLookup(context.Background(), "localhost"); !errors.Is(err, neterr.ErrKilled) {
+		t.Fatalf("with the kill file there: %v", err)
+	}
+	l.Close()
+	var es []ledger.Entry
+	_ = ledger.Read(path, func(e ledger.Entry) error { es = append(es, e); return nil })
+	if len(es) != 1 || es[0].Class != "dns" || es[0].Target != "system" || es[0].Host != "localhost" {
+		t.Fatalf("%+v", es)
+	}
+}

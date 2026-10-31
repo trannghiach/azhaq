@@ -493,7 +493,7 @@ func (p *Pool) system(ctx context.Context, name string) Answer {
 	a := Answer{Name: name, Status: StatusReserved}
 	ctx, cancel := context.WithTimeout(ctx, p.timeout)
 	defer cancel()
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, name)
+	ips, err := egress.SystemLookup(ctx, name)
 	if err != nil || len(ips) == 0 {
 		return a
 	}

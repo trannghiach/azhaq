@@ -21,7 +21,7 @@ import (
 
 // literals are types no code outside egress builds.
 var literals = map[string]bool{
-	"net/http.Client": true, "net/http.Transport": true, "net.Dialer": true,
+	"net/http.Client": true, "net/http.Transport": true, "net.Dialer": true, "net.Resolver": true,
 	"crypto/tls.Dialer": true, "github.com/miekg/dns.Client": true,
 	"golang.org/x/net/http2.Transport": true,
 }
@@ -32,6 +32,9 @@ var forbidden = map[string]bool{
 	"net/http.Get": true, "net/http.Post": true, "net/http.Head": true, "net/http.PostForm": true,
 	"net.Dial": true, "net.DialTimeout": true, "net.DialTCP": true, "net.DialUDP": true,
 	"net.DialIP": true, "net.DialUnix": true, "net.ListenPacket": true, "net.ListenUDP": true,
+	"net.LookupHost": true, "net.LookupIP": true, "net.LookupAddr": true, "net.LookupCNAME": true,
+	"net.LookupMX": true, "net.LookupNS": true, "net.LookupTXT": true, "net.LookupSRV": true,
+	"net.LookupPort": true, "net.DefaultResolver": true,
 	"crypto/tls.Dial": true, "crypto/tls.DialWithDialer": true,
 	"net/smtp.Dial": true, "net/smtp.SendMail": true,
 	"github.com/chromedp/chromedp.NewExecAllocator": true, "github.com/chromedp/chromedp.NewRemoteAllocator": true,

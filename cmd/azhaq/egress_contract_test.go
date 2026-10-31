@@ -237,15 +237,24 @@ var egressContract = map[string]egressEntry{
 	}},
 	"dns": {sends: "direct", run: func(t *testing.T, h *egressHarness) {
 		var asked atomic.Int64
-		addr := serveCountingZone(t, &asked, map[string]string{"app.example.test": "192.0.2.7"})
-		_, errOut, code := cli(t, "dns", "-d", "app.example.test", "-r", addr, "-ledger", h.ledger, "-json")
+		addr := serveCountingZone(t, &asked, map[string]string{"app.example.org": "192.0.2.7"})
+		_, errOut, code := cli(t, "dns", "-d", "app.example.org", "-r", addr, "-ledger", h.ledger, "-json")
 		rep := lastReport(t, errOut)
 		if code != exitOK || asked.Load() == 0 {
 			t.Fatalf("exit %d, the resolver was asked %d times: %+v", code, asked.Load(), rep)
 		}
 		c := h.counts()
-		if int64(c.n("dns", "dns")) != asked.Load() {
-			t.Errorf("the ledger lists %d queries, the resolver was asked %d times", c.n("dns", "dns"), asked.Load())
+		// Every query the resolver got is a dns line naming it; a name for the
+		// system's resolver would be one more, naming "system".
+		toResolver := 0
+		_ = ledger.Read(h.ledger, func(e ledger.Entry) error {
+			if e.Class == ledger.ClassDNS && e.Target == addr {
+				toResolver++
+			}
+			return nil
+		})
+		if int64(toResolver) != asked.Load() || c.n("dns", "dns") != toResolver {
+			t.Errorf("the ledger lists %d queries to the resolver (%d dns lines), the resolver was asked %d times", toResolver, c.n("dns", "dns"), asked.Load())
 		}
 		if c.class("target") != 0 || c.class("source") != 0 {
 			t.Errorf("a dns command sent to a target or a source: %v", c.byClassKind)

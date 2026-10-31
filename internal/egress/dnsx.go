@@ -243,6 +243,18 @@ func queryJoin(u string) string {
 	return "?"
 }
 
+// SystemLookup asks the system's resolver (/etc/hosts, the local DNS) for
+// the addresses of name: the special-use names no public resolver is asked
+// about. It is a dns line with the resolver "system" and is refused once
+// the kill file exists.
+func SystemLookup(ctx context.Context, name string) ([]net.IPAddr, error) {
+	if err := Current().Killed(); err != nil {
+		return nil, err
+	}
+	ledger.DNS(ctx, name, "A/AAAA", "system")
+	return net.DefaultResolver.LookupIPAddr(ctx, name)
+}
+
 // Transfer asks server for the zone domain over TCP (AXFR), through the
 // proxy when there is one, and returns its records. The transfer is cut
 // when ctx ends.
