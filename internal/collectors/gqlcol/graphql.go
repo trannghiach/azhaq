@@ -275,7 +275,7 @@ func (s *Schema) post(ctx context.Context, raw, query string) (int, []byte, erro
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
-	for k, vs := range fetch.Extra {
+	for k, vs := range fetch.CurrentExtra() {
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}

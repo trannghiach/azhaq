@@ -829,7 +829,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if *login != "" && out.plan {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("the run signs in at %s as %s with Chrome first", *login, *loginUser))
 	} else if *login != "" {
-		base := fetch.Extra.Clone()
+		base := fetch.CurrentExtra().Clone()
 		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
 		if err != nil {
 			return err
@@ -2165,7 +2165,7 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 		return "", fmt.Errorf("-login %s: signed in, but the site set no cookie and stored no token", loginURL)
 	}
 	// Built apart and set whole: requests in flight read fetch.Extra.
-	extra := fetch.Extra.Clone()
+	extra := fetch.CurrentExtra().Clone()
 	if extra == nil {
 		extra = make(http.Header)
 	}
@@ -2225,7 +2225,7 @@ func listOfHosts(hosts []string, n int) string {
 // browserAgent is the User-Agent Chrome sends: the run's, not Chrome's
 // headless one, which bot managers refuse.
 func browserAgent() string {
-	if ua := fetch.Extra.Get("User-Agent"); ua != "" {
+	if ua := fetch.CurrentExtra().Get("User-Agent"); ua != "" {
 		return ua
 	}
 	return fetch.UserAgent

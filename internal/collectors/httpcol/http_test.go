@@ -163,3 +163,26 @@ func TestServerErrorBodyIsNoted(t *testing.T) {
 		}
 	}
 }
+
+// A renewed session replaces the headers while requests are described.
+func TestDescribeWhileTheSessionIsRenewed(t *testing.T) {
+	t.Cleanup(func() { fetch.SetExtra(nil) })
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			fetch.SetExtra(http.Header{"Cookie": {"sid=" + strings.Repeat("x", i%7+1)}})
+		}
+	}()
+	for i := 0; i < 200; i++ {
+		describe("http://app.example.org/", "http://app.example.org/", fetch.Result{Status: 200, Body: []byte("x")}, "", false, false)
+	}
+	close(stop)
+	<-done
+}

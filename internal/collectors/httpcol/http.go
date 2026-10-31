@@ -746,7 +746,7 @@ func describe(reqURL, final string, res fetch.Result, title string, noTech, ever
 	if len(res.Hops) > 0 {
 		out["hops"] = res.Hops
 	}
-	if len(fetch.Extra) > 0 && fetch.Extra.Get("Cookie") != "" {
+	if fetch.CurrentExtra().Get("Cookie") != "" {
 		out["auth"] = "cookie"
 	}
 	return out

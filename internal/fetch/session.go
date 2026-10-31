@@ -111,6 +111,15 @@ func SetExtra(h http.Header) {
 	extraMu.Unlock()
 }
 
+// CurrentExtra is the headers every request carries now. A new session
+// replaces them whole, so the map is never changed in place: read it, do not
+// write to it, and use this, not Extra, where a run is going on.
+func CurrentExtra() http.Header {
+	extraMu.RLock()
+	defer extraMu.RUnlock()
+	return Extra
+}
+
 // WatchSession starts the check; Reset ends it.
 func WatchSession(s Session) {
 	if s.Every <= 0 {
