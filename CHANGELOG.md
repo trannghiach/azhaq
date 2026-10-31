@@ -4,6 +4,10 @@
 
 ### Fixed
 
+- `dirs` asks the base URL for an empty line of the wordlist, as ffuf does (`http://host/` with nothing appended), and counts it like any word; before, it dropped the line without a word.
+- `params` finds a field that shows only once the earlier ones are present, such as the required fields a validator reports one at a time (VAmPI's login reads `username` and `password`; `-X JSON` found only `username`). After a pass, the names not found are asked again with the found names in every request, against a reference taken the same way, up to 3 passes, for every method; such a name's `why` says what was present (`body, once username was present`).
+- `ports -host 127.0.0.1,127.0.0.1:10025` scans both: each entry stands for itself, so the bare host keeps its default ports (or `-p`) and the `host:port` entry adds its port. Before, the pinned port replaced the bare host's default scan.
+- `subs -w` counts the guesses that did not resolve: the summary has `asked by guessing`, `did not resolve` includes the unresolved guesses, and the `count:` note adds up to the names printed even when no source gave a name.
 - `show` and `query` list every port an ingested naabu line names: the address's open ports are the newest azhaq scan's joined with the imported rows' ports, with `via` naming both. A naabu file of two lines showed one port.
 - `shots -u http://host/` gives one row: the host name derived from a front-page URL is no longer also shot on both schemes (a bare name or `host:port` still is).
 - `probe -json` prints a URL input's `url` as it was given, with its slash, query and fragment, as httpx does; a bare host keeps httpx's form without the slash.
