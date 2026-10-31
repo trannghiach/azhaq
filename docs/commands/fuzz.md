@@ -107,6 +107,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
   - `-request FILE` reads a raw request as Burp saves it, and `-request-proto` gives its protocol. `-u`, `-X`, `-d`, `-H` and `-b` replace parts of it.
 - **Request**
   - `-u`, `-X`, `-d` (also `-data`, `-data-ascii`, `-data-binary`), `-H`, `-b` (also `-cookie`), `-r` and `-timeout`.
+  - A `-d` body goes out with `Content-Type: application/x-www-form-urlencoded`, as ffuf sends it, unless `-H` (or the `-request` file) gives a Content-Type.
   - `-timeout` is seconds per request, as in ffuf.
   - `-x` sends every request through an http, https, socks5 or socks5h proxy.
   - `-replay-proxy` sends each match once more through a proxy such as Burp.
@@ -211,7 +212,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-X` | string |  | HTTP method (default GET, POST with -d); the keyword may stand in it |
-| `-d` | string |  | request body; the keyword may stand in it |
+| `-d` | string |  | request body; the keyword may stand in it. Sent as a form (application/x-www-form-urlencoded) unless -H gives a Content-Type |
 | `-H` | string, repeatable |  | header "Name: value"; the keyword may stand in name and value, Host included (repeatable). A header that names a host (Host, X-Forwarded-Host, X-Host, X-Original-Host) joins the target when no -allow, -deny or -scope is given; with one, the host must be in the scope |
 | `-r` | bool |  | follow redirects |
 | `-request` | string |  | read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds |

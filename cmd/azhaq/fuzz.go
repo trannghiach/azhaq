@@ -44,7 +44,7 @@ func cmdFuzz(args []string) error {
 	fs.Var(&lists, "w", "wordlist `FILE[:KEYWORD]` (- for stdin; repeatable; a comma list is several; the keyword is FUZZ without one)")
 	mode := fs.String("mode", "clusterbomb", "how several wordlists combine: clusterbomb (every combination), pitchfork (line by line) or sniper (one wordlist in each §marked§ place of the request in turn)")
 	method := fs.String("X", "", "HTTP method (default GET, POST with -d); the keyword may stand in it")
-	data := fs.String("d", "", "request body; the keyword may stand in it")
+	data := fs.String("d", "", "request body; the keyword may stand in it. Sent as a form (application/x-www-form-urlencoded) unless -H gives a Content-Type")
 	fs.StringVar(data, "data", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-ascii", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-binary", "", "ffuf's alias of -d")

@@ -163,6 +163,10 @@ func (s *httpSender) newRequest(ctx context.Context, req *Request) (*http.Reques
 		hr.Header.Set(h.Name, h.Value)
 	}
 	fetch.ApplySweepHeaders(hr)
+	// A body with no Content-Type of the user's is a form, as ffuf sends it.
+	if req.Data != "" && hr.Header.Get("Content-Type") == "" {
+		hr.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	}
 	return hr, nil
 }
 

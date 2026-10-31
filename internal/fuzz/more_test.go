@@ -391,3 +391,34 @@ func TestReadingAnAnswerReusesItsBuffers(t *testing.T) {
 		t.Errorf("each answer allocates %d bytes to be read; its buffers are not reused", per)
 	}
 }
+
+// -d with no Content-Type of the user's sends a form, as ffuf does; a
+// Content-Type given in -H is kept, and a request with no body sends none.
+func TestBodySendsAFormContentType(t *testing.T) {
+	var got []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = append(got, r.Header.Get("Content-Type"))
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	s := mustSender(t, HTTPOptions{Timeout: 5 * time.Second, Threads: 1})
+	for _, c := range []struct {
+		data    string
+		headers []string
+		want    string
+	}{
+		{"a=FUZZ", nil, "application/x-www-form-urlencoded"},
+		{"{\"a\":1}", []string{"content-type: application/json"}, "application/json"},
+		{"", nil, ""},
+	} {
+		got = nil
+		tm, _ := NewTemplate("POST", srv.URL+"/", c.data, c.headers, nil)
+		req := tm.Expand(map[string]string{"FUZZ": "1"})
+		if _, err := s.Send(context.Background(), &req, false); err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0] != c.want {
+			t.Errorf("data %q headers %v: Content-Type %q, want %q", c.data, c.headers, got, c.want)
+		}
+	}
+}
