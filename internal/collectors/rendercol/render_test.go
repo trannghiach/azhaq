@@ -16,6 +16,7 @@ import (
 
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -61,7 +62,7 @@ func TestRenderHeldToScope(t *testing.T) {
 
 	fetch.Reset()
 	defer fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	b := &browser.Browser{}
 	defer b.Close()
 	if err := b.Start(); errors.Is(err, browser.ErrNoSandbox) {
@@ -106,7 +107,7 @@ func TestRenderHeldToScope(t *testing.T) {
 	b.Close()
 	mu.Lock()
 	defer mu.Unlock()
-	if n := fetch.Sent(); n != int64(served) {
+	if n := egress.Sent(); n != int64(served) {
 		t.Errorf("%d requests counted, %d sent", n, served)
 	}
 }
@@ -197,7 +198,7 @@ Promise.allSettled([
 		t.Run(fmt.Sprintf("writes %v", writes), func(t *testing.T) {
 			fetch.Reset()
 			defer fetch.Reset()
-			fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+			egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 			b := &browser.Browser{Writes: writes}
 			defer b.Close()
 			if err := b.Start(); errors.Is(err, browser.ErrNoSandbox) {

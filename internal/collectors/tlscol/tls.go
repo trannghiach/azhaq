@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -69,7 +69,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		port = "443"
 	}
 	addr := net.JoinHostPort(host, port)
-	if err := fetch.Killed(); err != nil {
+	if err := egress.Killed(); err != nil {
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}
 	ledger.TCP(ctx, host, addr)

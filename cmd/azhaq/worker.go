@@ -25,6 +25,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -263,8 +264,8 @@ func runWorker(cat *catalog.Catalog, base, token string, slots int) error {
 	// outcomes, to be listed as not requested; so does what its answers
 	// said of the session.
 	sink := &denials{seen: map[string]bool{}}
-	fetch.OnDenied = sink.add
-	defer func() { fetch.OnDenied = nil }()
+	egress.SetOnDenied(sink.add)
+	defer func() { egress.SetOnDenied(nil) }()
 	if fetch.HasSession() {
 		fetch.WatchRemote(workerSignIn, func(rep fetch.SessionReport) {
 			c, cancel := context.WithTimeout(ctx, 10*time.Second)

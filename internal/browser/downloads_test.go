@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // A page that saves a file as it loads (<a download>), and a URL that is
@@ -97,7 +97,7 @@ func TestLeanPage(t *testing.T) {
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	p, err := b.Load(ctx, srv.URL+"/", false)
 	if err != nil {
 		t.Fatal(err)
@@ -116,14 +116,14 @@ func TestLeanPage(t *testing.T) {
 	if slices.Contains(p.Requests, srv.URL+"/logo") || !slices.Contains(p.Requests, srv.URL+"/api/me") {
 		t.Errorf("requests %q", p.Requests)
 	}
-	sent := fetch.Sent()
+	sent := egress.Sent()
 	if _, err := b.Load(ctx, srv.URL+"/", true); err != nil {
 		t.Fatal(err)
 	}
 	if got := srv.got(); !slices.Contains(got, "/logo") {
 		t.Errorf("a screenshot without the page's images: %q", got)
 	}
-	if fetch.Sent() <= sent {
+	if egress.Sent() <= sent {
 		t.Errorf("the screenshot's requests are not counted")
 	}
 }

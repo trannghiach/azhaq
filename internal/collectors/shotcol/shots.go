@@ -33,6 +33,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
 	"github.com/trannghiach/azhaq/internal/collectors/rendercol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -98,10 +99,10 @@ func (c *Collector) Skip(seed types.Seed) bool {
 
 // budgetLeft is how many requests the run may still send, or -1 without a cap.
 func budgetLeft() int {
-	if fetch.MaxRequests <= 0 {
+	if egress.MaxRequests() <= 0 {
 		return -1
 	}
-	return int(max(fetch.MaxRequests-fetch.Sent(), 0))
+	return int(max(egress.MaxRequests()-egress.Sent(), 0))
 }
 
 // notTaken says in the summary that the budget left no room for a page
@@ -191,7 +192,7 @@ func (c *Collector) shoot(ctx context.Context, tries []string, isURL bool, emit 
 		}
 		raw = t
 		left := budgetLeft()
-		if err := fetch.SpendUnpaced(ctx); err != nil {
+		if err := egress.SpendUnpaced(ctx); err != nil {
 			c.shot.Delete(t)
 			if errors.Is(err, neterr.ErrBudget) {
 				v, _ := c.need.Load(t)
@@ -304,7 +305,7 @@ func (c *Collector) shoot(ctx context.Context, tries []string, isURL bool, emit 
 // names them, and with any -allow the page's own host must be named too.
 func allowAdvice(page *url.URL, hosts []string) string {
 	var flags []string
-	if fetch.Allow == nil && page != nil && page.Hostname() != "" {
+	if !egress.HasScope() && page != nil && page.Hostname() != "" {
 		flags = append(flags, "-allow "+page.Hostname()) // any -allow replaces the default scope, the page's site
 	}
 	for _, h := range hosts {

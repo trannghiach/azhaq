@@ -16,6 +16,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -91,7 +92,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		c.count[u.Host]--
 		c.mu.Unlock()
 	}
-	if err := fetch.SpendUnpaced(ctx); err != nil {
+	if err := egress.SpendUnpaced(ctx); err != nil {
 		undo()
 		return types.RunMeta{Status: types.StatusCapped}, err
 	}

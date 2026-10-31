@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
@@ -51,9 +52,9 @@ let i = 0; setInterval(() => fetch('/tick' + (i++)), 20);
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.SetRate(8)     // slower than the page asks: some wait when it closes
-	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetRate(8)     // slower than the page asks: some wait when it closes
+	_ = egress.Spend(ctx) // the page, which Load's caller counts
 	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +76,7 @@ let i = 0; setInterval(() => fetch('/tick' + (i++)), 20);
 	if !slices.Equal(listed, got) {
 		t.Errorf("ledger %d lines, server got %d\nledger %v\nserver %v", len(listed), len(got), listed, got)
 	}
-	if n := fetch.Sent(); n != int64(len(got)) {
+	if n := egress.Sent(); n != int64(len(got)) {
 		t.Errorf("counted %d requests, the server got %d", n, len(got))
 	}
 }
@@ -111,9 +112,9 @@ func TestCacheHitsAreNotListed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	for _, p := range []string{"/a", "/b", "/c"} {
-		_ = fetch.Spend(ctx) // each page, which Load's caller counts
+		_ = egress.Spend(ctx) // each page, which Load's caller counts
 		if _, err := b.Load(ctx, own.URL+p, false); err != nil {
 			t.Fatal(err)
 		}
@@ -133,7 +134,7 @@ func TestCacheHitsAreNotListed(t *testing.T) {
 	if !slices.Equal(listed, got) {
 		t.Errorf("ledger %v\nserver %v", listed, got)
 	}
-	if n := fetch.Sent(); n != int64(len(got)) {
+	if n := egress.Sent(); n != int64(len(got)) {
 		t.Errorf("counted %d requests, the server got %d: %v", n, len(got), got)
 	}
 }
@@ -181,9 +182,9 @@ func TestPoliteShotIsWhole(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.SetRate(4)
-	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetRate(4)
+	_ = egress.Spend(ctx) // the page, which Load's caller counts
 	p, err := b.Load(ctx, srv.URL+"/", true)
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +222,7 @@ func TestPoliteShotIsWhole(t *testing.T) {
 	if !slices.Equal(listed, got) {
 		t.Errorf("ledger %d lines, server got %d", len(listed), len(got))
 	}
-	if n := fetch.Sent(); n != int64(len(got)) {
+	if n := egress.Sent(); n != int64(len(got)) {
 		t.Errorf("counted %d requests, the server got %d", n, len(got))
 	}
 }
@@ -243,7 +244,7 @@ func TestShotOfAStalledPageIsPartial(t *testing.T) {
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	p, err := b.Load(context.Background(), srv.URL+"/", true)
 	if err != nil {
 		t.Fatal(err)
@@ -278,11 +279,11 @@ for (let i = 0; i < 6; i++) fetch('/data' + i).then(r => r.json()).then(d => { c
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.SetRate(6)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetRate(6)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.SpendUnpaced(ctx)
+	_ = egress.SpendUnpaced(ctx)
 	p, err := b.Load(ctx, srv.URL+"/", true)
 	if err != nil {
 		t.Fatal(err)
@@ -346,8 +347,8 @@ func TestBuiltInPagesAreNotCounted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	_ = egress.Spend(ctx) // the page, which Load's caller counts
 	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +368,7 @@ func TestBuiltInPagesAreNotCounted(t *testing.T) {
 	if len(listed) != len(own.got()) {
 		t.Errorf("ledger %d lines, server got %d: %v", len(listed), len(own.got()), listed)
 	}
-	if n := fetch.Sent(); n != int64(len(own.got())) {
+	if n := egress.Sent(); n != int64(len(own.got())) {
 		t.Errorf("counted %d requests, the server got %d", n, len(own.got()))
 	}
 }

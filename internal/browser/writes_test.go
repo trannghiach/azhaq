@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -68,14 +69,14 @@ addEventListener('pagehide', () => navigator.sendBeacon('/api/bye', 'x'));</scri
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	if _, err := b.Login(ctx, srv.URL+"/login", "member@x.test", "s3cret"); err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(srv.got(), "/api/login") {
 		t.Fatalf("the sign-in did not post its form: %q", srv.got())
 	}
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	p, err := b.Load(ctx, srv.URL+"/app", false)
 	if err != nil {
 		t.Fatal(err)

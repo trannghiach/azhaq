@@ -14,14 +14,19 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 )
+
+func init() {
+	egress.SessionTick = sessionTick
+	egress.Noter = Note
+}
 
 type Hop struct {
 	URL      string `json:"url"`
@@ -75,70 +80,9 @@ type Result struct {
 // Extra is copied onto every GET. Cookie values stay on the wire, not in Extra's docs.
 var Extra http.Header
 
-// Allow, when set, is the run's scope: a host it rejects is never
-// requested, not even as a redirect target.
-var Allow func(host string) bool
-
-// DenyPath, when set, is the user's own rule for paths (-deny-path): it
-// returns the rule a URL's path matches, or "". Such a URL is never
-// requested: not by a collector, not as a redirect, not by Chrome.
-var DenyPath func(raw string) string
-
-// OnDenied, when set, hears of each request DenyPath kept out, so the run
-// can list it as not requested.
-var OnDenied func(raw, rule string)
-
-// DeniedBy is the -deny-path rule that keeps raw out, or "".
-func DeniedBy(raw string) string {
-	if DenyPath == nil {
-		return ""
-	}
-	return DenyPath(raw)
-}
-
-// DenyReason is how a rule is named in a list of what was not requested.
-func DenyReason(rule string) string { return "-deny-path " + rule }
-
-// CheckDenied is nil for a URL no -deny-path rule keeps out, else the
-// error to refuse it with; it tells OnDenied. Nothing has been spent or sent.
-func CheckDenied(raw string) error { return denied(raw) }
-
-func denied(raw string) error {
-	rule := DeniedBy(raw)
-	if rule == "" {
-		return nil
-	}
-	if f := OnDenied; f != nil {
-		f(raw, rule)
-	} else {
-		Note(raw + " was not requested: " + DenyReason(rule))
-	}
-	return &neterr.Denied{Rule: rule}
-}
-
-// resolver, when set, gives the addresses to connect to for a name: the
-// run's own DNS answers, so a service is reached at the address its
-// names were seen to resolve to. Unset, or no answer: the system
-// resolver. It is swapped whole: a request a finished run left behind
-// (a source past its deadline) may still dial while the next run sets it.
-var resolver atomic.Pointer[func(ctx context.Context, host string) []string]
-
-// SetResolver sets the run's resolver; nil goes back to the system's.
-func SetResolver(f func(ctx context.Context, host string) []string) {
-	if f == nil {
-		resolver.Store(nil)
-		return
-	}
-	resolver.Store(&f)
-}
-
-// Resolve is the run's answer for host, or nil without a resolver.
-func Resolve(ctx context.Context, host string) []string {
-	if f := resolver.Load(); f != nil {
-		return (*f)(ctx, host)
-	}
-	return nil
-}
+// denied is nil for a URL no -deny-path rule keeps out: the run's policy
+// (internal/egress) holds the rules and tells who listens.
+func denied(raw string) error { return egress.CheckDenied(raw) }
 
 var (
 	cacheMu  sync.Mutex
@@ -178,18 +122,6 @@ var HostParallel = 10
 
 // Delay is a pause before each uncached GET.
 var Delay time.Duration
-
-// ProxyURL, when set, is the proxy every request to a target goes through
-// (-proxy: http, https or socks5); unset, the environment's.
-var ProxyURL *url.URL
-
-// ProxyFor sends a request through -proxy, else as the environment says.
-func ProxyFor(r *http.Request) (*url.URL, error) {
-	if p := ProxyURL; p != nil {
-		return p, nil
-	}
-	return http.ProxyFromEnvironment(r)
-}
 
 // NoFollow keeps each GET to the URL asked (-no-follow): a redirect is
 // recorded with its Location, as httpx does by default.
@@ -264,11 +196,8 @@ func Reset() {
 	inflight = map[string]chan struct{}{}
 	hostSem = map[string]chan struct{}{}
 	Extra = nil
-	Allow = nil
-	DenyPath = nil
-	OnDenied = nil
+	egress.Reset()
 	resetSession()
-	SetResolver(nil)
 	Keep = nil
 	Memos = nil
 	Delay = 0
@@ -278,7 +207,6 @@ func Reset() {
 	KeepRaw = false
 	NoAccept = false
 	NoReuse = false
-	ProxyURL = nil
 	RespectHSTS = false
 	AutoReferer = false
 	RandomAgent = false
@@ -295,7 +223,6 @@ func Reset() {
 	resetProbes()
 	resetDescribed()
 	resetNotes()
-	resetBudget()
 	resetPolite()
 	Tap = nil
 	MaxBody = 2 << 20
@@ -345,13 +272,7 @@ func markStopped(ctx context.Context, err error) {
 	if !errors.Is(err, neterr.ErrOriginDown) {
 		return
 	}
-	if w, _ := ctx.Value(refusedKey{}).(*watch); w != nil {
-		w.mu.Lock()
-		if w.down == nil {
-			w.down = err
-		}
-		w.mu.Unlock()
-	}
+	egress.MarkStopped(ctx, err)
 }
 
 // noteOrigin counts how raw's origin answered: an answer of any kind
@@ -462,7 +383,7 @@ func Patient(header, total time.Duration) *http.Client {
 	return &http.Client{
 		Timeout: total,
 		Transport: ledger.Wrap(&http.Transport{
-			Proxy:                 ProxyFor,
+			Proxy:                 egress.ProxyFor,
 			DialContext:           dial,
 			DisableKeepAlives:     NoReuse,
 			TLSHandshakeTimeout:   handshake,
@@ -516,7 +437,7 @@ func dial(ctx context.Context, network, addr string) (net.Conn, error) {
 	if err != nil || net.ParseIP(host) != nil {
 		return d.DialContext(ctx, network, addr)
 	}
-	ips := Resolve(ctx, host)
+	ips := egress.Resolve(ctx, host)
 	if len(ips) == 0 {
 		return d.DialContext(ctx, network, addr) // /etc/hosts, special-use names
 	}
@@ -1115,7 +1036,7 @@ func followable(raw, next string) bool {
 // itself). A bundle on cdn.example.com and an API on api.example.com
 // belong to www.example.com; a library on a third-party CDN does not.
 func SameSite(page, other string) bool {
-	if Allow != nil {
+	if egress.HasScope() {
 		return inScope(other)
 	}
 	a, b := hostOf(page), hostOf(other)
@@ -1145,11 +1066,11 @@ func hostOf(raw string) string {
 }
 
 func inScope(raw string) bool {
-	if Allow == nil {
+	if !egress.HasScope() {
 		return true
 	}
 	u, err := url.Parse(raw)
-	return err != nil || u.Hostname() == "" || Allow(u.Hostname())
+	return err != nil || u.Hostname() == "" || egress.Allows(u.Hostname())
 }
 
 // HasSession says whether the run sends a session: a cookie, an

@@ -25,6 +25,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/limit"
@@ -507,7 +508,7 @@ func (c *Collector) more(ctx context.Context, raw string, variants []*fetch.Req)
 	}
 	var ips []string
 	if h := normalize.HostFromURL(raw); h != "" && net.ParseIP(h) == nil {
-		ips = fetch.Resolve(ctx, h)
+		ips = egress.Resolve(ctx, h)
 	}
 	if len(ips) < 2 {
 		return variants[1:]
@@ -553,7 +554,7 @@ func (c *Collector) excluded(ctx context.Context, raw string) string {
 	}
 	ips := []string{u.Hostname()}
 	if net.ParseIP(u.Hostname()) == nil {
-		ips = fetch.Resolve(ctx, u.Hostname())
+		ips = egress.Resolve(ctx, u.Hostname())
 	}
 	for _, a := range ips {
 		ip := net.ParseIP(a)

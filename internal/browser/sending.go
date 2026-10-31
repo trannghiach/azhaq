@@ -6,7 +6,7 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
@@ -50,7 +50,7 @@ func (b *Browser) pausedAgain(id network.RequestID, raw string) {
 	switch {
 	case !ok:
 	case g.url == raw:
-		fetch.Refund()
+		egress.Refund()
 	default:
 		ledger.ChromeAt(g.ctx, g.method, g.url, g.at)
 	}
@@ -66,7 +66,7 @@ func (b *Browser) sentOff(id network.RequestID) {
 	if !ok {
 		if g, ok = b.cached[id]; ok {
 			delete(b.cached, id)
-			fetch.Count(1)
+			egress.Count(1)
 		}
 	}
 	b.sendMu.Unlock()
@@ -90,7 +90,7 @@ func (b *Browser) fromCache(id network.RequestID) {
 		b.cached = map[network.RequestID]letGo{}
 	}
 	b.cached[id] = g
-	fetch.Refund()
+	egress.Refund()
 }
 
 // unheard lists what was let go for t (nil: for any page) and not heard

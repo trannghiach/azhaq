@@ -14,6 +14,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
@@ -65,7 +66,7 @@ func TestEveryFoundGetIsRequestedAndDenyPathIsListed(t *testing.T) {
 			seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}
 			rules := scope.Rules{DenyPath: tc.deny}.Compile()
 			if len(tc.deny) > 0 {
-				fetch.DenyPath = rules.DeniedPath
+				egress.SetDenyPath(rules.DeniedPath)
 			}
 			if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64, Scope: rules}); err != nil {
 				t.Fatal(err)

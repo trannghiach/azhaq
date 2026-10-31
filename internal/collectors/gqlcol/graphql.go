@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -282,7 +283,7 @@ func (s *Schema) post(ctx context.Context, raw, query string) (int, []byte, erro
 	if req.Header.Get("User-Agent") == "" {
 		req.Header.Set("User-Agent", fetch.UserAgent)
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return 0, nil, err
 	}
 	resp, err := s.Client.Do(req)

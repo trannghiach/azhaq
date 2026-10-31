@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -649,9 +649,9 @@ func (s *search) once(q []pair, quiet bool) (a answer, wait time.Duration, ok bo
 	if err := s.c.limiter.Wait(s.ctx, s.base.Host); err != nil {
 		return answer{}, 0, false
 	}
-	if rule := fetch.DeniedBy(s.base.String()); rule != "" {
+	if rule := egress.DeniedBy(s.base.String()); rule != "" {
 		s.mu.Lock()
-		s.skip = fetch.DenyReason(rule)
+		s.skip = egress.DenyReason(rule)
 		s.mu.Unlock()
 		return answer{}, 0, false
 	}
@@ -664,7 +664,7 @@ func (s *search) once(q []pair, quiet bool) (a answer, wait time.Duration, ok bo
 		if err != nil {
 			return answer{}, 0, false
 		}
-		if err := fetch.Spend(s.ctx); err != nil {
+		if err := egress.Spend(s.ctx); err != nil {
 			if errors.Is(err, neterr.ErrBudget) {
 				s.mu.Lock()
 				s.err = err

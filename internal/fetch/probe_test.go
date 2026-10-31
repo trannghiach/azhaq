@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // A request with a method or body of its own is asked, cached and kept
@@ -46,8 +48,8 @@ func TestDoReqKeepsWritesApartFromGETs(t *testing.T) {
 	if got := strings.Join(seen, " "); got != "GET: POST:a=1 POST:a=2" {
 		t.Errorf("server saw %q", got)
 	}
-	if Sent() != 3 {
-		t.Errorf("counted %d requests, sent 3", Sent())
+	if egress.Sent() != 3 {
+		t.Errorf("counted %d requests, sent 3", egress.Sent())
 	}
 }
 

@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
@@ -199,11 +200,11 @@ func (g *guard) handle(c net.Conn) {
 		return
 	}
 	if ws {
-		if fetch.Take() != nil {
+		if egress.Take() != nil {
 			return // the budget is spent
 		}
-		if fetch.Pace(g.ctx) != nil {
-			fetch.Refund() // never sent
+		if egress.Pace(g.ctx) != nil {
+			egress.Refund() // never sent
 			return
 		}
 	}
@@ -214,7 +215,7 @@ func (g *guard) handle(c net.Conn) {
 	p, err := upstream(scheme, addr, g.via)
 	if err != nil {
 		if ws {
-			fetch.Refund()
+			egress.Refund()
 		}
 		return
 	}
@@ -229,7 +230,7 @@ func (g *guard) handle(c net.Conn) {
 	cancel()
 	if err != nil {
 		if ws {
-			fetch.Refund()
+			egress.Refund()
 		}
 		return
 	}
@@ -398,7 +399,7 @@ func upstream(scheme, addr string, via *url.URL) (*url.URL, error) {
 	if via != nil {
 		return via, nil
 	}
-	return fetch.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+	return egress.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
 }
 
 // dialOut connects to addr through the proxy p (Burp, a SOCKS tunnel), or

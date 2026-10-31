@@ -27,7 +27,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/tlscol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // Options configure the built-in collectors for one run.
@@ -128,7 +128,7 @@ func Register(cat *catalog.Catalog, o Options) {
 	sub.Verify = func(ctx context.Context, apex string, names []string) (live, failed []string) {
 		var ask []string
 		for _, n := range names {
-			if fetch.Allow == nil || fetch.Allow(n) { // outside the scope: not even resolved
+			if egress.Allows(n) { // outside the scope: not even resolved
 				ask = append(ask, n)
 			}
 		}

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
@@ -148,7 +148,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			defer wg.Done()
 			defer func() { <-sem }()
 			ip := a.String()
-			if fetch.Allow != nil && !fetch.Allow(ip) {
+			if !egress.Allows(ip) {
 				mu.Lock()
 				out++
 				mu.Unlock()

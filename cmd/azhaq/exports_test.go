@@ -19,6 +19,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/scopefile"
@@ -142,7 +143,7 @@ func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
 	eng := &engine.Engine{Cat: cat, Store: st}
 	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": site.URL + "/"}}
 	rules := scope.Rules{DenyPath: []string{`phpids=on`, `action=reset`}}.Compile()
-	fetch.DenyPath = rules.DeniedPath
+	egress.SetDenyPath(rules.DeniedPath)
 	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64, Scope: rules}); err != nil {
 		t.Fatal(err)
 	}

@@ -25,7 +25,7 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // ErrNoChrome means no Chrome or Chromium was found.
@@ -113,7 +113,7 @@ type Browser struct {
 	mu      sync.Mutex
 	session map[string]string    // sessionStorage a login left, for every tab
 	sites   map[string]bool      // without a scope: the sites of the pages Chrome was pointed at
-	allow   func(string) bool    // the run's scope when Chrome started (fetch.Allow), or nil
+	allow   func(string) bool    // the run's scope when Chrome started (the egress scope), or nil
 	paid    map[cdp.FrameID]bool // tabs whose page their caller counted
 
 	refMu    sync.Mutex
@@ -153,7 +153,7 @@ func (b *Browser) start() error {
 		// The scope this Chrome is held to, as the run set it when Chrome
 		// started: a later fetch.Reset (a run ending, a test) does not move
 		// it under requests still being decided.
-		b.allow = fetch.Allow
+		b.allow = egress.Current().Scope()
 		if b.guard, err = newGuard(b.allowedHost); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
 			return
@@ -308,7 +308,7 @@ func (b *Browser) sessionScript() string {
 // returns the page; shot adds a screenshot of the viewport, and has the
 // page's images, fonts and media fetched, which a page read for its
 // requests and its document does without. The caller has counted the
-// page itself against the budget (fetch.Spend); every other request
+// page itself against the budget (egress.Spend); every other request
 // Chrome sends for it is counted here.
 func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, error) {
 	if err := b.start(); err != nil {
@@ -329,7 +329,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	defer cancel()
 	// With a pace the page's deadlines run from when it last moved.
 	var prog *progress
-	if fetch.Rate() > 0 {
+	if egress.Rate() > 0 {
 		prog = newProgress()
 	}
 	extra := time.Duration(b.Interact) * 2 * time.Second // the clicks of -interact

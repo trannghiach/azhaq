@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 func TestBackoffAsksAgainAfter429(t *testing.T) {
@@ -124,7 +126,7 @@ func TestSubmitFormIsCountedAndHeldToScope(t *testing.T) {
 	if v, _ := body.Load().(string); v != "POST u=azhaq" || Posts() != 1 {
 		t.Errorf("%q, %d posts", v, Posts())
 	}
-	Allow = func(string) bool { return false }
+	egress.SetScope(func(string) bool { return false })
 	if _, err := SubmitForm(context.Background(), srv.Client(), srv.URL+"/login", "u=azhaq"); err == nil || Posts() != 1 {
 		t.Errorf("a submission outside the scope was sent: %v", err)
 	}

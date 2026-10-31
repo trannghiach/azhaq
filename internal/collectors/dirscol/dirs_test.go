@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/scope"
@@ -427,7 +428,7 @@ func TestSweepDenyPathHoldsAWordBackAndListsIt(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	t.Cleanup(srv.Close)
-	fetch.DenyPath = scope.Rules{DenyPath: []string{`^/logout`}}.Compile().DeniedPath
+	egress.SetDenyPath(scope.Rules{DenyPath: []string{`^/logout`}}.Compile().DeniedPath)
 	c := New(srv.Client(), Options{Words: []string{"logout", "admin"}, Rate: 1000, NoCalibration: true})
 	var skipped map[string]any
 	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {

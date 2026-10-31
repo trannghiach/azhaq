@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/scope"
 )
@@ -305,9 +306,9 @@ func TestDenyPathKeepsAPathOut(t *testing.T) {
 	}))
 	defer srv.Close()
 	rules := scope.Rules{DenyPath: []string{`^/admin/`, `action=wipe`}}.Compile()
-	DenyPath = rules.DeniedPath
+	egress.SetDenyPath(rules.DeniedPath)
 	var told []string
-	OnDenied = func(raw, rule string) { told = append(told, rule) }
+	egress.SetOnDenied(func(raw, rule string) { told = append(told, rule) })
 	for _, p := range []string{"/admin/users", "/%61dmin/users", "/page?action=wipe"} {
 		_, _, err := Do(context.Background(), srv.Client(), srv.URL+p)
 		var d *neterr.Denied
@@ -338,7 +339,7 @@ func TestScopeStopsRequestsAndRedirects(t *testing.T) {
 		http.Redirect(w, r, strings.Replace(out.URL, "127.0.0.1", "localhost", 1)+"/sso", http.StatusFound)
 	}))
 	defer in.Close()
-	Allow = func(host string) bool { return host == "127.0.0.1" }
+	egress.SetScope(func(host string) bool { return host == "127.0.0.1" })
 	res, _, err := Do(context.Background(), in.Client(), in.URL+"/login")
 	if err != nil || len(res.Hops) != 1 || res.Hops[0].Status != http.StatusFound {
 		t.Fatalf("hops %+v err %v", res.Hops, err)
@@ -382,7 +383,7 @@ func TestSameSiteScope(t *testing.T) {
 	if !SameSite(www, api) || SameSite(www, cdn) {
 		t.Error("without a scope: the registrable domain")
 	}
-	Allow = func(h string) bool { return h == "www.example.com" || h == "cdn.example.net" }
+	egress.SetScope(func(h string) bool { return h == "www.example.com" || h == "cdn.example.net" })
 	if SameSite(www, api) || !SameSite(www, cdn) {
 		t.Error("with a scope: its hosts")
 	}
@@ -409,11 +410,11 @@ func TestHostHeaderIsTheRequestHost(t *testing.T) {
 func TestPacePastTheDeadlineIsTheDeadline(t *testing.T) {
 	Reset()
 	defer Reset()
-	SetRate(1)
+	egress.SetRate(1)
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
 	defer cancel()
-	_ = Pace(ctx)
-	err := Pace(ctx)
+	_ = egress.Pace(ctx)
+	err := egress.Pace(ctx)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("err %v, want the deadline", err)
 	}
@@ -425,14 +426,14 @@ func TestKillEndsTheWaitForThePace(t *testing.T) {
 	Reset()
 	defer Reset()
 	path := filepath.Join(t.TempDir(), "stop")
-	defer SetKill(path)()
-	SetRate(0.5) // one request every 2 s
+	defer egress.SetKill(path)()
+	egress.SetRate(0.5) // one request every 2 s
 	ctx := context.Background()
-	if err := Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- Spend(ctx) }() // waits about 2 s for its turn
+	go func() { done <- egress.Spend(ctx) }() // waits about 2 s for its turn
 	time.Sleep(100 * time.Millisecond)
 	os.WriteFile(path, nil, 0o644)
 	start := time.Now()
@@ -448,7 +449,7 @@ func TestKillEndsTheWaitForThePace(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("the waiting request went on after the kill file")
 	}
-	if Sent() != 1 {
-		t.Errorf("counted %d, want 1 (the one that waited was not sent)", Sent())
+	if egress.Sent() != 1 {
+		t.Errorf("counted %d, want 1 (the one that waited was not sent)", egress.Sent())
 	}
 }

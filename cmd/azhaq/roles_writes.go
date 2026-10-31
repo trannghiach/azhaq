@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -226,9 +227,9 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	ctx := context.Background()
 	fetch.Reset()
 	defer fetch.Reset()
-	fetch.SetRate(rate)
-	fetch.ProxyURL = rolesProxy
-	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	egress.SetRate(rate)
+	egress.SetTargetProxy(rolesProxy)
+	egress.SetScope(func(h string) bool { return own[normalize.Hostname(h)] })
 	holdDeny()
 	client := *fetch.Client(nil)
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
@@ -718,10 +719,10 @@ func withCanary(body []byte, token string) (out []byte, field string, ok bool) {
 // without following a redirect; the body is kept as evidence.
 func readAs(ctx context.Context, client *http.Client, r role, u string) (answer, error) {
 	pu, err := url.Parse(u)
-	if err != nil || fetch.Allow != nil && !fetch.Allow(pu.Hostname()) {
+	if err != nil || !egress.Allows(pu.Hostname()) {
 		return answer{}, fmt.Errorf("%s is outside the scope", u)
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return answer{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -754,10 +755,10 @@ var timeLike = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}|^\d{10,13}$
 // redirect.
 func sendWrite(ctx context.Context, client *http.Client, r role, w writeReq) (answer, error) {
 	u, err := url.Parse(w.url)
-	if err != nil || fetch.Allow != nil && !fetch.Allow(u.Hostname()) {
+	if err != nil || !egress.Allows(u.Hostname()) {
 		return answer{}, fmt.Errorf("%s is outside the scope", w.url)
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return answer{}, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)

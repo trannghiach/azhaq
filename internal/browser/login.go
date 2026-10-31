@@ -16,6 +16,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
@@ -329,7 +330,7 @@ func outside(loginURL string, main cdp.FrameID, rs []refusal, err error) error {
 	}
 	at := hostOf(loginURL)
 	fix := func(host string) string {
-		if fetch.Allow == nil {
+		if !egress.HasScope() {
 			return fmt.Sprintf("outside the site of %s: name both with -allow %s -allow %s", at, fetch.Site(at), host)
 		}
 		return "outside the scope: add it with -allow " + host

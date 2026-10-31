@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
@@ -267,15 +268,15 @@ func Measure(ctx context.Context, raw string) (with, without Print, err error) {
 // counted in the budget and the ledger like any request, but not checked
 // by the guard itself.
 func askPrint(ctx context.Context, raw string, session bool) (Print, error) {
-	if err := denied(raw); err != nil {
+	if err := egress.CheckDenied(raw); err != nil {
 		return Print{}, err
 	}
-	if err := spendCount(ctx, true); err != nil {
+	if err := egress.SpendCounted(ctx, true); err != nil {
 		return Print{}, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		Refund()
+		egress.Refund()
 		return Print{}, err
 	}
 	if session {

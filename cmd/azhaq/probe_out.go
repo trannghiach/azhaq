@@ -27,6 +27,7 @@ import (
 
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -117,7 +118,7 @@ func (p *probeOut) see(ent types.Entity, o types.Observation) {
 		}
 		var addrs []string
 		if net.ParseIP(host) == nil {
-			addrs = fetch.Resolve(context.Background(), host) // the answer HTTP connected with
+			addrs = egress.Resolve(context.Background(), host) // the answer HTTP connected with
 		}
 		if !known {
 			for _, a := range append([]string{r.IP}, addrs...) {

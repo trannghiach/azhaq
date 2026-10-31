@@ -9,7 +9,7 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // With a pace set (-rate), a page's requests wait their turn, so the
@@ -47,7 +47,7 @@ func deadline(parent context.Context, p *progress, d, hard time.Duration) (conte
 		return context.WithTimeout(parent, d)
 	}
 	ctx, cancel := context.WithCancelCause(parent)
-	if r := fetch.Rate(); r > 0 {
+	if r := egress.Rate(); r > 0 {
 		d += time.Duration(2 * float64(time.Second) / r)
 	}
 	start := time.Now()
@@ -86,7 +86,7 @@ type gate struct {
 
 // limit is how many pages may be open now.
 func (g *gate) limit(tabs int, timeout time.Duration) int {
-	r := fetch.Rate()
+	r := egress.Rate()
 	if r <= 0 {
 		return tabs
 	}
@@ -162,7 +162,7 @@ func counted(rt network.ResourceType) bool {
 // second and no more than 5 s.
 func (b *Browser) quiet(ctx context.Context, t *tab, log *pageLog, prog *progress) (waiting int) {
 	hold, limit := 300*time.Millisecond, 5*time.Second
-	if r := fetch.Rate(); r > 0 {
+	if r := egress.Rate(); r > 0 {
 		hold, limit = 700*time.Millisecond+time.Duration(float64(time.Second)/r), 3*b.Timeout
 	}
 	end := time.Now().Add(limit)

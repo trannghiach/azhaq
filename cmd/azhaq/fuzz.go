@@ -19,6 +19,7 @@ import (
 
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/connector"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -342,10 +343,10 @@ func cmdFuzz(args []string) error {
 	}
 
 	fetch.Reset()
-	fetch.SetRate(*rate)
-	fetch.MaxRequests = *maxReq
+	egress.SetRate(*rate)
+	egress.SetMaxRequests(*maxReq)
 	if len(denyPath) > 0 {
-		fetch.DenyPath = rules.DeniedPath
+		egress.SetDenyPath(rules.DeniedPath)
 	}
 	to := time.Duration(*timeout * float64(time.Second))
 	sender, err := fuzz.NewSender(fuzz.HTTPOptions{Timeout: to, Threads: *threads, Follow: *follow, Allow: rules.Allows,
@@ -446,7 +447,7 @@ func cmdFuzz(args []string) error {
 	var ctrl *fuzz.Control
 	if *controlFile != "" {
 		ctrl = fuzz.NewControl(fuzz.ControlEnv{
-			Set: set, SetRate: fetch.SetRate,
+			Set: set, SetRate: egress.SetRate,
 			Save: func(path string) error { return fuzz.WriteReport(path, "json", snapshot()) },
 			Show: func() string {
 				hitsMu.Lock()
@@ -491,9 +492,9 @@ func cmdFuzz(args []string) error {
 	case stderrIsTerminal():
 		defer fuzzProgress(ctx, cfg.Progress, t0)()
 	default:
-		pc := progressCfg{JSON: c.json, Cap: fetch.MaxRequests, CapBy: "-max-requests", Timeout: time.Duration(*maxtime * float64(time.Second))}
+		pc := progressCfg{JSON: c.json, Cap: egress.MaxRequests(), CapBy: "-max-requests", Timeout: time.Duration(*maxtime * float64(time.Second))}
 		defer startProgress(ctx, pc, os.Stderr, func() progressSnap {
-			return progressSnap{At: time.Since(t0), Sent: fetch.Sent(), Left: -1}
+			return progressSnap{At: time.Since(t0), Sent: egress.Sent(), Left: -1}
 		})()
 	}
 	st := fuzz.Run(ctx, cfg)
@@ -502,7 +503,7 @@ func cmdFuzz(args []string) error {
 	}
 
 	rep.Results = st.Matches
-	rep.Requests = fetch.Sent()
+	rep.Requests = egress.Sent()
 	rep.Unreachable = st.Down
 	if st.Errors > 0 {
 		rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-fuzz", Error: "request failed", Retryable: true, Count: st.Errors})
@@ -511,7 +512,7 @@ func cmdFuzz(args []string) error {
 		rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d inputs", st.OutOfScope), Reason: "their host is outside the scope"})
 	}
 	for _, rule := range slices.Sorted(maps.Keys(st.Denied)) {
-		rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d inputs, the first %s", st.Denied[rule], st.DeniedURL[rule]), Reason: fetch.DenyReason(rule)})
+		rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d inputs, the first %s", st.Denied[rule], st.DeniedURL[rule]), Reason: egress.DenyReason(rule)})
 	}
 	if len(st.Filters) > 0 {
 		rep.Notes = append(rep.Notes, "auto-calibration filtered out answers with "+strings.Join(st.Filters, ", "))
@@ -546,10 +547,10 @@ func cmdFuzz(args []string) error {
 	var killed *neterr.Killed
 	cause := context.Cause(ctx)
 	switch {
-	case errors.As(fetch.Killed(), &killed):
+	case errors.As(egress.Killed(), &killed):
 		rep.Stopped = "the kill switch: kill file " + killed.Path + " exists"
 	case st.Spent:
-		rep.Stopped = fmt.Sprintf("the request budget of %d is spent", fetch.MaxRequests)
+		rep.Stopped = fmt.Sprintf("the request budget of %d is spent", egress.MaxRequests())
 	case st.StoppedBy != "":
 		rep.Stopped = st.StoppedBy
 	case len(st.Down) > 0:

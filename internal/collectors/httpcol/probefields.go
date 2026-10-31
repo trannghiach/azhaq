@@ -33,6 +33,7 @@ import (
 	"golang.org/x/text/transform"
 
 	"github.com/trannghiach/azhaq/internal/cpedetect"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -324,7 +325,7 @@ func jarmHash(ctx context.Context, raw string) string {
 	host := u.Hostname()
 	var results []string
 	for _, probe := range jarm.GetProbes(host, port) {
-		if err := fetch.Spend(ctx); err != nil {
+		if err := egress.Spend(ctx); err != nil {
 			return ""
 		}
 		c, err := fetch.Dial(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
@@ -355,7 +356,7 @@ func (c *Collector) supportsHTTP2(ctx context.Context, raw string) bool {
 	if err != nil {
 		return false
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return false
 	}
 	if u.Scheme == "http" {
@@ -426,7 +427,7 @@ func supportsPipeline(ctx context.Context, raw string) bool {
 	}
 	const n = 10
 	for i := 0; i < n; i++ {
-		if fetch.Spend(ctx) != nil {
+		if egress.Spend(ctx) != nil {
 			return false
 		}
 	}

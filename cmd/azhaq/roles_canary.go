@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
@@ -251,10 +252,10 @@ type roleReplay struct {
 
 func (rr *roleReplay) setup() {
 	fetch.Reset()
-	fetch.SetRate(rr.rate)
-	fetch.ProxyURL = rolesProxy
+	egress.SetRate(rr.rate)
+	egress.SetTargetProxy(rolesProxy)
 	own := rr.own
-	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	egress.SetScope(func(h string) bool { return own[normalize.Hostname(h)] })
 	holdDeny()
 	fetch.Extra = rr.roles[rr.i].session.Clone()
 }

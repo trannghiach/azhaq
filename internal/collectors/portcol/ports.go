@@ -18,6 +18,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fingerprint"
 	"github.com/trannghiach/azhaq/internal/neterr"
@@ -92,7 +93,7 @@ type scan struct {
 }
 
 func New(pool *dnsr.Pool, ports []int, rate float64) *Collector {
-	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate, Take: fetch.Take, UserAgent: fetch.UserAgent},
+	return &Collector{Pool: pool, Ports: ports, Scanner: &portscan.Scanner{Rate: rate, Take: egress.Take, UserAgent: fetch.UserAgent},
 		byIP: map[string]*scan{}, maxIP: 2}
 }
 

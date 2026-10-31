@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -32,7 +33,7 @@ func TestDialogRecordAndOptions(t *testing.T) {
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	start := time.Now()
@@ -73,7 +74,7 @@ func TestFullPage(t *testing.T) {
 	}))
 	defer srv.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	p, err := b.Load(context.Background(), srv.URL+"/", true)
 	if err != nil {
 		t.Fatal(err)

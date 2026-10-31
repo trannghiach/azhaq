@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -114,7 +115,7 @@ func (s *Spec) Apply() error {
 		if err != nil || u.Host == "" || u.Scheme != "http" && u.Scheme != "https" && u.Scheme != "socks5" {
 			return fmt.Errorf("-proxy wants http://, https:// or socks5:// and a host, got %q", s.Proxy)
 		}
-		fetch.ProxyURL = u
+		egress.SetTargetProxy(u)
 	}
 	fetch.Retries = s.Retries
 	fetch.RequestTimeout = time.Duration(s.TimeoutMS) * time.Millisecond

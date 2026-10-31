@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
@@ -52,14 +53,14 @@ func TestOriginStopsAfterTimeouts(t *testing.T) {
 	Reset()
 	t.Cleanup(Reset)
 	base, accepted := blackhole(t)
-	ctx, stopped, _ := WatchBudget(context.Background())
+	ctx, stopped, _ := egress.WatchBudget(context.Background())
 	for i := 0; i < OriginTrips; i++ {
 		_, _, err := Do(ctx, slowClient(), fmt.Sprintf("%s/p%d", base, i))
 		if err == nil || !neterr.Unanswered(err) {
 			t.Fatalf("request %d: %v", i, err)
 		}
 	}
-	if Stopped(ctx) != nil {
+	if egress.Stopped(ctx) != nil {
 		t.Fatal("refused before the origin tripped")
 	}
 	_, _, err := Do(ctx, slowClient(), base+"/after")
@@ -72,7 +73,7 @@ func TestOriginStopsAfterTimeouts(t *testing.T) {
 	if n := accepted.Load(); int(n) != OriginTrips {
 		t.Errorf("connections %d, want %d", n, OriginTrips)
 	}
-	if Stopped(ctx) == nil || stopped() {
+	if egress.Stopped(ctx) == nil || stopped() {
 		t.Error("the refusal is noted on the context as the origin's, not the budget's")
 	}
 	if got := OriginsDown(); len(got) != 1 || got[0] != base {
@@ -135,20 +136,20 @@ func TestCachedOriginDownMarksTask(t *testing.T) {
 	cacheMu.Lock()
 	cache[url] = cacheEnt{err: down}
 	cacheMu.Unlock()
-	ctx, _, _ := WatchBudget(context.Background())
+	ctx, _, _ := egress.WatchBudget(context.Background())
 	if _, cached, err := Do(ctx, slowClient(), url); !cached || !errors.Is(err, neterr.ErrOriginDown) {
 		t.Fatalf("cached refusal: cached=%v err=%v", cached, err)
 	}
-	if Stopped(ctx) == nil {
+	if egress.Stopped(ctx) == nil {
 		t.Fatal("a task that took the cached origin-down refusal was not marked for resume")
 	}
 	// A plain cached timeout (not an origin-down refusal) does not mark it.
 	cacheMu.Lock()
 	cache[url] = cacheEnt{err: context.DeadlineExceeded}
 	cacheMu.Unlock()
-	ctx2, _, _ := WatchBudget(context.Background())
+	ctx2, _, _ := egress.WatchBudget(context.Background())
 	_, _, _ = Do(ctx2, slowClient(), url)
-	if Stopped(ctx2) != nil {
+	if egress.Stopped(ctx2) != nil {
 		t.Fatal("a cached timeout wrongly marked the task as its origin stopped")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -66,8 +67,8 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	if e.Store != nil {
 		catalog.Claim = e.Store.Claim
 		defer func() { catalog.Claim = nil }()
-		fetch.OnDenied = e.noteDenied
-		defer func() { fetch.OnDenied = nil }()
+		egress.SetOnDenied(e.noteDenied)
+		defer func() { egress.SetOnDenied(nil) }()
 	}
 	if b.Resume && e.Store != nil {
 		if err := s.restore(); err != nil {
@@ -528,7 +529,7 @@ func (s *scheduler) lend(ctx context.Context, c claim) {
 			if !ok || !s.contacts(t) || catalog.InfoOf(col).Local {
 				continue
 			}
-			if s.ran >= s.b.MaxItems || fetch.Spent() || (p == 0 && s.originRan >= s.b.MaxItems-s.reserve) {
+			if s.ran >= s.b.MaxItems || egress.Spent() || (p == 0 && s.originRan >= s.b.MaxItems-s.reserve) {
 				break
 			}
 			s.queue[p] = append(s.queue[p][:i:i], s.queue[p][i+1:]...)
@@ -621,7 +622,7 @@ func (s *scheduler) dispatch(ctx context.Context) {
 // startRetry runs the cheapest task the budget stopped before, when
 // nothing else runs.
 func (s *scheduler) startRetry(ctx context.Context) {
-	for s.inflight-s.remote == 0 && len(s.retry) > 0 && !fetch.Spent() && s.ran < s.b.MaxItems {
+	for s.inflight-s.remote == 0 && len(s.retry) > 0 && !egress.Spent() && s.ran < s.b.MaxItems {
 		t := s.retry[0]
 		s.retry = s.retry[1:]
 		if s.skip(t) {
@@ -646,7 +647,7 @@ func (s *scheduler) next() (task, bool) {
 				s.unpark(t) // nothing to wait for
 				continue
 			}
-			if fetch.Spent() && s.contacts(t) {
+			if egress.Spent() && s.contacts(t) {
 				// It would only be refused: it waits for azhaq resume.
 				s.queue[p] = s.queue[p][1:]
 				s.held = append(s.held, t)

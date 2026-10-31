@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -121,7 +121,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	// and its run after azhaq resume reports again.
 	var mu sync.Mutex
 	var held []types.Observation
-	hold := fetch.MaxRequests > 0
+	hold := egress.MaxRequests() > 0
 	if s, ok := col.(catalog.Standing); ok && s.Standing() {
 		hold = false
 	}
@@ -176,7 +176,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 	}
 
 	done := timing.Start(ctx, col.Name(), seed.Key())
-	ctx, refused, used := fetch.WatchBudget(ledger.WithCollector(ctx, col.Name()))
+	ctx, refused, used := egress.WatchBudget(ledger.WithCollector(ctx, col.Name()))
 	got, err := col.Run(types.WithBatchEmit(ctx, emitMany), seed, emit)
 	done()
 	if errors.Is(err, neterr.ErrBudget) || refused() {
@@ -196,7 +196,7 @@ func (e *Engine) Run(ctx context.Context, item types.WorkItem) (types.RunMeta, e
 		e.markCapped()
 		return meta, neterr.ErrBudget
 	}
-	if down := fetch.Stopped(ctx); down != nil {
+	if down := egress.Stopped(ctx); down != nil {
 		// Its origin stopped answering: not done either, listed as left
 		// alone with the reason, and azhaq resume tries it again.
 		meta.Status, meta.Error, meta.Drop = types.StatusCapped, down.Error(), false
@@ -573,7 +573,7 @@ func (e *Engine) noteDenied(raw, rule string) {
 	if _, dup := e.denied.LoadOrStore(raw, true); dup {
 		return
 	}
-	e.noteSkip(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}}, fetch.DenyReason(rule))
+	e.noteSkip(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}}, egress.DenyReason(rule))
 }
 
 // noteSkip records a URL the run found and did not request, and why.

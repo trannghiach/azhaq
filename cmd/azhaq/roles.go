@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -81,7 +82,7 @@ func rolesScope(runArgs []string, sc histScope, allows []string) (scope.Rules, e
 // fetch's state before it sets its own scope.
 func holdDeny() {
 	if len(rolesHostRules.DenyPath) > 0 {
-		fetch.DenyPath = rolesHostRules.DeniedPath
+		egress.SetDenyPath(rolesHostRules.DeniedPath)
 	}
 }
 
@@ -385,7 +386,7 @@ func cmdRoles(args []string) error {
 			}
 			keepRunBodies(got, raw)
 			readBodies(got, raw, s, hostSet(hosts))
-			rep.Requests += fetch.Sent() // the run's requests, and any the cache could not answer
+			rep.Requests += egress.Sent() // the run's requests, and any the cache could not answer
 			absorb(rep, r.name, sub)
 		} else {
 			roles[i].session = headerOf(r.headers)
@@ -501,8 +502,8 @@ func cmdRoles(args []string) error {
 		// A made-up identifier on each cross read's route: a route that
 		// answers it alike answers anything.
 		fetch.Reset()
-		fetch.SetRate(rate)
-		fetch.ProxyURL = rolesProxy
+		egress.SetRate(rate)
+		egress.SetTargetProxy(rolesProxy)
 		holdDeny()
 		n, err := askControls(roles, rows, own, pages, refusalRE, max(0, *replayMax-replayed))
 		fetch.Reset()
@@ -576,7 +577,7 @@ func cmdRoles(args []string) error {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d more endpoints compared and not listed (%s); -all lists them", n, strings.Join(parts, ", ")))
 	}
 	rep.Results, rep.Counts = len(shown), counts
-	if k := fetch.Killed(); k != nil && rep.Stopped == "" {
+	if k := egress.Killed(); k != nil && rep.Stopped == "" {
 		// The replay's refusals are answers it could not get: the matrix is cut short.
 		var kf *neterr.Killed
 		errors.As(k, &kf)

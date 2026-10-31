@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/net/proxy"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -34,7 +35,7 @@ func TestGuardOnlyChrome(t *testing.T) {
 	target := newRecorder(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "internal") })
 	defer target.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	d, err := proxy.SOCKS5("tcp", b.guard.addr(), nil, proxy.Direct)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +49,7 @@ func TestGuardOnlyChrome(t *testing.T) {
 		t.Errorf("the server was asked for %q", got)
 	}
 	// Chrome itself still goes through.
-	_ = fetch.Spend(context.Background())
+	_ = egress.Spend(context.Background())
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	if _, err := b.Load(ctx, target.URL+"/", false); err != nil || !slices.Contains(target.got(), "/") {
@@ -105,8 +106,8 @@ Promise.all([open('ws://' + location.host + '/ws'), open('` + strings.Replace(tl
 	defer cancel()
 
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	_ = egress.Spend(ctx)
 	p, err := b.Load(ctx, own.URL+"/", false)
 	if err != nil {
 		t.Fatal(err)
@@ -117,16 +118,16 @@ Promise.all([open('ws://' + location.host + '/ws'), open('` + strings.Replace(tl
 	mu.Lock()
 	served := len(own.got()) + secure
 	mu.Unlock()
-	if n := fetch.Sent(); n != int64(served) {
+	if n := egress.Sent(); n != int64(served) {
 		t.Errorf("counted %d requests, the servers got %d", n, served)
 	}
 
 	// The budget spent: the page alone.
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.MaxRequests = 1
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetMaxRequests(1)
 	before := len(own.got())
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	p, _ = b.Load(ctx, own.URL+"/", false)
 	if got := own.got()[before:]; len(got) != 1 {
 		t.Errorf("sent %q under a budget of 1", got)
@@ -147,8 +148,8 @@ func TestGuardResolver(t *testing.T) {
 	defer own.Close()
 	u, _ := url.Parse(own.URL)
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "app.azhaq.test" }
-	fetch.SetResolver(func(_ context.Context, host string) []string {
+	egress.SetScope(func(h string) bool { return h == "app.azhaq.test" })
+	egress.SetResolver(func(_ context.Context, host string) []string {
 		if host == "app.azhaq.test" {
 			return []string{"127.0.0.1"}
 		}
@@ -156,7 +157,7 @@ func TestGuardResolver(t *testing.T) {
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	p, err := b.Load(ctx, "http://app.azhaq.test:"+u.Port()+"/", false)
 	if err != nil || p.Title != "found" {
 		t.Errorf("title %q, %v", p.Title, err)

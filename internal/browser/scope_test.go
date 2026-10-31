@@ -19,6 +19,7 @@ import (
 	"github.com/chromedp/cdproto/cdp/jsonv2"
 	"github.com/chromedp/chromedp"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -115,11 +116,11 @@ navigator.sendBeacon('` + o + `/beacon', 'x');
 		t.Run(name, func(t *testing.T) {
 			fetch.Reset()
 			if scoped {
-				fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+				egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 			}
 			before := len(own.got())
 			refusedBefore, _, _ := b.Refused()
-			if err := fetch.Spend(ctx); err != nil { // the page, as the collectors count it
+			if err := egress.Spend(ctx); err != nil { // the page, as the collectors count it
 				t.Fatal(err)
 			}
 			p, err := b.Load(ctx, own.URL+"/", false)
@@ -156,10 +157,10 @@ navigator.sendBeacon('` + o + `/beacon', 'x');
 			// Every request that left was counted, the page once. One
 			// Chrome sends after the load (a favicon) may arrive late on a
 			// loaded machine: wait for it rather than call it extra.
-			for wait := time.Now().Add(5 * time.Second); fetch.Sent() > int64(len(own.got())-before) && time.Now().Before(wait); {
+			for wait := time.Now().Add(5 * time.Second); egress.Sent() > int64(len(own.got())-before) && time.Now().Before(wait); {
 				time.Sleep(50 * time.Millisecond)
 			}
-			if n := fetch.Sent(); n != int64(len(own.got())-before) {
+			if n := egress.Sent(); n != int64(len(own.got())-before) {
 				t.Errorf("counted %d requests, the server got %d: %q", n, len(own.got())-before, own.got()[before:])
 			}
 			want := "outside the scope (Chrome)"
@@ -174,7 +175,7 @@ navigator.sendBeacon('` + o + `/beacon', 'x');
 
 	t.Run("redirect out", func(t *testing.T) {
 		fetch.Reset()
-		fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+		egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 		p, _ := b.Load(ctx, own.URL+"/away", false)
 		if p.Left != o+"/landing" {
 			t.Errorf("left %q", p.Left)
@@ -186,10 +187,10 @@ navigator.sendBeacon('` + o + `/beacon', 'x');
 
 	t.Run("budget", func(t *testing.T) {
 		fetch.Reset()
-		fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-		fetch.MaxRequests = 2 // the page and one more
+		egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+		egress.SetMaxRequests(2) // the page and one more
 		before := len(own.got())
-		if err := fetch.Spend(ctx); err != nil {
+		if err := egress.Spend(ctx); err != nil {
 			t.Fatal(err)
 		}
 		p, _ := b.Load(ctx, own.URL+"/", false)
@@ -225,7 +226,7 @@ func TestLoginOutsideScope(t *testing.T) {
 	defer cancel()
 
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	_, err := b.Login(ctx, app.URL+"/login", "member@x.test", "s3cret")
 	if err == nil || !strings.Contains(err.Error(), "the sign-in went to localhost, outside the scope: add it with -allow localhost") {
 		t.Errorf("error %v", err)
@@ -254,8 +255,8 @@ func TestPopupClosed(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +264,7 @@ func TestPopupClosed(t *testing.T) {
 	if got := slices.DeleteFunc(own.got(), func(p string) bool { return p == "/" || p == "/favicon.ico" }); len(got) > 0 {
 		t.Errorf("windows the page opened sent %q", got)
 	}
-	if n := fetch.Sent(); n != int64(len(own.got())) {
+	if n := egress.Sent(); n != int64(len(own.got())) {
 		t.Errorf("counted %d requests, the server got %d", n, len(own.got()))
 	}
 	targets, err := chromedp.Targets(b.root)
@@ -300,11 +301,11 @@ addEventListener('visibilitychange', () => navigator.sendBeacon('`+o+`/vis', 'x'
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 
 	held := func() int { b.refMu.Lock(); defer b.refMu.Unlock(); return len(b.held) }
 	for i := 0; i < 5; i++ {
-		_ = fetch.Spend(ctx)
+		_ = egress.Spend(ctx)
 		if _, err := b.Load(ctx, fmt.Sprintf("%s/p%d", own.URL, i), false); err != nil {
 			t.Fatal(err)
 		}
@@ -318,13 +319,13 @@ addEventListener('visibilitychange', () => navigator.sendBeacon('`+o+`/vis', 'x'
 	for i := held(); i < maxHeld; i++ {
 		b.refuse(nil, refusal{url: fmt.Sprintf("%s/sw%d", o, i), host: "localhost", frame: cdp.FrameID(fmt.Sprintf("SW%d", i))})
 	}
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	p, _ := b.Load(ctx, own.URL+"/away", false)
 	if p.Left != o+"/landing" || !slices.Contains(p.Blocked, o+"/landing") {
 		t.Errorf("with %d refusals held, a redirect out gives Left %q, Blocked %q", held(), p.Left, p.Blocked)
 	}
-	fetch.MaxRequests = fetch.Sent() + 2 // the page and one image (fetched for a screenshot)
-	_ = fetch.Spend(ctx)
+	egress.SetMaxRequests(egress.Sent() + 2) // the page and one image (fetched for a screenshot)
+	_ = egress.Spend(ctx)
 	if p, _ := b.Load(ctx, own.URL+"/p9", true); !p.Capped {
 		t.Errorf("with %d refusals held, a page the budget cut is not capped", held())
 	}
@@ -349,9 +350,9 @@ func TestCappedLeftover(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.MaxRequests = 2
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetMaxRequests(2)
+	_ = egress.Spend(ctx)
 	p, _ := b.Load(ctx, own.URL+"/", true) // a screenshot: the images are fetched
 	if !p.Capped || len(p.Blocked) > 0 {
 		t.Errorf("capped %v, blocked %q", p.Capped, p.Blocked)
@@ -380,9 +381,9 @@ func TestPaced(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.SetRate(4)
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetRate(4)
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, own.URL+"/", true); err != nil { // a screenshot: the images are fetched
 		t.Fatal(err)
 	}
@@ -482,8 +483,8 @@ pc.createOffer().then(o => pc.setLocalDescription(o));
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}

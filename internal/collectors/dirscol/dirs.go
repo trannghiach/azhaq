@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
 	"github.com/trannghiach/azhaq/internal/ledger"
@@ -274,7 +275,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		byRule[h.rule] = append(byRule[h.rule], h.url)
 	}
 	for _, rule := range rules {
-		raw, _ := json.Marshal(map[string]any{"skipped": fetch.DenyReason(rule), "urls": byRule[rule]})
+		raw, _ := json.Marshal(map[string]any{"skipped": egress.DenyReason(rule), "urls": byRule[rule]})
 		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "skipped", Payload: raw, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 			return meta, err
 		}
@@ -345,7 +346,7 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			words = append(words, w+"."+strings.TrimPrefix(ext, "."))
 		}
 		for _, t := range words {
-			if rule := fetch.DeniedBy(dir + escapeWord(t)); rule != "" {
+			if rule := egress.DeniedBy(dir + escapeWord(t)); rule != "" {
 				held = append(held, heldURL{dir + escapeWord(t), rule})
 				continue
 			}
@@ -536,7 +537,7 @@ func (c *Collector) send(ctx context.Context, target, probe string) (response, e
 		return response{}, err
 	}
 	fetch.ApplySweepHeaders(req)
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return response{}, err
 	}
 	resp, err := c.Client.Do(req)

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -104,7 +105,7 @@ func TestPageWithOffScopeAssetsIsPartial(t *testing.T) {
 	for _, scoped := range []bool{false, true} {
 		fetch.Reset()
 		if scoped {
-			fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+			egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 		}
 		for _, path := range []string{"/", "/second"} { // the second page's are listed no more, and counted all the same
 			row := run(path)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/andybalholm/brotli"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
@@ -66,7 +67,7 @@ type Replayer interface {
 }
 
 // NewSender sends through internal/fetch: its client (dialer, TLS settings,
-// the run's resolver), its default headers, and fetch.Spend before every
+// the run's resolver), its default headers, and egress.Spend before every
 // request, which applies the run's request budget and pace.
 func NewSender(o HTTPOptions) (Sender, error) {
 	tlsConf, err := tlsFor(o)
@@ -196,7 +197,7 @@ func (s *httpSender) Send(ctx context.Context, req *Request, keepBody bool) (*Re
 	if s.opt.KeepRaw {
 		rawReq, _ = httputil.DumpRequestOut(hr, true)
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return nil, err
 	}
 	resp, err := s.client.Do(hr)
@@ -249,7 +250,7 @@ func (s *httpSender) Exchange(ctx context.Context, hr *http.Request) (*http.Resp
 	if hr.Header.Get("Accept") == "" {
 		hr.Header.Set("Accept", "*/*")
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return nil, err
 	}
 	return s.client.Do(hr)

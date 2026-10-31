@@ -12,6 +12,7 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -64,7 +65,7 @@ func TestBudgetGoesToFrontPagesAndAPIFirst(t *testing.T) {
 	cat.MustRegister(&httpcol.Collector{Client: srv.Client(), Probe: true, NoFavicon: true})
 	cat.MustRegister(&fakeArchive{base: srv.URL})
 	eng := &engine.Engine{Cat: cat, Store: st}
-	fetch.MaxRequests = 3
+	egress.SetMaxRequests(3)
 	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}
 	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 2, MaxItems: 64, Parallel: 1}); err != nil {
 		t.Fatal(err)

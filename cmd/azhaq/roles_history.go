@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -466,9 +467,9 @@ func (h *history) gets(sc histScope, own map[string]bool) (urls []string, seen m
 func readHistoryURLs(r role, urls []string, got map[string]answer, raw map[string]string, seen runSeen, own map[string]bool, rate float64, budget int) (int, error) {
 	fetch.Reset()
 	defer fetch.Reset()
-	fetch.SetRate(rate)
-	fetch.ProxyURL = rolesProxy
-	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	egress.SetRate(rate)
+	egress.SetTargetProxy(rolesProxy)
+	egress.SetScope(func(h string) bool { return own[normalize.Hostname(h)] })
 	holdDeny()
 	fetch.Extra = r.session.Clone()
 	ctx := context.Background()
@@ -484,8 +485,8 @@ func readHistoryURLs(r role, urls []string, got map[string]answer, raw map[strin
 		sent++
 		res, _, err := fetch.Do(ctx, client, u)
 		if err != nil {
-			if fetch.Stopped(ctx) != nil {
-				return sent, fetch.Stopped(ctx)
+			if egress.Stopped(ctx) != nil {
+				return sent, egress.Stopped(ctx)
 			}
 			continue
 		}

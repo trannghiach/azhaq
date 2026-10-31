@@ -18,6 +18,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/webextract"
@@ -25,7 +26,7 @@ import (
 
 // Chrome is held to where plain HTTP may go: every request a page, a frame
 // or a worker sends is paused (the Fetch domain, for the whole browser) and
-// sent only when its host is in the run's scope (fetch.Allow) or, without
+// sent only when its host is in the run's scope (the egress scope) or, without
 // one, in the site (fetch.Site) of a page Chrome was pointed at, paced and
 // counted as the run's own requests are. The rest fail before they leave
 // the machine. What connects without a request the Fetch domain sees
@@ -115,7 +116,7 @@ func (t *tab) add(r refusal) {
 
 // Reason is what a run lists Chrome's refused requests under.
 func Reason() string {
-	if fetch.Allow == nil {
+	if !egress.HasScope() {
 		return "outside the site (Chrome)"
 	}
 	return "outside the scope (Chrome)"
@@ -284,7 +285,7 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.done(t)
 		b.fail(root, ev.RequestID) // a window a page opened, being closed
 		return
-	case raw != "" && fetch.CheckDenied(raw) != nil:
+	case raw != "" && egress.CheckDenied(raw) != nil:
 		// The user's own -deny-path rule: never requested, and listed with
 		// the rule by fetch (not as a refusal of the scope).
 		b.done(t)
@@ -314,8 +315,8 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.fail(root, ev.RequestID)
 		return
 	case r.doc && b.paidFor(ev.FrameID):
-		refuse = false // the page itself: its caller counted it (fetch.SpendUnpaced); it waits for the pace as it is sent
-	case fetch.Take() != nil:
+		refuse = false // the page itself: its caller counted it (egress.SpendUnpaced); it waits for the pace as it is sent
+	case egress.Take() != nil:
 		r.budget = true
 	default:
 		refuse = false
@@ -337,8 +338,8 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		if t != nil {
 			ctx = t.ctx
 		}
-		if fetch.Pace(ctx) != nil {
-			fetch.Refund() // never sent: the page closed while it waited
+		if egress.Pace(ctx) != nil {
+			egress.Refund() // never sent: the page closed while it waited
 			b.fail(root, ev.RequestID)
 			return
 		}
@@ -478,7 +479,7 @@ func (b *Browser) watch(ctx context.Context, t *tab, also func(*network.EventReq
 			switch {
 			case !b.allowed(ev.URL):
 				r.url, r.host = listable(ev.URL)
-			case fetch.Spent():
+			case egress.Spent():
 				r.budget = true
 			default:
 				continue

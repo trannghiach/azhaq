@@ -20,6 +20,7 @@ import (
 
 	"github.com/andybalholm/brotli"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -238,8 +239,8 @@ func TestReplayProxyGetsMatchesOnly(t *testing.T) {
 	set.AddMatcher("status", "200")
 	st := Run(context.Background(), Config{Template: tm, Mode: Clusterbomb, Set: set, Sender: s, Replay: s.(Replayer), Threads: 1,
 		Lists: []List{{Keyword: "FUZZ", Words: []string{"yes", "no"}}}})
-	if st.Replayed != 1 || len(seen) != 1 || !strings.HasSuffix(seen[0], "/yes") || fetch.Sent() != 2 {
-		t.Errorf("replayed %d seen %v sent %d", st.Replayed, seen, fetch.Sent())
+	if st.Replayed != 1 || len(seen) != 1 || !strings.HasSuffix(seen[0], "/yes") || egress.Sent() != 2 {
+		t.Errorf("replayed %d seen %v sent %d", st.Replayed, seen, egress.Sent())
 	}
 }
 

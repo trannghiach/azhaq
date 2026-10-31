@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
@@ -279,7 +280,7 @@ func deadRoles(roles []role, rows []roleRow) []string {
 func refusalReason(r role, u string, own map[string]bool) string {
 	fetch.Reset()
 	defer fetch.Reset()
-	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	egress.SetScope(func(h string) bool { return own[normalize.Hostname(h)] })
 	holdDeny()
 	fetch.Extra = r.session.Clone()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)

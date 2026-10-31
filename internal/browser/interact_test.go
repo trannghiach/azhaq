@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
@@ -58,8 +59,8 @@ func TestInteractClicksAndSendsNoWrite(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	_ = fetch.Spend(ctx)
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	_ = egress.Spend(ctx)
 	p, err := b.Load(ctx, srv.URL+"/", false)
 	if err != nil {
 		t.Fatal(err)

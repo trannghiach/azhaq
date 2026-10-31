@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
@@ -231,7 +232,7 @@ func askFresh(ctx context.Context, h http.Header, u string, own map[string]bool)
 	if err != nil || !own[normalize.Hostname(p.Hostname())] {
 		return answer{}, nil, fmt.Errorf("%s is outside the scope", u)
 	}
-	if err := fetch.Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return answer{}, nil, err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)

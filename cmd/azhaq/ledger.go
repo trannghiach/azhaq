@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/scope"
@@ -99,7 +99,7 @@ func startLedger(ledgerFlag, killFlag, db string, scratch bool, rules scope.Rule
 	if kill == "" && !scratch {
 		kill = db + ".stop"
 	}
-	r.stopKill = fetch.SetKill(kill)
+	r.stopKill = egress.SetKill(kill)
 	if l := ledger.Active(); l != nil {
 		r.l = l
 		if !rules.Empty() {
@@ -131,8 +131,8 @@ func startLedger(ledgerFlag, killFlag, db string, scratch bool, rules scope.Rule
 // again after a role's run ended its own watch: the replay stops at it too.
 func rolesLedger(dir string, rep *report) (closeIt, rearm func()) {
 	kill := filepath.Join(dir, "roles.stop")
-	r := &runLedger{stopKill: fetch.SetKill(kill)}
-	rearm = func() { r.stopKill = fetch.SetKill(kill) }
+	r := &runLedger{stopKill: egress.SetKill(kill)}
+	rearm = func() { r.stopKill = egress.SetKill(kill) }
 	l, err := ledger.Open(filepath.Join(dir, "roles.ledger.jsonl"))
 	if err != nil {
 		rep.Notes = append(rep.Notes, "no ledger: "+err.Error())
@@ -146,7 +146,7 @@ func rolesLedger(dir string, rep *report) (closeIt, rearm func()) {
 // killStopped is the run's `stopped` when the kill file ended it.
 func killStopped(left int) string {
 	var k *neterr.Killed
-	errors.As(fetch.Killed(), &k)
+	errors.As(egress.Killed(), &k)
 	return fmt.Sprintf("the kill switch: kill file %s exists, %d tasks known and not done (remove it, then azhaq resume)", k.Path, left)
 }
 

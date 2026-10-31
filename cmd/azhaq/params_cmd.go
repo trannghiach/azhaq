@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -680,7 +681,7 @@ func replayToProxy(hostport string, rows []paramsRow, rate float64) string {
 			req.Header.Set("Content-Type", ctype)
 		}
 		fetch.ApplyHeaders(req)
-		if err := fetch.Spend(context.Background()); err != nil {
+		if err := egress.Spend(context.Background()); err != nil {
 			return fmt.Sprintf("-oB: %d of %d pages were sent through %s; the rest were not: %v", sent, len(rows), hostport, err)
 		}
 		if rate > 0 {

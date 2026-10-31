@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -51,7 +52,7 @@ func Execute(ctx context.Context, cat *catalog.Catalog, item types.WorkItem) Out
 		early = append(early, seeds...)
 		mu.Unlock()
 	})
-	ctx, refused, used := fetch.WatchBudget(ctx)
+	ctx, refused, used := egress.WatchBudget(ctx)
 	got, err := col.Run(ctx, seed, func(o types.Observation) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -90,7 +91,7 @@ func (e *Engine) Record(item types.WorkItem, o Outcome) (types.RunMeta, error) {
 	seed := normalize.Seed(item.Seed)
 	idKey := workID(col.Name(), seed)
 	meta := types.RunMeta{ItemID: item.ID, Status: types.StatusOK}
-	fetch.Count(o.Requests) // the run's budget counts every process's requests
+	egress.Count(o.Requests) // the run's budget counts every process's requests
 	for _, d := range o.Denied {
 		e.noteDenied(d.URL, d.Rule) // listed as not requested, as one the run kept out itself
 	}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
@@ -50,7 +51,7 @@ func SubmitForm(ctx context.Context, c *http.Client, raw, query string) (Result,
 		req.Header.Set("Referer", u.Scheme+"://"+u.Host+"/")
 	}
 	withJar(req)
-	if err := Spend(ctx); err != nil {
+	if err := egress.Spend(ctx); err != nil {
 		return Result{}, err
 	}
 	posts.Add(1)

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/webextract"
 )
@@ -98,7 +98,7 @@ func Within(page, link string) bool {
 	if err != nil || lu.Hostname() == "" {
 		return false
 	}
-	if fetch.Allow != nil && !fetch.Allow(lu.Hostname()) {
+	if !egress.Allows(lu.Hostname()) {
 		return false
 	}
 	if !c.Any && !c.hostOK(page, lu.Hostname()) {

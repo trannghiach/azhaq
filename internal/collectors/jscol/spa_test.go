@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
@@ -146,7 +147,7 @@ func TestScriptsOnOtherHosts(t *testing.T) {
 
 	// With a scope, its hosts are the site.
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" || h == "localhost" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" || h == "localhost" })
 	col = New(page.Client())
 	got, _ = observe(t, col, page.URL+"/")
 	if third.asked("/widget.js") != 1 || got[thirdURL+"/widget.js"] == nil {

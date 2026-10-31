@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
@@ -507,7 +508,7 @@ func TestSenderSpendsTheBudget(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
 	defer srv.Close()
 	fetch.Reset()
-	fetch.MaxRequests = 2
+	egress.SetMaxRequests(2)
 	defer fetch.Reset()
 	s := mustSender(t, HTTPOptions{Timeout: time.Second, Threads: 1})
 	tmpl, _ := NewTemplate("", srv.URL+"/", "", nil, nil)
@@ -517,8 +518,8 @@ func TestSenderSpendsTheBudget(t *testing.T) {
 		_, err := s.Send(context.Background(), &req, false)
 		errs = append(errs, err)
 	}
-	if errs[0] != nil || errs[1] != nil || errs[2] == nil || fetch.Sent() != 2 {
-		t.Errorf("errors %v, sent %d", errs, fetch.Sent())
+	if errs[0] != nil || errs[1] != nil || errs[2] == nil || egress.Sent() != 2 {
+		t.Errorf("errors %v, sent %d", errs, egress.Sent())
 	}
 }
 

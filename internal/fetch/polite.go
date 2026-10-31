@@ -18,6 +18,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
@@ -124,9 +125,7 @@ func beforeSend(ctx context.Context, raw string) error {
 	if MaxPerHost > 0 && hostSent[h] >= MaxPerHost {
 		capHit[h] = true
 		politeMu.Unlock()
-		if w, _ := ctx.Value(refusedKey{}).(*watch); w != nil {
-			w.refused.Store(true)
-		}
+		egress.MarkRefused(ctx)
 		return neterr.ErrBudget
 	}
 	hostSent[h]++
@@ -281,7 +280,7 @@ func attempt(ctx, rctx context.Context, c *http.Client, method, raw string, sent
 		}
 		// Counted before the request is built: a new sign-in the count
 		// brings about (the session check) is in the headers it carries.
-		if err := Spend(ctx); err != nil {
+		if err := egress.Spend(ctx); err != nil {
 			return nil, nil, false, nil, err
 		}
 		var rd io.Reader
@@ -290,7 +289,7 @@ func attempt(ctx, rctx context.Context, c *http.Client, method, raw string, sent
 		}
 		req, err := http.NewRequestWithContext(rctx, method, raw, rd)
 		if err != nil {
-			Refund()
+			egress.Refund()
 			return nil, nil, false, nil, err
 		}
 		ApplyHeaders(req)

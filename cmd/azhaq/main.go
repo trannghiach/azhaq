@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"io"
 	"log"
 	"maps"
@@ -424,7 +425,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if err != nil {
 			return err
 		}
-		fetch.ProxyURL = pu
+		egress.SetTargetProxy(pu)
 	}
 	var spec *httpcol.Spec
 	if *probeOpts != "" {
@@ -697,10 +698,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		budgets.Active["params"] = true
 	}
 	if !budgets.Scope.Empty() {
-		fetch.Allow = budgets.Scope.Allows
+		egress.SetScope(budgets.Scope.Allows)
 	}
 	if len(budgets.Scope.DenyPath) > 0 {
-		fetch.DenyPath = budgets.Scope.DeniedPath
+		egress.SetDenyPath(budgets.Scope.DeniedPath)
 	}
 	if *crawlScope != "" || *crawlAny || len(crawlIn) > 0 || len(crawlOut) > 0 {
 		var roots []string
@@ -754,8 +755,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		_ = st.SetMeta("probe:"+st.RunID(), fetch.ProbeToken())
 		_ = st.DropResponses(st.RunID())
 	}
-	fetch.SetRate(*rateFlag)
-	fetch.MaxRequests = *maxRequests
+	egress.SetRate(*rateFlag)
+	egress.SetMaxRequests(*maxRequests)
 	if *daily > 0 {
 		key := *program
 		if key == "" {
@@ -766,10 +767,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if left <= 0 {
 			return fmt.Errorf("-daily-requests: the %d requests of %s are spent (resets at 00:00 UTC)", *daily, day)
 		}
-		if fetch.MaxRequests == 0 || left < fetch.MaxRequests {
-			fetch.MaxRequests = left
+		if egress.MaxRequests() == 0 || left < egress.MaxRequests() {
+			egress.SetMaxRequests(left)
 		}
-		defer func() { _ = st.AddSpent(key, day, fetch.Sent()) }()
+		defer func() { _ = st.AddSpent(key, day, egress.Sent()) }()
 	}
 	cat := catalog.New()
 	if *webScheme != "" && *webScheme != "http" && *webScheme != "https" {
@@ -922,7 +923,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	opts.DNS = dnsr.New(dnsr.Options{Resolvers: resolvers, PerSecond: *dnsRate})
 	probePool = opts.DNS
 	// HTTP connects to the addresses azhaq-dns found: one answer per name.
-	fetch.SetResolver(func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() })
+	egress.SetResolver(func(ctx context.Context, host string) []string { return opts.DNS.ResolveBoth(ctx, host).IPs() })
 	if *bruteFile != "" {
 		if opts.BruteWords, err = loadLines(*bruteFile); err != nil {
 			return err
@@ -1085,8 +1086,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	// -json as JSON lines, as everything on stderr is.
 	stopTicker := func() {}
 	if mode := progressMode(*quiet, *verbose, *jsonOut, out.progress); mode != "" {
-		cfg := progressCfg{JSON: mode == "json", Cap: fetch.MaxRequests, CapBy: "-max-requests", Timeout: *timeout}
-		if *daily > 0 && fetch.MaxRequests != *maxRequests {
+		cfg := progressCfg{JSON: mode == "json", Cap: egress.MaxRequests(), CapBy: "-max-requests", Timeout: *timeout}
+		if *daily > 0 && egress.MaxRequests() != *maxRequests {
 			cfg.CapBy = "-daily-requests"
 		}
 		if !cfg.JSON {
@@ -1096,7 +1097,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 		t0 := time.Now()
 		stopTicker = startProgress(ctx, cfg, os.Stderr, func() progressSnap {
-			return progressSnap{At: time.Since(t0), Sent: fetch.Sent(), Done: st.TasksDone(), Left: st.TasksLeft()}
+			return progressSnap{At: time.Since(t0), Sent: egress.Sent(), Done: st.TasksDone(), Left: st.TasksLeft()}
 		})
 	}
 	defer stopTicker()
@@ -1226,7 +1227,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		// never sent, it is not counted.
 		opts.Browser.Close()
 	}
-	rep.Requests = fetch.Sent()
+	rep.Requests = egress.Sent()
 	// Work the -timeout cut short (a source still asking) is not done:
 	// resume runs it again.
 	cut := 0
@@ -1244,18 +1245,18 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			rep.Stopped = fmt.Sprintf("-timeout %s reached with %d tasks known and not done", *timeout, left)
 		case ctx.Err() != nil:
 			rep.Stopped = fmt.Sprintf("interrupted with %d tasks known and not done", left)
-		case fetch.Killed() != nil:
+		case egress.Killed() != nil:
 			rep.Stopped = killStopped(left)
-		case fetch.Spent():
-			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done (the cap holds for each run: azhaq resume sends up to %d more, or as many as its -max-requests says, 0 for no cap)", fetch.MaxRequests, left, fetch.MaxRequests)
+		case egress.Spent():
+			rep.Stopped = fmt.Sprintf("the request budget of %d is spent, %d tasks known and not done (the cap holds for each run: azhaq resume sends up to %d more, or as many as its -max-requests says, 0 for no cap)", egress.MaxRequests(), left, egress.MaxRequests())
 		case len(fetch.OriginsDown()) > 0:
 			rep.Stopped = fmt.Sprintf("%s stopped answering after %d timeouts, %d tasks known and not done", strings.Join(fetch.OriginsDown(), ", "), fetch.OriginTrips, left)
 		default:
 			rep.Stopped = fmt.Sprintf("-max-items %d reached, %d tasks known and not done", budgets.MaxItems, left)
 		}
 		rep.Resume = resumeHint(path, cut > 0, *login != "", *loginUser)
-		if *resumeRun != "" && st.TasksDone() == doneBefore && fetch.Spent() && fetch.Killed() == nil {
-			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", fetch.MaxRequests))
+		if *resumeRun != "" && st.TasksDone() == doneBefore && egress.Spent() && egress.Killed() == nil {
+			rep.Notes = append(rep.Notes, fmt.Sprintf("no task finished: each one left needs more than %d requests (a path sweep needs one per word); raise -max-requests", egress.MaxRequests()))
 		}
 	} else {
 		// Nothing left to resume: the kept answers have served.

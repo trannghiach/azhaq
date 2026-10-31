@@ -20,6 +20,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/store"
@@ -225,15 +226,15 @@ func (swallower) Inputs() []types.SeedType { return []types.SeedType{types.TypeD
 func (swallower) Outputs() []string        { return nil }
 func (s swallower) Run(ctx context.Context, _ types.Seed, _ func(types.Observation) error) (types.RunMeta, error) {
 	*s.ran++
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	return types.RunMeta{Status: types.StatusOK}, nil
 }
 
 func TestRefusedRequestLeavesWorkUndone(t *testing.T) {
 	fetch.Reset()
 	defer fetch.Reset()
-	fetch.MaxRequests = 1
-	fetch.Count(1)
+	egress.SetMaxRequests(1)
+	egress.Count(1)
 	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
 	if err != nil {
 		t.Fatal(err)

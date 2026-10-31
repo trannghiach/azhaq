@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
@@ -114,11 +115,11 @@ func TestChromeRequestsPassThroughTheRunsProxy(t *testing.T) {
 	ledger.Use(l)
 	defer ledger.Use(nil)
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.ProxyURL = pu
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetTargetProxy(pu)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	_ = egress.Spend(ctx) // the page, which Load's caller counts
 	if _, err := b.Load(ctx, target.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -171,11 +172,11 @@ func TestChromeTLSGoesThroughTheRunsProxyAsATunnel(t *testing.T) {
 	defer prox.Close()
 	pu, _ := url.Parse(prox.URL)
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.ProxyURL = pu
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetTargetProxy(pu)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, target.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -213,10 +214,10 @@ func TestChromeProxyOptionGetsPlainRequests(t *testing.T) {
 	}
 	defer b.Close()
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, target.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}
@@ -254,8 +255,8 @@ func TestChromeSignInPassesThroughTheRunsProxy(t *testing.T) {
 	pu, _ := url.Parse(prox.URL)
 	b := startChrome(t)
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.ProxyURL = pu
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetTargetProxy(pu)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	s, err := b.Login(ctx, srv.URL+"/login", "member@x.test", "s3cret")
@@ -289,11 +290,11 @@ func TestChromeBackgroundConnectionsAreRefusedAndCounted(t *testing.T) {
 	defer prox.Close()
 	pu, _ := url.Parse(prox.URL)
 	fetch.Reset()
-	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
-	fetch.ProxyURL = pu
+	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
+	egress.SetTargetProxy(pu)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	_ = fetch.Spend(ctx)
+	_ = egress.Spend(ctx)
 	if _, err := b.Load(ctx, target.URL+"/", false); err != nil {
 		t.Fatal(err)
 	}

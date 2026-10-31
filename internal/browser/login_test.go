@@ -12,6 +12,7 @@ import (
 
 	"github.com/chromedp/cdproto/cdp"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
@@ -23,7 +24,7 @@ func TestOutside(t *testing.T) {
 	defer fetch.Reset()
 	const main = cdp.FrameID("MAIN")
 	failed := ErrLoginFailed.Error()
-	fetch.Allow = func(h string) bool { return h == "app.example.com" }
+	egress.SetScope(func(h string) bool { return h == "app.example.com" })
 	for _, c := range []struct {
 		rs   []refusal
 		want string
@@ -41,7 +42,7 @@ func TestOutside(t *testing.T) {
 	if err := outside("https://app.example.com/login", main, []refusal{{budget: true}}, ErrLoginFailed); !errors.Is(err, neterr.ErrBudget) {
 		t.Errorf("budget: %v", err)
 	}
-	fetch.Allow = nil
+	egress.SetScope(nil)
 	want := "the sign-in went to sso.example.net, outside the site of app.example.com: name both with -allow example.com -allow sso.example.net"
 	if err := outside("https://app.example.com/login", main, []refusal{{host: "sso.example.net", frame: main, doc: true}}, ErrLoginFailed); err.Error() != want {
 		t.Errorf("no scope: %v", err)
