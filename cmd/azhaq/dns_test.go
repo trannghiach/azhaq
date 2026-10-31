@@ -256,6 +256,55 @@ func TestDNSRecordTypesAndFields(t *testing.T) {
 	}
 }
 
+// A record's value is printed as the resolver sent it, in -resp, -resp-only
+// and -output-template alike: a DMARC TXT keeps its DMARC1, a CAA its value's
+// case, an SOA its mailbox's, a target name its capitals.
+func TestDNSTextFormsKeepTheCaseOfValues(t *testing.T) {
+	t.Chdir(t.TempDir())
+	lab := startLab(t)
+	added := map[string][]string{
+		"case.lab.zz.": {`TXT "v=DMARC1; p=none; rua=mailto:DMARC@Lab.zz"`, `CAA 0 issue "CA.Test; accounturi=https://Acme.test/Acct/7"`,
+			"SOA NS.Lab.ZZ. Host.Master.lab.zz. 5 1 2 3 4", "SRV 1 2 5060 Sip.Lab.ZZ.", "MX 10 Mail.Lab.ZZ.", "NS NS2.Lab.ZZ."},
+		"alias.lab.zz.": {"CNAME Target.Lab.ZZ."},
+	}
+	for k, v := range added {
+		labZone[k] = v
+		t.Cleanup(func() { delete(labZone, k) })
+	}
+	for _, tt := range []struct {
+		host, flag string
+		want       []string
+	}{
+		{"case.lab.zz", "-txt", []string{"case.lab.zz [TXT] [v=DMARC1; p=none; rua=mailto:DMARC@Lab.zz]"}},
+		{"case.lab.zz", "-caa", []string{"case.lab.zz [CAA] [CA.Test; accounturi=https://Acme.test/Acct/7]"}},
+		{"case.lab.zz", "-soa", []string{"case.lab.zz [SOA] [NS.Lab.ZZ]", "case.lab.zz [SOA] [Host.Master.lab.zz]"}},
+		{"case.lab.zz", "-srv", []string{"case.lab.zz [SRV] [Sip.Lab.ZZ]"}},
+		{"case.lab.zz", "-mx", []string{"case.lab.zz [MX] [Mail.Lab.ZZ]"}},
+		{"case.lab.zz", "-ns", []string{"case.lab.zz [NS] [NS2.Lab.ZZ]"}},
+		{"alias.lab.zz", "-cname", []string{"alias.lab.zz [CNAME] [Target.Lab.ZZ]"}},
+	} {
+		ls, _, _ := dnsOut(t, "-d", tt.host, "-r", lab.addr, tt.flag, "-resp")
+		if !reflect.DeepEqual(ls, tt.want) {
+			t.Errorf("%s -resp: %q, want %q", tt.flag, ls, tt.want)
+		}
+		var only []string
+		for _, l := range tt.want {
+			only = append(only, strings.TrimSuffix(l[strings.Index(l, "] [")+3:], "]"))
+		}
+		if ls, _, _ := dnsOut(t, "-d", tt.host, "-r", lab.addr, tt.flag, "-resp-only"); !reflect.DeepEqual(ls, only) {
+			t.Errorf("%s -resp-only: %q, want %q", tt.flag, ls, only)
+		}
+	}
+	ls, _, _ := dnsOut(t, "-d", "case.lab.zz", "-r", lab.addr, "-txt", "-ot", "{{txt}}")
+	if !reflect.DeepEqual(ls, []string{"v=DMARC1; p=none; rua=mailto:DMARC@Lab.zz"}) {
+		t.Errorf("-ot: %q", ls)
+	}
+	ls, _, _ = dnsOut(t, "-d", "case.lab.zz", "-r", lab.addr, "-txt", "-j")
+	if r := dnsRows(t, ls)["case.lab.zz"]; r["txt"].([]any)[0] != "v=DMARC1; p=none; rua=mailto:DMARC@Lab.zz" {
+		t.Errorf("-j: %v", r)
+	}
+}
+
 func TestDNSFailuresAreSaid(t *testing.T) {
 	t.Chdir(t.TempDir())
 	lab := startLab(t)

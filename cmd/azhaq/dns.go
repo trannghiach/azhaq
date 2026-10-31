@@ -1127,7 +1127,6 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 	printed := false
 	emit := func(typ string, items []string) {
 		for _, item := range items {
-			item = strings.ToLower(item)
 			switch {
 			case cf.ro:
 				r.w.line(item + details)
