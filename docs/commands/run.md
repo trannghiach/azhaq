@@ -11,17 +11,39 @@ azhaq run (-url URL | -domain D | -list FILE | -scope FILE|PLATFORM -program P |
 ## Examples
 
 ```
+# Map one app into a workspace
 azhaq run -url https://app.example.com/ -db app.db
+
+# Map a program's scope, capped and paced
 azhaq run -scope hackerone -program security -db h1.db -max-requests 5000 -rate 5
+
+# Names only: nothing is sent to the targets
 azhaq run -domain example.com -passive -json > map.jsonl
+
+# Sign in with Chrome first, then map as that user
 azhaq run -url https://app.example.com/ -browser -login https://app.example.com/login -login-user me@x.test -login-pass '…'
 ```
 
+## What it does
+
+1. Takes your seeds: a URL, a domain, a list, a program's scope, an AS number, an address range, or a seeds file.
+2. Resolves names, probes web services, crawls pages and scripts, and reads API descriptions.
+3. Follows what it finds in waves, as far as `-depth` allows.
+4. Asks each web service for the built-in paths unless `-no-paths` says not to ([Path checks](#path-checks-stop-at-their-answer)).
+5. Lists, but does not request, URLs whose names say a GET would change something. They get the coverage `skipped`.
+6. Sends nothing to a host outside the scope, Chrome's requests included. `-passive` sends nothing to the targets at all.
+7. Prints the ranked map when it ends and the summary on stderr.
+
+[What azhaq sends](../CONCEPTS.md#what-azhaq-sends) lists every request by kind. `azhaq plan` prints what a run would do and send before anything goes out.
+
 ## Output
 
-A ranked map, one row per entity (-json: one JSON object per row); the summary on stderr.
+The map has one row per entity, best first: the target's own pages and APIs, then what they led to. The summary goes to stderr.
 
-The map, one row per entity, best first: the target's own pages and APIs, then what it led to. `-json` prints one object per row:
+- Plain: one row per line, with forms and parameters indented below ([The text map](#the-text-map)).
+- `-json`: one JSON object per row, and the summary as one JSON object on stderr.
+- `-quiet`: no map and no progress lines, only the summary.
+- `-stream`: also prints each name, service, URL and open port as it is found, before the map ([Streaming found lines](#streaming-found-lines)).
 
 ```json
 {"type":"URL","key":"http://127.0.0.1:3001/api/Users","scope":"target","coverage":"visited","role":"auth",
@@ -37,50 +59,196 @@ The map, one row per entity, best first: the target's own pages and APIs, then w
 {"type":"URL","key":"ws://127.0.0.1:3001/socket.io","scope":"target","coverage":"hint","role":"websocket","protocol":"socket.io"}
 ```
 
-| Field | Values |
+| Field | Meaning |
 | --- | --- |
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
+| `key` | The URL, name or address. |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
-| `coverage` (URLs) | `visited`: fetched and answered as a page of its own. `catchall`: answered with the page every unknown path gets (a single-page app's shell). `error`: requested, no answer. `gone`: answered 404 or 410 (found in an archive or a link, not there now). `hint`: found (in a script, an API description, an archive) but not requested (an archive's static assets, images, fonts and the like, are never requested, whatever hides their extension), or called by scripts only with POST or PUT, or written to only by a page in Chrome (a GET that answers 404, 405 or the catch-all page says nothing about such a route), or named only in scripts with no GET call among them while a GET answers 404 (`proof` says `GET answers 404; found only in scripts, method unknown`). `skipped`: found (by a link, a script's call, an API description or an archive), not requested because its name says a GET would change something; `word` names the verb, and the summary lists it under `skipped` (`left alone`). This is the map's rule: a wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does, and holds words back only under a session (see `dirs`). `capped`: left when a limit was hit, or when its origin stopped answering (5 connects or timeouts in a row with no answer between them: the rest of that origin's work is left for `azhaq resume`, listed under `left alone` with `ORIGIN stopped answering after 5 timeouts`, and `stopped` names the origin). A version prefix alone that only a script's strings name (`/v3`) is left out of the map when it answers 404 or the catch-all page. |
-| `evidence` (URLs) | How azhaq knows the row, the strongest level any of its sources reaches: `answered` (azhaq sent the request; `status` and the rest are what came back), `browser` (Chrome sent it while loading the page), `described` (an API description lists it, not asked), `called` (a script calls it, not asked), `linked` (a page, a form or a script string names it, not asked), `archived`, `guessed` or `given` (you named it and nothing else holds it) ([CONCEPTS.md](../CONCEPTS.md#evidence-how-azhaq-knows-a-url) defines them). A row folded into a template takes the strongest level of its instances. `evidence_from` lists the collectors behind it, sorted. Only URL rows have a level; `coverage` says what was done (`skipped`: deliberately not asked). |
-| `answer` (URLs) | Set when the status says less than it looks: `500 without input` is a 5xx that azhaq's plain request got from a route that takes names (query or body) and was sent none of them. |
-| `role` (URLs) | `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest` (a bundler's build manifest: Vite's `.vite/manifest.json`, Create React App's `asset-manifest.json`, Angular's `ngsw.json`, Nuxt's build meta), `client-route` and `websocket` (below). |
-| `client-route` | A view a single-page app's router draws, read from its route table (Angular's `RouterModule`, React Router's `<Route>` and `createBrowserRouter`, Vue Router): `http://host/#/administration` for an app that routes by the hash, else its path (`http://host/admin`), parameters as `{name}`, nested routes joined to their parents'. A view after the hash is never requested: the server answers every one with the app's shell. A view in the path is asked for once with a GET, as the server may answer it itself: a sign-in's 401 makes the row `auth`, a page the server renders `page`, with the guard still on the row and in its `proof`; a view the shell answers stays `client-route` (`catchall`), a template (`/reports/{id}`) is not requested. `guard` is what the router checks before it draws the view, a parent's guard holding for its children: Angular's `canActivate`, `canMatch`, `canLoad` or `canActivateChild` (with the guard's name when the build keeps it, `canLoad AdminGuard`), Vue's `meta.requiresAuth` (or another meta key about sessions or roles) or `beforeEnter`, a React wrapper such as `RequireAuth` or `PrivateRoute`. A string in a script that names a view (a router link, `router.navigate(['/order-completion', id])`) is that view's, listed in its `found_in`, not a page of its own. With `-browser`, Chrome does not open the views. |
-| `websocket` | A WebSocket endpoint a script opens (`new WebSocket(…)`, `SockJS`, a `ws://` or `wss://` URL, a socket.io client's `io(url, {path})`), as `ws://` or `wss://` (the page's scheme when the script builds the URL from `location.host`). Never requested. `protocol` is `socket.io` for a socket.io endpoint, whose `namespace` (`/chat`) is given when the app's call names one; the library's default path, `/socket.io`, stands when the app's call cannot be read. Third parties' sockets (chat widgets, analytics) are left out. |
-| `role` (names) | `live` (resolves; a host you gave, or a name under a domain you gave), `sibling` (resolves; found on the way, under another domain), `unresolved` (from a source or a list, not looked up), `dead`, `wildcard`. |
-| `ops` | each operation on the route: `method`, `query`, `path`, `header`, `body` (field names), `body_type`, `auth` (the description asks for credentials), `summary`, `operation_id`, `source` (`js-call`, `openapi`, `graphql`; `browser`: a write a page in Chrome sent or was refused, with the names its query and body carried, never their values). |
-| `body` | the body field names of all its operations, whatever described them: a script's call, an API description (served or found), a GraphQL schema (argument names), a request taken in from katana. |
-| `status`, `title` | The URL's own answer (the first hop of a redirect). Without a scope, a redirect is followed only within the site (same registrable domain or address); with one, only inside it. Chrome is held to the same rule for everything a page asks for. |
-| `methods`, `params` | From API descriptions and call sites in scripts; `params` also holds the names in the URL's own query string. The query names of the links on a page are on the links' rows, not the page's. |
-| `forms` | `{"method","action","enctype","fields","files"}` for each form on the page. A form whose action is empty or `#` submits to the page itself: `action` is the page's URL with its query. `enctype` is a POST form's encoding (`application/x-www-form-urlencoded`, `multipart/form-data` or `text/plain`), `files` the fields that are file inputs. |
-| `found_in` | Where scripts name the route, up to three places, calls first (for a route on another host than the page whose script named it, the script on that host, which is also what links to it in `show`): `script` (its URL; the page's for a script inside the page, with `inline` true and the page's line numbers), `line` and `col` (bytes, from 1), `snippet` (up to 120 bytes: the call as written, or the string with the code around it; credentials in it, such as JSON Web Tokens, bearer tokens, secrets set to a literal or in a query string and long keys, read `[redacted]`), and `source`, the original file, when the route was read from a source map's sources (`line` and `col` are then that file's). |
-| `watch` | Parameter and body names worth trying first, by what their name says they take: `returnUrl (redirect)`, `url (url)`, `file (file)`, `cmd (command)`, `isAdmin (debug)`, `userId (id)`, `callback (callback)`. The text map prints them on a `watch:` line under the row. |
-| `template`, `count`, `not_asked` | Pages that differ only by an ID are folded: `/product?id={n}` with the number of URLs folded and `not_asked`, how many of them were found and not requested (`(30 urls, 27 not asked)` in the text map). A query value that names a page (`index.jsp?content=about.htm`, `view=grid`) is not an ID: each is a page of its own. Three URLs of a template are requested (`-per-template N` changes it); the others are listed, with `coverage: hint`, as rows of their own in `crawl` (text and `-json`). |
+| `coverage` (URLs) | What azhaq did with the URL: `visited`, `catchall`, `error`, `gone`, `hint`, `skipped` or `capped`. See [Coverage](#coverage). |
+| `evidence` (URLs) | How azhaq knows the row: the strongest level of its sources, from `answered` to `given`. See [Evidence](#evidence). |
+| `evidence_from` | The collectors behind the evidence, sorted. |
+| `answer` (URLs) | Set when the status says less than it looks, such as `500 without input`. See [Evidence](#evidence). |
+| `role` (URLs) | What the URL is: `app` (a front page), `auth` (401), `forbidden` (403), `api`, `page`, `script`, `asset`, `sourcemap`, `manifest`, `client-route`, `websocket`. |
+| `role` (names) | The status of a name: `live`, `sibling`, `unresolved`, `dead` or `wildcard`. [CONCEPTS](../CONCEPTS.md#names) defines them. |
+| `proof` | Why the row is as it is, in one line: `status=401 …`, `guard=canActivate`. |
+| `first_seen` | When the workspace first saw the entity. |
+| `guard` | What a client route's router checks before it draws the view. See [Client routes](#client-routes). |
+| `protocol`, `namespace` | `protocol` is `socket.io` for a socket.io endpoint; `namespace` is its namespace, when the app names one. See [WebSockets](#websockets). |
+| `status`, `title` | The URL's own answer: the first hop of a redirect. See [Redirects](#redirects). |
+| `methods`, `params` | From API descriptions and call sites in scripts. See [Methods and parameters](#methods-and-parameters). |
+| `ops` | Each operation on the route: `method`, `query`, `path`, `header`, `body`, `body_type`, `auth`, `summary`, `operation_id`, `source`. See [Operations](#operations). |
+| `body` | The body field names of all the route's operations, whatever described them. See [Operations](#operations). |
+| `forms` | One object per form on the page: `method`, `action`, `enctype`, `fields`, `files`. See [Forms](#forms). |
+| `found_in` | Up to three places where scripts name the route, calls first. See [found_in](#found_in). |
+| `watch` | Names worth trying first, by what each says it takes: `returnUrl (redirect)`, `url (url)`, `file (file)`, `cmd (command)`, `isAdmin (debug)`, `userId (id)`, `callback (callback)`. |
+| `template`, `count`, `not_asked` | A page that differs only by an ID is folded: its `{n}` template, how many URLs it holds, how many were not requested. See [Templates](#templates). |
 
-A GraphQL endpoint whose schema was read with `-graphql` has one op per query, mutation and subscription: `method` `POST`, `summary` its signature (`mutation login(username: String, password: String): Login`), `operation_id` the field name, `body` the argument names, `source` `graphql`.
+## Summary and exit codes
 
-A run's summary counts `client routes` and `websockets` apart from `URLs`. The text map lists them after the routes of the server with the same rank, with `guard=…`, `protocol=…` and `namespace=…` as their proof.
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two things are specific to `run`:
 
-`azhaq query -fields key,evidence,evidence_from` shows the level, and `azhaq query -evidence answered,described` keeps the rows with those levels. The text map ends a row that is not `answered` with `[browser]`, `[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]` or `[given]`, and writes `500 without input` after the proof of a row that has an `answer`.
+- The summary counts `client routes` and `websockets` apart from `URLs`.
+- It counts the path checks it skipped, as a note ([Path checks](#path-checks-stop-at-their-answer)).
 
-A string in a script that is only the start of a path, `"/rest/user/" + id` or a base such as `this.hostServer + "/rest/web3"` that calls are built on (`/rest/web3/submitKey`), is not a route: it has no row, is never requested, and is kept as a rejected string with the reason `the start of a path a script joins more to` (`crawl -rejected` lists it). A string with a query (`"/search?q=" + q`) names its route and stays. `export -format jsonl` carries `evidence` and `evidence_from` on each entity line, `export -format openapi` `x-azhaq-evidence` on each operation, and `export -format html` an Evidence column in the API and map tables.
+## Details
 
-The text map prints the same rows, one per line, with forms and parameters indented below, and a GraphQL endpoint's operations by their signatures (the first 50; the rest are in `-json` and the exports). `azhaq show URL` prints where scripts name it under `found in`, one place per line as `script:line:col  snippet`:
+### The text map
+
+- Rows are the JSON rows, one per line, best first. Forms and parameters are indented below the row.
+- A GraphQL endpoint's operations are listed by their signatures: the first 50. The rest are in `-json` and the exports.
+- A row that is not `answered` ends with its evidence: `[browser]`, `[described]`, `[called]`, `[linked]`, `[archived]`, `[guessed]` or `[given]`.
+- A row that has an `answer` shows `500 without input` after its proof.
+- Parameter and body names worth trying first are on a `watch:` line under the row.
+- A folded template shows its count: `(30 urls, 27 not asked)`.
+- Client routes and websockets come after the server's routes of the same rank. Their proof is `guard=…`, `protocol=…` and `namespace=…`.
+- `azhaq show URL` prints where scripts name a route, under `found in`, one place per line as `script:line:col  snippet`:
 
 ```
 found in
   http://127.0.0.1:3001/main.js:6472:88  this.http.post(`${F$.hostServer}/rest/2fa/verify`,{tmpToken:localStorage.getItem(`totp_tmp_token`),totpToken:t})
 ```
 
-`run` prints its ranked map at the end; with `-stream` it also prints, as they are found and once each, the names that resolve, the URLs found, the answers (`found  answer http://app/openapi.json  [200]`) and the open ports, before the map (with `-json`, objects with `"type":"found"`, `kind` (`name`, `url`, `answer`, `ports`), `key` (the name, the URL, or the host), `collector`, and for an answer its `status` and `title`, for ports the `ip` and the `open` list).
+### Streaming found lines
 
-## Summary and exit codes
+- With `-stream`, `run` prints each name that resolves, URL found, answer and open port as it is found, once each. They come before the map.
+- An answer line looks like `found  answer http://app/openapi.json  [200]`.
+- With `-json`, each is an object with `"type":"found"` and these fields:
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+| Field | Meaning |
+| --- | --- |
+| `kind` | `name`, `url`, `answer` or `ports`. |
+| `key` | The name, the URL, or the host. |
+| `collector` | The collector that found it. |
+| `status`, `title` | For an answer. |
+| `ip`, `open` | For ports: the address and the list of open ports. |
 
-## Details
+### Coverage
 
-**Path checks stop at their answer.** The checks that guess where an API description sits (`openapi.json`, `swagger.json`, `api-docs`, `v3/api-docs`, …, and the same names again under each API base the run found, such as `/rest/` or `/v3/`) are asked one at a time, likeliest first. They stop at the first answer that is an OpenAPI or Swagger document with paths, or the Swagger UI or ReDoc page that loads one. Once an origin has served a description, here or through `azhaq-openapi`, its other locations are not asked, and the summary counts them: `note: path checks: 28 skipped (an API description was already found)`. Every other check (`robots.txt`, `login`, `admin`, `graphql`, `.git/HEAD`, …) is still asked. A Swagger UI whose script holds the document (Juice Shop's `/api-docs/`) is read from the script, and the names next to it are not guessed. A page that is byte for byte what the site root answers for a made-up path (a single-page app's shell) is the catch-all answer of a directory whose own baseline was not asked, so that baseline is not requested; a directory with answers of its own is still asked.
+[CONCEPTS](../CONCEPTS.md#coverage-what-azhaq-did-with-a-url) defines `visited`, `catchall`, `error`, `gone`, `hint`, `skipped` and `capped`. What follows is what is specific to `run`.
+
+- `gone` is a URL found in an archive or a link that answered 404 or 410: it is not there now.
+- `hint` means found, in a script, an API description or an archive, but not requested. It also covers these cases:
+  - An archive's static assets, such as images and fonts, are never requested, whatever hides their extension.
+  - A route that scripts call only with POST or PUT.
+  - A route that only a page in Chrome writes to. A GET that answers 404, 405 or the catch-all page says nothing about such a route.
+  - A route named only in scripts, with no GET call among them, while a GET answers 404. Its `proof` says `GET answers 404; found only in scripts, method unknown`.
+- `skipped` means found by a link, a script's call, an API description or an archive. It was not requested: its name says a GET would change something.
+  - `word` names the verb. The summary lists the URL under `skipped`, as `left alone`.
+  - This is the map's rule. A wordlist sweep (`dirs`, `-dirs`, `fuzz`) asks every word, `/logout` included, as ffuf does. It holds words back only under a session (see [dirs](dirs.md)).
+- `capped` means left when a limit was hit, or when its origin stopped answering.
+  - An origin has stopped answering after 5 connects or timeouts in a row with no answer between them.
+  - The rest of that origin's work is left for `azhaq resume`. It is listed under `left alone` as `ORIGIN stopped answering after 5 timeouts`, and `stopped` names the origin.
+- A version prefix alone that only a script's strings name (`/v3`) is left out of the map when it answers 404 or the catch-all page.
+
+### Evidence
+
+- [CONCEPTS](../CONCEPTS.md#evidence-how-azhaq-knows-a-url) defines the levels, `evidence_from` and `answer`. It also lists where evidence shows: `query`, the text map and the exports.
+- `azhaq query -fields key,evidence,evidence_from` shows the level. `azhaq query -evidence answered,described` keeps the rows with those levels.
+- `answer` is `500 without input` for a 5xx that azhaq's plain request got from a route that takes names, in the query or the body. The request sent none of them.
+
+### Roles of a URL
+
+- `manifest` is a bundler's build manifest: Vite's `.vite/manifest.json`, Create React App's `asset-manifest.json`, Angular's `ngsw.json`, Nuxt's build meta.
+- `client-route` and `websocket` are below.
+
+### Client routes
+
+A client route is a view that a single-page app's router draws.
+
+- It is read from the app's route table: Angular's `RouterModule`, React Router's `<Route>` and `createBrowserRouter`, or Vue Router.
+- Its key is `http://host/#/administration` for an app that routes by the hash, else its path, `http://host/admin`.
+- Parameters are written `{name}`. Nested routes are joined to their parents'.
+- A view after the hash is never requested: the server answers every one with the app's shell.
+- A view in the path is asked for once with a GET, as the server may answer it itself.
+  - A sign-in's 401 makes the row `auth`. A page the server renders makes it `page`. The guard stays on the row and in its `proof`.
+  - A view the shell answers stays `client-route`, with coverage `catchall`.
+  - A template such as `/reports/{id}` is not requested.
+- A string in a script that names a view is that view's, listed in its `found_in`, not a page of its own. A router link and `router.navigate(['/order-completion', id])` are examples.
+- With `-browser`, Chrome does not open the views.
+
+`guard` is what the router checks before it draws the view. A parent's guard holds for its children.
+
+- Angular: `canActivate`, `canMatch`, `canLoad` or `canActivateChild`, with the guard's name when the build keeps it, such as `canLoad AdminGuard`.
+- Vue: `meta.requiresAuth`, or another meta key about sessions or roles, or `beforeEnter`.
+- React: a wrapper such as `RequireAuth` or `PrivateRoute`.
+
+### WebSockets
+
+- A `websocket` row is an endpoint a script opens: `new WebSocket(…)`, `SockJS`, a `ws://` or `wss://` URL, or a socket.io client's `io(url, {path})`.
+- Its key is `ws://` or `wss://`: the page's scheme when the script builds the URL from `location.host`.
+- It is never requested.
+- `protocol` is `socket.io` for a socket.io endpoint. `namespace` (`/chat`) is given when the app's call names one.
+- When the app's call cannot be read, the library's default path, `/socket.io`, stands.
+- Third parties' sockets, such as chat widgets and analytics, are left out.
+
+### Operations
+
+- `ops` has an entry for each operation on the route. `auth` means the description asks for credentials. `body` lists field names.
+- `source` is `js-call`, `openapi`, `graphql` or `browser`. `browser` is a write that a page in Chrome sent or was refused. It carries the names its query and body held, never their values.
+- The route's `body` is the body field names of all its operations, whatever described them:
+  - a script's call;
+  - an API description, served or found;
+  - a GraphQL schema, as argument names;
+  - a request taken in from katana.
+- A GraphQL endpoint whose schema was read with `-graphql` has one op per query, mutation and subscription:
+  - `method` is `POST`.
+  - `summary` is its signature: `mutation login(username: String, password: String): Login`.
+  - `operation_id` is the field name, `body` the argument names, and `source` is `graphql`.
+
+### Redirects
+
+- `status` and `title` are the URL's own answer: the first hop of a redirect.
+- Without a scope, a redirect is followed only within the site: the same registrable domain or address. With a scope, it is followed only inside it.
+- Chrome is held to the same rule for everything a page asks for.
+
+### Methods and parameters
+
+- `methods` and `params` come from API descriptions and call sites in scripts.
+- `params` also holds the names in the URL's own query string.
+- The query names of the links on a page are on the links' rows, not the page's.
+
+### Forms
+
+- Each form is `{"method","action","enctype","fields","files"}`.
+- A form whose action is empty or `#` submits to the page itself. Its `action` is the page's URL with its query.
+- `enctype` is a POST form's encoding: `application/x-www-form-urlencoded`, `multipart/form-data` or `text/plain`.
+- `files` are the fields that are file inputs.
+
+### found_in
+
+- It lists where scripts name the route: up to three places, calls first.
+- For a route on another host than the page whose script named it, it lists the script on that host. `show` links the route to that script too.
+- Each place has:
+  - `script`: its URL. For a script inside the page, the page's URL, with `inline` true and the page's line numbers.
+  - `line` and `col`: in bytes, from 1.
+  - `snippet`: up to 120 bytes, the call as written or the string with the code around it.
+  - `source`: the original file, when the route was read from a source map's sources. `line` and `col` are then that file's.
+- Credentials in a snippet read `[redacted]`: JSON Web Tokens, bearer tokens, secrets set to a literal or in a query string, and long keys.
+
+### Templates
+
+- Pages that differ only by an ID are folded: `/product?id={n}`.
+- `count` is the number of URLs folded. `not_asked` is how many of them were found and not requested.
+- A query value that names a page, such as `index.jsp?content=about.htm` or `view=grid`, is not an ID. Each is a page of its own.
+- Three URLs of a template are requested. `-per-template N` changes that.
+- The others are listed with `coverage: hint`, as rows of their own in `crawl`, in text and `-json`.
+
+### Strings that are not routes
+
+- A string in a script that is only the start of a path, `"/rest/user/" + id`, is not a route.
+- Nor is a base that calls are built on, such as `this.hostServer + "/rest/web3"`, whose calls are `/rest/web3/submitKey`.
+- It has no row and is never requested. It is kept as a rejected string with the reason `the start of a path a script joins more to`. `crawl -rejected` lists it.
+- A string with a query, `"/search?q=" + q`, names its route and stays.
+
+### Path checks stop at their answer
+
+- The checks that guess where an API description sits are asked one at a time, likeliest first.
+- The names include `openapi.json`, `swagger.json`, `api-docs` and `v3/api-docs`. The same names are asked again under each API base the run found, such as `/rest/` or `/v3/`.
+- They stop at the first answer that is an OpenAPI or Swagger document with paths. A Swagger UI or ReDoc page that loads one counts too.
+- Once an origin has served a description, here or through `azhaq-openapi`, its other locations are not asked. The summary counts them: `note: path checks: 28 skipped (an API description was already found)`.
+- Every other check is still asked: `robots.txt`, `login`, `admin`, `graphql`, `.git/HEAD` and more.
+- A Swagger UI whose script holds the document (Juice Shop's `/api-docs/`) is read from the script. The names next to it are not guessed.
+- A page that is byte for byte what the site root answers for a made-up path is a single-page app's shell. That makes it the catch-all answer of a directory whose own baseline was not asked, so that baseline is not requested. A directory with answers of its own is still asked.
 
 ## Flags
 
