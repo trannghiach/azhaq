@@ -105,6 +105,10 @@ func (r *report) finish(asJSON, silent bool) error {
 		fmt.Fprintf(os.Stderr, "%s\n", raw)
 	case silent && r.Exit == exitOK && (r.Sources == nil || r.Sources.failures() == 0):
 		// A source that failed is something that failed: it is said under -silent too.
+		// So is a takeover candidate: a finding, not a note.
+		for _, t := range r.Takeover {
+			fmt.Fprintln(os.Stderr, takeoverLine(t))
+		}
 	default:
 		r.print(os.Stderr)
 	}
@@ -407,6 +411,16 @@ func progressTicker(ctx context.Context, st *store.Store, silent bool) func() {
 		}
 	}()
 	return func() { once.Do(func() { close(done) }) }
+}
+
+// takeoverLine is a candidate as -silent prints it on stderr, one per line:
+// [takeover] name -> cname (service, strength).
+func takeoverLine(t takeoverRow) string {
+	line := "[takeover] " + t.Host
+	if t.Target != "" {
+		line += " -> " + t.Target
+	}
+	return line + " (" + t.Service + ", " + t.Strength + ")"
 }
 
 // takeoverRow is a name another party may take over, and why.

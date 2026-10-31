@@ -32,11 +32,16 @@ type subsOut struct {
 	perInput map[string]*bytes.Buffer
 	live     bool
 	cnameN   int // live names that are a CNAME with no address of their own
+	// takeover is the candidates DNS found, by name: -json rows carry them.
+	takeover map[string]takeoverRow
 }
 
 func (o *subsOut) put(input, name string, row map[string]any, ips, by []string) {
 	if o.live && len(ips) == 0 {
 		o.cnameN++
+	}
+	if t, ok := o.takeover[name]; ok && o.w.json {
+		row["takeover"] = t.Finding
 	}
 	var line string
 	switch {
@@ -363,6 +368,10 @@ func cmdSubs(args []string) error {
 		return err
 	}
 	defer done()
+	out.takeover = map[string]takeoverRow{}
+	for _, t := range rep.Takeover {
+		out.takeover[t.Host] = t
+	}
 	if *live {
 		// A name with an address, or one that is a CNAME (dnsx -a -cname
 		// lists those too, dangling or not): it exists in DNS.
