@@ -88,6 +88,27 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
 
 `sources asked` is `sources answered` plus `sources failed` plus `off-by-default failed`.
 
+### The sources block
+- `asked`, `answered`, `failed` and `off_by_default_failed` count each source once for each domain, as `counts` does.
+- `failed` counts sources in the default set, or named with `-sources`. `off_by_default_failed` counts sources that ran only because of `-all-sources`.
+- `asked` is `answered` plus `failed` plus `off_by_default_failed`. A source skipped for want of a key is not asked.
+- `names` is what each source gave, before any DNS check or filter. For `urls` the field is `urls`: see [urls](urls.md#summary-and-exit-codes).
+- `seconds` is how long each source took, the longest over the domains. The slowest source set the run's time. A note names it when it held the run: `crtsh took 30 s, the next slowest source 3 s, so it held the run`.
+- `failed_sources` has each failed source's reason, such as `"wayback": "web.archive.org answered 429"`. With several domains, each reason starts with its domain.
+- `dns` asks resolvers, not sources, and has no such block.
+
+The text summary ends with the same, and says why the exit code is what it is:
+
+```
+23 of 33 sources answered, 10 failed (listed above); exit 0 because other sources answered for the same domain (-fail-on-errors makes it 3)
+```
+
+### Degraded
+- True when `sources failed` ([Sources in the summary](#sources-in-the-summary)) is above 0. A source the run relies on did not answer, so the names may be incomplete.
+- The text summary says it on its first line: `DEGRADED: 7 of 38 sources failed`.
+- It does not change the exit code. A failure the other sources made up for is listed as `partial`, and the exit stays 0. With `-fail-on-errors` it is 3.
+- Failures of sources that ran only because of `-all-sources` never set it on their own.
+
 ### Failed sources
 - A source whose answer was an error with a 200 status is a failed source when it gave no names. Examples are hackertarget's `API count exceeded`, a JSON `{"error": …}` and a challenge page.
 - Its `error` holds the server's words: `api.hackertarget.com answered 200 with an error, not names: API count exceeded - Increase Quota with Membership`.

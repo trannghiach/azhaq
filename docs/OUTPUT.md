@@ -104,10 +104,10 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 | `takeover` | Names another party may take over: `host`, `service`, `target` (the CNAME target), `evidence`, `strength`. See [takeover](#takeover). |
 | `failed` | Work that did not get its answer, grouped by collector, source and error, most frequent first. See [failed](#failed). |
 | `skipped` | Targets and requests azhaq chose not to touch, with the reason. See [skipped](#skipped). |
-| `junk` | `urls` only: the URLs left out as junk, by reason. See [junk](#junk). |
-| `sources` | `subs` and `urls`: which sources answered, which failed and why, and what each gave. See [sources](#sources). |
+| `junk` | `urls` only: the URLs left out as junk, by reason. See [urls](commands/urls.md#junk). |
+| `sources` | `subs` and `urls`: which sources answered, which failed and why, and what each gave. See [subs](commands/subs.md#the-sources-block) and [urls](commands/urls.md#summary-and-exit-codes). |
 | `partial` (in `failed`) | A third-party source failed while other sources answered for the same target. |
-| `degraded` | `subs` only: a source the run relies on did not answer, so the names may be incomplete. See [degraded](#degraded). |
+| `degraded` | `subs` only: a source the run relies on did not answer, so the names may be incomplete. See [subs](commands/subs.md#degraded). |
 | `stopped`, `resume` | The limit that stopped the work and the command that continues it. |
 | `notes` | Caps that were hit and other things worth knowing that are not failures. See [notes](#notes). |
 | `next` | Commands worth running next. See [next](#next). |
@@ -140,60 +140,19 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 - It is listed as `Chrome would download it`, by URL without its query and the name Chrome would have given the file: `http://127.0.0.1:3001/ftp/incident-support.kdbx (incident-support.kdbx)`.
 - The request itself was sent and counted. Only what it answered is dropped.
 
-### junk
-
-`urls` counts the URLs on the domains that it left out as junk, by reason. Each URL is counted once.
-
-- `"scanner payload"`: for example 3.
-- `"scanner probe"`: a scanner's own file or tag, a NUL byte (`%00`) in the path or query, or a query that is only punctuation or a dot and an extension (`?.`, `?.tst`, `?.bak`).
-- `"directory listing sort link"`.
-- `"script placeholder (NaN, undefined, null)"`.
-- `"dot segment"`.
-- `"malformed link (wildcard, quote, bracket, ellipsis)"`.
-- `"link cut at the end of its sentence"`.
-
-`counts` has the total as `dropped as junk`, and a note says it: `7 URLs dropped as junk (…; -raw keeps them)`. `-raw` prints them and drops none.
-
-### sources
-
-- `asked`, `answered`, `failed` and `off_by_default_failed` count each source once for each domain, as `counts` does.
-- `failed` counts sources in the default set, or named with `-sources`. `off_by_default_failed` counts sources that ran only because of `-all-sources`.
-- `asked` is `answered` plus `failed` plus `off_by_default_failed`. A source skipped for want of a key is not asked.
-- `names` is what each source gave, before any DNS check or filter. For `urls` the field is `urls`.
-- `seconds` is how long each source took, the longest over the domains. The slowest source set the run's time. A note names it when it held the run: `crtsh took 30 s, the next slowest source 3 s, so it held the run`.
-- `failed_sources` has each failed source's reason, such as `"wayback": "web.archive.org answered 429"`. With several domains, each reason starts with its domain.
-- `dns` asks resolvers, not sources, and has no such block.
-
-The text summary ends with the same, and says why the exit code is what it is:
-
-```
-23 of 33 sources answered, 10 failed (listed above); exit 0 because other sources answered for the same domain (-fail-on-errors makes it 3)
-```
-
-### degraded
-
-- True when `sources failed` ([subs](commands/subs.md#details)) is above 0. A source the run relies on did not answer, so the names may be incomplete.
-- The text summary says it on its first line: `DEGRADED: 7 of 38 sources failed`.
-- It does not change the exit code. A failure the other sources made up for is listed as `partial`, and the exit stays 0. With `-fail-on-errors` it is 3.
-- Failures of sources that ran only because of `-all-sources` never set it on their own.
-
 ### notes
 
-Examples of what `notes` holds:
+`notes` holds caps that were hit and other things worth knowing that are not failures. Examples:
 
 - `ledger: 148 requests and connections recorded in app.db.ledger.jsonl (azhaq ledger -verify app.db.ledger.jsonl)`
-- `path checks: 28 skipped (an API description was already found)`
-- `screenshot of URL not taken: the page needs about 26 requests and 8 were left (raise -max-requests)`, or `the budget was spent before the page loaded`
-- `GraphQL URL: introspection disabled: schema recovered (partial: query Query: 2 fields (1 client, 1 probe), 140 words tried; not proof there is nothing more)`, or `introspection: full schema`
-- For `subs`, the `coverage` line: see [subs](commands/subs.md#details).
+- `path checks: 28 skipped (an API description was already found)`: see [run](commands/run.md#notes-in-the-summary).
+- `screenshot of URL not taken: …`: see [shots](commands/shots.md#screenshots-and-the-budget).
+- `GraphQL URL: introspection disabled: schema recovered (…)`: see [run](commands/run.md#notes-in-the-summary).
+- For `subs`, the `coverage` line: see [subs](commands/subs.md#coverage-estimate).
 
 ### next
 
-`next` suggests a command in three cases:
-
-- A run without `-browser` whose target pages leave their links to their scripts gets `azhaq run -url ORIGIN/ -browser …`, with the page that showed it. The signs are three or more `{{templates}}` in the text, or Markdown in the text whose links are read as text, or an empty shell of a front page. The last two count only when fewer than 10 routes were found on the page's origin. Example: `(/learn/vulnerability/a1_injection and 11 more pages: Markdown its scripts turn into links; read as text here, Chrome sees the page as rendered)`.
-- A run that found a GraphQL endpoint and did not read its schema gets `azhaq run -url ORIGIN/ -graphql -allow HOST …   (/graphql and /graphiql answer like GraphQL; -graphql reads the schema by introspection)`. That is a run with no `-graphql`, or with the endpoint's host outside the scope.
-- A run without a session (`-login`, `-cookie`, `-header`) whose target site shows a sign-in form gets `azhaq run -url ORIGIN/ -login PAGE -login-user USER -login-pass PASS -allow HOST …`. A sign-in form is a form that takes a password.
+`next` suggests a command to run after this one. `run` suggests three: see [run](commands/run.md#next-in-the-summary).
 
 ## The ledger
 

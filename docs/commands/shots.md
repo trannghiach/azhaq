@@ -119,6 +119,7 @@ note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 re
 ```
 
 - The figure is how many requests the page made when it was cut short.
+- When the budget was spent before the page loaded, the note says so: `screenshot of http://127.0.0.1:3001/ not taken: the budget was spent before the page loaded (raise -max-requests)`.
 
 ## Flags
 

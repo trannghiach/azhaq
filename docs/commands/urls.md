@@ -52,7 +52,10 @@ The summary lists one row for each archive:
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). These points are specific to `urls`.
+
+- The summary has a `sources` block with a row for each archive. It reads as the one of `subs` ([The sources block](subs.md#the-sources-block)), with `urls` where `subs` has `names`.
+- It has `junk`, the URLs left out and why: see [Junk](#junk).
 
 ## Details
 
@@ -66,6 +69,19 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
   - `failed after 4 tries, 429 Too Many Requests`
   - `failed after 4 tries, dial tcp …: connection refused`
   - `…, Retry-After 2m0s; the 2m0s to wait is more than the 45s left (-urls-timeout or -timeout)`
+
+### Junk
+`urls` counts the URLs on the domains that it left out as junk, by reason. Each URL is counted once.
+
+- `"scanner payload"`: for example 3.
+- `"scanner probe"`: a scanner's own file or tag, a NUL byte (`%00`) in the path or query, or a query that is only punctuation or a dot and an extension (`?.`, `?.tst`, `?.bak`).
+- `"directory listing sort link"`.
+- `"script placeholder (NaN, undefined, null)"`.
+- `"dot segment"`.
+- `"malformed link (wildcard, quote, bracket, ellipsis)"`.
+- `"link cut at the end of its sentence"`.
+
+`counts` has the total as `dropped as junk`, and a note says it: `7 URLs dropped as junk (…; -raw keeps them)`. `-raw` prints them and drops none.
 
 ### Filters an archive cannot apply
 - `unfiltered` lists what an archive keeps none of: `status`, `type` or `date`.
