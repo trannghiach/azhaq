@@ -115,7 +115,7 @@ func cmdFuzz(args []string) error {
 	flights := &flightFlags{}
 	fs.Var(flightFile{flights, false}, "preflight", "a raw request file sent before each fuzzing request (repeatable, in order); it carries -H and -b of the command, and is held to the scope, budget and pace")
 	fs.Var(flightVar{flights, false, false}, "preflight-var", "a value read from the answer of the -preflight before it: NAME:regexp (the first group; the body, then the headers); NAME in later requests stands for it (repeatable)")
-	fs.Var(flightVar{flights, false, true}, "preflight-var-auto", "a value read from that answer by name: NAME:key tries a form field, meta tag, cookie and header, NAME:[form|meta|cookie|header]key names one (repeatable)")
+	fs.Var(flightVar{flights, false, true}, "preflight-var-auto", "a value read from that answer by name: NAME:key tries a form field, meta tag, cookie and header, NAME:form:key (or meta, cookie, header) names one (repeatable)")
 	fs.Var(flightFile{flights, true}, "postflight", "a raw request file sent after each fuzzing request that was answered (repeatable)")
 	fs.Var(flightVar{flights, true, false}, "postflight-var", "like -preflight-var, for the -postflight before it")
 	fs.Var(flightVar{flights, true, true}, "postflight-var-auto", "like -preflight-var-auto, for the -postflight before it")

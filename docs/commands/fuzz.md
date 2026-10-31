@@ -127,6 +127,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ### Preflight and postflight
 - `-preflight FILE` and `-postflight FILE` name raw request files, sent before and after each request.
 - `-preflight-var 'TOKEN:name="csrf" value="([^"]+)"'` or `-preflight-var-auto 'TOKEN:csrf'` reads a value from the answer. `TOKEN` in the request stands for it.
+  - `-preflight-var-auto` reads a form field, meta tag, cookie or header by name, whatever its quotes or attribute order. `TOKEN:form:user_token` names the source (`form`, `meta`, `cookie`, `header`; the older `TOKEN:[form]user_token` works too). Without a source, azhaq looks in all four and says so when the name is in two with different values.
 - `-preflight-mode` and `-preflight-error` set when they run and what a failed one does.
 - A cookie a flight's answer sets (`Set-Cookie`) goes with the requests after it to the same host, as a Burp macro's session does: the next flight, the fuzz request and the postflight. With `per-request` the cookies are those of that request's flights; with `per-thread` each thread keeps its own, and what its postflight sets goes on. They are merged with `-b` and a `Cookie` header: the flight's newer value wins for the same name, other names stay. A cookie the answer expires is dropped.
 - They carry your `-H` and `-b`. Each goes through the scope, the budget, the pace and the ledger.
@@ -227,7 +228,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-preflight-mode` | string | `per-request` | per-request: the preflights run before each request; per-thread: once for each thread, its values kept |
 | `-preflight-error` | string | `abort` | abort: a failed flight fails the request; ignore: it is noted and the request goes on without the flight's values |
 | `-preflight-var` | value, repeatable |  | a value read from the answer of the -preflight before it: NAME:regexp (the first group; the body, then the headers); NAME in later requests stands for it |
-| `-preflight-var-auto` | value, repeatable |  | a value read from that answer by name: NAME:key tries a form field, meta tag, cookie and header, NAME:[form\|meta\|cookie\|header]key names one |
+| `-preflight-var-auto` | value, repeatable |  | a value read from that answer by name: NAME:key tries a form field, meta tag, cookie and header, NAME:form:key (or meta, cookie, header) names one |
 | `-postflight` | value, repeatable |  | a raw request file sent after each fuzzing request that was answered |
 | `-postflight-var` | string |  | like -preflight-var, for the -postflight before it |
 | `-postflight-var-auto` | string |  | like -preflight-var-auto, for the -postflight before it |

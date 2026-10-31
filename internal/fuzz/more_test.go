@@ -422,3 +422,55 @@ func TestBodySendsAFormContentType(t *testing.T) {
 		}
 	}
 }
+
+func TestParseFlightVarSources(t *testing.T) {
+	for spec, want := range map[string][2]string{
+		"T:user_token":          {"auto", "user_token"},
+		"T:form:user_token":     {"form", "user_token"},
+		"T:meta:csrf-token":     {"meta", "csrf-token"},
+		"T:[cookie]PHPSESSID":   {"cookie", "PHPSESSID"},
+		"T:auto:x":              {"auto", "x"},
+		"T:formuser_token":      {"auto", "formuser_token"},
+		"T:ns:field":            {"auto", "ns:field"},
+		"T:header:X-CSRF-Token": {"header", "X-CSRF-Token"},
+	} {
+		v, err := ParseFlightVar(spec, true)
+		if err != nil || v.Source != want[0] || v.Key != want[1] {
+			t.Errorf("%s: %+v, %v; want source %s key %s", spec, v, err, want[0], want[1])
+		}
+	}
+	for _, spec := range []string{"T:form:", "T:[nope]x", "T:[form"} {
+		if _, err := ParseFlightVar(spec, true); err == nil {
+			t.Errorf("%s: want an error", spec)
+		}
+	}
+}
+
+// DVWA writes <input type='hidden' name='user_token' value='…' />: single
+// quotes, an attribute order of its own. Quoting and order do not matter.
+func TestFlightVarReadsAnyAttributeStyle(t *testing.T) {
+	for _, page := range []string{
+		`<input type='hidden' name='user_token' value='abc123' />`,
+		`<input value='abc123' type='hidden' name='user_token'>`,
+		`<input type=hidden name=user_token value=abc123>`,
+		`<form><input name="user_token" value="abc123"/></form>`,
+	} {
+		a := &flightAnswer{body: []byte(page), header: http.Header{}}
+		for _, spec := range []string{"T:user_token", "T:form:user_token", "T:[form]user_token"} {
+			v, err := ParseFlightVar(spec, true)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := (&flightSender{}).extract(&v, a)
+			if err != nil || got != "abc123" {
+				t.Errorf("%s on %s: %q, %v", spec, page, got, err)
+			}
+		}
+	}
+	a := &flightAnswer{body: []byte(`<input type='hidden' name='user_token' value='x'>`), header: http.Header{}}
+	v, _ := ParseFlightVar("T:formuser_token", true)
+	_, err := (&flightSender{}).extract(&v, a)
+	if err == nil || !strings.Contains(err.Error(), "write NAME:form:user_token") {
+		t.Errorf("the run-together spelling should say how to pin the source: %v", err)
+	}
+}

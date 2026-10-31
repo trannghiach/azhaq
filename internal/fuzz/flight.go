@@ -60,11 +60,13 @@ type flightRequest struct {
 }
 
 // ParseFlightVar reads "NAME:regex" (auto false) or "NAME:key" and
-// "NAME:[source]key" (auto true), splitting at the first colon.
+// "NAME:source:key" (auto true), splitting at the first colon. The source is
+// auto, form, meta, cookie or header; the older "NAME:[source]key" is read
+// too. A key that begins with a source name and no colon is a plain key.
 func ParseFlightVar(spec string, auto bool) (FlightVar, error) {
 	i := strings.IndexByte(spec, ':')
 	if i <= 0 || i == len(spec)-1 {
-		return FlightVar{}, fmt.Errorf("%q: want NAME:%s with a name and a value", spec, map[bool]string{true: "key or NAME:[form|meta|cookie|header]key", false: "regex"}[auto])
+		return FlightVar{}, fmt.Errorf("%q: want NAME:%s with a name and a value", spec, map[bool]string{true: "key or NAME:form|meta|cookie|header:key", false: "regex"}[auto])
 	}
 	v := FlightVar{Name: spec[:i]}
 	rest := spec[i+1:]
@@ -83,12 +85,14 @@ func ParseFlightVar(spec string, auto bool) (FlightVar, error) {
 	if strings.HasPrefix(rest, "[") {
 		end := strings.IndexByte(rest, ']')
 		if end < 0 {
-			return v, fmt.Errorf("%q: unterminated source, want [form|meta|cookie|header]key", spec)
+			return v, fmt.Errorf("%q: unterminated source, want NAME:form|meta|cookie|header:key", spec)
 		}
 		v.Source, v.Key = rest[1:end], rest[end+1:]
-		if !contains(VarSources, v.Source) {
+		if v.Source != "auto" && !contains(VarSources, v.Source) {
 			return v, fmt.Errorf("%q: unknown source %q, want one of %s", spec, v.Source, strings.Join(VarSources, ", "))
 		}
+	} else if src, key, ok := strings.Cut(rest, ":"); ok && (src == "auto" || contains(VarSources, src)) {
+		v.Source, v.Key = src, key
 	}
 	if v.Key == "" {
 		return v, fmt.Errorf("%q: the key is empty", spec)
@@ -629,7 +633,7 @@ func (f *flightSender) extract(v *FlightVar, a *flightAnswer) (string, error) {
 		if val, ok := a.lookup(source, v.Key); ok {
 			return val, nil
 		}
-		return "", fmt.Errorf("[%s]%s is not in the answer", source, v.Key)
+		return "", fmt.Errorf("%s:%s is not in the answer", source, v.Key)
 	}
 	var picked, val string
 	for _, s := range VarSources {
@@ -640,14 +644,25 @@ func (f *flightSender) extract(v *FlightVar, a *flightAnswer) (string, error) {
 		if picked == "" {
 			picked, val = s, x
 		} else if x != val {
-			return "", fmt.Errorf("%q is in both [%s] and [%s] with different values: pin one with NAME:[%s]%s", v.Key, picked, s, picked, v.Key)
+			return "", fmt.Errorf("%q is in both the %s and the %s with different values: pin one with NAME:%s:%s", v.Key, picked, s, picked, v.Key)
 		}
 	}
 	if picked == "" {
-		return "", fmt.Errorf("%q is in no form, meta tag, cookie or header of the answer", v.Key)
+		return "", fmt.Errorf("%q is in no form, meta tag, cookie or header of the answer%s", v.Key, sourceTypo(v.Key))
 	}
 	f.pins.Store(v, picked)
 	return val, nil
+}
+
+// sourceTypo says how to pin a source when the key begins with a source name
+// stuck to the rest ("formuser_token"); it is a lead, not a guess made for you.
+func sourceTypo(key string) string {
+	for _, s := range VarSources {
+		if rest := strings.TrimPrefix(key, s); rest != key && rest != "" {
+			return fmt.Sprintf(" (if %q is a %s, write NAME:%s:%s)", rest, s, s, rest)
+		}
+	}
+	return ""
 }
 
 func (a *flightAnswer) lookup(source, key string) (string, bool) {

@@ -242,7 +242,7 @@ A login form that checks a token refuses a request that repeats the token you co
 **You get:** one row for the password that did not answer `bad credentials`, with the status the form gives on success, such as 302. The summary says `N preflight/postflight requests were sent`: one page request for each guess, counted in the request total.
 
 - `TOKEN` stands for the value of the field `csrf_token` in the answer to `page.req`. It can sit in the body, a header or the path.
-- `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source: `form`, `meta`, `cookie` or `header`. `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp.
+- `-preflight-var-auto 'TOKEN:meta:csrf-token'` names the source: `form`, `meta`, `cookie` or `header`. `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp.
 - `-preflight-mode per-thread` asks once for each thread, for a token that lasts. `-postflight FILE` sends a request after each guess.
 - `-H 'Content-Type: …'` is not added for you: a form is read only with its content type.
 - `-fr 'bad credentials'` hides the answers that carry the form's error text. Take that text from your form.
