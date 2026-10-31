@@ -344,12 +344,30 @@ func (e *Engine) linkNames(from types.Entity, o types.Observation, now time.Time
 		return
 	}
 	var p struct {
-		Names []string `json:"names"`
+		Names   []string `json:"names"`
+		Answers []struct {
+			Name  string   `json:"name"`
+			IPs   []string `json:"ips"`
+			CNAME string   `json:"cname"`
+		} `json:"answers"`
 	}
 	if json.Unmarshal(o.Payload, &p) != nil || len(p.Names) == 0 {
 		return
 	}
 	_ = e.Store.UpsertMany(types.TypeHostname, p.Names, now, from.ID, "FOUND")
+	// A name the guesses found was answered by DNS already: keep the answer,
+	// so that a run that stops before it resolves names has its addresses.
+	for _, a := range p.Answers {
+		ent, err := e.Store.UpsertEntity(types.TypeHostname, a.Name, now)
+		if err != nil {
+			continue
+		}
+		raw, _ := json.Marshal(map[string]any{"fqdn": a.Name, "result": "ok", "ips": a.IPs, "cname": a.CNAME})
+		dns := types.Observation{Collector: o.Collector, Source: "dns", Kind: "dns", Payload: raw, Confidence: o.Confidence, ObservedAt: now}
+		if _, err := e.Store.AddObservation(ent.ID, dns); err == nil {
+			e.linkDNS(ent, dns, now)
+		}
+	}
 }
 
 func (e *Engine) linkFoundURL(from types.Entity, o types.Observation, now time.Time) {

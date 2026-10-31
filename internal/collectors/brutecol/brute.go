@@ -62,10 +62,11 @@ func (b *Brute) Run(ctx context.Context, seed types.Seed, emit func(types.Observ
 			names = append(names, n)
 		}
 	}
-	found := resolveFound(ctx, b.Pool, b.Wild, domain, names, b.Workers)
+	answers := resolveFound(ctx, b.Pool, b.Wild, domain, names, b.Workers)
+	found := nameList(answers)
 	wild := b.Wild.Zone(ctx, domain)
 	return report(ctx, emit, BruteName, domain, map[string]any{
-		"domain": domain, "names": found, "count": len(found), "tried": len(names), "wildcard_zone": wild,
+		"domain": domain, "names": found, "answers": answerList(answers), "count": len(found), "tried": len(names), "wildcard_zone": wild,
 	}, found)
 }
 
@@ -166,9 +167,10 @@ func (p *Permute) Run(ctx context.Context, seed types.Seed, emit func(types.Obse
 	if len(names) == 0 {
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
-	found := resolveFound(ctx, p.Pool, p.Wild, domain, names, p.Workers)
+	answers := resolveFound(ctx, p.Pool, p.Wild, domain, names, p.Workers)
+	found := nameList(answers)
 	meta, err := report(ctx, emit, PermuteName, host, map[string]any{
-		"fqdn": host, "names": found, "count": len(found), "tried": len(names),
+		"fqdn": host, "names": found, "answers": answerList(answers), "count": len(found), "tried": len(names),
 	}, found)
 	for _, h := range meta.NextHints {
 		h.Keys[types.ViaKey] = types.ViaPermute
@@ -259,19 +261,43 @@ func pad(n, width int) string {
 
 // resolveFound resolves names and keeps those with an address that is not
 // a wildcard answer.
-func resolveFound(ctx context.Context, pool *dnsr.Pool, wild *dnsr.Wildcards, apex string, names []string, workers int) []string {
+func resolveFound(ctx context.Context, pool *dnsr.Pool, wild *dnsr.Wildcards, apex string, names []string, workers int) []dnsr.Answer {
 	if workers <= 0 {
 		workers = 128
 	}
-	var found []string
+	var found []dnsr.Answer
 	for _, a := range pool.ResolveMany(dnsr.Bulk(ctx), names, workers) {
 		// A CNAME whose target is gone is a name that exists: the kind a
 		// takeover check wants most.
 		if (a.Live() || len(a.CNAME) > 0) && !wild.Match(ctx, a.Name, apex, a) {
-			found = append(found, a.Name)
+			found = append(found, a)
 		}
 	}
 	return found
+}
+
+func nameList(as []dnsr.Answer) []string {
+	out := make([]string, len(as))
+	for i, a := range as {
+		out[i] = a.Name
+	}
+	return out
+}
+
+// answerList is what DNS said of each name found, kept with the name: a run
+// that does not resolve the names it finds (-depth 0) still has their addresses.
+func answerList(as []dnsr.Answer) []map[string]any {
+	out := make([]map[string]any, len(as))
+	for i, a := range as {
+		out[i] = map[string]any{"name": a.Name}
+		if ips := a.IPs(); len(ips) > 0 {
+			out[i]["ips"] = ips
+		}
+		if len(a.CNAME) > 0 {
+			out[i]["cname"] = a.CNAME[0]
+		}
+	}
+	return out
 }
 
 func report(ctx context.Context, emit func(types.Observation) error, name, source string, payload map[string]any, found []string) (types.RunMeta, error) {
