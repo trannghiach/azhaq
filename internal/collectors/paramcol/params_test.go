@@ -330,3 +330,82 @@ func TestLongQueriesAreSplit(t *testing.T) {
 		t.Errorf("%v requests", n)
 	}
 }
+
+// requiredServer reports the first missing field of required, as a
+// schema validator does: a field changes nothing until those before it
+// are given. It reads them from a JSON body, a form or the query.
+func requiredServer(t *testing.T, required ...string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		have := map[string]bool{}
+		switch ct := r.Header.Get("Content-Type"); {
+		case strings.Contains(ct, "json"):
+			var m map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&m)
+			for k := range m {
+				have[k] = true
+			}
+		case r.Method == http.MethodPost:
+			_ = r.ParseForm()
+			for k := range r.PostForm {
+				have[k] = true
+			}
+		default:
+			for k := range r.URL.Query() {
+				have[k] = true
+			}
+		}
+		for _, f := range required {
+			if !have[f] {
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprintf(w, `{"status":"fail","message":"'%s' is a required property"}`, f)
+				return
+			}
+		}
+		fmt.Fprint(w, `{"status":"success","auth_token":"t"}`)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// A name that changes the answer only once the earlier required ones are
+// present is found by asking the rest again with the found names given.
+func TestFindsRequiredFieldsThatShowOneAtATime(t *testing.T) {
+	for _, m := range []string{JSON, POST, GET} {
+		t.Run(m, func(t *testing.T) {
+			fetch.Reset()
+			srv := requiredServer(t, "username", "password", "token_type")
+			words := []string{"username", "password", "email", "debug", "token_type"}
+			for i := 0; i < 40; i++ {
+				words = append(words, fmt.Sprintf("noise%d", i))
+			}
+			c := New(srv.Client(), Options{Words: words, Method: m, Writes: true, Rate: 10000})
+			got := runOn(t, c, srv.URL+"/users/v1/login")
+			params := fmt.Sprint(got["params"])
+			if params != "[password token_type username]" {
+				t.Fatalf("%s: found %v", m, got)
+			}
+			why, _ := got["why"].(map[string]any)
+			if !strings.Contains(fmt.Sprint(why["password"]), "once username was present") ||
+				!strings.Contains(fmt.Sprint(why["token_type"]), "once password and username were present") ||
+				strings.Contains(fmt.Sprint(why["username"]), "once") {
+				t.Errorf("%s: why %v", m, why)
+			}
+		})
+	}
+}
+
+// A page that reads none of the names found asks nothing more than the
+// first pass did, apart from the names found given.
+func TestNoRepeatPassWithoutFinds(t *testing.T) {
+	fetch.Reset()
+	srv := requiredServer(t)
+	c := New(srv.Client(), Options{Words: []string{"a1b2c", "d3e4f"}, Rate: 10000})
+	got := runOn(t, c, srv.URL+"/x")
+	if len(got["params"].([]any)) != 0 {
+		t.Fatalf("found %v", got)
+	}
+	if n := got["requests"].(float64); n > 12 {
+		t.Errorf("%v requests with nothing found", n)
+	}
+}

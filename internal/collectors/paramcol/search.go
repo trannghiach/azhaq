@@ -70,6 +70,10 @@ type search struct {
 	include string
 	header  []string
 	known   map[string]bool
+	// fixed are names found earlier, sent with every request of a later
+	// pass (see deepen); fixedW is what they add to a request, in bytes.
+	fixed   []pair
+	fixedW  int
 	sem     chan struct{}
 	session bool // the run or the page's own headers carry a session
 
@@ -231,10 +235,34 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 		return types.RunMeta{}, nil
 	}
 	found := map[string]string{}
-	var notes []string
+	notes := s.gather(page, chunks, found)
 	floodAt := s.floodAt
+	values := map[string]string{}
+	if floodAt == math.MaxInt && !s.halted() {
+		s.toggles(toggled, found, values)
+		notes = append(notes, s.deepen(page, names, found, values)...)
+		switch {
+		case s.ctx.Err() != nil:
+			return types.RunMeta{Status: types.StatusCancelled}, s.ctx.Err()
+		case s.spentNow():
+			return types.RunMeta{}, nil
+		}
+	}
+	s.mu.Lock()
+	bad := s.badXML
+	s.mu.Unlock()
+	if bad > 0 {
+		notes = append(notes, fmt.Sprintf("%s: %d names are not valid XML element names and were not sent", page, bad))
+	}
+	return s.give(page, emit, found, values, notes)
+}
+
+// gather adds what chunks found to found, up to the first group of a page
+// that answers any name, and says that page.
+func (s *search) gather(page string, chunks []*chunk, found map[string]string) []string {
+	var notes []string
 	for _, ck := range chunks {
-		if ck.idx > floodAt {
+		if ck.idx > s.floodAt {
 			break
 		}
 		if ck.any {
@@ -249,17 +277,118 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 			found[n] = why
 		}
 	}
-	values := map[string]string{}
-	if floodAt == math.MaxInt && !s.halted() {
-		s.toggles(toggled, found, values)
-	}
+	return notes
+}
+
+func (s *search) spentNow() bool {
 	s.mu.Lock()
-	bad := s.badXML
-	s.mu.Unlock()
-	if bad > 0 {
-		notes = append(notes, fmt.Sprintf("%s: %d names are not valid XML element names and were not sent", page, bad))
+	defer s.mu.Unlock()
+	return s.err != nil
+}
+
+// deepPasses is how often the names not found are asked again.
+const deepPasses = 3
+
+// deepen asks the names not found again with the names found so far in
+// every request, against a reference taken the same way: a required field
+// that the page reports one at a time (the first missing one) changes
+// nothing until the ones before it are given. It repeats while a pass
+// finds more, at most deepPasses times, and adds what it finds to found
+// (and values, for a toggle), with a why that says what was present.
+func (s *search) deepen(page string, names []string, found, values map[string]string) []string {
+	var notes []string
+	given := map[string]string{} // the value each found name is sent with
+	for pass := 0; pass < deepPasses && len(found) > 0 && !s.halted(); pass++ {
+		var rest []string
+		for _, n := range names {
+			if _, ok := found[n]; !ok {
+				rest = append(rest, n)
+			}
+		}
+		present := make([]string, 0, len(found))
+		for n := range found {
+			present = append(present, n)
+		}
+		sort.Strings(present)
+		prevW := s.fixedW
+		s.fixed, s.fixedW = s.fixed[:0], 0
+		for _, n := range present {
+			v := values[n]
+			if v == "" {
+				if given[n] == "" {
+					given[n] = randValue()
+				}
+				v = given[n]
+			}
+			s.fixed = append(s.fixed, pair{n, v})
+			s.fixedW += s.weight(pair{n, v})
+			s.known[n] = true
+		}
+		s.mu.Lock()
+		if s.maxBytes > 0 {
+			s.maxBytes = max(s.maxBytes-(s.fixedW-prevW), 1)
+		}
+		s.mu.Unlock()
+		s.noEcho, s.exact, s.controlled, s.skip, s.floodAt = false, false, false, "", math.MaxInt
+		if !s.calibrate(rest) {
+			if s.skip != "" && !s.halted() {
+				notes = append(notes, fmt.Sprintf("%s: names not found were not asked again with %s present: %s", page, joinNames(present), s.skip))
+			}
+			break
+		}
+		chunks := s.plan(rest)
+		var toggled []toggleAnswer
+		var tw sync.WaitGroup
+		tw.Add(1)
+		go func() {
+			defer tw.Done()
+			toggled = s.askToggles()
+		}()
+		s.searchChunks(chunks)
+		tw.Wait()
+		if s.halted() {
+			break
+		}
+		more := map[string]string{}
+		notes = append(notes, s.gather(page, chunks, more)...)
+		if s.floodAt == math.MaxInt {
+			// toggles skips what found holds: it gets both.
+			for n, why := range found {
+				more[n] = why
+			}
+			s.toggles(toggled, more, values)
+		}
+		added := 0
+		for n, why := range more {
+			if _, ok := found[n]; !ok {
+				found[n] = why + ", once " + presence(present) + " present"
+				added++
+			}
+		}
+		if added == 0 {
+			break
+		}
 	}
-	return s.give(page, emit, found, values, notes)
+	s.fixed, s.fixedW = nil, 0
+	return notes
+}
+
+// joinNames is "a", "a and b", "a, b and c"; past three, "a, b, c and 2 more".
+func joinNames(n []string) string {
+	if len(n) > 3 {
+		return fmt.Sprintf("%s and %d more", strings.Join(n[:3], ", "), len(n)-3)
+	}
+	if len(n) < 2 {
+		return strings.Join(n, "")
+	}
+	return strings.Join(n[:len(n)-1], ", ") + " and " + n[len(n)-1]
+}
+
+func presence(n []string) string {
+	if len(n) == 1 {
+		return n[0] + " was"
+	}
+	return joinNames(n) + " were"
 }
 
 // candidates are the names to try: trimmed, without repeats, without what
