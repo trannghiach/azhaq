@@ -72,7 +72,7 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
 - `-u https://h/api/` asks `https://h/api/WORD`. A query or fragment on the URL is dropped, and a note says so.
 
 ### Pace
-- `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced. At a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
+- `-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced. Calibration asks 4 guesses for each directory, and one more for each extension. At a low rate a sweep takes about (guesses ÷ rate) seconds longer than ffuf's, and stays within your rate.
 
 ## Flags
 

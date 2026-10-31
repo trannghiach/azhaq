@@ -463,7 +463,7 @@ An ffuf line works as it is. It takes the same flags, gives the same counts and 
 - `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits. `-x` sends every request through it.
 - Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target. The requests to the target do, `-ac` calibration included.
 
-**Catch:** `fuzz` calibrates only with `-ac`, as ffuf does. A line moved over gives ffuf's matches, and a catch-all answer is listed unless you ask for `-ac` or a filter. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second, see [fuzz](commands/fuzz.md#details).
+**Catch:** `fuzz` calibrates only with `-ac`, as ffuf does. A line moved over gives ffuf's matches, and a catch-all answer is listed unless you ask for `-ac` or a filter. Calibration is paced by `-rate`. The default strategy asks 6 guesses, so with `-rate 5` it takes about a second: see [fuzz](commands/fuzz.md#calibration).
 
 ### A form that wants a one-use token
 

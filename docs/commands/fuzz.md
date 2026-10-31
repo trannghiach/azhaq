@@ -135,6 +135,7 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
 - Calibration is off unless `-ac` is given. `-acs`, `-acc` and `-ach` imply it, as in ffuf, so the matches are ffuf's for the same flags.
 - It needs the keyword `FUZZ`, or the one `-ack` names, in the request. Without it a note says nothing was calibrated.
 - `-rate` paces its guesses like any request, and `-max-requests` counts them. ffuf's are unpaced and not counted.
+- The default strategy asks 6 guesses: `admin…`, `.htaccess…` and a random name, each at two lengths. At `-rate 5` they take about a second.
 - At `-rate 5` a sweep takes about (guesses ÷ 5) seconds longer than ffuf's, and stays within your rate.
 
 ### Matching and wordlists
