@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -166,12 +167,12 @@ func TestSchemaFromSuggestions(t *testing.T) {
 		for _, f := range strings.Fields(strings.Trim(strings.SplitN(q.Query, "{", 2)[1], " }")) {
 			typ, ok := have[f]
 			switch {
-			case !ok && strings.HasPrefix(f, "paste") && root == "Query":
-				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "Query". Did you mean "pastes" or "paste"?`})
-			case !ok && f == "createPost" && root == "Mutations":
-				errs = append(errs, map[string]string{"message": `Cannot query field "createPost" on type "Mutations". Did you mean "createPaste" or "deletePaste"?`})
 			case !ok:
-				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "` + root + `".`})
+				msg := `Cannot query field "` + f + `" on type "` + root + `".`
+				if near := suggest(f, have); len(near) > 0 {
+					msg += ` Did you mean "` + strings.Join(near, `" or "`) + `"?`
+				}
+				errs = append(errs, map[string]string{"message": msg})
 			case typ != "":
 				errs = append(errs, map[string]string{"message": `Field "` + f + `" of type "` + typ + `" must have a sub selection.`})
 			}
@@ -217,7 +218,7 @@ func TestSchemaRecoversClientAndDerivedWords(t *testing.T) {
 		switch r.URL.Path {
 		case "/app.js":
 			w.Header().Set("Content-Type", "application/javascript")
-			_, _ = w.Write([]byte("const Q = gql`query { vaultBalance }`;"))
+			_, _ = w.Write([]byte("const Q = gql`query { vaultBalance pastes { id } }`, M = gql`mutation { createPaste(title: $t) { id } }`;"))
 		case "/graphql":
 			var q struct{ Query string }
 			_ = json.NewDecoder(r.Body).Decode(&q)
@@ -270,16 +271,16 @@ func TestSchemaRecoversClientAndDerivedWords(t *testing.T) {
 		t.Errorf("query fields %v, want 2", qr["fields"])
 	}
 	qby, _ := qr["by"].(map[string]any)
-	if qby["client"] != float64(1) || qby["probe"] != float64(1) {
-		t.Errorf("queries by %v, want one client (vaultBalance) and one probe (pastes)", qby)
+	if qby["client"] != float64(2) {
+		t.Errorf("queries by %v, want two client (vaultBalance, pastes)", qby)
 	}
 	if n, _ := qr["words_tried"].(float64); n == 0 {
 		t.Error("words_tried is 0")
 	}
 	mr, _ := recovery["mutations"].(map[string]any)
 	mby, _ := mr["by"].(map[string]any)
-	if mby["probe"] != float64(2) {
-		t.Errorf("mutations by %v, want two probe (createPaste, deleteAllPastes)", mby)
+	if mby["client"] != float64(1) || mby["probe"] != float64(1) {
+		t.Errorf("mutations by %v, want one client (createPaste) and one derived from Query's pastes (deleteAllPastes)", mby)
 	}
 }
 
@@ -300,4 +301,49 @@ func TestGETQueries(t *testing.T) {
 	if got["get_queries"] != true {
 		t.Errorf("row %v", got)
 	}
+}
+
+// suggest names the fields a graphql-js server offers for an unknown one:
+// those within floor(len*0.4)+1 edits, a case-only difference counting 1.
+func suggest(f string, have map[string]string) []string {
+	var out []string
+	for name := range have {
+		if d := lexical(f, name); d <= len(f)*4/10+1 {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// lexical is graphql-js's lexicalDistance (optimal string alignment).
+func lexical(a, b string) int {
+	if a == b {
+		return 0
+	}
+	a, b = strings.ToLower(a), strings.ToLower(b)
+	if a == b {
+		return 1
+	}
+	d := make([][]int, len(a)+1)
+	for i := range d {
+		d[i] = make([]int, len(b)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
+			}
+		}
+	}
+	return d[len(a)][len(b)]
 }

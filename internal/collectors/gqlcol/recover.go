@@ -57,12 +57,11 @@ me viewer node nodes user users currentUser account accounts profile profiles ad
 login logout signin signup register authenticate auth token tokens refreshToken session sessions
 createUser updateUser deleteUser editUser removeUser addUser resetPassword changePassword forgotPassword
 post posts createPost updatePost deletePost comment comments createComment deleteComment
-paste pastes createPaste editPaste deletePaste uploadPaste importPaste
 product products order orders cart carts basket item items checkout payment payments invoice invoices
 file files upload uploadFile download document documents image images media
 search find lookup query list all
 setting settings config configuration preferences flags featureFlags
-health systemHealth status version info debug systemDiagnostics systemUpdate diagnostics metrics logs auditLogs audit
+health status version info debug system diagnostics metrics logs auditLogs audit
 message messages notification notifications event events task tasks job jobs report reports
 organization organizations org orgs team teams group groups member members role roles permission permissions
 project projects repository repositories issue issues ticket tickets customer customers employee employees
@@ -79,7 +78,7 @@ var (
 	deriveVerbs = strings.Fields(`get list all create update delete remove add edit change
 		import export upload download reset find search save send invite accept reject approve run`)
 	deriveNouns = strings.Fields(`user users account accounts session sessions token tokens
-		paste pastes post posts comment comments file files order orders item items product products
+		post posts comment comments file files order orders item items product products
 		message messages notification notifications event events task tasks job jobs report reports
 		log logs setting settings system health diagnostics metric metrics audit
 		key keys secret secrets role roles permission permissions`)
@@ -188,8 +187,9 @@ type recField struct {
 // the server has; nil when it does not answer like a validating GraphQL
 // server. clientWords are field, argument and type names the map found in
 // the endpoint's own HTML and scripts; extra is the user's
-// -graphql-wordlist, added to the built-in wordlist and the derive pool.
-func (s *Schema) recoverType(ctx context.Context, raw, op string, clientWords, extra []string) (*recoveredType, error) {
+// -graphql-wordlist, added to the built-in wordlist and the derive pool;
+// seen are the fields recovered for the other root types.
+func (s *Schema) recoverType(ctx context.Context, raw, op string, clientWords, extra, seen []string) (*recoveredType, error) {
 	rt := &recoveredType{fields: map[string]*recField{}, how: map[string]string{}}
 	tried := map[string]bool{}
 	queuedOnce := map[string]bool{}
@@ -220,7 +220,9 @@ func (s *Schema) recoverType(ctx context.Context, raw, op string, clientWords, e
 			}
 			deriveRounds++
 			added := 0
-			for _, w := range deriveWords(rt.names(), extra) {
+			// Parts of names known anywhere (the other root types, the client's
+			// code) name fields here too: pastes in Query, deleteAllPastes in Mutation.
+			for _, w := range deriveWords(append(append(rt.names(), seen...), clientWords...), extra) {
 				if !queuedOnce[w] {
 					push(w, "probe")
 					added++

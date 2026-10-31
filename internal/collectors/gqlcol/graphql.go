@@ -196,14 +196,14 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 // from the server's validation errors, when introspection gave nothing.
 func (s *Schema) recoverSchema(ctx context.Context, raw string, status int, emit func(types.Observation) error) (types.RunMeta, error) {
 	clientWords := harvestClientWords(raw)
-	q, err := s.recoverType(ctx, raw, "query", clientWords, s.Wordlist)
+	q, err := s.recoverType(ctx, raw, "query", clientWords, s.Wordlist, nil)
 	if err != nil {
 		return failed(err)
 	}
 	if q == nil {
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
-	m, err := s.recoverType(ctx, raw, "mutation", clientWords, s.Wordlist)
+	m, err := s.recoverType(ctx, raw, "mutation", clientWords, s.Wordlist, q.names())
 	if err != nil {
 		return failed(err)
 	}
