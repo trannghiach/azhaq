@@ -240,8 +240,9 @@ func cmdSubs(args []string) error {
 	private := map[string]bool{}
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
-	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot, itself, notAsked int
+	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot, itself, notAsked, noAnswer int
 	var answers map[string]map[string]any // every name DNS was asked: a name missing was not
+	noAnswerBy := map[[2]string]int{}
 	health := newHealthTally(false)
 	var procMu sync.Mutex
 	processed := map[string]bool{}
@@ -335,6 +336,10 @@ func cmdSubs(args []string) error {
 					notChecked++
 				case ans == nil:
 					notAsked++ // the run stopped before its answer came
+				case ans["degraded"] == true:
+					noAnswer++
+					resolver, why := dnsAnswerText(ans)
+					noAnswerBy[[2]string{resolver, why}]++
 				default:
 					didNot++
 				}
@@ -505,6 +510,7 @@ func cmdSubs(args []string) error {
 	}
 	set("CNAME without an address", danglingN)
 	set("not checked", notChecked)
+	set("no answer", noAnswer)
 	set("not asked", notAsked)
 	set("unverified", unverified)
 	set("left out by -m/-f", filtered+guessFiltered)
@@ -519,6 +525,10 @@ func cmdSubs(args []string) error {
 	}
 	if notChecked > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names could not be checked (the resolvers failed) and are left out; azhaq resume checks them", notChecked))
+		rep.warned = true
+	}
+	if noAnswer > 0 {
+		rep.Notes = append(rep.Notes, dnsAnswerNote(noAnswerBy)+": those names are left out, neither live nor dead; ask again with other -resolvers or a lower -dns-rate")
 		rep.warned = true
 	}
 	if notAsked > 0 {
@@ -557,6 +567,7 @@ func nameSum(c map[string]int, results int, filtering bool) string {
 	minus("did not resolve", "did not resolve")
 	minus("CNAME without an address", "CNAME without an address")
 	minus("not checked", "not checked")
+	minus("no answer", "no answer from the resolvers")
 	minus("not asked", "not asked before the run stopped")
 	minus("left out by -m/-f", "left out by -m/-f")
 	minus("listed under another domain", "listed under another domain")

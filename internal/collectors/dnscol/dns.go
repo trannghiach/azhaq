@@ -147,6 +147,9 @@ func (c *Collector) describe(ctx context.Context, host string, a dnsr.Answer, pa
 	case dnsr.StatusFailed:
 		payload["error"] = a.Err
 		payload["degraded"] = true // a resolver problem, not an answer
+		if a.Resolver != "" {
+			payload["resolver"] = a.Resolver
+		}
 	case dnsr.StatusNXDomain:
 		payload["error"] = "nxdomain"
 		meta.Drop = true

@@ -52,6 +52,25 @@ const (
 // more.
 var errBroken = errors.New("SERVFAIL from every resolver asked")
 
+// queryError is the last resolver's failure, naming it; its text is the
+// failure's own.
+type queryError struct {
+	server string
+	err    error
+}
+
+func (e *queryError) Error() string { return e.err.Error() }
+func (e *queryError) Unwrap() error { return e.err }
+
+// FailedResolver names the resolver whose failure err is, or "".
+func FailedResolver(err error) string {
+	var q *queryError
+	if errors.As(err, &q) {
+		return q.server
+	}
+	return ""
+}
+
 // IsBroken says whether err is the SERVFAIL of every attempt, by two
 // resolvers or more: the name's own DNS is broken, for everyone.
 func IsBroken(err error) bool { return errors.Is(err, errBroken) }
@@ -64,6 +83,9 @@ type Answer struct {
 	CNAME  []string // the chain, first hop first
 	Status string
 	Err    string
+	// Resolver is the one that failed last, when Status is failed: the
+	// resolver a reader looks at (a timeout, a REFUSED for this machine).
+	Resolver string
 }
 
 // Live is true when the name has an address.
@@ -335,6 +357,10 @@ func (p *Pool) ResolveBoth(ctx context.Context, name string) Answer {
 	return a
 }
 
+// minForPass is how many names a batch needs before a mostly failed first
+// pass is taken for dead resolvers.
+const minForPass = 16
+
 // ResolveMany resolves names with up to workers queries in flight and
 // returns answers in the same order. Names whose every attempt failed
 // (timeouts, SERVFAIL under load) get a second pass at a quarter of the
@@ -348,10 +374,17 @@ func (p *Pool) ResolveMany(ctx context.Context, names []string, workers int) []A
 	var at []int
 	for i, a := range out {
 		if (a.Status == StatusFailed || a.Status == StatusBroken) && ctx.Err() == nil {
-			p.forget(a.Name)
 			again = append(again, names[i])
 			at = append(at, i)
 		}
+	}
+	// When most names failed the resolvers are down, not loaded: a second
+	// pass at a quarter of the speed would cost minutes and fail alike.
+	if len(names) >= minForPass && len(again)*2 > len(names) {
+		again, at = nil, nil
+	}
+	for _, n := range again {
+		p.forget(n)
 	}
 	if len(again) > 0 {
 		for j, a := range p.resolveMany(ctx, again, max(workers/4, 4)) {
@@ -408,7 +441,7 @@ func (p *Pool) resolve(ctx context.Context, name string) Answer {
 	q := question(name, dns.TypeA)
 	m, from, err := p.query(ctx, q, "")
 	if err != nil {
-		a.Status, a.Err = StatusFailed, err.Error()
+		a.Status, a.Err, a.Resolver = StatusFailed, err.Error(), FailedResolver(err)
 		if errors.Is(err, errBroken) {
 			a.Status = StatusBroken
 		}
@@ -529,6 +562,7 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 		return nil, "", errors.New("no resolvers")
 	}
 	var last error
+	var lastServer string
 	var lastMsg *dns.Msg         // the last SERVFAIL or REFUSED, returned with the error
 	servfail := map[string]int{} // resolver → attempts it answered SERVFAIL
 	for attempt := 0; attempt <= p.retries; attempt++ {
@@ -541,14 +575,14 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 			h.note(err != nil)
 		}
 		if err != nil {
-			last = err
+			last, lastServer = err, server
 			continue
 		}
 		if in.Rcode == dns.RcodeServerFailure || in.Rcode == dns.RcodeRefused {
 			if in.Rcode == dns.RcodeServerFailure {
 				servfail[server]++
 			}
-			last, lastMsg = errors.New(server+": "+dns.RcodeToString[in.Rcode]), in
+			last, lastMsg, lastServer = errors.New(server+": "+dns.RcodeToString[in.Rcode]), in, server
 			continue
 		}
 		return in, server, nil
@@ -559,6 +593,9 @@ func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, s
 	}
 	if n == p.retries+1 && len(servfail) >= 2 {
 		return lastMsg, "", fmt.Errorf("%w (last %v)", errBroken, last)
+	}
+	if last != nil && lastServer != "" {
+		last = &queryError{server: lastServer, err: last}
 	}
 	return lastMsg, "", last
 }

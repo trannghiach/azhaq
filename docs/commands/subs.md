@@ -70,7 +70,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 - The summary has `degraded` when `sources failed` is above 0.
 - Names past `-max-names` are left out, and the run ends with exit 3.
-- With `-live`, names the resolvers failed on are left out as `not checked`. The run says so, and `azhaq resume` checks them.
+- With `-live`, names every resolver failed on (a timeout, a REFUSED) are left out as `no answer`, and the run ends with exit 3. A note names the resolver, how many names and why: `no answer from 8.8.8.8 for 512 names (timed out)`. They are not counted as `did not resolve`: the name may well exist.
 - A signal (Ctrl-C, SIGTERM, SIGHUP) or `-timeout` while names wait for DNS stops the run: exit 4, `complete` false, `stopped` says why. The names DNS had not answered are counted as `not asked`, and `azhaq resume` asks them.
 - A source that answered 200 with an error and gave no names is a failed source: see [Failed sources](#failed-sources).
 - `subs` ends with a `coverage:` note: see [Coverage estimate](#coverage-estimate).
@@ -130,7 +130,8 @@ The counts also say what became of the names, so a reader can add them up:
 | `found as CNAME targets`, `found by guessing` | Live names no source gave: another name's CNAME target in scope, and the names of `-w` and `-permute`. |
 | `asked by guessing` | The names `-w` and `-permute` asked that no source gave. `found by guessing` is what is left of them after `did not resolve` and `left out by -m/-f`. |
 | `unverified` | Printed names no DNS lookup checked, without `-live`: names only subdomain.center guessed, and names only the name history held, which no source gave this run. |
-| `not checked` | With `-live`: names the resolvers failed on, left out. The run says so and `azhaq resume` checks them. |
+| `not checked` | With `-live`: guessed or history names the resolvers failed on, or the run ended before it checked, left out. `azhaq resume` checks them. |
+| `no answer` | With `-live`: names every resolver failed on, left out. A note says which resolver and why. The run ends with exit 3. |
 | `not asked` | With `-live`: names the run stopped before DNS answered them. `azhaq resume` asks them. |
 | `left out by -m/-f` | Names a `-m`, `-f`, `-match-regex` or `-filter-regex` removed. |
 | `listed under another domain` | A name under two of the domains given, printed once. |
@@ -141,7 +142,7 @@ The counts also say what became of the names, so a reader can add them up:
 
 The number of results is `from sources`, less some counts and plus others:
 
-- Less: `the domain itself`, `did not resolve`, `CNAME without an address`, `not checked`, `not asked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`.
+- Less: `the domain itself`, `did not resolve`, `CNAME without an address`, `not checked`, `no answer`, `not asked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`.
 - Plus: `found as CNAME targets` and `asked by guessing` (the guesses that did not resolve are in `did not resolve`).
 
 The run prints the sum as a note:

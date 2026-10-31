@@ -420,6 +420,45 @@ func dnsAnswers(st *store.Store) map[string]map[string]any {
 	return out
 }
 
+// dnsAnswerText is how a failed lookup reads in a note: the resolver that
+// failed and the reason, short.
+func dnsAnswerText(p map[string]any) (resolver, reason string) {
+	resolver, _ = p["resolver"].(string)
+	resolver = strings.TrimSuffix(resolver, ":53")
+	msg, _ := p["error"].(string)
+	switch {
+	case strings.Contains(msg, "timeout"), strings.Contains(msg, "deadline exceeded"):
+		reason = "timed out"
+	case strings.Contains(msg, "REFUSED"):
+		reason = "refused"
+	case strings.Contains(msg, "SERVFAIL"):
+		reason = "SERVFAIL"
+	default:
+		reason = msg
+	}
+	return resolver, reason
+}
+
+// dnsAnswerNote sums up the lookups that got no answer: how many names,
+// from which resolver, and why.
+func dnsAnswerNote(failed map[[2]string]int) string {
+	keys := slices.SortedFunc(maps.Keys(failed), func(a, b [2]string) int {
+		if failed[a] != failed[b] {
+			return failed[b] - failed[a]
+		}
+		return strings.Compare(a[0]+a[1], b[0]+b[1])
+	})
+	var parts []string
+	for _, k := range keys {
+		who := k[0]
+		if who == "" {
+			who = "the resolvers"
+		}
+		parts = append(parts, fmt.Sprintf("%s for %d names (%s)", who, failed[k], k[1]))
+	}
+	return "no answer from " + strings.Join(parts, ", ")
+}
+
 // dnsFields puts a live name's answer on its row with dnsx's names: the
 // IPv4 addresses in a, the IPv6 ones in aaaa, the CNAME chain in cname,
 // and the CDN or WAF in front.

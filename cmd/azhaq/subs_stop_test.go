@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
@@ -12,8 +13,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/miekg/dns"
+
 	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 )
+
+// refusingServer answers every query REFUSED, as a resolver does that will
+// not serve this machine; it returns the function that stops it.
+func refusingServer(pc net.PacketConn) (stop func()) {
+	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		m := new(dns.Msg)
+		m.SetRcode(r, dns.RcodeRefused)
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = srv.ActivateAndServe() }()
+	return func() { _ = srv.Shutdown() }
+}
 
 // silentResolver is a UDP resolver that reads every query and never answers;
 // asked counts them.
@@ -98,5 +113,39 @@ func TestSubsTimeoutDuringDNSIsAStop(t *testing.T) {
 	}
 	if rep.Counts["did not resolve"] != 0 || rep.Counts["not asked"] != 2 {
 		t.Errorf("counts %v", rep.Counts)
+	}
+}
+
+// A resolver that refuses every name is a failure to be seen: the names are
+// not "did not resolve", and the summary says which resolver and why.
+func TestSubsLiveSaysWhenTheResolversGaveNoAnswer(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("no UDP: %v", err)
+	}
+	srv := refusingServer(pc)
+	defer srv()
+	t.Chdir(t.TempDir())
+	defer subcol.UseTestSources(subcol.TestSource{Name: "s", Default: true, Names: []string{"a.example.org", "b.example.org", "c.example.org"}})()
+	path := filepath.Join(t.TempDir(), "r.txt")
+	if err := os.WriteFile(path, []byte(pc.LocalAddr().String()+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, rep, code := runContract(t, "subs", "-d", "example.org", "-live", "-resolvers", path, "-no-history")
+	if rep.Counts["did not resolve"] != 0 || rep.Counts["no answer"] != 3 {
+		t.Errorf("counts %v", rep.Counts)
+	}
+	if code != exitPartial {
+		t.Errorf("exit %d, want %d", code, exitPartial)
+	}
+	want := "no answer from " + pc.LocalAddr().String()
+	found := false
+	for _, n := range rep.Notes {
+		if strings.Contains(n, "no answer from") && strings.Contains(n, "for 3 names (refused)") && strings.Contains(n, strings.TrimSuffix(want, ":0")) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("no note naming the resolver and the refusal in %q", rep.Notes)
 	}
 }
