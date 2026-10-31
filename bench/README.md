@@ -55,7 +55,7 @@ Downloaded to `bench/.work/bin` and verified against pinned SHA-256 sums (`bench
 | arjun | 2.2.7 | query parameters (GPL-3.0; installed with pip in a virtual environment and run as a separate program) |
 | gowitness | 3.2.2 | screenshots (GPL-3.0; run as a separate program) |
 | nmap | 7.94 | `-sV` service and version detection on the services lab (NPSL; run as a separate program; extracted from the Ubuntu .debs with `dpkg -x`, no sudo; `-nmap` names a script that runs it) |
-| notify | 1.0.7 | notifications to a local stub (`go install`, MIT) |
+| notify | 1.0.7 | notifications to a local stub (built with `go install` by the bench, like jsluice; MIT) |
 
 Wordlists come from SecLists (MIT) at a pinned commit and are checked against their SHA-256 sums: `subdomains-top1million-5000.txt` for DNS brute force, `common.txt` for paths, `burp-parameter-names.txt` for parameters.
 

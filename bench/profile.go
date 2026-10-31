@@ -185,6 +185,12 @@ func helpHas(cmd, flag string) bool {
 // a reviewer can run them again; note anything else the record should keep,
 // the old 95% share among it.
 func barOne(name string, az, rf int, azT, rfT float64, evidence, cmds, note string) {
+	if why, gone := refGone[vsTool(cmds)]; gone {
+		// 0.0 s and no results are no reference to be within 5% of.
+		addCheck(name+": results ≥ the reference's, confirmed by "+evidence, false, "the reference did not run: %s | %s", why, cmds)
+		addCheck(name+": time ≤ 1.05× the reference's", false, "the reference did not run: %s; there is no time to compare | %s", why, cmds)
+		return
+	}
 	if note != "" {
 		note = "; " + note
 	}
@@ -194,6 +200,26 @@ func barOne(name string, az, rf int, azT, rfT float64, evidence, cmds, note stri
 	failed := strings.Contains(note, "[azhaq: ")
 	addCheck(name+": time ≤ 1.05× the reference's", azT <= rfT*1.05 && !failed,
 		"azhaq %.1fs, reference %.1fs (%s)%s | %s", azT, rfT, "the median of 3 below 20 s, one run above", pick("", "")+failedNote(failed), cmds)
+}
+
+// refGone holds the reference tools that did not run, by name, with why: a
+// tool that could not start, or one that sent what the check looks for
+// nowhere. barOne fails a comparison against one.
+var refGone = map[string]string{}
+
+func markGone(tool, why string) { refGone[tool] = clip(why, 200) }
+
+// vsTool is the tool after " vs " in a comparison's commands.
+func vsTool(cmds string) string {
+	_, after, ok := strings.Cut(cmds, " vs ")
+	if !ok {
+		return ""
+	}
+	f := strings.Fields(after)
+	if len(f) == 0 {
+		return ""
+	}
+	return filepath.Base(f[0])
 }
 
 // share is the old bar, kept in the record: the part of the reference's

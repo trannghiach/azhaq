@@ -148,6 +148,14 @@ func benchNotify() *notifyRow {
 	_, nm := timedArgs("notify", 10*time.Minute, dir, ref("notify"), func(int) []string { return na })
 	row.NotifySecs = nm.Seconds
 	row.NotifyOK, nBodies = count("/notify")
+	if row.NotifyOK == 0 && refGone["notify"] == "" {
+		// Started and sent nothing to the stub: no reference to compare with.
+		why := "it sent nothing to the stub"
+		if nm.Error != "" {
+			why += " (" + nm.Error + ")"
+		}
+		markGone("notify", why)
+	}
 	// The first run of each is what the stub holds (the repetitions send again).
 	azBodies, nBodies = uniq(azBodies), uniq(nBodies)
 	row.SameBodies = len(azBodies) > 0 && strings.Join(azBodies, "\n") == strings.Join(nBodies, "\n")
@@ -155,8 +163,11 @@ func benchNotify() *notifyRow {
 	barOne("notify", row.AzhaqOK, row.NotifyOK, row.AzhaqSecs, row.NotifySecs, "the stub's own log (a request with the message in its body, per provider)", cmds,
 		fmt.Sprintf("%d messages to 2 providers; distinct requests at the stub: azhaq %d, notify %d %s", row.Messages, len(azBodies), len(nBodies), azErr(am)))
 	if !polite() {
-		addCheck("notify: the same requests as notify's (bodies and content types), per the stub", row.SameBodies,
-			"azhaq %s | notify %s", clip(strings.Join(azBodies, " ; "), 300), clip(strings.Join(nBodies, " ; "), 300))
+		detail := fmt.Sprintf("azhaq %s | notify %s", clip(strings.Join(azBodies, " ; "), 300), clip(strings.Join(nBodies, " ; "), 300))
+		if why := refGone["notify"]; why != "" {
+			detail = "the reference did not run: " + why
+		}
+		addCheck("notify: the same requests as notify's (bodies and content types), per the stub", row.SameBodies, "%s", detail)
 		row.TokenLeak = tokenLeak(dir)
 	}
 	return row
