@@ -909,6 +909,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			Type: types.TypeURL, Keys: map[string]string{"url": src},
 		})
 	}
+	// Strings with a complete query (/catalog?category=Gin) are pages of
+	// their own, each a row and asked like a link of the page; the route's
+	// row keeps the names.
+	variants := map[string][]string{}
+	variantSeen := map[string]bool{}
+	for _, l := range found {
+		if completeQuery(l) && !variantSeen[l] {
+			variantSeen[l] = true
+			k := webextract.RouteKey(l)
+			variants[k] = append(variants[k], l)
+		}
+	}
 	for _, link := range webextract.CollapseURLs(found) {
 		if meta.EmitCount >= maxEmit {
 			break
@@ -950,8 +962,49 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				Keys: map[string]string{"url": webextract.RouteKey(link)},
 			})
 		}
+		for _, v := range variants[webextract.RouteKey(link)] {
+			if meta.EmitCount >= maxEmit {
+				break
+			}
+			row := map[string]any{"url": v, "via": "js", "role": role}
+			if at := named[webextract.RouteKey(v)]; len(at) > 0 {
+				row["found_in"] = at
+				setFrom(row, raw, at)
+			}
+			if err := emitRow(row, 0.7); err != nil {
+				return meta, err
+			}
+			if webextract.Hintable(v) {
+				meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": v}})
+			}
+		}
 	}
 	return meta, nil
+}
+
+// completeQuery says whether a URL's query holds a value for every name
+// (?category=Gin): one with an empty value (?current=) is the start of a
+// URL the app finishes at run time.
+func completeQuery(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.RawQuery == "" {
+		return false
+	}
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil || len(q) == 0 {
+		return false
+	}
+	for k, vs := range q {
+		if k == "" {
+			return false
+		}
+		for _, v := range vs {
+			if v == "" || strings.ContainsAny(v, "{}[]$`") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // markupCand judges a URL read from markup inside a script. A browser

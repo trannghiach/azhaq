@@ -125,3 +125,26 @@ func TestMapOpsOnce(t *testing.T) {
 		t.Errorf("rows %+v", rows)
 	}
 }
+
+// A template row says how many of its URLs were found and not asked.
+func TestGroupTemplatesCountsTheUrlsNotAsked(t *testing.T) {
+	ents := []types.Entity{{ID: "root", Type: types.TypeURL, Key: "https://shop.test/"}}
+	obs := []types.StoredObservation{httpObs("root", `{"status":200,"url":"https://shop.test/"}`)}
+	for _, id := range []string{"1", "2", "3", "4", "5"} {
+		key := "https://shop.test/item?id=" + id
+		ents = append(ents, types.Entity{ID: id, Type: types.TypeURL, Key: key})
+		if id <= "2" {
+			obs = append(obs, httpObs(id, `{"status":200,"url":"`+key+`"}`))
+		}
+	}
+	seeds := []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": "https://shop.test/"}}}
+	var row engine.MapEntry
+	for _, r := range engine.GroupTemplates(engine.BuildMap(ents, seeds, obs, nil, false)) {
+		if r.Template != "" {
+			row = r
+		}
+	}
+	if row.Count != 5 || row.NotAsked != 3 || !strings.Contains(row.Line(), "(5 urls, 3 not asked)") {
+		t.Errorf("%d urls, %d not asked: %s", row.Count, row.NotAsked, row.Line())
+	}
+}
