@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -537,5 +538,38 @@ func TestProbePathJoinsTheURLsPathAndKeepsItsQuery(t *testing.T) {
 	got = ask(site.URL+"/", "/api")
 	if fmt.Sprint(got) != "[GET /api]" {
 		t.Errorf("root URL: %v", got)
+	}
+}
+
+// forwardProxy is an HTTP proxy that sends every request to target.
+func forwardProxy(t *testing.T, target string) string {
+	t.Helper()
+	srv := httptest.NewServer(&httputil.ReverseProxy{Director: func(r *http.Request) {
+		r.URL.Scheme, r.URL.Host = "http", target
+	}})
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// A literal IP is its own host_ip and a, as httpx prints it, whether the
+// request is made directly or through a proxy (no connection to the target
+// is seen, so there is no remote address to read).
+func TestProbeLiteralIPFillsTheAddressFields(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := newProbeSite(t)
+	addr := strings.TrimPrefix(site.URL, "http://")
+	ip, _, _ := net.SplitHostPort(addr)
+	for name, extra := range map[string][]string{
+		"direct": nil,
+		"proxy":  {"-proxy", forwardProxy(t, addr)},
+	} {
+		out, _, code := runContract(t, append([]string{"probe", "-u", site.URL + "/api", "-ip"}, extra...)...)
+		rows := probeRows(t, out)
+		if code != exitOK || len(rows) != 1 {
+			t.Fatalf("%s: exit %d, %s", name, code, out)
+		}
+		if rows[0]["host_ip"] != ip || fmt.Sprint(rows[0]["a"]) != "["+ip+"]" {
+			t.Errorf("%s: host_ip %v, a %v, want %s", name, rows[0]["host_ip"], rows[0]["a"], ip)
+		}
 	}
 }

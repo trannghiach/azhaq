@@ -51,7 +51,7 @@ Always present:
 | --- | --- |
 | `input` | The target as given. |
 | `host` | The name. |
-| `host_ip` | The address the request connected to. |
+| `host_ip` | The address the request connected to. Through a proxy no connection to the target is seen, so it is the literal IP given, or the first address the name resolves to. |
 | `time` | How long the request took, as a Go duration. |
 | `timestamp`, `url`, `port`, `scheme`, `path`, `method`, `status_code`, `content_length`, `words`, `lines`, `failed` | As httpx. |
 

@@ -204,6 +204,15 @@ func (p *probeOut) row(r engine.ProbeRow, m map[string]any, input string, addrs,
 	if input == "" {
 		input = host
 	}
+	// Through a proxy no connection reaches the target, so no remote address
+	// is known: a literal IP is its own, a name's is the one it resolves to.
+	if r.IP == "" {
+		if net.ParseIP(host) != nil {
+			r.IP = host
+		} else if len(addrs) > 0 {
+			r.IP = addrs[0]
+		}
+	}
 	if len(addrs) == 0 && r.IP != "" {
 		addrs = []string{r.IP}
 	}
