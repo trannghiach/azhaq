@@ -282,6 +282,47 @@ func TestReadGauConfig(t *testing.T) {
 	}
 }
 
+// The probes a scanner leaves beside a clean URL in an archive (?., ?.tst,
+// ?%00) are dropped as junk and counted; a query with a name and value, or a
+// dotted value, stays. -raw keeps them all.
+func TestURLsDropsScannerProbeVariants(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"has_next":false,"url_list":[`+
+			`{"url":"http://example.org/t/fit.txt"},`+
+			`{"url":"http://example.org/t/fit.txt?."},`+
+			`{"url":"http://example.org/t/fit.txt?.tst"},`+
+			`{"url":"http://example.org/t/fit.txt?%00"},`+
+			`{"url":"http://example.org/p?v=1.2"},`+
+			`{"url":"http://example.org/q?id=3"}]}`)
+	}))
+	defer srv.Close()
+	args := []string{"-d", "example.org", "-providers", "otx", "-urls-pause", "0", "-archive", "otx=" + srv.URL}
+	got, _, err := urlsRun(t, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(got)
+	if want := []string{"http://example.org/p?v=1.2", "http://example.org/q?id=3", "http://example.org/t/fit.txt"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("urls %v, want %v", got, want)
+	}
+	_, errOut, err := urlsRun(t, append(args, "-json")...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := lastReport(t, errOut)
+	if want := map[string]int{"scanner probe": 3}; !reflect.DeepEqual(rep.Junk, want) || rep.Counts["dropped as junk"] != 3 {
+		t.Errorf("junk %v counts %v", rep.Junk, rep.Counts)
+	}
+	_, errOut, err = urlsRun(t, args...)
+	if err != nil || !strings.Contains(errOut, "3 URLs dropped as junk (3 scanner probe; -raw keeps them)") {
+		t.Errorf("%v\n%s", err, errOut)
+	}
+	raw, _, err := urlsRun(t, append(args, "-raw")...)
+	if err != nil || len(raw) != 6 {
+		t.Errorf("-raw: %d lines %v", len(raw), err)
+	}
+}
+
 // A page cap that cut an archive short is a note, and exit 4 when asked.
 func TestURLsPageCapIsSaid(t *testing.T) {
 	flags, _ := archiveMirror(t)

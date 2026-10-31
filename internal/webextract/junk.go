@@ -3,6 +3,7 @@ package webextract
 import (
 	"net/url"
 	"strings"
+	"unicode"
 )
 
 // payloadMarks are what scanners send and archives keep: path traversal,
@@ -35,6 +36,25 @@ var scannerMarks = lazyRE(`(?i)` + strings.Join([]string{
 	`(?:appscan|nessus|qualys|webinspect)(?:[_(]|test\b|\.txt)`,
 }, "|"))
 
+// dotProbe is a query that is a file extension and nothing else: ?.tst,
+// ?.bak, the variants a scanner asks to see whether the server ignores
+// the query.
+var dotProbe = lazyRE(`^\.[A-Za-z0-9]{1,10}$`)
+
+// probeQuery reports a query no page was given: only punctuation (?.) or
+// only a dot and an extension (?.tst), and no name or value. ?v=1.2 and
+// ?1.2 are not.
+func probeQuery(raw string) bool {
+	if raw == "" {
+		return false
+	}
+	q := raw
+	if d, err := url.QueryUnescape(raw); err == nil {
+		q = d
+	}
+	return dotProbe.MatchString(q) || strings.IndexFunc(q, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) < 0
+}
+
 // randomExe is an executable at the root named by a scanner's random
 // token: /7zSo1DIz.exe. Letters and digits, 6 to 10 of them, and nothing
 // else in the path.
@@ -42,7 +62,8 @@ var randomExe = lazyRE(`^/([A-Za-z0-9]{6,10})\.(?:exe|dll|scr)$`)
 
 // Payload reports a URL that carries a scanner's payload in its path or
 // query (see payloadMarks), or a scanner's own name or random file
-// (scannerMarks, randomExe).
+// (scannerMarks, randomExe), a NUL byte (%00) in its path or query, or a
+// query that is only punctuation or a dot and an extension (probeQuery).
 func Payload(raw string) bool { return payloadKind(raw) != "" }
 
 // payloadKind is JunkPayload, JunkScanner or "".
@@ -63,7 +84,7 @@ func payloadKind(raw string) string {
 	if payloadMarks.MatchString(low) {
 		return JunkPayload
 	}
-	if scannerMarks.MatchString(low) {
+	if scannerMarks.MatchString(low) || strings.Contains(low, "\x00") || strings.Contains(low, "%00") || probeQuery(u.RawQuery) {
 		return JunkScanner
 	}
 	if m := randomExe.FindStringSubmatch(u.Path); m != nil && randomToken(m[1]) {

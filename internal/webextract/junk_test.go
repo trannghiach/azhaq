@@ -195,3 +195,54 @@ func TestJunkReason(t *testing.T) {
 		}
 	}
 }
+
+// A query no page was given, and a NUL byte, are a scanner's probes: the
+// archive keeps them beside the clean URL. A query with a name and value, a
+// dotted value or a bare word stays.
+func TestJunkURLScannerProbeQueries(t *testing.T) {
+	for _, raw := range []string{
+		"http://testasp.vulnweb.com/t/fit.txt?.",
+		"http://testasp.vulnweb.com/t/fit.txt?.tst",
+		"http://testasp.vulnweb.com/t/fit.txt?.bak",
+		"http://testasp.vulnweb.com/t/fit.txt?.old",
+		"http://testasp.vulnweb.com/t/fit.txt?%00",
+		"http://testasp.vulnweb.com/t/fit.txt%00.php",
+		"http://testasp.vulnweb.com/t/fit.txt?id=1%00",
+		"http://testasp.vulnweb.com/t/fit.txt?id=1%2500",
+		"http://testasp.vulnweb.com/t/fit.txt?%00=1",
+		"http://testasp.vulnweb.com/a%00/b",
+		"http://testasp.vulnweb.com/t/fit.txt?..",
+		"http://testasp.vulnweb.com/t/fit.txt?;",
+		"http://testasp.vulnweb.com/t/fit.txt?*",
+		"http://testasp.vulnweb.com/t/fit.txt?-",
+		"http://testasp.vulnweb.com/t/fit.txt?%2e",
+		"http://testasp.vulnweb.com/t/fit.txt?%2etst",
+	} {
+		if got := JunkReason(raw); got != JunkScanner {
+			t.Errorf("JunkReason(%s) = %q, want %q", raw, got, JunkScanner)
+		}
+	}
+	for _, raw := range []string{
+		"http://testasp.vulnweb.com/t/fit.txt",
+		"http://testasp.vulnweb.com/t/fit.txt?",
+		"http://a.test/x?v=1.2",
+		"http://a.test/x?v=.tst",
+		"http://a.test/x?file=a.bak",
+		"http://a.test/x?id=1",
+		"http://a.test/x?id=",
+		"http://a.test/x?1.2",
+		"http://a.test/style.css?v1.2.3",
+		"http://a.test/x?search",
+		"http://a.test/x?a=1&.tst",
+		"http://a.test/x?q=caf%C3%A9",
+		"http://a.test/x?.tst=1",
+		"http://a.test/x?100%25",
+		"http://a.test/docs/v1.0.0/index.html",
+		"http://a.test/files/archive.tar.gz?download",
+		"http://a.test/x?.toolongextension1",
+	} {
+		if got := JunkReason(raw); got != "" {
+			t.Errorf("JunkReason(%s) = %q, want none", raw, got)
+		}
+	}
+}
