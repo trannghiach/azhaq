@@ -240,7 +240,12 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 	values := map[string]string{}
 	if floodAt == math.MaxInt && !s.halted() {
 		s.toggles(toggled, found, values)
-		notes = append(notes, s.deepen(page, names, found, values)...)
+		// Only a page that refuses a request without its input (400, 422)
+		// reports required fields one at a time; a page that answers is not
+		// asked again, which keeps a plain sweep as cheap as arjun's.
+		if st := s.ref.status; st == http.StatusBadRequest || st == http.StatusUnprocessableEntity {
+			notes = append(notes, s.deepen(page, names, found, values)...)
+		}
 		switch {
 		case s.ctx.Err() != nil:
 			return types.RunMeta{Status: types.StatusCancelled}, s.ctx.Err()
