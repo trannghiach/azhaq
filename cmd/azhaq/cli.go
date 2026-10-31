@@ -183,7 +183,7 @@ func init() {
 		{name: "shots", group: groupDropIn, like: "gowitness", run: cmdShots,
 			summary: "a screenshot of each web service, look-alikes grouped (needs Chrome)",
 			usage:   "-u TARGET | -l FILE | -nmap FILE | -nessus FILE | stdin  [-p PORTS] [-dir DIR] [-shot-size WxH] [-shot-fullpage] [-shot-format jpeg] [-rate N] [-json]",
-			output:  "URL and picture file per line; -json: one object per page with {\"url\",\"file\",\"title\",\"final_url\",\"phash\",\"response_code\",\"headers\",\"tls\",\"technologies\",\"console\",\"network\"}, and {\"partial\":true} when the page was not fully loaded or drew without assets of hosts outside the scope (\"blocked\", \"blocked_hosts\"; exit 3); text: partial (3 off-scope assets blocked: cdn.example.com)",
+			output:  "URL and picture file per line; -json: one object per page with {\"url\",\"file\",\"title\",\"final_url\",\"phash\",\"response_code\",\"headers\",\"tls\",\"technologies\",\"console\",\"network\"}, and {\"partial\":true} when the page was not fully loaded (exit 3), or drew without assets of hosts outside the scope (\"blocked\", \"blocked_hosts\": a note, and the exit code does not change, the scope is yours); text: partial (3 off-scope assets blocked: cdn.example.com)",
 			examples: []string{
 				"azhaq shots -l services.txt -dir shots",
 				"azhaq shots -u http://127.0.0.1:3001/rest/products/search   # a path and query are kept",

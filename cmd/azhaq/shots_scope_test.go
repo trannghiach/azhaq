@@ -11,11 +11,12 @@ import (
 	"testing"
 
 	"github.com/trannghiach/azhaq/internal/browser"
+	"github.com/trannghiach/azhaq/types"
 )
 
 // shots marks a page that was drawn without the assets of a host outside
-// the scope as partial, in the text line, the JSON row and the summary
-// (exit 3), and names the host to allow.
+// the scope as partial, in the text line, the JSON row and the summary,
+// and names the host to allow. The scope is the user's: the exit code stays 0.
 func TestShotsMarksOffScopeAssetsPartial(t *testing.T) {
 	if _, err := browser.Find(); err != nil {
 		t.Skip(err)
@@ -33,8 +34,8 @@ func TestShotsMarksOffScopeAssetsPartial(t *testing.T) {
 	text, errOut, err := captureBoth(t, func() error {
 		return cmdShots([]string{"-u", site.URL + "/", "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db")})
 	})
-	if exitCode(err) != exitPartial {
-		t.Fatalf("exit %d (%v), want 3\n%s", exitCode(err), err, errOut)
+	if err != nil {
+		t.Fatalf("exit %d (%v), want 0: the scope is the user's, not a failure\n%s", exitCode(err), err, errOut)
 	}
 	if !strings.Contains(text, "  partial (2 off-scope assets blocked: localhost)") {
 		t.Errorf("the text line does not say so:\n%s", text)
@@ -46,8 +47,8 @@ func TestShotsMarksOffScopeAssetsPartial(t *testing.T) {
 	js, _, err := captureBoth(t, func() error {
 		return cmdShots([]string{"-u", site.URL + "/", "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db"), "-json"})
 	})
-	if exitCode(err) != exitPartial {
-		t.Fatalf("exit %d (%v)", exitCode(err), err)
+	if err != nil {
+		t.Fatalf("exit %d (%v), want 0", exitCode(err), err)
 	}
 	var row struct {
 		Partial      bool
@@ -56,5 +57,24 @@ func TestShotsMarksOffScopeAssetsPartial(t *testing.T) {
 	}
 	if err := json.Unmarshal([]byte(strings.SplitN(js, "\n", 2)[0]), &row); err != nil || !row.Partial || row.Blocked != 2 || len(row.BlockedHosts) != 1 || row.BlockedHosts[0] != "localhost" {
 		t.Errorf("row %+v (%v): %s", row, err, js)
+	}
+}
+
+// partialShots counts a picture whose own assets did not load, and not one
+// that is partial only for the scope.
+func TestPartialShotsExitRule(t *testing.T) {
+	shot := func(payload string) []types.StoredObservation {
+		return []types.StoredObservation{{Observation: types.Observation{Collector: "azhaq-shots", Kind: "screenshot", Payload: json.RawMessage(payload)}}}
+	}
+	for payload, want := range map[string]bool{
+		`{"partial":true,"blocked":3,"blocked_hosts":["cdn.test"]}`: false, // the scope only
+		`{"partial":true,"unloaded":2,"resources":9}`:               true,  // its own assets did not load
+		`{"partial":true,"unloaded":2,"resources":9,"blocked":3}`:   true,  // both
+		`{"partial":true}`:  true, // an older row
+		`{"title":"whole"}`: false,
+	} {
+		if got := partialShots(shot(payload)); got != want {
+			t.Errorf("%s: %v, want %v", payload, got, want)
+		}
 	}
 }
