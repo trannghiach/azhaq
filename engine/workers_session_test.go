@@ -121,6 +121,7 @@ func runWithWorker(t *testing.T, app *sessionApp, s fetch.Session, until func() 
 	t.Cleanup(func() { _ = st.Close() })
 	_ = st.BeginRun("r", 3, 0)
 	release := make(chan struct{})
+	var released atomic.Bool // after release the run's own slot may take what is left
 	var localOnce sync.Once
 	cat := catalog.New()
 	cat.MustRegister(remoteGet{app: app, local: func(sd types.Seed) {
@@ -129,7 +130,7 @@ func runWithWorker(t *testing.T, app *sessionApp, s fetch.Session, until func() 
 			return
 		}
 		// Asked here, a request is refused once the session is lost.
-		if fetch.SessionLost() == nil {
+		if fetch.SessionLost() == nil && !released.Load() {
 			t.Errorf("%s ran in the run's own process", sd.Key())
 		}
 	}})
@@ -145,7 +146,7 @@ func runWithWorker(t *testing.T, app *sessionApp, s fetch.Session, until func() 
 		for !until() {
 			time.Sleep(20 * time.Millisecond)
 		}
-		localOnce.Do(func() { close(release) })
+		localOnce.Do(func() { released.Store(true); close(release) })
 	}()
 	fetch.WatchSession(s)
 	seeds := []types.Seed{
@@ -159,7 +160,7 @@ func runWithWorker(t *testing.T, app *sessionApp, s fetch.Session, until func() 
 	select {
 	case err = <-done:
 	case <-time.After(20 * time.Second):
-		localOnce.Do(func() { close(release) })
+		localOnce.Do(func() { released.Store(true); close(release) })
 		t.Fatal("the run did not end")
 	}
 	close(stop)
