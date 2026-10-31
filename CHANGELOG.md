@@ -69,6 +69,9 @@
 - `-interact` stops clicking at the first request the budget refuses, so a capped browser crawl ends promptly with exit 4 and its tasks left for `azhaq resume`; before, it could run on long after the budget was spent.
 - `-interact` keeps a page's rows when a click leaves the scope (the link is listed as skipped, outside the scope); before, the page's requests, links, click routes and the `-interact:` note were dropped, so `crawl -browser -interact` mapped 9 rows where `crawl -browser` mapped 167.
 - `run -url A -url B` maps both addresses, where it mapped only the last without a word; `roles … -- -url A -url B` therefore compares the endpoints of both.
+- `crawl -browser -interact` behind a slow `-proxy` (or on a loaded machine) mapped only what the static pass found, clicked nothing and left the `-interact:` note out, exit 0, because an app brought up late had drawn nothing when the page was read. A page read now waits until none of its requests is out (up to 5 s more), a page with nothing to click is looked at again while it draws, and `-interact` always gives its note.
+- `crawl` maps the page a link redirects to at the link's own depth: `/my-account` redirecting to `/login` lists `/login` at `-d 1`, as katana does; before, the redirect's destination counted as one more step of `-depth` and was left out although the redirect had fetched it.
+- `run -dirs` rows are `visited` (or `gone`, or what their status makes them) with their status when no limit was hit; before, every hit was `capped` with no status.
 
 ## v0.10.1
 
