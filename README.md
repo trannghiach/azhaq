@@ -286,7 +286,7 @@ The Juice Shop truth is the 77 routes its server defines that its frontend calls
 - [Concepts](docs/CONCEPTS.md): a row, coverage, evidence, kinds, scope, budget, the ledger, roles verdicts, what azhaq sends.
 - [Troubleshooting](docs/TROUBLESHOOTING.md): a URL that is `hint`, a thin map, exit 3, exit 4, the kill file, Chrome.
 - [Output](docs/OUTPUT.md): stdout and stderr, the summary, exit codes, the ledger format.
-- [Architecture](docs/ARCHITECTURE.md): every collector, every run option, how the engine works, limitations.
+- [Architecture](docs/ARCHITECTURE.md): every collector, how the engine works, limitations. The run options are in the [`run` flags](docs/commands/run.md#flags).
 - [MCP](docs/MCP.md) and the [connector protocol](docs/CONNECTOR.md).
 
 ## License
