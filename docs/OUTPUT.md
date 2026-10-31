@@ -3,7 +3,7 @@
 Every command follows the same contract, so a script or an assistant can read any of them the same way.
 
 - **stdout** carries results only: one per line, or one JSON object per line with `-json`.
-- **stderr** carries progress, failures as they happen (the first three of each kind), and a **summary** at the end. With `-json` every stderr line is JSON and the summary is one object with `"type":"summary"`. With `-silent` the summary is printed only when something failed or was cut short.
+- **stderr** carries progress, failures as they happen (the first three of each kind), and a **summary** at the end. With `-json` every stderr line is JSON and the summary is one object with `"type":"summary"`. With `-silent` the summary is printed only when something failed or was cut short. A command that is still working after 10 seconds says so every 10 seconds, so a run paced at a request a second is not taken for a hung one: `azhaq: 1m30s, 62 requests sent (1/s), 38 tasks left; -max-requests 80 ends it in about 18 s` (the pace is that of the last interval, the tasks are those known so far, and the end is the sooner of the request cap and `-timeout`), or with `-json` the object `{"type":"progress","seconds":90,"requests":62,"requests_per_second":1,"tasks_done":70,"tasks_left":38,"ends_by":"-max-requests 80","ends_in_seconds":18}`. A run paced slowly says so as it starts (`-rate 1 paces requests to 1/s: the cap of 80 requests …`). `-quiet` and `-silent` print neither, and a run that ends within 10 seconds prints no progress line. Nothing of this goes to stdout.
 - The **exit code** says whether the work is complete.
 
 `azhaq help -json` lists every command and flag with its type and default.

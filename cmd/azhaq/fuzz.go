@@ -486,19 +486,11 @@ func cmdFuzz(args []string) error {
 	case c.silent:
 	case stderrIsTerminal():
 		defer fuzzProgress(ctx, cfg.Progress, t0)()
-	case !c.json:
-		tick := time.NewTicker(30 * time.Second)
-		defer tick.Stop()
-		go func() {
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-tick.C:
-					fmt.Fprintf(os.Stderr, "azhaq: working, %s: %d requests sent\n", time.Since(t0).Round(time.Second), fetch.Sent())
-				}
-			}
-		}()
+	default:
+		pc := progressCfg{JSON: c.json, Cap: fetch.MaxRequests, CapBy: "-max-requests", Timeout: time.Duration(*maxtime * float64(time.Second))}
+		defer startProgress(ctx, pc, os.Stderr, func() progressSnap {
+			return progressSnap{At: time.Since(t0), Sent: fetch.Sent(), Left: -1}
+		})()
 	}
 	st := fuzz.Run(ctx, cfg)
 	if err := w.close(); err != nil {

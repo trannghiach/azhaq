@@ -171,7 +171,12 @@ func resumeHint(db string, cut, signedIn bool, user string) string {
 // embedded: a command built on run owns stdout.
 // runOut is how a run prints; scratch says its database is temporary,
 // so nothing is kept for azhaq resume.
-type runOut struct{ json, quiet, embedded, plan, scratch bool }
+type runOut struct {
+	json, quiet, embedded, plan, scratch bool
+	// progress is how a drop-in wants the lines of a long run: "json" for
+	// its -json, which hushes the run itself; empty, as run's own flags say.
+	progress string
+}
 
 // observer, when set, sees every observation of the next run as it is
 // stored: the drop-in commands print their results as they come.
@@ -253,7 +258,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	dbPath := fs.String("db", "", "the workspace, a SQLite file (default: a new azhaq-TIME-PID.db in the current directory, or $AZHAQ_DB; query, show and export read it afterwards)")
 	demo := fs.Bool("demo", false, "run against the built-in fixture server (no internet)")
 	pathsFile := fs.String("paths", "", "extra path wordlist (one path per line)")
-	quiet := fs.Bool("quiet", false, "print no map, only the summary (on stderr)")
+	quiet := fs.Bool("quiet", false, "print no map and no progress lines (a line every 10 s while the run works), only the summary (on stderr)")
 	jsonOut := fs.Bool("json", false, "print the map as JSON lines, and the summary as one JSON object on stderr")
 	stream := fs.Bool("stream", false, "also print each name, service, URL and open port as it is found (found lines, before the ranked map)")
 	verbose := fs.Bool("v", false, "print a line for every finished task, not only failures")
@@ -1014,7 +1019,25 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	default:
 		ctx = engine.WithProgress(ctx)
 	}
-	stopTicker := progressTicker(ctx, st, hushed)
+	// A command that is still working says so every few seconds (not with
+	// -quiet, which the commands built on run give; -silent is that): with
+	// -json as JSON lines, as everything on stderr is.
+	stopTicker := func() {}
+	if mode := progressMode(*quiet, *verbose, *jsonOut, out.progress); mode != "" {
+		cfg := progressCfg{JSON: mode == "json", Cap: fetch.MaxRequests, CapBy: "-max-requests", Timeout: *timeout}
+		if *daily > 0 && fetch.MaxRequests != *maxRequests {
+			cfg.CapBy = "-daily-requests"
+		}
+		if !cfg.JSON {
+			if l := cfg.paceLine(*rateFlag); l != "" {
+				fmt.Fprintln(os.Stderr, l)
+			}
+		}
+		t0 := time.Now()
+		stopTicker = startProgress(ctx, cfg, os.Stderr, func() progressSnap {
+			return progressSnap{At: time.Since(t0), Sent: fetch.Sent(), Done: st.TasksDone(), Left: st.TasksLeft()}
+		})
+	}
 	defer stopTicker()
 
 	t0 := time.Now()
