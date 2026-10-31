@@ -25,8 +25,8 @@ type helpSpec struct {
 var helpSpecs = map[string]helpSpec{
 	"run": {
 		groups: []helpGroup{
-			{"Targets and input", `url domain list in asn cidr org scope program cloud exec demo`},
-			{"What to ask", `probe passive skip dirs params ports ports-on ports-udp port-cdn-full dns-brute permute graphql graphql-wordlist known-files paths no-paths path-climb fill-forms per-template web-ports web-scheme no-favicon no-tech no-map-guess no-follow`},
+			{"Targets and input", `url domain list in asn cidr org scope program exec demo`},
+			{"What to ask", `probe passive skip dirs params ports ports-on ports-udp dns-brute permute graphql graphql-wordlist known-files paths no-paths path-climb fill-forms per-template web-ports web-scheme no-favicon no-tech no-map-guess no-follow`},
 			{"Crawl scope", `crawl-scope crawl-any-host crawl-in crawl-out`},
 			{"Names and sources", `sources all-sources exclude-sources providers resolvers dns-rate source-proxy source-rate source-rates source-timeout max-time max-body max-results urls-timeout no-history`},
 			{"Browser", `browser interact interact-clicks screenshots chrome chrome-profile chrome-proxy tabs unsafe-ports`},
@@ -36,8 +36,9 @@ var helpSpecs = map[string]helpSpec{
 			{"Output", `db json quiet v stream fail-on-errors fail-on-capped`},
 		},
 		hidden: map[string]string{
-			"rare": `serve worker-token 
-				dirs-depth dirs-ext dirs-fc dirs-fl dirs-fr dirs-fs dirs-fw dirs-mc dirs-ml dirs-mr dirs-ms
+			"accepted": `port-cdn-full`,
+			"rare": `
+				port-exclude-cdn serve worker-token dirs-depth dirs-ext dirs-fc dirs-fl dirs-fr dirs-fs dirs-fw dirs-mc dirs-ml dirs-mr dirs-ms
 				dirs-mw dirs-rate dirs-threads facts obs params-chunk params-delay params-include params-method
 				params-per-host params-rate params-stable params-targets params-threads params-timeout
 				port-all-ips port-detect port-discover port-ip port-min-rate port-order port-payload port-proxy
@@ -157,7 +158,7 @@ var helpSpecs = map[string]helpSpec{
 	"crawl": {
 		groups: []helpGroup{
 			{"Targets and input", `u l scope program`},
-			{"What to ask", `d paths sweep fill-forms no-form-fill per-template no-follow no-map-guess browser interact interact-clicks fs kf`},
+			{"What to ask", `d paths sweep no-form-fill per-template no-follow no-map-guess browser interact interact-clicks fs kf`},
 			{"What to list", `assets no-catchall rejected em ndef do`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger submit-forms browser-writes`},
 			{"Pace and limits", `rl delay backoff retry host-rate hrl host-parallel parallel request-timeout ct max-requests max-host-requests max-items max-response-size`},
@@ -171,8 +172,8 @@ var helpSpecs = map[string]helpSpec{
 			"alias": `
 				c dr j p pc r rate timeout
 			`,
-			"accepted": `jsl 
-				duc fx jc kb nc s td
+			"accepted": `
+				jsl duc fx jc kb nc s td
 			`,
 		},
 	},
@@ -197,7 +198,7 @@ var helpSpecs = map[string]helpSpec{
 	"ports": {
 		groups: []helpGroup{
 			{"Targets and input", `host l p tp ep no-stdin scope program`},
-			{"What to ask", `udp pu detect order unnamed seed sn wn`},
+			{"What to ask", `udp pu detect order unnamed exclude-cdn seed sn wn`},
 			{"Scope and safety", `allow deny kill-file ledger`},
 			{"Pace and limits", `rate min-rate workers connect-timeout dns-rate retries max-requests timeout`},
 			{"Network", `proxy resolvers`},
@@ -208,13 +209,10 @@ var helpSpecs = map[string]helpSpec{
 				T cp csv ef eh eof iv lof oG pf proxy-auth pts sa source-ip
 			`,
 			"alias": `
-				c j max-retries r
+				ec c j max-retries r
 			`,
 			"accepted": `
-				Pn cdn nc
-			`,
-			"rare": `
-				cdn-full
+				cdn-full Pn cdn nc
 			`,
 		},
 	},
@@ -252,8 +250,8 @@ var helpSpecs = map[string]helpSpec{
 				input-cmd input-num input-shell maxtime-job ml mmode ms mt mw od or raw recursion-strategy sa se
 				sf sni
 			`,
-			"alias": `s 
-				cookie data data-ascii
+			"alias": `
+				s cookie data data-ascii
 			`,
 			"accepted": `
 				noninteractive

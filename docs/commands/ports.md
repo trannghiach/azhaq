@@ -296,6 +296,7 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-detect` | string | `all` | what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close, as naabu without -sV) |
 | `-order` | string | `random` | the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc |
 | `-unnamed` | int |  | after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6, a guard against hosts that accept every connect; -1: no limit) |
+| `-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu's two ports plus 8080 and 8443; the default is the full list) |
 | `-seed` | int |  | make the random port order repeat (default: a new one each run) |
 | `-sn` | bool |  | list the addresses that are up (a connect to 80 or 443 is accepted or refused) and scan nothing |
 | `-wn` | bool |  | scan only the addresses that are up (by -sn's test); the default scans every address |
@@ -341,15 +342,8 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
-**Other**
-
-| Flag | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `-ec` | bool |  | same as -exclude-cdn |
-| `-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu's two ports plus 8080 and 8443; the default is the full list) |
-
 <details>
-<summary>Flags familiar from naabu, other names, flags accepted with no effect and rarely used flags (22)</summary>
+<summary>Flags familiar from naabu, other names and flags accepted with no effect (23)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
@@ -368,13 +362,14 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-sa` | bool |  | scan every address of a name, not the first two of each family | naabu's name |
 | `-source-ip` | string |  | connect from this local address | naabu's name |
 | `-c` | int |  | same as -workers | other name |
+| `-ec` | bool |  | same as -exclude-cdn | other name |
 | `-j` | bool |  | same as -json | other name |
 | `-max-retries` | int | `-1` | same as -retries | other name |
 | `-r` | string |  | same as -resolvers | other name |
 | `-Pn` | bool |  | accepted: addresses are scanned without asking whether they are up, which is the default | accepted, no effect |
 | `-cdn` | bool |  | accepted: a CDN address is marked in the output, always | accepted, no effect |
+| `-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default | accepted, no effect |
 | `-nc` | bool |  | accepted: no colours are printed | accepted, no effect |
-| `-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default | rarely needed |
 
 </details>
 <!-- flags:end -->

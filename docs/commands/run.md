@@ -297,7 +297,6 @@ Examples of what `notes` holds for a run:
 | `-ports` | string |  | scan TCP ports: top-100, top-1000, full or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888 (active; the targets given are the scope unless -allow) |
 | `-ports-on` | string, repeatable |  | scan only these ports on a host: HOST=22,80 |
 | `-ports-udp` | string |  | ask UDP ports (active): top (about 25 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open\|filtered (-ports none: UDP only) |
-| `-port-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default |
 | `-dns-brute` | string |  | resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow) |
 | `-permute` | bool |  | resolve variations of found names (active; the targets given are the scope unless -allow) |
 | `-graphql` | bool |  | read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow) |
@@ -418,17 +417,12 @@ Examples of what `notes` holds for a run:
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
 
-**Other**
-
-| Flag | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `-port-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu -ec asks 80 and 443; this adds 8080 and 8443) |
-
 <details>
-<summary>Rarely used flags (73)</summary>
+<summary>Flags accepted with no effect and rarely used flags (75)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
+| `-port-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default | accepted, no effect |
 | `-dirs-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found | rarely needed |
 | `-dirs-ext` | string |  | also try each word with these extensions, comma-separated (php,bak) | rarely needed |
 | `-dirs-fc` | string |  | hide these statuses | rarely needed |
@@ -458,6 +452,7 @@ Examples of what `notes` holds for a run:
 | `-port-all-ips` | bool |  | scan every address of a name, not the first two of each family | rarely needed |
 | `-port-detect` | string | `all` | what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close) | rarely needed |
 | `-port-discover` | string |  | ask first whether an address is up, by a connect to 80 and 443: first (scan the ones that answer) or only (list them, scan nothing) | rarely needed |
+| `-port-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu -ec asks 80 and 443; this adds 8080 and 8443) | rarely needed |
 | `-port-ip` | string |  | the address families of a name to scan: 4 or 6 (default both) | rarely needed |
 | `-port-min-rate` | float |  | port connection attempts per second at least: raises -port-rate to this when lower | rarely needed |
 | `-port-order` | string | `random` | the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc | rarely needed |

@@ -177,7 +177,7 @@ func TestHelpAllHoldsEveryFlag(t *testing.T) {
 			}
 		}
 		short, _, _ := cli(t, name, "-h")
-		if strings.Contains(short, "  -dirs-ext ") || !strings.Contains(short, " more flags (rarely used): azhaq "+name+" -h all") {
+		if strings.Contains(short, "  -dirs-ext ") || !regexp.MustCompile(` more flags \([a-z ,]*rarely used\): azhaq `+name+` -h all`).MatchString(short) {
 			t.Errorf("%s -h leaves its hidden families in, or says no more: %.300s", name, short)
 		}
 	}
