@@ -1,6 +1,6 @@
 # azhaq asn
 
-The prefixes autonomous systems announce. Replaces asnmap.
+Lists the prefixes an autonomous system announces. Replaces asnmap.
 
 ## Synopsis
 
@@ -11,14 +11,34 @@ azhaq asn -a AS64500 | -l FILE | stdin  [-json]
 ## Examples
 
 ```
+# the prefixes of one AS
 azhaq asn -a AS13335
+
+# several AS numbers, as JSON
+azhaq asn -a AS13335 -a AS64500 -json
+
+# AS numbers from a file, or from stdin
+azhaq asn -l asns.txt
+echo AS13335 | azhaq asn -json
 ```
+
+## What it does
+
+1. Reads each AS number: `AS64500`, `as64500` or `64500`.
+2. Asks RIPEstat (stat.ripe.net, no key) for the prefixes the AS announces and its holder's name.
+3. Prints each prefix of an AS once.
+
+Nothing is sent to the addresses of the AS: the prefixes are listed, not scanned.
 
 ## Output
 
-One prefix per line; -json: {"as_number","as_name","prefix"}
+Plain output is one prefix per line. With `-json` you get one object per prefix. `-silent` prints the prefixes only, with no progress.
 
-`as_number`, `as_name`, `prefix`.
+| Field | Meaning |
+| --- | --- |
+| `as_number` | The AS number, such as `AS13335`. |
+| `as_name` | The holder's name. |
+| `prefix` | One announced prefix. |
 
 ## Summary and exit codes
 
