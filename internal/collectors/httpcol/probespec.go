@@ -38,7 +38,7 @@ type Spec struct {
 	// Ports are the web ports tried on each name (-p), each with the scheme
 	// it was given, or none for both.
 	Ports []PortSpec `json:"ports,omitempty"`
-	// Paths are asked of every target in place of its own path (-path).
+	// Paths are asked of every target, joined onto its own path (-path).
 	Paths []string `json:"paths,omitempty"`
 	// Methods are sent to every target (-x); empty is GET. Body is the body
 	// that goes with them (-body); Raw is a request file's request (-rr).

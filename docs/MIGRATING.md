@@ -167,7 +167,7 @@ Behaviour, fields and edge cases: [`azhaq probe`](commands/probe.md).
 | --- | --- | --- |
 | `-u TARGET`, `-l FILE` | `-u TARGET`, `-l FILE` | Or stdin. |
 | `-p 80,8000-8100` | `-p 80,8000-8100` | `http:80` or `https:443` asks one scheme. A `host:port` or a URL is asked on these ports instead of its own, as in httpx. |
-| `-path /a,/b` | `-path /a,/b` | A list or a file. |
+| `-path /a,/b` | `-path /a,/b` | A list or a file. As in httpx, a path is joined onto the path of a URL input (`http://h/api?q=1` with `-path /login` asks `/api/login?q=1`): one slash between them, the URL's query kept and the path's added, the fragment never sent. A host has no path, so the path is the whole of it. |
 | `-sc -cl -ct -title -td -server -ip -cname -location -method` | the same | What a row prints. `-web-server` and `-tech-detect` are accepted. |
 | `-asn -cdn -favicon -jarm -hash md5,mmh3` | the same | |
 | `-tls-grab -tls-probe -csp-probe` | the same | |

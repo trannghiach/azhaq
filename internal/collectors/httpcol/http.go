@@ -259,7 +259,7 @@ func (c *Collector) targets(seed types.Seed) [][]string {
 	if len(paths) == 0 {
 		return groups
 	}
-	// -path asks each target for these paths in place of its own.
+	// -path asks each target for these paths, joined onto its own.
 	var out [][]string
 	for _, g := range groups {
 		for _, p := range paths {
@@ -277,25 +277,69 @@ func (c *Collector) targets(seed types.Seed) [][]string {
 	return out
 }
 
-// withPath is u with its path and query replaced by p.
+// withPath is u asked for p, as httpx's -path does: p is joined onto the
+// URL's own path (mergePaths), its query is added to the URL's, and the
+// URL's query stays. A bare host has no path, so p is the whole path.
 func withPath(u, p string) (string, bool) {
 	pu, err := url.Parse(u)
 	if err != nil {
 		return "", false
 	}
 	if p == "" {
-		p = "/"
+		return u, true // httpx: an empty path leaves the URL as it is
 	}
-	if !strings.HasPrefix(p, "/") {
+	p, _, _ = strings.Cut(p, "#") // a fragment is never sent
+	if !strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "?") {
 		p = "/" + p
 	}
-	rel, err := url.Parse(p)
+	rel, err := url.Parse("http://h" + p) // a path that reads like a host or a scheme is still a path
 	if err != nil {
 		return "", false
 	}
-	pu.Path, pu.RawPath, pu.RawQuery = rel.Path, rel.RawPath, rel.RawQuery
+	merged := mergePaths(pu.EscapedPath(), rel.EscapedPath())
+	if !strings.HasPrefix(merged, "/") {
+		merged = "/" + merged
+	}
+	at, err := url.Parse("http://h" + merged)
+	if err != nil {
+		return "", false
+	}
+	pu.Path, pu.RawPath = at.Path, at.RawPath
+	switch {
+	case rel.RawQuery == "":
+	case pu.RawQuery == "":
+		pu.RawQuery = rel.RawQuery
+	default:
+		pu.RawQuery += "&" + rel.RawQuery
+	}
 	n, err := normalize.URL(pu.String())
 	return n, err == nil
+}
+
+// mergePaths joins a URL's path and a -path value as httpx does (the
+// projectdiscovery/utils url package): one slash between them; a path
+// that already ends with the other, or starts with it, is not repeated.
+func mergePaths(base, p string) string {
+	if strings.HasSuffix(base, "/") && strings.HasPrefix(p, "/") {
+		p = strings.TrimLeft(p, "/")
+	}
+	if base == "" {
+		return p
+	} else if p == "" {
+		return base
+	}
+	if !strings.HasSuffix(base, "/") && !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	switch {
+	case base == p:
+		return base
+	case len(base) > len(p) && strings.HasSuffix(base, p):
+		return base
+	case len(base) < len(p) && strings.HasPrefix(p, base):
+		return p
+	}
+	return base + p
 }
 
 // HTTPFirst says a bare host:port is asked over plain HTTP first, as httpx

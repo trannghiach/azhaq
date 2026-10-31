@@ -460,3 +460,41 @@ func TestProbePortsReplaceTheInputsPort(t *testing.T) {
 		t.Errorf("without -p: %s", out)
 	}
 }
+
+// As httpx, -path is joined onto the URL's own path and its query is added
+// to the URL's; a bare host has no path, so -path is the path. The
+// fragment is never sent.
+func TestProbePathJoinsTheURLsPathAndKeepsItsQuery(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := newProbeSite(t)
+	ask := func(in, paths string) []string {
+		t.Helper()
+		site.mu.Lock()
+		site.seen = nil
+		site.mu.Unlock()
+		out, _, code := runContract(t, "probe", "-u", in, "-path", paths)
+		if rows := probeRows(t, out); code != exitOK || len(rows) == 0 {
+			t.Fatalf("%s -path %s: exit %d\n%s", in, paths, code, out)
+		}
+		site.mu.Lock()
+		defer site.mu.Unlock()
+		return append([]string(nil), site.seen...)
+	}
+	got := ask(site.URL+"/rest/products/search?q=juice#frag", "/,/login")
+	if fmt.Sprint(got) != "[GET /rest/products/search/?q=juice GET /rest/products/search/login?q=juice]" {
+		t.Errorf("full URL: %v", got)
+	}
+	got = ask(site.URL+"/a/?q=1", "b?x=2,/c")
+	if fmt.Sprint(got) != "[GET /a/b?q=1&x=2 GET /a/c?q=1]" {
+		t.Errorf("path with a query: %v", got)
+	}
+	bare := strings.TrimPrefix(site.URL, "http://")
+	got = ask(bare, "/api,login,/x?y=1")
+	if fmt.Sprint(got) != "[GET /api GET /login GET /x?y=1]" {
+		t.Errorf("bare host: %v", got)
+	}
+	got = ask(site.URL+"/", "/api")
+	if fmt.Sprint(got) != "[GET /api]" {
+		t.Errorf("root URL: %v", got)
+	}
+}

@@ -167,3 +167,35 @@ func TestFollowSettings(t *testing.T) {
 		}
 	}
 }
+
+// -path joins as httpx does (projectdiscovery/utils url.MergePath, run for
+// these inputs): one slash between, a repeated tail or head not doubled,
+// the URL's query kept and the path's added.
+func TestWithPathMatchesHTTPX(t *testing.T) {
+	for _, c := range []struct{ in, path, want string }{
+		{"http://h:3001/rest/products/search?q=juice", "/", "http://h:3001/rest/products/search/?q=juice"},
+		{"http://h:3001/rest/products/search?q=juice", "/login", "http://h:3001/rest/products/search/login?q=juice"},
+		{"http://h:3001/rest/products/search?q=juice", "login", "http://h:3001/rest/products/search/login?q=juice"},
+		{"http://h:3001/a/?q=1", "/b?x=2", "http://h:3001/a/b?q=1&x=2"},
+		{"http://h:3001/a?q=1", "/b?q=2", "http://h:3001/a/b?q=1&q=2"},
+		{"http://h:3001/a?q=1", "/b#f2", "http://h:3001/a/b?q=1"},
+		{"http://h:3001/a/b", "/a/b/c", "http://h:3001/a/b/c"},
+		{"http://h:3001/a/b", "/b", "http://h:3001/a/b"},
+		{"http://h:3001/a/b", "/a", "http://h:3001/a/b/a"},
+		{"http://h:3001/a/", "/a/", "http://h:3001/a/"},
+		{"http://h:3001/a/", "/a", "http://h:3001/a/a"},
+		{"http://h:3001/a/", "//c", "http://h:3001/a/c"},
+		{"http://h:3001", "/x", "http://h:3001/x"},
+		{"http://h:3001/", "/x", "http://h:3001/x"},
+		{"http://h:3001/", "x", "http://h:3001/x"},
+		{"http://h:3001/", "", "http://h:3001/"},
+		{"http://h:3001/p?a=%20b&c", "/x?d", "http://h:3001/p/x?a=%20b&c&d"},
+		{"http://h:3001/a", "?x=1", "http://h:3001/a?x=1"},
+		{"http://h:3001/", "/a%2Fb", "http://h:3001/a%2Fb"},
+	} {
+		got, ok := withPath(c.in, c.path)
+		if !ok || got != c.want {
+			t.Errorf("%s + %q = %q (%v), want %q", c.in, c.path, got, ok, c.want)
+		}
+	}
+}

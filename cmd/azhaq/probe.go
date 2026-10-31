@@ -77,7 +77,7 @@ func (p *probeFlags) register(fs *flag.FlagSet) {
 		}
 	}
 	str(&p.ports, "ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own", "p", "ports", "web-ports")
-	str(&p.paths, "path or paths to ask of every target in place of its own: a list, comma-separated, or a file", "path")
+	str(&p.paths, "path or paths to ask of every target, a list (comma-separated) or a file: joined onto the path of a URL input, as httpx does, with the URL's query kept and the path's added; a host has no path, so the path is the whole of it", "path")
 	boolean(&p.noFallback, "ask an input without a scheme over both http and https and report each that answers", "nf", "no-fallback")
 	boolean(&p.probeAllIPs, "send the request to every address of a name, one row each", "pa", "probe-all-ips")
 	str(&p.exclude, "leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex", "e", "exclude")
