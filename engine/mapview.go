@@ -223,7 +223,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 func answerOf(obs []types.StoredObservation) (int, string) {
 	status, title := 0, ""
 	for _, o := range obs {
-		if o.Kind == "error" || (o.Collector != "azhaq-http" && o.Collector != "azhaq-paths" && o.Kind != "application") {
+		if o.Kind == "error" || (o.Collector != "azhaq-http" && !probed(o) && o.Kind != "application") {
 			continue
 		}
 		st := statusOf(o.Payload)
@@ -356,18 +356,30 @@ func isCatchAll(o types.StoredObservation) bool {
 	return p.CatchAll
 }
 
-// gone: the URL's own answer is 404 or 410.
+// probed is an answer a path sweep (-paths, -dirs) got to a URL it asked
+// for itself.
+func probed(o types.StoredObservation) bool {
+	return (o.Collector == "azhaq-paths" || o.Collector == "azhaq-dirs") && o.Kind == "url"
+}
+
+// gone: the URL's own answer is 404 or 410. A sweep's answer counts when
+// no fetch of the URL has one.
 func gone(obs []types.StoredObservation) bool {
-	for _, o := range obs {
-		if o.Kind == "error" || isCatchAll(o) || o.Collector != "azhaq-http" && o.Kind != "application" {
-			continue
-		}
-		switch statusOf(o.Payload) {
-		case 404, 410:
-			return true
-		case 0:
-		default:
-			return false
+	for _, own := range []bool{true, false} {
+		for _, o := range obs {
+			if o.Kind == "error" || isCatchAll(o) {
+				continue
+			}
+			if own && o.Collector != "azhaq-http" && o.Kind != "application" || !own && !probed(o) {
+				continue
+			}
+			switch statusOf(o.Payload) {
+			case 404, 410:
+				return true
+			case 0:
+			default:
+				return false
+			}
 		}
 	}
 	return false
@@ -381,7 +393,7 @@ func fetched(obs []types.StoredObservation) bool {
 		if (o.Collector == "azhaq-http" || o.Kind == "application") && statusOf(o.Payload) > 0 {
 			return true
 		}
-		if o.Collector == "azhaq-paths" && o.Kind == "url" && statusOf(o.Payload) > 0 {
+		if probed(o) && statusOf(o.Payload) > 0 {
 			return true
 		}
 	}
@@ -440,12 +452,8 @@ func appRoot(raw string) bool {
 // listings and IP rules send it too.
 func gate(obs []types.StoredObservation) int {
 	for _, o := range obs {
-		switch o.Collector {
-		case "azhaq-http", "azhaq-paths":
-		default:
-			if o.Kind != "application" {
-				continue
-			}
+		if o.Collector != "azhaq-http" && !probed(o) && o.Kind != "application" {
+			continue
 		}
 		if isCatchAll(o) {
 			continue
@@ -1001,13 +1009,13 @@ func addSites(xs, ys []webextract.Site) []webextract.Site {
 	return xs
 }
 
-// pathProbes indexes wordlist hits by the URL they probed. They are stored
-// on the page that was swept, and files such as robots.txt are not fetched
-// again, so without this they would read as hints.
+// pathProbes indexes the hits of -paths and -dirs by the URL they probed.
+// They are stored on the page that was swept, and files such as robots.txt
+// are not fetched again, so without this they would read as hints.
 func pathProbes(obs []types.StoredObservation) map[string][]types.StoredObservation {
 	out := map[string][]types.StoredObservation{}
 	for _, o := range obs {
-		if o.Collector != "azhaq-paths" || o.Kind != "url" {
+		if !probed(o) {
 			continue
 		}
 		if u, err := normalize.URL(payloadURL(o)); err == nil {

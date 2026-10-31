@@ -130,6 +130,7 @@ found in
 [CONCEPTS](../CONCEPTS.md#coverage-what-azhaq-did-with-a-url) defines `visited`, `catchall`, `error`, `gone`, `hint`, `skipped` and `capped`. What follows is what is specific to `run`.
 
 - `gone` is a URL found in an archive or a link that answered 404 or 410: it is not there now.
+- A path a `-dirs` or `-paths` sweep asked is `visited` (or `gone`, or what its answer makes it) with the status the sweep read, even when `-depth` leaves no step for fetching it again. It is never `capped` for that.
 - `hint` means found, in a script, an API description or an archive, but not requested. It also covers these cases:
   - An archive's static assets, such as images and fonts, are never requested, whatever hides their extension.
   - A route that scripts call only with POST or PUT.
