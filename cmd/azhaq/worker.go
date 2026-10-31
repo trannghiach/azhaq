@@ -390,7 +390,8 @@ func call(ctx context.Context, method, url, token string, body, out any) error {
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{Timeout: 2 * time.Minute}).Do(req)
+	// The run's own endpoint, not a request about a target.
+	resp, err := egress.OwnClient(egress.OwnOptions{Timeout: 2 * time.Minute, Follow: true}).Do(req)
 	if err != nil {
 		return err
 	}

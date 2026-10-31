@@ -905,7 +905,7 @@ func (p *probeOut) asn(ip string) *asnInfo {
 }
 
 func ripeASN(ip string) *asnInfo {
-	cl := &http.Client{Timeout: 15 * time.Second}
+	cl := egress.SourceClient(egress.SourceOptions{Timeout: 15 * time.Second})
 	get := func(path string, v any) bool {
 		req, err := http.NewRequest(http.MethodGet, "https://stat.ripe.net"+path+"&sourceapp=azhaq", nil)
 		if err != nil {

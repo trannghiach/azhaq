@@ -708,19 +708,11 @@ func do(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, error
 // viaProxy drops ip when the request went through a proxy: the address
 // is the proxy's, not the target's.
 func viaProxy(c *http.Client, raw, ip string) string {
-	rt := egress.Unwrap(c.Transport)
-	if rt == nil {
-		rt = http.DefaultTransport
-	}
-	t, ok := rt.(*http.Transport)
-	if !ok || t.Proxy == nil {
-		return ip
-	}
 	req, err := http.NewRequest(http.MethodGet, raw, nil)
 	if err != nil {
 		return ip
 	}
-	if u, err := t.Proxy(req); err == nil && u != nil {
+	if u, err := egress.ProxyOf(c, req); err == nil && u != nil {
 		return ""
 	}
 	return ip

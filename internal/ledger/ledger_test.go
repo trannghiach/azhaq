@@ -190,7 +190,7 @@ func TestTransportRecordsARequestThatFails(t *testing.T) {
 	}
 	addr := ln.Addr().String()
 	ln.Close() // nothing listens there now
-	c := &http.Client{Transport: Wrap(nil)}
+	c := &http.Client{Transport: Wrap(http.DefaultTransport)}
 	req, _ := http.NewRequestWithContext(WithCollector(context.Background(), "azhaq-http"), http.MethodPost, "http://"+addr+"/x?y=1", nil)
 	if _, err := c.Do(req); err == nil {
 		t.Fatal("the connect to a closed port succeeded")
@@ -218,7 +218,7 @@ func TestHooksAreNoOpsWithoutALedger(t *testing.T) {
 }
 
 func TestWrapOnce(t *testing.T) {
-	rt := Wrap(nil)
+	rt := Wrap(http.DefaultTransport)
 	if Wrap(rt) != rt || Unwrap(rt) != http.DefaultTransport {
 		t.Fatal("Wrap wraps twice or Unwrap does not unwrap")
 	}
@@ -234,7 +234,7 @@ func TestGuardHoldsTheWritesOfAKilledRun(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "l.jsonl")
 	l, _ := Open(path)
 	Use(l)
-	c := &http.Client{Transport: Wrap(nil)}
+	c := &http.Client{Transport: Wrap(http.DefaultTransport)}
 	post := func(body string) error {
 		resp, err := c.Post(srv.URL+"/pay", "text/plain", strings.NewReader(body))
 		if err == nil {

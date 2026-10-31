@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -181,9 +182,17 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (t *Transport) base() http.RoundTripper {
 	if t.Base == nil {
-		return http.DefaultTransport
+		return noBase{}
 	}
 	return t.Base
+}
+
+// noBase is what a Transport without a Base sends with: an error. Only
+// egress makes the transports a run sends with, and gives each a Base.
+type noBase struct{}
+
+func (noBase) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, errors.New("ledger: the transport has no Base to send with")
 }
 
 // CloseIdleConnections passes on to Base, as http.Client looks for it.
@@ -193,7 +202,7 @@ func (t *Transport) CloseIdleConnections() {
 	}
 }
 
-// Wrap is rt (nil: the default transport) with its requests recorded; a
+// Wrap is rt with its requests recorded; a
 // transport already wrapped is returned as it is.
 func Wrap(rt http.RoundTripper) http.RoundTripper { return WrapAs(ClassTarget, rt) }
 

@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -22,7 +21,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/paramcol"
 	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -655,14 +653,7 @@ func replayToProxy(hostport string, rows []paramsRow, rate float64) string {
 	if err != nil || pu.Host == "" {
 		return fmt.Sprintf("-oB %q is not HOST:PORT: nothing was replayed", hostport)
 	}
-	client := &http.Client{
-		Timeout: 30 * time.Second,
-		Transport: ledger.Wrap(&http.Transport{
-			Proxy:           http.ProxyURL(pu),
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true, MinVersion: tls.VersionTLS12},
-		}),
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	client := egress.TargetClient(egress.TargetOptions{Timeout: 30 * time.Second, Proxy: pu})
 	sent, failed := 0, 0
 	var last error
 	for _, r := range rows {

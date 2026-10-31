@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -194,7 +193,8 @@ func sendSeal(dest, ledgerPath, seal string, entries int) error {
 		return err
 	}
 	if u, err := url.Parse(dest); err == nil && (u.Scheme == "http" || u.Scheme == "https") {
-		client := &http.Client{Timeout: 15 * time.Second}
+		// The user's own endpoint, asked after the ledger is sealed: not recorded in it.
+		client := egress.OwnClient(egress.OwnOptions{Timeout: 15 * time.Second, Follow: true})
 		resp, err := client.Post(dest, "application/json", bytes.NewReader(raw))
 		if err != nil {
 			return err

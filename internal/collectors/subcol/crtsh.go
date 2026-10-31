@@ -63,24 +63,14 @@ func crtshDatabase(ctx context.Context, domain string, client *http.Client, shar
 // crtshProxy is the SOCKS5 proxy the source requests go through, nil for
 // none, or an error when the proxy is one PostgreSQL cannot pass.
 func crtshProxy(client *http.Client) (*url.URL, error) {
-	var tr http.RoundTripper
 	if client != nil {
-		tr = client.Transport
+		if rt, ok := client.Transport.(*retryTransport); ok {
+			cp := *client
+			cp.Transport = rt.next
+			client = &cp
+		}
 	}
-	if rt, ok := tr.(*retryTransport); ok {
-		tr = rt.next
-	}
-	var fn func(*http.Request) (*url.URL, error)
-	switch t := egress.Unwrap(tr).(type) {
-	case *http.Transport:
-		fn = t.Proxy
-	case nil:
-		fn = http.ProxyFromEnvironment
-	}
-	if fn == nil {
-		return nil, nil
-	}
-	u, err := fn(&http.Request{URL: &url.URL{Scheme: "https", Host: "crt.sh", Path: "/"}})
+	u, err := egress.ProxyOf(client, &http.Request{URL: &url.URL{Scheme: "https", Host: "crt.sh", Path: "/"}})
 	if err != nil || u == nil {
 		return nil, nil
 	}
