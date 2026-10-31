@@ -46,12 +46,14 @@ var tools = []tool{
 // commit with go install. jsluice needs cgo (tree-sitter).
 var builtTools = []tool{
 	{Name: "jsluice", Version: "v0.0.0-20240110145140-0ddfab153e06", repo: "github.com/BishopFox/jsluice/cmd/jsluice"},
+	// MIT; no release binary is pinned, so the notify comparison builds it.
+	{Name: "notify", Version: "v1.0.7", repo: "github.com/projectdiscovery/notify/cmd/notify"},
 }
 
 func installBuilt(dir string) error {
 	for _, t := range builtTools {
 		marker := filepath.Join(dir, "."+t.Name+"-"+t.Version)
-		if installed(dir, t.Name, marker) {
+		if installed(dir, t.Name, marker) || (refBin != "" && fileExists(filepath.Join(refBin, t.Name))) {
 			continue
 		}
 		logf("building %s %s", t.Name, t.Version)

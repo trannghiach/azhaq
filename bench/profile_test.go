@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBenignExitAndRefused(t *testing.T) {
@@ -162,5 +163,67 @@ func TestReadmeBlockCarriesTheLabelTheDriftCheckReads(t *testing.T) {
 	}
 	if !strings.Contains(b, "| default |") || !strings.Contains(b, "| polite |") || !strings.Contains(b, "1 of 2 checks pass") {
 		t.Fatal(b)
+	}
+}
+
+// Two tools are timed in turn, so a target that drifts costs both the same.
+func TestTimedPairTakesTheRunsInTurn(t *testing.T) {
+	oldRec, oldFresh, oldWork := rec, fresh, work
+	defer func() { rec, fresh, work = oldRec, oldFresh, oldWork }()
+	rec, fresh, work = record{}, true, t.TempDir() // fresh: nothing replayed from a cache
+	order := filepath.Join(t.TempDir(), "order")
+	say := func(who string) []string { return []string{"-c", "echo " + who + " >> " + order + "; echo out-" + who} }
+	aOut, am, bOut, bm := timedPair("t", time.Minute, t.TempDir(), "sh", "sh", say("a"), say("b"))
+	got, _ := os.ReadFile(order)
+	if string(got) != "a\nb\na\nb\na\nb\n" {
+		t.Errorf("runs in this order: %q", got)
+	}
+	if string(aOut) != "out-a\n" || string(bOut) != "out-b\n" || am.Seconds <= 0 || bm.Seconds <= 0 {
+		t.Errorf("outputs %q %q, seconds %v %v", aOut, bOut, am.Seconds, bm.Seconds)
+	}
+	if noCache {
+		t.Error("the cache is left off")
+	}
+
+	// A run that failed is its tool's only measure; the other tool goes on.
+	os.Remove(order)
+	_, am, _, _ = timedPair("t", time.Minute, t.TempDir(), "sh", "sh", []string{"-c", "echo a >> " + order + "; exit 2"}, say("b"))
+	got, _ = os.ReadFile(order)
+	if string(got) != "a\nb\nb\nb\n" || am.Error == "" {
+		t.Errorf("a failed tool is run once: %q, error %q", got, am.Error)
+	}
+}
+
+// A reference that could not start has no time and no results: the
+// comparison fails and says so, instead of finding azhaq within 5% of 0.0 s.
+func TestBarFailsWhenTheReferenceDidNotRun(t *testing.T) {
+	oldRec, oldProf, oldFresh, oldWork, oldGone := rec, prof, fresh, work, refGone
+	defer func() { rec, prof, fresh, work, refGone = oldRec, oldProf, oldFresh, oldWork, oldGone }()
+	rec, prof, fresh, work, refGone = record{}, profDefault, true, t.TempDir(), map[string]string{}
+
+	// The tool is not there: run() notes it.
+	_, m := run("notify", time.Second, t.TempDir(), filepath.Join(t.TempDir(), "notify"), "-i", "x")
+	if m.Error == "" || refGone["notify"] == "" {
+		t.Fatalf("a tool that cannot start is not marked: error %q, gone %v", m.Error, refGone)
+	}
+	barOne("notify", 6, 0, 5.0, 0.0, "the stub's own log", "azhaq notify -i x vs notify -i x -duc", "")
+	for _, c := range rec.Checks {
+		if c.Pass || !strings.Contains(c.Detail, "the reference did not run") {
+			t.Errorf("%s: pass %v, detail %q", c.Name, c.Pass, c.Detail)
+		}
+	}
+	if len(rec.Checks) != 2 || rec.Checks[1].Name != "[default] notify: time ≤ 1.05× the reference's" {
+		t.Errorf("checks %+v", rec.Checks)
+	}
+
+	// A reference that ran is compared as before.
+	rec.Checks = nil
+	refGone = map[string]string{}
+	barOne("notify", 6, 6, 5.0, 4.9, "the stub's own log", "azhaq notify -i x vs notify -i x -duc", "")
+	if !rec.Checks[0].Pass || !rec.Checks[1].Pass {
+		t.Errorf("checks %+v", rec.Checks)
+	}
+	if got := vsTool("azhaq dirs -u x vs /home/r/ffuf -u y"); got != "ffuf" {
+		t.Errorf("vsTool %q", got)
 	}
 }

@@ -33,7 +33,7 @@ Public test sites (ginandjuice.shop, testphp.vulnweb.com, demo.testfire.net) are
 Each comparison row is two checks.
 
 - **Results**: azhaq's results are at least the reference's, counting only results that something other than azhaq confirms: a server's own log, a second resolver, `ss -ltn`, the app's own routes or planted parameters, a GET to the host itself. Not 95%.
-- **Time**: azhaq's time is at most 1.05 times the reference's: the median of three runs when the first took under 20 s, one run above. A run of azhaq that failed (a flag or a command a stream has not delivered) is no time to compare, and fails the check.
+- **Time**: azhaq's time is at most 1.05 times the reference's: the median of three runs when the first took under 20 s, one run above; for `dirs` and `fuzz` the two tools' runs alternate (azhaq, ffuf, azhaq, ffuf, …), so a target that slows down or speeds up as the bench goes on costs both the same. A run of azhaq that failed (a flag or a command a stream has not delivered) is no time to compare, and fails the check.
 
 Every check names the exact commands, so a reviewer can run them again. The record still has the old numbers (shares of the reference's results, ratios of times).
 
@@ -55,7 +55,7 @@ Downloaded to `bench/.work/bin` and verified against pinned SHA-256 sums (`bench
 | arjun | 2.2.7 | query parameters (GPL-3.0; installed with pip in a virtual environment and run as a separate program) |
 | gowitness | 3.2.2 | screenshots (GPL-3.0; run as a separate program) |
 | nmap | 7.94 | `-sV` service and version detection on the services lab (NPSL; run as a separate program; extracted from the Ubuntu .debs with `dpkg -x`, no sudo; `-nmap` names a script that runs it) |
-| notify | 1.0.7 | notifications to a local stub (`go install`, MIT) |
+| notify | 1.0.7 | notifications to a local stub (built with `go install` by the bench, like jsluice; MIT) |
 
 Wordlists come from SecLists (MIT) at a pinned commit and are checked against their SHA-256 sums: `subdomains-top1million-5000.txt` for DNS brute force, `common.txt` for paths, `burp-parameter-names.txt` for parameters.
 

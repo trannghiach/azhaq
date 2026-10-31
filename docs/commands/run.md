@@ -229,6 +229,7 @@ A client route is a view that a single-page app's router draws.
 
 - Pages that differ only by an ID are folded: `/product?id={n}`.
 - `count` is the number of URLs folded. `not_asked` is how many of them were found and not requested.
+- Pages of one route that differ in which ID-like names they carry are one row: `/product?id={n}` and `/product?id={n}&store={n}`. Its `params` lists every name.
 - A query value that names a page, such as `index.jsp?content=about.htm` or `view=grid`, is not an ID. Each is a page of its own.
 - Three URLs of a template are requested. `-per-template N` changes that.
 - The others are listed with `coverage: hint`, as rows of their own in `crawl`, in text and `-json`.

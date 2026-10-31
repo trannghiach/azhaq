@@ -730,7 +730,7 @@ func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 			out = append(out, r)
 			continue
 		}
-		key := r.Scope + "\x00" + r.Template
+		key := r.Scope + "\x00" + templateFamily(r.Template)
 		i, ok := idx[key]
 		if !ok {
 			r.Count = 1
@@ -756,6 +756,28 @@ func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 		}
 	}
 	return out
+}
+
+// templateFamily is a template without its ID-like query names: the
+// pages of one route that differ in which of them they carry
+// (?productId={n} and ?productId={n}&storeId={n}) are one row, and its
+// params list every name. A word that names a page (?category=Gin) stays,
+// as each is a page of its own.
+func templateFamily(t string) string {
+	path, query, ok := strings.Cut(t, "?")
+	if !ok {
+		return t
+	}
+	var keep []string
+	for _, p := range strings.Split(query, "&") {
+		if _, v, _ := strings.Cut(p, "="); v != "{n}" && v != "{v}" {
+			keep = append(keep, p)
+		}
+	}
+	if len(keep) == 0 {
+		return path
+	}
+	return path + "?" + strings.Join(keep, "&")
 }
 
 // notAsked is 1 for a URL found and never requested.

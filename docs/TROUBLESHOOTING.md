@@ -250,6 +250,8 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 
 - The row keeps the first bytes of any answer in `banner`.
 - A port that accepts a connection and closes it without a word is `tcpwrapped`.
+- A container's port is `tcpwrapped` too while its daemon is still starting: docker's proxy accepts and closes until the daemon listens. Scan again once it is up.
+- A daemon that greets a second or two late is named by its greeting.
 - When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports. The protocol list was not run for the rest.
 
 **Fix:** Read `banner`.

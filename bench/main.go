@@ -362,6 +362,9 @@ func run(target string, timeout time.Duration, dir string, name string, args ...
 	t0 := time.Now()
 	m := runMeasure{Tool: filepath.Base(name), Target: target, Profile: prof}
 	err := cmd.Start()
+	if err != nil && name != azhaq {
+		markGone(filepath.Base(name), err.Error()) // a reference that cannot start has no time to compare
+	}
 	if err == nil {
 		done := make(chan struct{})
 		peak := make(chan int64)

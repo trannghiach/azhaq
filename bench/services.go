@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"strconv"
@@ -51,6 +53,115 @@ var serviceTruth = []struct {
 	{10445, "samba", []string{"smb", "microsoft-ds", "netbios"}}, {19200, "elasticsearch", []string{"http", "elasticsearch"}}, {10053, "coredns (tcp)", []string{"domain", "dns"}},
 }
 
+// serviceReady is how to tell that the daemon behind a lab port serves, not
+// only that docker's proxy listens: it accepts a connection and closes it
+// until the container's process is up, which nmap and azhaq both name
+// tcpwrapped. send is what to say first (nothing for a service that
+// greets), ok judges what comes back; with no ok the service waits to be
+// asked, and is serving when a connection stays open.
+type serviceReady struct {
+	send []byte
+	ok   func(reply []byte) bool
+}
+
+func startsWith(p string) func([]byte) bool {
+	return func(b []byte) bool { return bytes.HasPrefix(b, []byte(p)) }
+}
+
+// httpOK is a reply that is an HTTP status line with the code, any when "".
+func httpOK(code string) func([]byte) bool {
+	return func(b []byte) bool {
+		return bytes.HasPrefix(b, []byte("HTTP/1.")) && (code == "" || bytes.Contains(firstLine(b), []byte(" "+code)))
+	}
+}
+
+func firstLine(b []byte) []byte {
+	l, _, _ := bytes.Cut(b, []byte("\n"))
+	return l
+}
+
+var (
+	httpGet = []byte("GET / HTTP/1.0\r\nHost: lab\r\n\r\n")
+	// What each lab port is asked, by port (see serviceTruth).
+	readyBy = map[int]serviceReady{
+		16379: {[]byte("PING\r\n"), startsWith("+PONG")},
+		// A handshake packet: a 4-byte header, then protocol version 10; an error packet counts as serving.
+		13306: {nil, func(b []byte) bool { return len(b) > 4 && (b[4] == 10 || b[4] == 0xff) }},
+		// An SSLRequest: a server that is up answers S or N.
+		15432: {[]byte{0, 0, 0, 8, 4, 0xd2, 0x16, 0x2f}, func(b []byte) bool { return len(b) >= 1 && (b[0] == 'S' || b[0] == 'N') }},
+		17017: {},
+		// MQTT CONNECT, protocol 4, clean session: CONNACK.
+		11883: {[]byte{0x10, 0x0c, 0, 4, 'M', 'Q', 'T', 'T', 4, 2, 0, 60, 0, 0}, func(b []byte) bool { return len(b) >= 2 && b[0] == 0x20 }},
+		// AMQP 0-9-1 header: a method frame (Connection.Start).
+		15682: {[]byte("AMQP\x00\x00\x09\x01"), func(b []byte) bool { return len(b) >= 7 && b[0] == 1 }},
+		21211: {[]byte("version\r\n"), startsWith("VERSION ")},
+		12222: {nil, startsWith("SSH-")},
+		10021: {nil, startsWith("220")},
+		10025: {nil, startsWith("220")},
+		18825: {httpGet, httpOK("")},
+		// An anonymous simple bind: a LDAPMessage with a bindResponse (0x61).
+		10389: {[]byte{0x30, 0x0c, 0x02, 0x01, 0x01, 0x60, 0x07, 0x02, 0x01, 0x03, 0x04, 0x00, 0x80, 0x00}, func(b []byte) bool { return len(b) > 5 && b[0] == 0x30 && bytes.IndexByte(b, 0x61) > 0 }},
+		10445: {},
+		// Elasticsearch answers 503 or 401 while it starts.
+		19200: {httpGet, httpOK("200")},
+		// A DNS query for "a." over TCP, with its length: any answer to id 0x1234.
+		10053: {[]byte{0, 21, 0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 'a', 0, 0, 1, 0, 1}, func(b []byte) bool { return len(b) >= 4 && b[2] == 0x12 && b[3] == 0x34 }},
+	}
+)
+
+// serving says whether the lab port answers as its daemon does.
+func serving(port int) bool { return servingAs(port, readyBy[port]) }
+
+// servingAs is one look: connect, say what the protocol says first, read
+// what comes back.
+func servingAs(port int, r serviceReady) bool {
+	c, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 2*time.Second)
+	if err != nil {
+		return false
+	}
+	defer c.Close()
+	wait := 2 * time.Second
+	if r.ok == nil {
+		wait = 400 * time.Millisecond // a closed connection is closed at once
+	}
+	_ = c.SetDeadline(time.Now().Add(wait))
+	if len(r.send) > 0 {
+		if _, err := c.Write(r.send); err != nil {
+			return false
+		}
+	}
+	buf := make([]byte, 512)
+	n, err := c.Read(buf)
+	if r.ok == nil {
+		// Waits to be asked: serving unless something closes the connection.
+		ne, isNet := err.(net.Error)
+		return n > 0 || isNet && ne.Timeout()
+	}
+	return n > 0 && r.ok(buf[:n])
+}
+
+// waitServing waits up to max for every lab service to serve, and returns
+// the ports that do not.
+func waitServing(max time.Duration, every time.Duration, ports []int) []int {
+	deadline := time.Now().Add(max)
+	for {
+		var not []int
+		for _, p := range ports {
+			if !serving(p) {
+				not = append(not, p)
+			}
+		}
+		if len(not) == 0 || time.Now().After(deadline) {
+			return not
+		}
+		time.Sleep(every)
+	}
+}
+
+// servicesStartWait is how long the daemons of the lab get to start
+// (Elasticsearch's JVM, RabbitMQ and OpenLDAP take a minute on a runner).
+const servicesStartWait = 4 * time.Minute
+
 func servicesLab() bool {
 	up := func() bool {
 		snap := listening()
@@ -61,16 +172,35 @@ func servicesLab() bool {
 		}
 		return true
 	}
-	if up() {
-		return true
+	if !up() {
+		// Containers are only ever started, never stopped, by the bench.
+		logf("starting the services lab")
+		_ = exec.Command("docker", "compose", "-f", "bench/services.yaml", "up", "-d").Run()
+		for i := 0; i < 30 && !up(); i++ {
+			time.Sleep(2 * time.Second)
+		}
+		if !up() {
+			return false
+		}
 	}
-	// Containers are only ever started, never stopped, by the bench.
-	logf("starting the services lab")
-	_ = exec.Command("docker", "compose", "-f", "bench/services.yaml", "up", "-d").Run()
-	for i := 0; i < 30 && !up(); i++ {
-		time.Sleep(2 * time.Second)
+	// docker's proxy listens before its daemon does: nothing is timed until
+	// each one answers as its protocol does.
+	var ports []int
+	for _, s := range serviceTruth {
+		ports = append(ports, s.port)
 	}
-	return up()
+	if not := waitServing(servicesStartWait, 2*time.Second, ports); len(not) > 0 {
+		var names []string
+		for _, s := range serviceTruth {
+			for _, p := range not {
+				if s.port == p {
+					names = append(names, fmt.Sprintf("%d %s", p, s.what))
+				}
+			}
+		}
+		addCheck("services: every lab daemon serves before anything is timed", false, "not serving after %s: %v (the rows for them measure a lab that was not up)", servicesStartWait, names)
+	}
+	return true
 }
 
 func nmapBin() string {

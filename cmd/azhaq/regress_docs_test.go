@@ -183,3 +183,34 @@ func TestDocsSignInSendsMoreThanItsOwnForm(t *testing.T) {
 		}
 	}
 }
+
+// No help text or doc says "GET requests only" of the tool as a whole
+// without naming HEAD: a port scan sends one, Chrome sends it too. The
+// bench's docs check reads the same lines.
+func TestHelpAndDocsDoNotSayGETsOnlyWithoutHEAD(t *testing.T) {
+	getsOnly := regexp.MustCompile(`(?i)\bGETs? only\b|\bonly GETs?\b|\bGET requests only\b`)
+	general := regexp.MustCompile(`(?i)\bsends?\b|requests? (are|is)|\bports?\b|banner|every request|all requests|\bsent\b`)
+	help, err := json.MarshalIndent(buildManifest(), "", "  ") // what help -json prints (too large for the capture pipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	docs := map[string]string{"help -json": string(help), "README.md": readDoc(t, "../../README.md")}
+	files, _ := os.ReadDir("../../docs")
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".md") {
+			docs["docs/"+f.Name()] = readDoc(t, "../../docs/"+f.Name())
+		}
+	}
+	for name, text := range docs {
+		ls := docLines(text)
+		for i, l := range ls {
+			if !getsOnly.MatchString(l) || !general.MatchString(l) {
+				continue
+			}
+			ctx := strings.Join(ls[max(0, i-1):min(len(ls), i+2)], " ")
+			if !strings.Contains(strings.ToUpper(ctx), "HEAD") {
+				t.Errorf("%s:%d says GETs only without naming HEAD: %.160s", name, i+1, strings.TrimSpace(l))
+			}
+		}
+	}
+}

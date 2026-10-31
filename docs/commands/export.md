@@ -52,7 +52,7 @@ The output is the format you chose, on stdout.
 
 ## Summary and exit codes
 
-A format that finds nothing writes nothing and says why on stderr. The exit code is 0.
+A format that finds nothing writes nothing and says why on stderr; `openapi` writes a description with no paths instead (below). The exit code is 0.
 
 ```
 azhaq export: nothing to write: the workspace holds no host names (a run of a URL or an address has none: …)
@@ -85,6 +85,7 @@ The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUT
 
 It is a valid OpenAPI document whatever went into it:
 
+- A workspace with no API route gives one too, such as a run whose target did not answer. Its `paths` is `{}`, stderr says `azhaq export: no API routes found on ORIGIN: wrote a description with no paths`, and the exit code is 0.
 - Every `operationId` is unique. A served description's keep theirs. A repeat gets `_2`, `_3` in path order: `/blog` and `/blog/` are both `get_blog`.
 - Templates that differ only by their parameter names are one path: the served description's, else the first.
 - Every `{name}` in a path is a declared path parameter, and a parameter is listed once.

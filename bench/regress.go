@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -68,12 +69,6 @@ func benchRegress() *regressRow {
 	row := &regressRow{}
 	dir, _ := filepath.Abs(filepath.Join(work, "regress-"+time.Now().Format("150405")))
 	must(os.MkdirAll(dir, 0o755))
-	for _, u := range []string{regressJuice, regressVampi} {
-		if err := waitUp(u, 20*time.Second); err != nil {
-			addCheck("regress: the local apps are up", false, "%v", err)
-			return row
-		}
-	}
 	// While developing: REGRESS_ONLY=SAF-03,PRB-07 runs those checks only.
 	only := map[string]bool{}
 	for _, id := range strings.Split(os.Getenv("REGRESS_ONLY"), ",") {
@@ -81,15 +76,43 @@ func benchRegress() *regressRow {
 			only[id] = true
 		}
 	}
-	for _, c := range []struct {
-		id string
-		fn func()
+	items := []struct {
+		id   string
+		open bool
+		apps []string
+		fn   func()
 	}{
-		{"SAF-03", func() { row.saf03(dir) }}, {"SAF-09", func() { row.saf09(dir) }}, {"PRB-13", func() { row.dirsTime(dir) }},
-		{"PRB-07", row.prb07}, {"PRB-14", func() { row.prb14(dir) }}, {"PRB-18", func() { row.prb18(dir) }},
-		{"MAP-27", func() { row.map27(dir) }}, {"SPD-01", func() { row.spd01(dir) }},
-	} {
+		{"SAF-03", false, []string{claimJuice}, func() { row.saf03(dir) }}, {"SAF-09", false, []string{claimJuice}, func() { row.saf09(dir) }},
+		{"PRB-13", false, []string{claimJuice, claimVampi}, func() { row.dirsTime(dir) }}, {"PRB-07", true, nil, row.prb07},
+		{"PRB-14", true, []string{claimJuice}, func() { row.prb14(dir) }}, {"PRB-18", true, []string{claimJuice}, func() { row.prb18(dir) }},
+		{"MAP-27", true, []string{claimJuice}, func() { row.map27(dir) }}, {"SPD-01", true, []string{claimJuice}, func() { row.spd01(dir) }},
+	}
+	labs := newLabSet()
+	var need []string
+	for _, c := range items {
 		if len(only) == 0 || only[c.id] {
+			for _, a := range c.apps {
+				if !slices.Contains(need, a) {
+					need = append(need, a)
+				}
+			}
+		}
+	}
+	labs.start(need...)
+	// A check whose app is down is recorded as not met; the others run.
+	for _, c := range items {
+		if len(only) > 0 && !only[c.id] {
+			continue
+		}
+		down := false
+		for _, a := range c.apps {
+			if err := labs.up(a); err != nil {
+				row.record(c.id, c.open, false, "not run, the app it needs is down: %v", err)
+				down = true
+				break
+			}
+		}
+		if !down {
 			c.fn()
 		}
 	}

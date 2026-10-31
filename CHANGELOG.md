@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `export -format openapi` of a workspace with no API route (a run whose target did not answer, exit 3) writes a valid OpenAPI 3.0.3 description with no paths and a stderr line `no API routes found on ORIGIN: wrote a description with no paths`, and exits 0; it printed nothing and exited 1.
+- Pages of one route that differ in which ID-like query names they carry (`?productId=1` and `?productId=1&storeId=1`) are one template row of the map, and its `params` list every name; a word that names a page (`?category=Gin`) stays its own row, and `crawl` still lists every URL.
+- The help of `plan` no longer says a run sends "GET requests only": it names what is planned besides GET (Chrome's HEAD and OPTIONS, a port scan's HEAD, UDP probes, POST bodies, sign-in).
 - `ports` identifies a silent port in a few waits, not one per protocol: the protocols that wait to be asked are tried a few at a time (3, then 6, then 12, as many as the scan has free workers), the first in the list that answers is the port's, and a `HEAD` that stays unanswered for half a second is waited on while the TLS handshake and the list are asked beside it. Every connect is still paced, counted and in the ledger, and the cap of 24 after the first holds. On 15 local services the scan took 2.8 s, from 8.1 s, with the same rows; a port named by a late protocol may cost a few more connects than before.
 - A `ports` scan that `-max-requests` or the kill file stopped counts the addresses it asked, wholly or in part, in its summary (`counts.addresses`), so it agrees with the rows; it said 0 for a single address that had printed two open ports.
 - `dns -resp` and `-resp-only` print each record's value exactly as the resolver sent it, as `-json`, `-ot`, dnsx and dig do: a DMARC TXT keeps its `DMARC1` (it printed `v=dmarc1`), and so do CAA values, SOA mailboxes and target names.

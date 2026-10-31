@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
@@ -598,5 +599,62 @@ func TestShotGroups(t *testing.T) {
 	groups := shotGroups(obs, "")
 	if len(groups) != 4 || len(groups[0]) != 3 {
 		t.Errorf("want a group of 3 and three singles, got %d groups: %v", len(groups), groups)
+	}
+}
+
+// An export is a valid OpenAPI description whatever the run found: a run
+// that exits 3 because its target did not answer, and a workspace with no
+// URL at all, give a document with no paths, not an error and no output.
+func TestOpenAPIExportWithNoRoutes(t *testing.T) {
+	closed := httptest.NewServer(http.NotFoundHandler())
+	dead := closed.URL
+	closed.Close() // the address answers nothing
+	db := filepath.Join(t.TempDir(), "dead.db")
+	_, _, code := runContract(t, "run", "-url", dead+"/", "-db", db, "-quiet", "-allow", "127.0.0.1")
+	if code != exitPartial {
+		t.Fatalf("run exit %d, want %d (the target did not answer)", code, exitPartial)
+	}
+	out, errOut, err := captureBoth(t, func() error {
+		return run([]string{"export", "-db", db, "-format", "openapi"})
+	})
+	if err != nil {
+		t.Fatalf("export: %v", err)
+	}
+	var doc struct {
+		OpenAPI string `json:"openapi"`
+		Info    struct{ Title, Version string }
+		Servers []struct{ URL string }
+		Paths   map[string]any `json:"paths"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("the export is not JSON: %v\n%s", err, out)
+	}
+	if doc.OpenAPI != "3.0.3" || doc.Info.Title == "" || doc.Info.Version == "" || doc.Paths == nil || len(doc.Paths) != 0 ||
+		len(doc.Servers) != 1 || doc.Servers[0].URL != dead {
+		t.Errorf("description %+v, want 3.0.3 with the target as server and an empty paths object", doc)
+	}
+	if !strings.Contains(errOut, "no API routes found on "+dead) || !strings.Contains(errOut, "no paths") {
+		t.Errorf("stderr does not say why the document is empty: %q", errOut)
+	}
+
+	// No URL in the workspace: no origin to name, still a document.
+	empty := filepath.Join(t.TempDir(), "names.db")
+	st, err := store.Open(empty)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertEntity(types.TypeHostname, "app.example.com", time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	out, _, err = captureBoth(t, func() error {
+		return run([]string{"export", "-db", empty, "-format", "openapi"})
+	})
+	if err != nil {
+		t.Fatalf("export of a workspace with no URL: %v", err)
+	}
+	doc.Servers = nil
+	if err := json.Unmarshal([]byte(out), &doc); err != nil || doc.OpenAPI != "3.0.3" || doc.Paths == nil || len(doc.Servers) != 0 {
+		t.Errorf("no URL: %v %+v\n%s", err, doc, out)
 	}
 }

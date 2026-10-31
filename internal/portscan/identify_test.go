@@ -425,3 +425,32 @@ func TestBudgetSpentInTheLadderStopsTheScan(t *testing.T) {
 		t.Fatal("a spent budget in the middle of a port's probes was not reported")
 	}
 }
+
+// A daemon that is slow to greet (a database after a cold start, sshd
+// under load) is named by what it says, not taken for a TCP wrapper:
+// tcpwrapped is for a connection that is closed, not one that is late. The
+// scanner has its default waits here, shorter than the greeting.
+func TestSlowGreeterIsNotTCPWrapped(t *testing.T) {
+	greet := func(banner []byte) func(net.Conn) {
+		return func(c net.Conn) {
+			time.Sleep(2 * time.Second)
+			c.Write(banner)
+			time.Sleep(300 * time.Millisecond)
+		}
+	}
+	body := append([]byte{10}, "8.0.35\x00"...)
+	body = append(body, 1, 0, 0, 0, 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 0)
+	my := listen(t, greet(append([]byte{byte(len(body)), 0, 0, 0}, body...)))
+	ssh := listen(t, greet([]byte("SSH-2.0-OpenSSH_9.6\r\n")))
+	s := &Scanner{}
+	r, err := s.ScanEach(context.Background(), "localhost", "127.0.0.1", []int{my, ssh})
+	if err != nil || len(r.Open) != 2 {
+		t.Fatalf("scan: %v %+v", err, r)
+	}
+	for _, o := range r.Open {
+		want := map[int]string{my: "mysql", ssh: "ssh"}[o.Port]
+		if o.Service != want {
+			t.Errorf("port %d said %q after 2 s: service %q, want %q", o.Port, o.Banner, o.Service, want)
+		}
+	}
+}
