@@ -72,8 +72,8 @@ check_not "the docker daemon is not on TCP 2375/2376" bash -c 'exec 3<>/dev/tcp/
 if [ -n "$dry" ]; then
   echo "+ sudo rm -f <each file in /etc/sudoers.d that names $user, %sudo or %admin>"
 else
-  for f in /etc/sudoers.d/*; do
-    [ -f "$f" ] || continue
+  # The user cannot list /etc/sudoers.d (0750 root): list it as root.
+  sudo -n find /etc/sudoers.d -maxdepth 1 -type f 2>/dev/null | while read -r f; do
     if sudo -n grep -qE "^[[:space:]]*(${user}|%sudo|%admin)\b" "$f" 2>/dev/null; then
       sudo -n rm -f "$f"
     fi
@@ -82,6 +82,13 @@ fi
 priv gpasswd -d "$user" sudo
 priv gpasswd -d "$user" admin
 priv sed -i -E "/^[[:space:]]*(${user}|%sudo|%admin)[[:space:]]/d" /etc/sudoers
+# Last, and last in sudoers' order: whatever grant is left, this denies it.
+if [ -n "$dry" ]; then
+  echo "+ sudo tee /etc/sudoers.d/zzz-no-$user  # $user ALL=(ALL) !ALL"
+else
+  # One call: once the file is there, sudo is gone.
+  printf '%s ALL=(ALL:ALL) !ALL\n' "$user" | sudo -n install -m 0440 /dev/stdin "/etc/sudoers.d/zzz-no-$user" || true
+fi
 if [ -z "$dry" ]; then sudo -k; fi
 check_not "sudo is gone" sudo -n true
 check_not "su to root is not possible without a password" su -c true root < /dev/null
