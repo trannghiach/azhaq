@@ -29,7 +29,7 @@ func evidenceRows(t *testing.T, keys []string, obs []types.StoredObservation) ma
 }
 
 func TestEvidenceLevelOrder(t *testing.T) {
-	want := []string{"answered", "described", "called", "linked", "archived", "guessed"}
+	want := []string{"answered", "browser", "described", "called", "linked", "archived", "guessed"}
 	if !slices.Equal(engine.EvidenceLevels, want) {
 		t.Fatalf("levels %v", engine.EvidenceLevels)
 	}
@@ -161,5 +161,54 @@ func TestEvidenceTagOnTextRows(t *testing.T) {
 	}
 	if l := got[h+"/old"].Line(); !strings.HasSuffix(l, "[archived]") {
 		t.Errorf("archived row: %s", l)
+	}
+}
+
+// Chrome's own request is its own level, apart from a script's call.
+func TestEvidenceBrowserIsApartFromCalled(t *testing.T) {
+	const h = "https://shop.test"
+	obs := []types.StoredObservation{
+		urlObs("azhaq-render", `{"url":"`+h+`/seen","via":"browser","seen":"request","role":"api"}`),
+		urlObs("azhaq-render", `{"url":"`+h+`/sent","via":"browser","seen":"write","role":"api","methods":["POST"]}`),
+		urlObs("azhaq-render", `{"url":"`+h+`/anchor","via":"browser","seen":"link","role":"page"}`),
+		urlObs("azhaq-js", `{"url":"`+h+`/script","via":"js-call","role":"api","methods":["GET"]}`),
+		urlObs("azhaq-render", `{"url":"`+h+`/both","via":"browser","seen":"request","role":"api"}`),
+		urlObs("azhaq-js", `{"url":"`+h+`/both","via":"js-call","role":"api","methods":["GET"]}`),
+	}
+	got := evidenceRows(t, []string{h + "/seen", h + "/sent", h + "/anchor", h + "/script", h + "/both"}, obs)
+	for k, want := range map[string]string{"seen": "browser", "sent": "browser", "anchor": "linked", "script": "called", "both": "browser"} {
+		if m := got[h+"/"+k]; m.Evidence != want {
+			t.Errorf("%s: evidence %q, want %q", k, m.Evidence, want)
+		}
+	}
+	if l := got[h+"/seen"].Line(); !strings.HasSuffix(l, "[browser]") {
+		t.Errorf("text row %q", l)
+	}
+}
+
+// A 5xx the plain request got from a route that takes names says so; one
+// that carried the names, or from a route that takes none, does not.
+func TestAnswerWithoutInput(t *testing.T) {
+	const h = "https://shop.test"
+	call := func(path, query string) types.StoredObservation {
+		return urlObs("azhaq-js", `{"url":"`+h+path+`","via":"js-call","role":"api","methods":["GET"],"params":["`+query+`"],"ops":[{"method":"GET","query":["`+query+`"],"source":"js-call"}]}`)
+	}
+	obs := []types.StoredObservation{
+		call("/needs-email", "email"),
+		httpObs("a", `{"status":500,"url":"`+h+`/needs-email"}`),
+		call("/takes-q", "q"),
+		httpObs("b", `{"status":500,"url":"`+h+`/takes-q?q=x"}`),
+		httpObs("c", `{"status":500,"url":"`+h+`/takes-nothing"}`),
+		call("/fine", "id"),
+		httpObs("d", `{"status":200,"url":"`+h+`/fine"}`),
+	}
+	got := evidenceRows(t, []string{h + "/needs-email", h + "/takes-q?q=x", h + "/takes-nothing", h + "/fine"}, obs)
+	for k, want := range map[string]string{"/needs-email": "500 without input", "/takes-q?q=x": "", "/takes-nothing": "", "/fine": ""} {
+		if m := got[h+k]; m.Answer != want {
+			t.Errorf("%s: answer %q, want %q", k, m.Answer, want)
+		}
+	}
+	if l := got[h+"/needs-email"].Line(); !strings.Contains(l, "500 without input") {
+		t.Errorf("text row %q", l)
 	}
 }

@@ -392,7 +392,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var queue []script
 	var fetched []string
 	var found []string
-	tails := map[string]bool{} // named only joined to a base: this.host+`/orders`
+	tails := map[string]bool{}       // named only joined to a base: this.host+`/orders`
+	heads := map[string]bool{}       // route → named only as the start of a join: "/rest/user/"+id
+	asWritten := map[string]string{} // route → the first string that names it, quotes off
 	var mans []buildManifest
 	var maps []sourceMap
 	appRoot := &url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/"} // where the app's router takes its paths from
@@ -538,6 +540,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			if _, seen := tails[r.URL]; !seen || !r.Joined {
 				tails[r.URL] = r.Joined
+			}
+			hk := webextract.RouteKey(r.URL)
+			if _, seen := heads[hk]; !seen || !r.Head {
+				heads[hk] = r.Head
+			}
+			if asWritten[hk] == "" {
+				asWritten[hk] = strings.Trim(s.body[r.Start:r.End], "\"'`")
 			}
 			found = append(found, r.URL)
 			named.add(webextract.RouteKey(r.URL), s, loc, r.Start, r.End, false)
@@ -911,6 +920,19 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		if tails[link] && tailOf(link, callOps) {
 			continue // this.host+`/orders`: the call says where its base put it
 		}
+		if hk := webextract.RouteKey(link); heads[hk] || tails[link] && prefixOf(hk, callOps) {
+			// The start of a path built at run time, or a base the calls
+			// extend: kept as a rejected string, not a route.
+			text := asWritten[hk]
+			if k := text + "\x00prefix"; !rejSeen[k] {
+				rejSeen[k] = true
+				if err := emit(webextract.RejectedObs(Name, raw, text, webextract.ReasonPrefix, "js", link)); err != nil {
+					return meta, err
+				}
+				meta.EmitCount++
+			}
+			continue
+		}
 		if v, ok := viewOf(appRoot, link); ok {
 			if _, ok := views.match(v); ok {
 				continue // a link to one of the app's views: its row, and its hint, are above
@@ -1112,6 +1134,24 @@ func tailOf(link string, calls map[string][]map[string]any) bool {
 	}
 	for k := range calls {
 		if strings.HasPrefix(k, origin+"/") && strings.HasSuffix(k, u.Path) && len(k) > len(origin)+len(u.Path) {
+			return true
+		}
+	}
+	return false
+}
+
+// prefixOf says whether route, a path a script joins to a base, is itself
+// the base of routes the calls build (/rest/web3 for /rest/web3/submitKey)
+// and no call's own: a string the calls are built on, not a route.
+func prefixOf(route string, calls map[string][]map[string]any) bool {
+	if _, own := calls[route]; own {
+		return false
+	}
+	if u, err := url.Parse(route); err != nil || u.Path == "" || u.Path == "/" {
+		return false
+	}
+	for k := range calls {
+		if strings.HasPrefix(k, route+"/") {
 			return true
 		}
 	}

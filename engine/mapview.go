@@ -35,10 +35,13 @@ type MapEntry struct {
 	Guard     string            // client-route: what the app's router checks before it draws the view
 	Protocol  string            // websocket: socket.io, or "" for a plain WebSocket
 	Namespace string            // websocket: socket.io's namespace, when known
-	// How the URL is known (answered, described, called, linked, archived,
-	// guessed) and the collectors behind it, sorted.
+	// How the URL is known (answered, browser, described, called, linked,
+	// archived, guessed) and the collectors behind it, sorted.
 	Evidence     string   `json:"evidence,omitempty"`
 	EvidenceFrom []string `json:"evidence_from,omitempty"`
+	// What a 5xx the run got says less of than it looks: "500 without
+	// input" when the route takes names and the request carried none.
+	Answer string `json:"answer,omitempty"`
 }
 
 // maxFound caps the places a row lists for where scripts name it.
@@ -176,6 +179,7 @@ func BuildMap(ents []types.Entity, seeds []types.Seed, obs []types.StoredObserva
 				}
 			}
 			m.Forms = pageForms(byEnt[e.ID])
+			m.Answer = answerNote(m, e.Key)
 			m.setEvidence(evidence[e.Key], rows)
 			// The URL's own query names; those in the links on a page
 			// are the links' rows'.
@@ -588,7 +592,7 @@ func (m MapEntry) Line() string {
 	} else {
 		b.WriteString(m.Entity.Key)
 	}
-	for _, p := range []string{m.Scope, m.Coverage, m.Role, strings.Join(m.Methods, ","), m.Proof, m.EvidenceTag()} {
+	for _, p := range []string{m.Scope, m.Coverage, m.Role, strings.Join(m.Methods, ","), m.Proof, m.Answer, m.EvidenceTag()} {
 		if p == "" {
 			continue
 		}

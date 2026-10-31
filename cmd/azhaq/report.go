@@ -352,6 +352,7 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	set("coverage", r.Coverage, r.Coverage != "")
 	set("role", r.Role, r.Role != "")
 	set("status", r.Status, r.Status != 0)
+	set("answer", r.Answer, r.Answer != "")
 	set("evidence", r.Evidence, r.Evidence != "")
 	set("evidence_from", r.EvidenceFrom, len(r.EvidenceFrom) > 0)
 	set("title", r.Title, r.Title != "")

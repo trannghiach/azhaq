@@ -56,11 +56,14 @@ func JSURLs(script string, base *url.URL) []string {
 // Ref is a URL a script names, and where: Start and End are the byte
 // offsets of what names it. Joined says the string is the right operand
 // of a +: what it is joined to (this.host+`/orders`) is its base, and the
-// path is a tail of a route, not one of the root's.
+// path is a tail of a route, not one of the root's. Head says it is the
+// left operand of a join that goes on ("/rest/user/"+id): the start of a
+// path, not a route.
 type Ref struct {
 	URL        string
 	Start, End int
 	Joined     bool
+	Head       bool
 }
 
 // JSURLRefs is JSURLs with every place each URL is named, in the order
@@ -72,7 +75,11 @@ func JSURLRefs(script string, base *url.URL) []Ref {
 	var out []Ref
 	add := func(raw string, start, end int) {
 		if u, ok := resolve(base, raw); ok && !StringNoise(u) {
-			out = append(out, Ref{URL: u, Start: start, End: end, Joined: joined(script, start)})
+			ls, le := start, end // the literal with its quotes: a bare URL match is inside them
+			if le < len(script) && ls > 0 && strings.ContainsRune("\"'`", rune(script[le])) && script[ls-1] == script[le] {
+				ls, le = ls-1, le+1
+			}
+			out = append(out, Ref{URL: u, Start: start, End: end, Joined: joined(script, start), Head: HeadAt(script, ls, le)})
 		}
 	}
 	for _, m := range absURL.FindAllStringIndex(script, -1) {
@@ -93,6 +100,30 @@ func JSURLRefs(script string, base *url.URL) []Ref {
 		add(script[m[2]:m[3]], m[0], m[1])
 	}
 	return out
+}
+
+// HeadAt says whether the string literal script[start:end] (quotes
+// included) is the left operand of a join that goes on: "/rest/user/"+id,
+// "/api/x".concat(y). Such a string is where a path starts, and the path
+// is built at run time. A string with a query ("/s?q="+q) names its
+// route, and one joined to a suffix ("/a"+".json") or a query ("/a"+"?x=")
+// is whole.
+func HeadAt(script string, start, end int) bool {
+	if start < 0 || end > len(script) || end-start < 2 || strings.ContainsAny(script[start:end], "?#") {
+		return false
+	}
+	i := skipSpace(script, end)
+	switch {
+	case strings.HasPrefix(script[i:], ".concat("):
+		return true
+	case i+1 < len(script) && script[i] == '+' && script[i+1] != '+' && script[i+1] != '=':
+		j := skipSpace(script, i+1)
+		if j+1 < len(script) && strings.ContainsRune("\"'`", rune(script[j])) && strings.ContainsRune("?#.&", rune(script[j+1])) {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 // joined says whether the string at i is the right operand of a +.
