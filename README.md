@@ -83,6 +83,8 @@ sha256sum --ignore-missing -c checksums.txt
 
 Only scan systems you are allowed to test.
 
+The addresses `localhost:3000` and `localhost:5000` are lab containers (`docker run -p 3000:3000 bkimminich/juice-shop`, `docker run -p 5000:5000 erev0s/vampi`). `$TA` and `$TB` hold two accounts' tokens, and `alice.har` and `alice.xml` are those accounts' saved browsing. `-program` names a program in the platform's public list (`tesla` on Bugcrowd, `security` on HackerOne); `acme` in other examples stands for yours.
+
 **Map an app.**
 
 ```
@@ -191,6 +193,8 @@ azhaq ledger -csv app.db.ledger.jsonl       # for a client report or a blue team
 
 ## A workspace
 
+`juice.db` is the workspace of the first example, and `h1.db` one made by a run with `-scope hackerone -program …`. `nuclei` is a separate tool.
+
 ```
 azhaq query  -db juice.db -role api -method POST -fields key,body -json   # what the app's writes take
 azhaq show   -db juice.db http://localhost:3000/rest/2fa/verify           # everything about one URL, and the line that calls it
@@ -223,6 +227,8 @@ Runs into the same workspace add to it; `diff` and `watch` say what changed. `in
 azhaq subs -d example.com -live | azhaq notify -bulk -pc ~/.config/notify/provider-config.yaml
 azhaq watch -db h1.db -every 24h -notify-config provider-config.yaml -- -scope hackerone -program acme
 ```
+
+`provider-config.yaml` is notify's file: without one both lines stop with exit 2 and send nothing. [docs/MIGRATING.md](docs/MIGRATING.md#notify-azhaq-notify) has a sample.
 
 A webhook URL is a secret. Azhaq never prints it: an error from a hook names the host and what went wrong, not the path or query, and not a token a server echoes back. So that it need not stand on the command line, where `ps` shows it to every user, `-notify @FILE` reads URLs from a file (one a line) and `AZHAQ_NOTIFY` holds them too (comma-separated); a provider config keeps its tokens in the file, and a word that starts with `$` in it is replaced by that environment variable.
 
@@ -279,7 +285,7 @@ azhaq fuzz   -u https://10.0.0.5/ -H 'Host: FUZZ.example.com' -w subdomains.txt 
 azhaq params -u https://app.example.com/search                                 # arjun (6,500 built-in names)
 ```
 
-Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` have ffuf's and arjun's defaults (40 guesses in flight, 5 groups of names in flight, no pace); `-rate N` holds them to N requests a second. `dirs` takes ffuf's matchers and filters (`-ms -mw -ml -mr`, `-fc -fs -fw -fl -fr`), counts sizes, words and lines as ffuf does, starts from the path of the URL given (`-u https://h/api/` sweeps `/api/WORD`), and carries SecLists' `common.txt` (MIT, 4,750 words) for when `-w` is left out. `probe` follows no redirect unless given `-fr`, as httpx: a row's status, title, length and content type are one answer's. It takes httpx's matchers and filters (`-mc -fc -ms -fs -mr -fe -mdc …`), ports (`-p 80,8000-8100`), paths (`-path`), certificate data (`-tls-grab`), hashes (`-hash`), `-jarm`, raw output (`-sr`, `-irr`) and its CSV and Markdown forms; a target with no answer is a row with `failed: true`. `-x`, `-body` and `-rr` send the methods, body or request you give and can change data on the target; the summary says so.
+`names.txt`, `subdomains.txt` and `common.txt` are lists of yours, one entry a line (`fuzz` has no built-in wordlist; `dirs` carries `common.txt`). Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its keywords in it, `-u`), prints results as found, and with `-json` uses the field names of the tool it stands in for. `dirs` and `params` have ffuf's and arjun's defaults (40 guesses in flight, 5 groups of names in flight, no pace); `-rate N` holds them to N requests a second. `dirs` takes ffuf's matchers and filters (`-ms -mw -ml -mr`, `-fc -fs -fw -fl -fr`), counts sizes, words and lines as ffuf does, starts from the path of the URL given (`-u https://h/api/` sweeps `/api/WORD`), and carries SecLists' `common.txt` (MIT, 4,750 words) for when `-w` is left out. `probe` follows no redirect unless given `-fr`, as httpx: a row's status, title, length and content type are one answer's. It takes httpx's matchers and filters (`-mc -fc -ms -fs -mr -fe -mdc …`), ports (`-p 80,8000-8100`), paths (`-path`), certificate data (`-tls-grab`), hashes (`-hash`), `-jarm`, raw output (`-sr`, `-irr`) and its CSV and Markdown forms; a target with no answer is a row with `failed: true`. `-x`, `-body` and `-rr` send the methods, body or request you give and can change data on the target; the summary says so.
 
 **`fuzz`** puts words from a wordlist into a request, anywhere in it: the path, a query value, a header (`Host: FUZZ.example.com` for virtual hosts), the method, a JSON or form body. It takes ffuf's flags and counts as ffuf does (words are spaces plus one, lines newlines plus one, the same match and filter rules, the same calibration), so a command line moved from ffuf gives the same results:
 

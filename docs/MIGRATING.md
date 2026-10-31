@@ -24,6 +24,7 @@ If you know subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowit
 - `probe`, `crawl`, `ports`, `dirs`, `fuzz`, `params` and `shots` take `-allow`, `-deny` and `-scope` (a program's scope), `-max-requests`, `-kill-file`, `-ledger` and `-rate`; `dns` takes the three scope flags. `subs`, `urls` and `notify` send nothing to a target, so they have none of these. Nothing is sent to a host outside the scope.
 - `-db FILE` keeps what a command found in a workspace, so that `query`, `show`, `export`, `diff`, `watch` and `resume` can work on it. Without it the command uses a temporary one.
 - The output of one command feeds the next: `azhaq subs -d example.com -silent | azhaq dns -silent | azhaq probe -json`.
+- In the examples, `example.com`, `app.example.com` and `192.0.2.x` stand for targets of yours, and files such as `hosts.txt` or `names.txt` for lists of yours, one entry a line. A line that needs a config, a key, a lab or another file says so next to it.
 
 A table below has the other tool's flag on the left and azhaq's on the right. A flag with no azhaq column is one azhaq does not have, and the note says what to do instead. Flags are written for the tool's current release; azhaq's `-json` field names follow the tool's.
 
@@ -269,6 +270,8 @@ azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -e .php,.bak -recursion
 azhaq fuzz -u https://10.0.0.5/ -H 'Host: FUZZ.example.com' -w subdomains.txt -fs 4242
 ```
 
+`common.txt` and `subdomains.txt` are wordlists of yours (SecLists has both). `fuzz` has no built-in list and stops with exit 2 without `-w`; `dirs` carries SecLists' `common.txt`, so its first line needs none.
+
 On top: `-db FILE` keeps the matches in the workspace; `azhaq fuzz` with `-maxtime` or Ctrl-C prints the command that continues it and `azhaq resume` does too with `-db`. `-control FILE` steers a run that is going (`rate 2`, `pause`, `fs 4242`, `stop`). The hash-chained ledger, the budget and the kill file hold every request.
 
 ## gau: `azhaq urls`
@@ -350,6 +353,8 @@ azhaq params -u https://app.example.com/search
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt -rate 5 -oJ params.json
 azhaq params -i burp-export.xml -allow app.example.com -X POST
 ```
+
+`burp-parameter-names.txt` is SecLists' file (without `-w`, azhaq uses its own list of 6,500 names), and `burp-export.xml` is a Burp "Save items" file of yours. `-X POST` sends the names in a body, which can change data.
 
 On top: `why` for every name (`status`, `size`, `reflected`, …); pages in parallel; scope, budget, ledger and the kill file; `-db` for `query` and `export`.
 
@@ -479,6 +484,8 @@ azhaq shots -u http://127.0.0.1:3001/rest/products/search -shot-format jpeg -sho
 azhaq shots -nmap scan.xml -shot-fullpage -tabs 6 -rate 5
 ```
 
+`shots` needs Chrome or Chromium on the machine. `services.txt` lists URLs or `host:port`, one a line. The second line expects a Juice Shop on port 3001 (`docker run -p 3001:3000 bkimminich/juice-shop`). `scan.xml` is nmap's XML, which `azhaq ports -oX scan.xml` also writes.
+
 On top: the response headers, TLS session, technologies, console messages and network log of every page in `-json`; look-alike pages grouped by a perceptual hash in `azhaq export -format html`; the screenshots next to the rest of the map in one workspace (`-db`); and `azhaq resume` for a page the budget capped.
 
 ## notify: `azhaq notify`
@@ -505,12 +512,30 @@ What differs on purpose:
 - A webhook URL is never printed: an error names the host and what went wrong, not the path or query. `-notify @FILE` and `AZHAQ_NOTIFY` keep URLs off the command line in `watch`.
 - Certificates are verified, including through `-proxy`. Azhaq checks for no updates.
 
+Every line below needs a provider config: `-pc FILE`, or `~/.config/azhaq/notify.yaml`, or notify's own file. Without one azhaq stops with exit 2 and sends nothing. A sample `provider-config.yaml` follows the lines.
+
 Three command lines:
 
 ```
 azhaq subs -d example.com -live | azhaq notify -bulk -pc provider-config.yaml
-azhaq notify -i report.txt -p slack,discord -id recon -mf 'recon {{date}}: {{data}}'
-azhaq ports -host 127.0.0.1 -json | azhaq notify -p custom -rl 2
+azhaq notify -i report.txt -p slack,discord -id recon -mf 'recon {{date}}: {{data}}' -pc provider-config.yaml
+azhaq ports -host 127.0.0.1 -json | azhaq notify -p custom -rl 2 -pc provider-config.yaml
+```
+
+`report.txt` is any text file. The first line sends to every entry of the file, so all of them must be reachable; `-p custom` narrows the third to a receiver of yours on port 8000. Put your own webhook URLs in the first two entries. The keys are notify's, listed for each provider in [OUTPUT.md](OUTPUT.md#notify).
+
+```yaml
+slack:
+  - id: recon
+    slack_webhook_url: https://hooks.slack.com/services/T000/B000/XXXX
+discord:
+  - id: recon
+    discord_webhook_url: https://discord.com/api/webhooks/ID/TOKEN
+custom:
+  - id: lab
+    custom_webhook_url: http://127.0.0.1:8000/hook
+    custom_method: POST
+    custom_format: '{"text":{{dataJsonString}}}'
 ```
 
 On top: `azhaq watch -db h1.db -every 24h -notify-config provider-config.yaml -- -scope hackerone -program acme` runs a recon again and again and sends only what changed: a new host, a new API route a deploy added, nothing when nothing changed. Its message carries the change as JSON for a receiver to act on.

@@ -2,6 +2,8 @@
 
 Short answers to "how do I…". Each gives the command, what to look at, and the catch. `azhaq docs recipes` prints this page. Only test what you are allowed to test.
 
+In the commands, `app.example.com` and `example.com` stand for your target and `acme` for your program. `$TA` and `$TB` hold two accounts' tokens, and `…` is a value of yours. Files such as `hosts.txt`, `names.txt` or `alice.har` are yours, unless the text says another command writes them. A command that needs a config, a key, a lab or a tool says so beside it.
+
 ## 1. Map a single-page app and get its API into Burp
 
 ```
@@ -67,7 +69,7 @@ azhaq plan -scope hackerone -program acme -max-requests 5000
 azhaq run -scope hackerone -program acme -max-requests 5000 -rate 5 -db acme.db
 ```
 
-`plan` says what the run would ask, and sends nothing. The run never touches a host outside the program's scope, Chrome included.
+`-program` names a program in the platform's public list (`security` on HackerOne, `tesla` on Bugcrowd): `acme` stands for yours, and a name that is not in the list stops the command (`no program "acme" in the list`). `plan` says what the run would ask, and sends nothing. The run never touches a host outside the program's scope, Chrome included.
 
 ## 7. Continue a run a limit stopped
 
@@ -91,10 +93,10 @@ It reports new names, services, URLs, open ports, pages whose status or title ch
 
 ```
 azhaq subs -d example.com -live | azhaq notify -bulk -pc provider-config.yaml
-azhaq notify -i findings.txt -p slack,smtp -id recon -mf 'recon {{date}}:\n{{data}}'
+azhaq notify -i findings.txt -p slack,smtp -id recon -mf 'recon {{date}}:\n{{data}}' -pc provider-config.yaml
 ```
 
-The flags and the config are [notify's](https://github.com/projectdiscovery/notify): a file written for it works. One message goes out per line, or with `-bulk` as many lines as fit in `-cl` characters; a longer line goes in pieces. `-rl` paces the requests (default 1 a second) and a 429 is waited out. The tokens are in the config, not on the command line; `$NAME` in it is that environment variable. The summary lists each entry a message did not reach, and the exit code is then 3.
+Both need a provider config; without one `notify` stops with exit 2 and sends nothing. Here `provider-config.yaml` holds `slack` and `smtp` entries with the id `recon`; [MIGRATING.md](MIGRATING.md#notify-azhaq-notify) has a sample and [OUTPUT.md](OUTPUT.md#notify) lists the keys of each provider. `findings.txt` is any text file. The flags and the config are [notify's](https://github.com/projectdiscovery/notify): a file written for it works. One message goes out per line, or with `-bulk` as many lines as fit in `-cl` characters; a longer line goes in pieces. `-rl` paces the requests (default 1 a second) and a 429 is waited out. The tokens are in the config, not on the command line; `$NAME` in it is that environment variable. The summary lists each entry a message did not reach, and the exit code is then 3.
 
 ## 9. Feed other tools, and take their results in
 
@@ -103,6 +105,8 @@ azhaq export -db acme.db -format targets | nuclei -l -
 azhaq export -db acme.db -format burp > scope.json
 httpx -l hosts.txt -json | azhaq ingest - -db acme.db
 ```
+
+`acme.db` is the workspace of recipe 6. `nuclei` and `httpx` are separate tools, and `hosts.txt` is yours.
 
 `ingest` reads subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines and ffuf output. Lines it cannot read are skipped and counted.
 
@@ -123,6 +127,8 @@ azhaq dirs -u https://app.example.com/api/                 # built-in common.txt
 azhaq dirs -u https://app.example.com/ -w big.txt -fs 4242 -fc 404 -e .php,.bak
 ```
 
+`big.txt` is a wordlist of yours.
+
 `dirs` calibrates like `ffuf -ac` (`fuzz` only with `-ac`, as ffuf); with `-fs`/`-fw`/`-fl` the sizes, word and line counts are ffuf's, so a filter value moves over from a ffuf run.
 
 ## 10. Read a GraphQL schema
@@ -142,6 +148,8 @@ azhaq params -u https://app.example.com/search -w small -rate 5 -oJ params.json
 azhaq params -i burp-export.xml -allow app.example.com -passive # pages from Burp, names the archives hold too
 ```
 
+`burp-export.xml` is a Burp "Save items" file of yours.
+
 The built-in lists are SecLists' `burp-parameter-names.txt` (MIT) and names Azhaq found itself. Names the page's own form fields and scripts hold are tried first. A page that rate-limits it fails with exit 3 and says so. `-X POST`, `-X JSON` and `-X XML` send the names in a body, which may change data on the target: they need `-allow` or `-scope` to name the targets, or a single page.
 
 ## 11. Retry what failed
@@ -157,6 +165,8 @@ Every failed target with its error and whether a retry may help. Exit 3 means th
 ```
 claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000 -rate 5
 ```
+
+`claude mcp add` is Claude Code's command; any other MCP client runs the same `azhaq mcp …` command from its own configuration ([MCP.md](MCP.md)).
 
 The scope, the budget and the pace are fixed when the server starts; no tool argument can widen them. Without `-allow` or `-scope` the server does not start, unless `-unlocked` says so.
 
@@ -179,6 +189,8 @@ Catch: `hunt` ranks what the map holds. A thin map gives a short list (see Troub
 azhaq report -dir azhaq-roles-20261028-101500
 azhaq report -dir azhaq-roles-20261028-101500 -url https://app.example.com/rest/basket/6 -redact
 ```
+
+The directory is the one a `roles` run made and named (`azhaq-roles-DATE-TIME`).
 
 `report` turns what `roles` listed into one Markdown report per finding: a title naming the bug class, steps with curl commands (the sessions as `$ALICE_TOKEN` and `$BOB_TOKEN`), the evidence, the control (what a made-up identifier returned), why the object is the owner's, impact and remediation. The first command writes them to `DIR/reports`, `proved` first; the second writes one to standard output with hosts and identifiers masked, for a report that leaves the engagement. It sends nothing: it reads `DIR/roles.db`.
 
@@ -210,7 +222,7 @@ azhaq urls -d example.com -raw                                          # what t
 azhaq urls -d example.com -urls-pause 0 -urls-pages 0 -retries 5        # as fast as the archives answer, no page cap
 ```
 
-Piped, `urls` prints each URL once, as soon as its page arrives, so the next tool starts at once; a stop (Ctrl-C, `-timeout`) keeps what was printed. On a terminal, or with `-sort`, it waits for every archive and prints the URLs sorted. The domain alone is the default, as in gau; `-subs` asks for `*.DOMAIN` too. `azhaq run` keeps asking for the subdomains.
+`httpx` and `jq` in these lines are separate tools. Piped, `urls` prints each URL once, as soon as its page arrives, so the next tool starts at once; a stop (Ctrl-C, `-timeout`) keeps what was printed. On a terminal, or with `-sort`, it waits for every archive and prints the URLs sorted. The domain alone is the default, as in gau; `-subs` asks for `*.DOMAIN` too. `azhaq run` keeps asking for the subdomains.
 
 | gau | azhaq `urls` |
 | --- | --- |
@@ -242,11 +254,13 @@ azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -replay-proxy http://12
 azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -rate 5 -control ctl &  echo 'fs 4242' >> ctl
 ```
 
+`common.txt` and `pass.txt` are wordlists of yours (`fuzz` has no built-in list; `dirs` has). `login.req` is a raw request saved from Burp, with `FUZZ` or `PASS` in it. `-x` and `-replay-proxy` expect a proxy, such as Burp's, listening on 127.0.0.1:8080.
+
 An ffuf line works as it is: same flags, same counts, same report files (`jq .results[0]` reads them as it reads ffuf's). `-request` takes the file Burp's "copy to file" gives, with `FUZZ` in it; the keyword is looked for in the method, URL, headers and body. `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits; `-x` sends every request through it. Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target; the requests to the target do, `-ac` calibration included.
 
 Catch: `fuzz` calibrates only with `-ac`, as ffuf does, so a line moved over gives ffuf's matches and a catch-all answer is listed unless you ask for `-ac` or a filter. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.
 
-A form that wants a one-use token: save the page request and the login as files, and read the token from the page.
+A form that wants a one-use token: save the page request (`page.req`) and the login (`login.req`) as raw request files, and read the token from the page.
 
 ```
 azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 403 \
@@ -261,6 +275,8 @@ azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 
 azhaq shots -l services.txt -dir shots -rate 3 -json -o shots.jsonl -csv shots.csv -db shots.db
 azhaq export -db shots.db -format html > shots.html
 ```
+
+`shots` needs Chrome or Chromium on the machine, and `services.txt` lists URLs or `host:port`, one a line.
 
 Each page is taken whole, or marked `partial` with a note and exit 3: at `-rate 3` a page of 40 requests takes about 13 seconds, and its time runs from when it last moved, so the pace alone never blanks a picture. `-p small|medium|large` and address ranges (`-u 192.0.2.0/28`) find the services; `-nmap scan.xml` and `-nessus scan.nessus` take them from a scan; `-shot-format jpeg -shot-fullpage` makes smaller, taller pictures. `shots.html` is one file with its pictures embedded, grouped by how they look, and opens from any directory.
 
@@ -291,6 +307,8 @@ azhaq crawl -u https://app.example.com/ -json -rejected                    # str
 azhaq crawl -u http://127.0.0.1:5030/ -submit-forms -allow 127.0.0.1 -ledger crawl.ledger.jsonl
 ```
 
+The target is an app of yours with forms on port 5030 (a DVWA container, say) that you may write to.
+
 Catch: `-submit-forms` changes data on the target (a sign-up form creates an account). Use it on a target you may write to; the ledger lists every submission and the summary counts them. A form whose address looks like it would change something (`logout`, `delete`), a form that uploads a file and a form that posts outside the crawl's scope are left alone, and the summary says so. A form that posts to its own page (an empty action) is sent. Without `-sweep`, `crawl` does not ask the built-in paths (`/admin`, `/.git/HEAD`, API description names); `-kf all` asks only `robots.txt` and the sitemaps and reads every entry.
 
 ## 20. Probe web services like httpx
@@ -313,7 +331,7 @@ azhaq subs -d example.com -live -m '*.dev.example.com' -oI
 azhaq subs -d example.com,example.org -json | jq 'select(.unverified | not)'
 ```
 
-The first line is `subfinder | dnsx` at a pace: `-dns-rate` is queries a second per resolver (two resolvers in `two.txt` make twice that), `-source-rate` is requests a second to each passive source. The summary's `counts` add up (`from sources` less `did not resolve`, plus what DNS found as CNAME targets, is `results`) and the `count:` note writes the sum out.
+The first line is `subfinder | dnsx` at a pace: `-dns-rate` is queries a second per resolver (`two.txt` lists two resolver addresses, one a line, so the pace is twice that), `-source-rate` is requests a second to each passive source. The summary's `counts` add up (`from sources` less `did not resolve`, plus what DNS found as CNAME targets, is `results`) and the `count:` note writes the sum out.
 
 Without `-live` nothing is looked up in DNS, so the names subdomain.center only guessed and the ones only the name history held (no source gave them this run) carry `"unverified": true`; the last line leaves them out. A name that is only a CNAME is listed with `-live` too (`cname`, no `a`), as `dnsx -a -cname` lists it.
 
