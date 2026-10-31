@@ -50,6 +50,12 @@ type Config struct {
 	// Start skips the first inputs of the first request: where a stopped
 	// run left off (-start).
 	Start int
+	// Skip holds the inputs of the first request an earlier run already
+	// asked, which this run does not ask again. They count from 0, as the
+	// inputs do, and are kept only when the run has as many inputs as Total.
+	Skip Spans
+	// SkipTotal is the number of inputs of the run Skip came from.
+	SkipTotal int
 
 	// StopOn403 (-sf) stops the run when over 95% of the first 50 or more
 	// answers are 403; StopOnAll (-sa) also on 429 over 20% and on errors.
@@ -128,6 +134,12 @@ type Stats struct {
 	// Done: inputs of the first request answered in a row from Start, so a
 	// stopped run goes on from Start+Done. Queued: recursions not started.
 	Done, Queued int
+	// Asked: every input of the first request answered or failed, in this
+	// run and in the runs Skip came from; Total is how many it has. A
+	// resume that skips these asks nothing twice, whatever order the
+	// answers came in.
+	Asked Spans
+	Total int
 }
 
 type job struct {
@@ -219,39 +231,75 @@ func (e *engine) activeLists(t Template) []List {
 	return out
 }
 
+// Spans is a set of input numbers as sorted, disjoint half-open [lo, hi)
+// ranges. Answers come out of order, so a run keeps the ranges it has: memory
+// is the number of gaps, not the product of the lists.
+type Spans [][2]int
+
+// Has says whether i is in the set.
+func (s Spans) Has(i int) bool {
+	k := sort.Search(len(s), func(k int) bool { return s[k][1] > i })
+	return k < len(s) && s[k][0] <= i
+}
+
+// Add puts i in the set and returns it.
+func (s Spans) Add(i int) Spans {
+	k := sort.Search(len(s), func(k int) bool { return s[k][1] >= i })
+	if k < len(s) && s[k][0] <= i && i < s[k][1] {
+		return s
+	}
+	if k < len(s) && s[k][1] == i { // touches the end of span k
+		s[k][1]++
+		if k+1 < len(s) && s[k+1][0] == s[k][1] {
+			s[k][1] = s[k+1][1]
+			s = append(s[:k+1], s[k+2:]...)
+		}
+		return s
+	}
+	if k < len(s) && s[k][0] == i+1 {
+		s[k][0] = i
+		return s
+	}
+	s = append(s, [2]int{})
+	copy(s[k+1:], s[k:])
+	s[k] = [2]int{i, i + 1}
+	return s
+}
+
 // tracker is where a stopped run goes on: the first input, counting from
-// start, not answered. Answers come out of order, so those past the first gap
-// wait in a small set; memory is the gap's width, not the product of the lists.
+// low, not answered, and the exact set answered.
 type tracker struct {
 	mu    sync.Mutex
 	low   int
-	ahead map[int]struct{}
+	spans Spans
 }
 
 func (t *tracker) done(i int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if i != t.low {
-		if t.ahead == nil {
-			t.ahead = map[int]struct{}{}
-		}
-		t.ahead[i] = struct{}{}
-		return
-	}
-	t.low++
-	for {
-		if _, ok := t.ahead[t.low]; !ok {
-			return
-		}
-		delete(t.ahead, t.low)
-		t.low++
-	}
+	t.spans = t.spans.Add(i)
 }
 
 func (t *tracker) first() int {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	k := sort.Search(len(t.spans), func(k int) bool { return t.spans[k][1] > t.low })
+	if k < len(t.spans) && t.spans[k][0] <= t.low {
+		return t.spans[k][1]
+	}
 	return t.low
+}
+
+func (t *tracker) has(i int) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.spans.Has(i)
+}
+
+func (t *tracker) set() Spans {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append(Spans(nil), t.spans...)
 }
 
 func (e *engine) runJob(ctx context.Context, j job, first bool) {
@@ -277,17 +325,25 @@ func (e *engine) runJob(ctx context.Context, j job, first bool) {
 		start = min(e.cfg.Start, total)
 	}
 	tr := &tracker{low: start}
+	if first && e.cfg.SkipTotal == total {
+		tr.spans = append(Spans(nil), e.cfg.Skip...)
+	}
 	sem := make(chan struct{}, e.cfg.Threads)
 	var wg sync.WaitGroup
 	began := time.Now()
 	defer func() {
 		if first {
 			e.stats.Done = tr.first() - start
+			e.stats.Asked, e.stats.Total = tr.set(), total
 		}
 	}()
 	for i := start; i < total; i++ {
 		if ctx.Err() != nil || e.stop.Load() || e.skipJob.Load() {
 			break
+		}
+		if first && tr.has(i) {
+			pr.Done.Add(1)
+			continue
 		}
 		if e.cfg.MaxTimeJob > 0 && time.Since(began) >= e.cfg.MaxTimeJob {
 			e.count(func(s *Stats) {

@@ -288,17 +288,25 @@ func TestMaxTimeJobAndDelay(t *testing.T) {
 	}
 }
 
-func TestTrackerKeepsAGapNotAProduct(t *testing.T) {
+func TestTrackerKeepsTheExactSetAnswered(t *testing.T) {
 	tr := &tracker{low: 5}
 	for _, i := range []int{7, 8, 5, 10} {
 		tr.done(i)
 	}
-	if tr.first() != 6 || len(tr.ahead) != 3 {
-		t.Errorf("first %d ahead %v", tr.first(), tr.ahead)
+	if tr.first() != 6 || !reflect.DeepEqual(tr.set(), Spans{{5, 6}, {7, 9}, {10, 11}}) {
+		t.Errorf("first %d set %v", tr.first(), tr.set())
 	}
 	tr.done(6)
-	if tr.first() != 9 {
-		t.Errorf("first %d", tr.first())
+	if tr.first() != 9 || !reflect.DeepEqual(tr.set(), Spans{{5, 9}, {10, 11}}) {
+		t.Errorf("first %d set %v", tr.first(), tr.set())
+	}
+	// Answers that came out of order from 0 leave a hole, not a lost prefix.
+	tr = &tracker{}
+	for _, i := range []int{9, 3, 0} {
+		tr.done(i)
+	}
+	if tr.first() != 1 || !tr.set().Has(9) || tr.set().Has(4) {
+		t.Errorf("first %d set %v", tr.first(), tr.set())
 	}
 }
 

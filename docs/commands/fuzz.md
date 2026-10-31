@@ -144,6 +144,10 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - An empty line of a wordlist is a word: `FUZZ` is replaced by nothing, so a wordlist that starts with a blank line asks the base URL (as in ffuf).
 - With several wordlists, `-mode pitchfork` runs as long as the longest list. The shorter ones start over. 4 users and 3 passwords make 4 requests, as in ffuf 2.3.
 
+### Stopping and resuming
+- A run stopped by `-max-requests`, `-maxtime`, the kill file or Ctrl-C keeps in its `-db` the exact inputs it asked. `azhaq resume -db FILE` asks only the others, so no input goes out twice, and its summary counts only what it newly did. Workers answer out of order, so the inputs asked are not always the first N.
+- The `-start N` in the summary's command is the first input not asked in a row. Run by hand, it may repeat inputs past it; `azhaq resume` does not.
+
 ### What goes out
 - The request carries the headers ffuf sends: no `Accept`, `Accept-Encoding: gzip`, and yours from `-H`. So a size matches ffuf's for the same server.
 - The `User-Agent` is a Chrome's unless `-H` gives one.

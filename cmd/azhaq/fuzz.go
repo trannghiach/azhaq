@@ -359,6 +359,7 @@ func cmdFuzz(args []string) error {
 		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OpenHeaders: openHeaders, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
 		Progress: new(fuzz.Progress),
 	}
+	cfg.Skip, cfg.SkipTotal = takeFuzzSkip(tmpl)
 	if *replayProxy != "" {
 		cfg.Replay = sender.(fuzz.Replayer)
 	}
@@ -558,12 +559,12 @@ func cmdFuzz(args []string) error {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("%d directories found for -recursion were not swept: run fuzz on each (they are in the results)", st.Queued))
 		}
 		if c.db != "" {
-			if err := setFuzzResume(c.db, next); err != nil {
+			if err := setFuzzResume(c.db, next, fuzzAsked{Key: fuzzSkipKey(tmpl), Total: st.Total, Spans: st.Asked}); err != nil {
 				return err
 			}
 		}
 	} else if c.db != "" {
-		if err := setFuzzResume(c.db, nil); err != nil {
+		if err := setFuzzResume(c.db, nil, fuzzAsked{}); err != nil {
 			return err
 		}
 	}
@@ -825,19 +826,54 @@ func keepFuzzHits(path string, hits []fuzz.Result, method string, argv []string)
 }
 
 // fuzzResumeKey holds, in a workspace, the fuzz command that goes on from
-// where a stopped one left off; azhaq resume runs it.
-const fuzzResumeKey = "fuzz:resume"
+// where a stopped one left off; azhaq resume runs it. fuzzAskedKey holds
+// the exact inputs it already asked: they come back in any order, so a
+// budget or a stop leaves holes that -start alone cannot say.
+const (
+	fuzzResumeKey = "fuzz:resume"
+	fuzzAskedKey  = "fuzz:asked"
+)
 
-func setFuzzResume(path string, args []string) error {
+// fuzzAsked is the set of inputs a stopped run asked, with what it needs
+// to be trusted: the request it was for and the inputs the run had.
+type fuzzAsked struct {
+	Key   string     `json:"key"`
+	Total int        `json:"total"`
+	Spans fuzz.Spans `json:"spans"`
+}
+
+// fuzzSkip is the asked set azhaq resume read from the workspace; the fuzz
+// run it starts takes it (as storedList is taken).
+var fuzzSkip *fuzzAsked
+
+func fuzzSkipKey(t fuzz.Template) string { return t.Method + " " + t.URL + " " + t.Data }
+
+// takeFuzzSkip hands the run the set azhaq resume read, when it is for the
+// same request.
+func takeFuzzSkip(t fuzz.Template) (fuzz.Spans, int) {
+	a := fuzzSkip
+	fuzzSkip = nil
+	if a == nil || a.Key != fuzzSkipKey(t) {
+		return nil, 0
+	}
+	return a.Spans, a.Total
+}
+
+func setFuzzResume(path string, args []string, asked fuzzAsked) error {
 	st, err := store.Open(path)
 	if err != nil {
 		return err
 	}
 	defer st.Close()
-	v := ""
+	v, a := "", ""
 	if args != nil {
 		raw, _ := json.Marshal(args)
 		v = string(raw)
+		raw, _ = json.Marshal(asked)
+		a = string(raw)
+	}
+	if err := st.SetMeta(fuzzAskedKey, a); err != nil {
+		return err
 	}
 	return st.SetMeta(fuzzResumeKey, v)
 }

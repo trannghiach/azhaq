@@ -459,3 +459,40 @@ func TestFuzzBlankWordIsAsked(t *testing.T) {
 		t.Errorf("rows %q, summary %+v", rows, rep)
 	}
 }
+
+// A budget stops a run with its 40 workers' answers out of order: the
+// resume must ask only inputs not asked, and say only what it newly did.
+func TestFuzzResumeAsksNothingTwice(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path]++
+		mu.Unlock()
+		fmt.Fprint(w, "ok "+r.URL.Path)
+	}))
+	defer srv.Close()
+	words := strings.Fields("a b c d e f g h i j")
+	db := filepath.Join(t.TempDir(), "r.db")
+	fz := []string{"-u", srv.URL + "/FUZZ", "-w", wlist(t, words...), "-db", db, "-ledger", "off", "-json", "-max-requests", "3"}
+	_, errOut, err := captureBoth(t, func() error { return cmdFuzz(fz) })
+	if exitCode(err) != exitLimit {
+		t.Fatalf("first run: %v", err)
+	}
+	got := []int{lastReport(t, errOut).Results}
+	for _, budget := range []string{"3", "20"} {
+		_, errOut, err = captureBoth(t, func() error { return cmdResume([]string{"-db", db, "-max-requests", budget}) })
+		if budget == "3" && exitCode(err) != exitLimit || budget == "20" && err != nil {
+			t.Fatalf("resume %s: %v", budget, err)
+		}
+		got = append(got, lastReport(t, errOut).Results)
+	}
+	if fmt.Sprint(got) != "[3 3 4]" {
+		t.Errorf("results per run %v, want [3 3 4]", got)
+	}
+	for _, w := range words {
+		if seen["/"+w] != 1 {
+			t.Errorf("/%s asked %d times: %v", w, seen["/"+w], seen)
+		}
+	}
+}

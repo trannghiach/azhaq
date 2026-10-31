@@ -47,6 +47,13 @@ func cmdResume(args []string) error {
 	if raw := st.GetMeta(fuzzResumeKey); raw != "" {
 		var args []string
 		if json.Unmarshal([]byte(raw), &args) == nil && len(args) > 0 {
+			fuzzSkip = nil
+			if raw := st.GetMeta(fuzzAskedKey); raw != "" {
+				var a fuzzAsked
+				if json.Unmarshal([]byte(raw), &a) == nil && len(a.Spans) > 0 {
+					fuzzSkip = &a
+				}
+			}
 			st.Close()
 			return cmdFuzz(append(args, rest...))
 		}
