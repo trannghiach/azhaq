@@ -324,7 +324,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	portSeed := fs.Int64("port-seed", 0, "make the random port order repeat (0: a new one each run)")
 	portThreshold := fs.Int("port-threshold", 0, "stop asking a host after this many open ports: it answers every port (0: no limit)")
 	portUnnamed := fs.Int("port-unnamed", 0, "after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6; -1: no limit; each probe is a connect)")
-	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close)")
+	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close)")
 	portCDNFull := fs.Bool("port-cdn-full", false, "scan CDN and WAF addresses in full, not only their web ports")
 	portDiscover := fs.String("port-discover", "", "ask first whether an address is up, by a connect to 80 and 443: first (scan the ones that answer) or only (list them, scan nothing)")
 	portIP := fs.String("port-ip", "", "the address families of a name to scan: 4 or 6 (default both)")

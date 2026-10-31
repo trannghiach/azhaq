@@ -6,8 +6,10 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"errors"
+	"maps"
 	"net"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/ledger"
@@ -109,20 +111,72 @@ type ident struct {
 	ctx      context.Context
 	o        *Open
 	host, ip string
-	left     int
+	left     *probeBudget // shared by the forks that ask beside each other
 	tried    map[string]bool
 	rtt      time.Duration // the shortest connect seen: how long a quiet answer is worth waiting for
+	// shook is called once a TLS handshake of this identification succeeded.
+	shook func()
+}
+
+// probeBudget is what a port's identification may still connect, and whether
+// the port stopped accepting (a plain connect failed).
+type probeBudget struct {
+	mu   sync.Mutex
+	n    int
+	dead bool
+}
+
+var errProbesSpent = errors.New("probes spent")
+
+func (b *probeBudget) take() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.n <= 0 || b.dead {
+		return false
+	}
+	b.n--
+	return true
+}
+
+func (b *probeBudget) fail() {
+	b.mu.Lock()
+	b.dead = true
+	b.mu.Unlock()
+}
+
+func (b *probeBudget) spent() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.n <= 0 || b.dead
+}
+
+// fork is an identification that asks beside this one: its own copy of what
+// is known so far, the same budget of connects.
+func (id *ident) fork(ctx context.Context) *ident {
+	o := *id.o
+	return &ident{s: id.s, ctx: ctx, o: &o, host: id.host, ip: id.ip, left: id.left, tried: maps.Clone(id.tried), rtt: id.rtt}
+}
+
+// guard closes conn when the identification is cancelled, so a read that
+// waits on it ends; the caller stops the guard when it is done with conn.
+func (id *ident) guard(conn net.Conn) (stop func() bool) {
+	return context.AfterFunc(id.ctx, func() { _ = conn.Close() })
 }
 
 // dial opens a connection of the identification: paced, counted against the
 // run's budget and written to the ledger like any connect.
 func (id *ident) dial(secure bool) (net.Conn, error) {
-	if id.left <= 0 {
-		return nil, errors.New("probes spent")
+	if err := id.ctx.Err(); err != nil {
+		return nil, err
 	}
-	id.left--
+	if !id.left.take() {
+		return nil, errProbesSpent
+	}
 	t0 := time.Now()
 	c, err := id.s.dial(id.ctx, id.host, id.ip, id.o.Port, secure)
+	if err != nil && !secure && id.ctx.Err() == nil {
+		id.left.fail() // the port no longer accepts: the rest would be refused too
+	}
 	if d := time.Since(t0); err == nil && !secure && (id.rtt == 0 || d < id.rtt) {
 		id.rtt = d
 	}
@@ -211,6 +265,7 @@ func (s *Scanner) talk(conn net.Conn, req []byte, frame func([]byte) int, wait t
 func (id *ident) try(conn net.Conn, p *protocol) bool {
 	s := id.s
 	id.tried[p.name] = true
+	defer id.guard(conn)()
 	reply := s.talk(conn, p.request(target{id.host, id.o.Port}), p.frame, id.patience(500*time.Millisecond))
 	return id.accept(conn, p, reply)
 }
@@ -276,13 +331,15 @@ func bannerOf(b []byte) string {
 // refused); then, for an answer that is not text, a TLS handshake on a
 // second connection (the greeting inside is read before any request); and
 // last the ladder of protocols that wait to be asked, each on a connection
-// of its own. Every connect is paced, counted and recorded, and an open
-// port costs at most maxProbes more.
+// of its own, a few at a time (climb). A HEAD that stays unanswered for a
+// while is waited on while the handshake and the ladder are asked beside it
+// (speculate), and what it answers still goes first. Every connect is paced,
+// counted and recorded, and an open port costs at most maxProbes more.
 func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip string, rtt time.Duration) {
 	if host == "" {
 		host = ip
 	}
-	id := &ident{s: s, ctx: ctx, o: o, host: host, ip: ip, left: maxProbes, tried: map[string]bool{}, rtt: rtt}
+	id := &ident{s: s, ctx: ctx, o: o, host: host, ip: ip, left: &probeBudget{n: maxProbes}, tried: map[string]bool{}, rtt: rtt}
 	for _, p := range protocolsOn(o.Port, false) {
 		if id.try(conn, p) {
 			return
@@ -295,7 +352,49 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 			return
 		}
 	}
-	head := s.ask(conn, host, o.Port, 80)
+	// The HEAD is asked on its own goroutine so its silence can be waited
+	// out beside other probes.
+	hctx, stopHead := context.WithCancel(ctx)
+	defer stopHead()
+	headc := make(chan []byte, 1)
+	go func() {
+		stop := context.AfterFunc(hctx, func() { _ = conn.Close() })
+		h := s.ask(conn, host, o.Port, 80)
+		stop()
+		headc <- h
+	}()
+	var head []byte
+	var sp *speculation
+	defer func() {
+		if sp != nil {
+			sp.stop()
+		}
+	}()
+	if wait := id.patience(500 * time.Millisecond); 2*wait <= s.Timeout+s.Banner {
+		t := time.NewTimer(wait)
+		select {
+		case head = <-headc:
+		case <-t.C:
+			sp = id.speculate()
+			select {
+			case head = <-headc:
+			case r := <-sp.done:
+				sp.res, sp.got = r, true
+				if r.win > 0 {
+					// A protocol of the ladder named it, and no HTTP server
+					// is also that: the HEAD's wait is not worth the rest.
+					stopHead()
+					<-headc
+					adopt(o, r.o, true)
+					return
+				}
+				head = <-headc
+			}
+		}
+		t.Stop()
+	} else {
+		head = <-headc
+	}
 	wantTLS := true
 	if status, banner, ok := httpAnswer(head); ok {
 		o.Service, o.Banner = "http", banner
@@ -319,6 +418,28 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 		// A text answer that is not HTTP is another protocol's: not TLS.
 		wantTLS = !isText(head)
 	}
+	if sp != nil {
+		r := sp.result()
+		switch {
+		case r.win == 0 && wantTLS:
+			adopt(o, r.o, false)
+			return
+		case r.win > 0:
+			adopt(o, r.o, true)
+			return
+		case r.win < 0 && r.ladder:
+			if o.Service == "" {
+				s.ladderFailed(ip)
+			}
+			return
+		}
+		// What was asked beside the HEAD does not apply (the handshake
+		// answered, but the HEAD's answer was text of another protocol; or
+		// the ladder was left out): go on as if it had not been asked.
+		if r.win < 0 && !r.ladder && wantTLS {
+			wantTLS = false // the handshake was asked and failed
+		}
+	}
 	if wantTLS && id.tls() {
 		return
 	}
@@ -327,38 +448,257 @@ func (s *Scanner) identify(ctx context.Context, o *Open, conn net.Conn, host, ip
 	if speaksFirst(o.Port) {
 		return
 	}
-	if !s.ladderAllowed(ip) {
-		return
-	}
-	named := false
-	defer func() {
-		if !named && o.Service == "" {
-			s.ladderFailed(ip)
-		}
-	}()
-	for _, p := range ladder() {
-		if id.left <= 0 || ctx.Err() != nil {
-			return
-		}
-		if id.tried[p.name] || p.request == nil {
-			continue
-		}
-		c, err := id.dial(false)
-		if err != nil {
-			return
-		}
-		ok := id.try(c, p)
-		c.Close()
-		if ok {
-			named = true
-			return
-		}
+	id.ladder()
+}
+
+// adopt takes what a fork found. A protocol of the ladder keeps the banner
+// an earlier answer left when it names none of its own.
+func adopt(o *Open, found Open, keepBanner bool) {
+	b := o.Banner
+	*o = found
+	if keepBanner && o.Banner == "" {
+		o.Banner = b
 	}
 }
 
-// ladderAllowed says whether this address's silent ports are still run down
-// the ladder; ladderFailed counts one that no probe could name.
-func (s *Scanner) ladderAllowed(ip string) bool {
+// probe is one connection of the identification that may name the port.
+type probe struct {
+	run func(sub *ident) bool
+	tls bool // the handshake: see race
+	// wait is how long the probe holds back, unless it is called off first,
+	// when it is asked in a window with the handshake.
+	wait time.Duration
+}
+
+// laneMax is how many connections one open port's identification may have
+// asking at once, its own included. The others are taken from the scan's
+// workers only while some are free, so a sweep is not starved by it.
+const laneMax = 12
+
+// borrow takes up to n of the scan's workers if they are free; release gives
+// them back.
+func (s *Scanner) borrow(n int) int {
+	got := 0
+	for got < n {
+		select {
+		case s.conns <- struct{}{}:
+			got++
+		default:
+			return got
+		}
+	}
+	return got
+}
+
+func (s *Scanner) release(n int) {
+	for ; n > 0; n-- {
+		<-s.conns
+	}
+}
+
+// stopped says the run's budget was spent on a probe of this scan.
+func (s *Scanner) stopped() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stop != nil
+}
+
+// ladderProbes are the protocols of the ladder not yet asked, in its order.
+func (id *ident) ladderProbes() []probe {
+	var out []probe
+	for _, p := range ladder() {
+		if id.tried[p.name] || p.request == nil {
+			continue
+		}
+		out = append(out, probe{run: func(sub *ident) bool {
+			c, err := sub.dial(false)
+			if err != nil {
+				return false
+			}
+			defer c.Close()
+			return sub.try(c, p)
+		}})
+	}
+	return out
+}
+
+// ladder runs the protocols that wait to be asked down the list until one
+// answers, unless this address has too many ports no probe could name.
+func (id *ident) ladder() {
+	s := id.s
+	if !s.ladderOpen(id.ip) {
+		s.ladderSkip(id.ip)
+		return
+	}
+	if id.climb(id.ladderProbes(), []int{3, 6, laneMax}) < 0 && id.o.Service == "" {
+		s.ladderFailed(id.ip)
+	}
+}
+
+// climb asks the probes in order, a window of them at a time (widths gives
+// the first widths, the last repeats): a window is only as wide as the free
+// workers allow, and a probe that names the port ends the climb. The first
+// window is narrow so a likely answer costs few connects, the later ones
+// wide so a port that says nothing to any is done in a few waits, not one
+// per protocol. It returns the index of the probe that named the port
+// (what it found is in id.o), or -1.
+func (id *ident) climb(ps []probe, widths []int) int {
+	s := id.s
+	lanes := 1 + s.borrow(laneMax-1)
+	defer s.release(lanes - 1)
+	for k, i := 0, 0; i < len(ps); k++ {
+		if id.ctx.Err() != nil || id.left.spent() || s.stopped() {
+			return -1
+		}
+		w := min(widths[min(k, len(widths)-1)], lanes, len(ps)-i)
+		if win := id.race(ps[i : i+w]); win >= 0 {
+			return i + win
+		}
+		i += w
+	}
+	return -1
+}
+
+// race asks the probes at once, each in a fork of its own. Among the
+// probes of the ladder the first in the list that names the port wins, as it
+// would down the list: a later probe is called off when an earlier one
+// names it, and an earlier one is waited for. The handshake is not part of
+// that order: a probe of the ladder that names the port calls it off, and a
+// handshake that succeeds calls off the ladder, since a port is not both.
+func (id *ident) race(ps []probe) int {
+	if len(ps) == 1 {
+		sub := id.fork(id.ctx)
+		if !ps[0].run(sub) {
+			return -1
+		}
+		*id.o = *sub.o
+		return 0
+	}
+	type outcome struct {
+		named bool
+		o     Open
+	}
+	out := make([]outcome, len(ps))
+	cancels := make([]context.CancelFunc, len(ps))
+	subs := make([]*ident, len(ps))
+	for i := range ps {
+		var ctx context.Context
+		ctx, cancels[i] = context.WithCancel(id.ctx)
+		subs[i] = id.fork(ctx)
+	}
+	hasTLS := false
+	for _, p := range ps {
+		hasTLS = hasTLS || p.tls
+	}
+	var mu sync.Mutex
+	callOff := func(keep func(j int) bool) {
+		for j, cancel := range cancels {
+			if !keep(j) {
+				cancel()
+			}
+		}
+	}
+	var wg sync.WaitGroup
+	for i := range ps {
+		if ps[i].tls {
+			subs[i].shook = func() {
+				mu.Lock()
+				defer mu.Unlock()
+				callOff(func(j int) bool { return ps[j].tls })
+			}
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if w := ps[i].wait; w > 0 && hasTLS {
+				t := time.NewTimer(w)
+				defer t.Stop()
+				select {
+				case <-t.C:
+				case <-subs[i].ctx.Done():
+					return
+				}
+			}
+			ok := ps[i].run(subs[i])
+			mu.Lock()
+			defer mu.Unlock()
+			out[i] = outcome{ok, *subs[i].o}
+			if ok {
+				callOff(func(j int) bool { return j == i || ps[i].tls == ps[j].tls && j < i })
+			}
+		}()
+	}
+	wg.Wait()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	win := -1
+	for i, r := range out {
+		if r.named && (win < 0 || ps[i].tls && !ps[win].tls) {
+			win = i
+		}
+	}
+	if win >= 0 {
+		*id.o = out[win].o
+	}
+	return win
+}
+
+// speculation is the handshake and the ladder asked beside a HEAD that has
+// not answered yet. probes[0] is the handshake.
+type speculation struct {
+	cancel context.CancelFunc
+	done   chan specResult
+	res    specResult
+	got    bool // res holds the result
+}
+
+type specResult struct {
+	win    int  // the probe that named the port: 0 the handshake, above it the ladder, -1 none
+	o      Open // what it found
+	ladder bool // the ladder was asked
+}
+
+func (id *ident) speculate() *speculation {
+	ctx, cancel := context.WithCancel(id.ctx)
+	sp := &speculation{cancel: cancel, done: make(chan specResult, 1)}
+	sid := id.fork(ctx)
+	ps := []probe{{tls: true, run: func(sub *ident) bool { return sub.tls() }}}
+	ladder := !speaksFirst(id.o.Port) && id.s.ladderOpen(id.ip)
+	if ladder {
+		// The handshake gets a head start: a TLS server has shaken hands
+		// before the first of these connects, and calls them off.
+		grace := min(max(8*id.rtt, 250*time.Millisecond), id.patience(500*time.Millisecond))
+		for _, p := range sid.ladderProbes() {
+			p.wait = grace
+			ps = append(ps, p)
+		}
+	}
+	go func() {
+		win := sid.climb(ps, []int{laneMax})
+		sp.done <- specResult{win: win, o: *sid.o, ladder: ladder}
+	}()
+	return sp
+}
+
+// result waits for what the speculation found.
+func (sp *speculation) result() specResult {
+	if !sp.got {
+		sp.res, sp.got = <-sp.done, true
+	}
+	return sp.res
+}
+
+// stop calls the speculation off and waits until its connections are shut.
+func (sp *speculation) stop() {
+	sp.cancel()
+	sp.result()
+}
+
+// ladderOpen says whether this address's silent ports are still run down the
+// ladder; ladderSkip counts one that was not, ladderFailed one that no probe
+// could name.
+func (s *Scanner) ladderOpen(ip string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	limit := ladderLimit
@@ -368,11 +708,16 @@ func (s *Scanner) ladderAllowed(ip string) bool {
 	case s.Unnamed > 0:
 		limit = s.Unnamed
 	}
-	if s.unnamed[ip] >= limit {
-		s.skipped[ip]++
-		return false
+	return s.unnamed[ip] < limit
+}
+
+func (s *Scanner) ladderSkip(ip string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.skipped == nil {
+		s.unnamed, s.skipped = map[string]int{}, map[string]int{}
 	}
-	return true
+	s.skipped[ip]++
 }
 
 func (s *Scanner) ladderFailed(ip string) {
@@ -403,10 +748,12 @@ func icyAnswer(head []byte, o *Open) bool {
 // dialTLS is dial(true) with a handshake that waits only as long as a
 // plain port is worth: a TLS server answers a ClientHello at once.
 func (id *ident) dialTLS() (net.Conn, error) {
-	if id.left <= 0 {
-		return nil, errors.New("probes spent")
+	if err := id.ctx.Err(); err != nil {
+		return nil, err
 	}
-	id.left--
+	if !id.left.take() {
+		return nil, errProbesSpent
+	}
 	return id.s.dialWait(id.ctx, id.host, id.ip, id.o.Port, true, id.patience(time.Second))
 }
 
@@ -420,6 +767,10 @@ func (id *ident) tls() bool {
 		return false
 	}
 	defer c.Close()
+	defer id.guard(c)()
+	if id.shook != nil {
+		id.shook()
+	}
 	o.TLS = true
 	o.Service, o.Banner = "tls", ""
 	if certs := c.(*tls.Conn).ConnectionState().PeerCertificates; len(certs) > 0 {
@@ -456,6 +807,7 @@ func (id *ident) tls() bool {
 				return true
 			}
 			defer c2.Close()
+			defer id.guard(c2)()
 			c = c2
 		}
 	}

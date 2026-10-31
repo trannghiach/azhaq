@@ -414,9 +414,9 @@ func TestBodyProductsOfControlPlanes(t *testing.T) {
 // A budget spent while a port is being asked what it serves stops the scan.
 func TestBudgetSpentInTheLadderStopsTheScan(t *testing.T) {
 	port := fakeService(t, []byte("version"), []byte("VERSION 1.6.9\r\n"))
-	n := 0
+	var n atomic.Int32
 	s := &Scanner{Banner: 100 * time.Millisecond, Timeout: time.Second, Take: func() error {
-		if n++; n > 3 {
+		if n.Add(1) > 3 {
 			return context.DeadlineExceeded
 		}
 		return nil
