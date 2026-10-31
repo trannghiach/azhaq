@@ -123,6 +123,7 @@ func cmdRoles(args []string) error {
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
 	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins, never a logout), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
+	writesCanary := fs.Bool("replay-writes-canary", false, "with -replay-writes: change one short string field of a PUT or PATCH body to a unique value for each role it is replayed with, before it is sent, so a write that would otherwise replay the owner's own value back (no change to read back) can still be proved; never on by default, since it changes data, and restoring the field afterward is not done")
 	fs.Var(&hars, "har", "NAME=FILE: the requests account NAME sent, as a browser or proxy saved them (HAR). Every GET is a page the role reached, its Authorization and Cookie headers of the latest request are its session (unless -role gives headers), its writes are replayed with -replay-writes. Without -- run options this is the whole input: no crawl")
 	fs.Var(&burps, "burp", "NAME=FILE: the same from a Burp \"Save items\" XML file (repeat a name to add files)")
 	fs.Var(&allows, "allow", "HOST: an origin of the history that is the target besides the ones most of a role's requests go to (the others, analytics and CDNs, are left out) (repeatable)")
@@ -470,7 +471,7 @@ func cmdRoles(args []string) error {
 			}
 		} else {
 			var n int
-			wrows, n, err = replayWrites(roles, reqs, answers, own, rate, max(0, *replayMax-replayed))
+			wrows, n, err = replayWrites(roles, reqs, answers, own, rate, max(0, *replayMax-replayed), *writesCanary)
 			rep.Requests += int64(n)
 			replayed += n
 			noteCap(rep, "write replay", err)
