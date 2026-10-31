@@ -286,7 +286,7 @@ Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its ke
 - input: `-w FILE[:KEYWORD]` (repeatable, `-w a.txt,b.txt`, `-` for stdin), `-mode clusterbomb|pitchfork|sniper` (`§…§` marks the places), `-e`, `-ic`, `-D` (dirsearch `%EXT%`), `-enc 'FUZZ:urlencode b64encode'` (all of ffuf's encoders, in process), `-input-cmd`/`-input-num`/`-input-shell`, `-request FILE` with `-request-proto` (a raw request as Burp saves it; `-u`, `-X`, `-d`, `-H`, `-b` replace parts of it);
 - request: `-u -X -d` (`-data`, `-data-ascii`, `-data-binary`), `-H`, `-b` (`-cookie`), `-r`, `-timeout`, `-x` (an http, https, socks5 or socks5h proxy), `-replay-proxy` (each match sent once more through a proxy such as Burp), `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`; servers back to TLS 1.0 are reached; a body compressed with gzip, deflate or brotli is decoded, so `-fs` counts the decoded bytes even when `-H 'Accept-Encoding: gzip, deflate, br'` is given;
 - matchers and filters: `-mc -ms -mw -ml -mr -mt` and `-fc -fs -fw -fl -fr -ft` (`-mt '>1000'`, `-ft '<100'`: milliseconds to the first byte), `-mmode`, `-fmode`;
-- calibration: `-ac` (`-ac=false` off), `-ack`, `-acs basic|advanced|NAME`, `-acc STRING`, `-ach`;
+- calibration: `-ac` (off by default, as in ffuf), `-ack`, `-acs basic|advanced|NAME`, `-acc STRING`, `-ach`;
 - recursion: `-recursion`, `-recursion-depth`, `-recursion-strategy default|greedy`, `-maxtime-job`;
 - pace and stops: `-t`, `-rate`, `-p 0.1` or `-p 0.1-2.0`, `-maxtime`, `-sf`, `-sa`, `-se` (and `-se-after N`);
 - reports: `-o FILE` with `-of json|ejson|csv|ecsv|html|md|all`, `-od DIR` (the raw request and answer of each match), `-or`; `-json` prints ffuf's fields on stdout;
@@ -296,7 +296,7 @@ Each reads targets from flags, a file or stdin (`fuzz` takes one URL with its ke
 
 It differs from ffuf in these ways:
 
-- Auto-calibration is on (`-ac=false` is ffuf's default), except when `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft` is given: a command line moved from ffuf that has its own filters has calibrated by hand, and the summary says calibration is off (`-ac` turns it on). It needs the keyword `FUZZ`, or the one `-ack` names, in the request; without it a note says nothing was calibrated. Calibration requests are paced by `-rate` and counted by `-max-requests`; ffuf's are not.
+- Auto-calibration is off unless `-ac` is given (`-acs`, `-acc` and `-ach` imply it), as in ffuf, so a command line moved from ffuf gives ffuf's matches. It needs the keyword `FUZZ`, or the one `-ack` names, in the request; without it a note says nothing was calibrated. Calibration requests are paced by `-rate` and counted by `-max-requests`; ffuf's are not.
 - The default matcher is `-mc 200-299,301,302,307,401,403,405,500`, unless `-ms`, `-mw`, `-ml`, `-mr` or `-mt` is given alone, as in ffuf.
 - With several wordlists, `-mode pitchfork` runs as long as the longest list and the shorter ones start over (4 users and 3 passwords make 4 requests, as in ffuf 2.3).
 - Every request goes through the run's budget and pace (`-max-requests`, `-rate`) and the ledger, and stops at the kill file. The host in `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise; when the keyword starts the host (`FUZZ.example.com`) the scope is its domain. A request to a host outside the scope is not sent, and the summary counts it. The copies `-replay-proxy` sends go to the proxy you named: they are not requests to the target, so they are not in the ledger, the budget or the pace, and the summary says how many were sent.
