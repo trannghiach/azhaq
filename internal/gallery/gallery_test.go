@@ -652,3 +652,31 @@ func TestFailedPages(t *testing.T) {
 		t.Errorf("stats %d failed, %d pages", stt.Failed, stt.Pages)
 	}
 }
+
+// A partial page says what it lacks: the assets of hosts outside the
+// scope that were blocked, or the images that did not load.
+func TestPartialShotsSayWhy(t *testing.T) {
+	dir := t.TempDir()
+	_, p := makeWorkspace(t, dir, "w.db", 60)
+	s := newSrv(t, p)
+	l := s.list("partial=yes&limit=100")
+	var blocked, unloaded int
+	for _, v := range l.Shots {
+		switch {
+		case v.PartialWhy == "3 off-scope assets blocked: cdn.example.test":
+			blocked++
+		case v.PartialWhy == "2 of 9 images, styles and scripts not loaded":
+			unloaded++
+		default:
+			t.Errorf("%s: partial_why %q", v.URL, v.PartialWhy)
+		}
+	}
+	if blocked == 0 || unloaded == 0 || blocked+unloaded != l.Total {
+		t.Errorf("%d blocked, %d unloaded of %d partial pages", blocked, unloaded, l.Total)
+	}
+	for _, v := range s.list("partial=no&limit=100").Shots {
+		if v.PartialWhy != "" {
+			t.Errorf("%s is whole but says %q", v.URL, v.PartialWhy)
+		}
+	}
+}

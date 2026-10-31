@@ -168,12 +168,17 @@ async function renderGrid(params) {
   view.replaceChildren(h("div", { class: "layout" }, side, h("div", {}, bar, chips.length ? h("div", { class: "chips" }, chips) : null, grid, pager)));
 }
 
+// partialLabel is "partial", and in brackets what the picture lacks.
+function partialLabel(s) {
+  return s.partial_why ? "partial (" + s.partial_why + ")" : "partial";
+}
+
 function rowsTable(shots, params) {
   const link = (s) => "#/shot/" + encodeURIComponent(s.id) + "?" + new URLSearchParams([...params].filter(([k]) => k !== "offset")).toString();
   return h("table", {}, h("thead", {}, h("tr", {}, ["", "Status", "Title", "URL", "Technologies", "Group", "Taken"].map((x) => h("th", {}, x)))),
     h("tbody", {}, shots.map((s) => h("tr", {},
       h("td", {}, h("a", { href: link(s) }, h("img", { src: "/img/" + encodeURIComponent(s.id) + "/thumb", loading: "lazy", alt: "", width: "96" }))),
-      h("td", {}, h("span", { class: "badge inline " + statusClass(s.status) }, s.status || "—"), s.partial ? h("span", { class: "tag warn" }, "partial") : null),
+      h("td", {}, h("span", { class: "badge inline " + statusClass(s.status) }, s.status || "—"), s.partial ? h("span", { class: "tag warn", title: s.partial_why || "" }, partialLabel(s)) : null),
       h("td", {}, h("a", { href: link(s) }, s.title || "(no title)")),
       h("td", { class: "m" }, s.url),
       h("td", {}, (s.technologies || []).join(", ")),
@@ -193,7 +198,7 @@ function card(s, params) {
     h("div", { class: "meta" },
       h("div", { class: "t", title: s.title }, s.title || "(no title)"),
       h("div", { class: "u", title: s.url }, s.url),
-      h("div", { class: "tags" }, s.partial ? h("span", { class: "tag warn", title: "taken before the page finished loading" }, "partial") : null,
+      h("div", { class: "tags" }, s.partial ? h("span", { class: "tag warn", title: s.partial_why || "taken before the page finished loading" }, partialLabel(s)) : null,
         s.workspace ? h("span", { class: "tag" }, s.workspace) : null,
         (s.technologies || []).slice(0, 6).map((t) => h("span", { class: "tag" }, t)),
         (s.technologies || []).length > 6 ? h("span", { class: "tag" }, "+" + (s.technologies.length - 6)) : null)));
