@@ -510,3 +510,47 @@ func TestFuzzMaxtimeInThePaceStops(t *testing.T) {
 		t.Errorf("exit %d, %+v", exitCode(err), rep)
 	}
 }
+
+// A preflight's token is valid only with the session cookie its page set
+// (DVWA's login): the cookie a flight's answer sets goes with the fuzz
+// request, per request and per thread, and a -b value for another name stays.
+func TestFuzzPreflightCarriesTheCookieItSet(t *testing.T) {
+	var mu sync.Mutex
+	tokens := map[string]string{} // session → its token
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if r.Method == http.MethodGet {
+			n++
+			sid := fmt.Sprintf("sess%d", n)
+			tokens[sid] = fmt.Sprintf("tok%d", n)
+			http.SetCookie(w, &http.Cookie{Name: "PHPSESSID", Value: sid, Path: "/"})
+			fmt.Fprintf(w, `<input type="hidden" name="user_token" value="%s">`, tokens[sid])
+			return
+		}
+		r.ParseForm()
+		c, _ := r.Cookie("PHPSESSID")
+		if c == nil || tokens[c.Value] != r.Form.Get("user_token") || r.Header.Get("Cookie") == "" || !strings.Contains(r.Header.Get("Cookie"), "theme=dark") {
+			http.Redirect(w, r, "/login.php", http.StatusFound)
+			return
+		}
+		if r.Form.Get("password") == "password" {
+			http.Redirect(w, r, "/index.php", http.StatusFound)
+			return
+		}
+		http.Error(w, "bad login", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	dir := t.TempDir()
+	pre := filepath.Join(dir, "login.req")
+	os.WriteFile(pre, []byte("GET /login.php HTTP/1.1\n\n"), 0o644)
+	for _, mode := range []string{"per-request", "per-thread"} {
+		rows, _, err := fuzzRows(t, "-u", srv.URL+"/login.php", "-X", "POST", "-d", "username=admin&password=FUZZ&user_token=TOKEN", "-b", "theme=dark",
+			"-w", wlist(t, "admin", "password", "letmein"), "-ac=false", "-mc", "all", "-fc", "401", "-t", "1",
+			"-preflight", pre, "-preflight-var-auto", "TOKEN:user_token", "-preflight-mode", mode)
+		if err != nil || len(rows) != 1 || !strings.Contains(rows[0], "password") || !strings.Contains(rows[0], "302") {
+			t.Errorf("%s: rows %q err %v, want the one word that logs in", mode, rows, err)
+		}
+	}
+}

@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"golang.org/x/net/html"
 
@@ -179,6 +180,73 @@ type Exchanger interface {
 type lane struct {
 	init bool
 	vars map[string]string
+	jar  cookieJar
+}
+
+// cookieJar holds the cookies the answers of a chain's flights set, by the
+// host that set them: they go with the requests after it to that host, as a
+// Burp macro's session does. A cookie a later answer sets again takes the
+// newer value; one it expires is dropped.
+type cookieJar map[string]map[string]string
+
+func (j cookieJar) clone() cookieJar {
+	out := cookieJar{}
+	for h, m := range j {
+		out[h] = make(map[string]string, len(m))
+		for k, v := range m {
+			out[h][k] = v
+		}
+	}
+	return out
+}
+
+// take reads what an answer from host sets.
+func (j cookieJar) take(host string, h http.Header) {
+	host = strings.ToLower(host)
+	for _, c := range (&http.Response{Header: h}).Cookies() {
+		if c.MaxAge < 0 || !c.Expires.IsZero() && c.Expires.Before(time.Now()) {
+			delete(j[host], c.Name)
+			continue
+		}
+		if j[host] == nil {
+			j[host] = map[string]string{}
+		}
+		j[host][c.Name] = c.Value
+	}
+}
+
+// merge is a Cookie header's value with the jar's cookies for host put in:
+// the jar's value wins for a name both have, and the names the header had
+// keep their place.
+func (j cookieJar) merge(host, header string) string {
+	jar := j[strings.ToLower(host)]
+	if len(jar) == 0 {
+		return header
+	}
+	var parts []string
+	used := map[string]bool{}
+	for _, p := range strings.Split(header, ";") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(p, "=")
+		if v, ok := jar[name]; ok {
+			p, used[name] = name+"="+v, true
+		}
+		parts = append(parts, p)
+	}
+	var rest []string
+	for k := range jar {
+		if !used[k] {
+			rest = append(rest, k)
+		}
+	}
+	sort.Strings(rest)
+	for _, k := range rest {
+		parts = append(parts, k+"="+jar[k])
+	}
+	return strings.Join(parts, "; ")
 }
 
 type flightSender struct {
@@ -237,8 +305,13 @@ func (f *flightSender) fail(err error) {
 
 func (f *flightSender) Send(ctx context.Context, req *Request, keepBody bool) (*Response, error) {
 	var applied map[string]string
+	var jar cookieJar
+	var l *lane
 	if len(f.fl.Pre) > 0 {
-		vars, release, err := f.preflights(ctx)
+		var vars map[string]string
+		var release func()
+		var err error
+		vars, jar, l, release, err = f.preflights(ctx)
 		defer release()
 		if err != nil {
 			f.fail(err)
@@ -251,20 +324,41 @@ func (f *flightSender) Send(ctx context.Context, req *Request, keepBody bool) (*
 			}
 			applied = vars
 		}
+		applyCookies(req, jar)
 	}
 	resp, err := f.Sender.Send(ctx, req, keepBody)
 	if err == nil && len(f.fl.Post) > 0 {
-		if _, perr := f.chain(ctx, f.fl.Post, applied); perr != nil {
+		_, pj, perr := f.chain(ctx, f.fl.Post, applied, jar)
+		if perr != nil {
 			f.fail(perr) // the answer stands; the failure is said in the summary
+		} else if l != nil {
+			l.jar = pj // a thread's session goes on with what the postflight set
 		}
 	}
 	return resp, err
 }
 
-func (f *flightSender) preflights(ctx context.Context) (map[string]string, func(), error) {
+// applyCookies puts the jar's cookies for the request's host into its Cookie
+// header, over a value the user gave for the same name.
+func applyCookies(req *Request, jar cookieJar) {
+	u, err := url.Parse(req.URL)
+	if err != nil || len(jar[strings.ToLower(u.Hostname())]) == 0 {
+		return
+	}
+	host := u.Hostname()
+	for i := range req.Headers {
+		if strings.EqualFold(req.Headers[i].Name, "Cookie") {
+			req.Headers[i].Value = jar.merge(host, req.Headers[i].Value)
+			return
+		}
+	}
+	req.Headers = append(req.Headers, Header{Name: "Cookie", Value: jar.merge(host, "")})
+}
+
+func (f *flightSender) preflights(ctx context.Context) (map[string]string, cookieJar, *lane, func(), error) {
 	if !f.fl.PerThread {
-		v, err := f.chain(ctx, f.fl.Pre, nil)
-		return v, func() {}, err
+		v, j, err := f.chain(ctx, f.fl.Pre, nil, nil)
+		return v, j, nil, func() {}, err
 	}
 	l, _ := f.lanes.Get().(*lane)
 	if l == nil {
@@ -272,13 +366,13 @@ func (f *flightSender) preflights(ctx context.Context) (map[string]string, func(
 	}
 	release := func() { f.lanes.Put(l) }
 	if !l.init {
-		v, err := f.chain(ctx, f.fl.Pre, nil)
+		v, j, err := f.chain(ctx, f.fl.Pre, nil, nil)
 		if err != nil {
-			return nil, release, err
+			return nil, nil, nil, release, err
 		}
-		l.vars, l.init = v, true
+		l.vars, l.jar, l.init = v, j, true
 	}
-	return l.vars, release, nil
+	return l.vars, l.jar, l, release, nil
 }
 
 // apply puts the variables into the request's URL, header values and body,
@@ -324,27 +418,29 @@ func varsReplacer(vars map[string]string) *strings.Replacer {
 	return strings.NewReplacer(pairs...)
 }
 
-// chain sends the steps in order, each with what the earlier ones gave.
-func (f *flightSender) chain(ctx context.Context, steps []FlightStep, seed map[string]string) (map[string]string, error) {
+// chain sends the steps in order, each with what the earlier ones gave: the
+// values read from their answers and the cookies they set.
+func (f *flightSender) chain(ctx context.Context, steps []FlightStep, seed map[string]string, seedJar cookieJar) (map[string]string, cookieJar, error) {
 	vars := make(map[string]string, len(seed))
 	for k, v := range seed {
 		vars[k] = v
 	}
+	jar := seedJar.clone()
 	for _, st := range steps {
-		err := f.step(ctx, st, vars)
+		err := f.step(ctx, st, vars, jar)
 		if err != nil {
 			if f.fl.Ignore && ctx.Err() == nil {
 				f.fail(err)
-				return vars, nil
+				return vars, jar, nil
 			}
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return vars, nil
+	return vars, jar, nil
 }
 
-func (f *flightSender) step(ctx context.Context, st FlightStep, vars map[string]string) error {
-	hr, err := f.build(ctx, st, vars)
+func (f *flightSender) step(ctx context.Context, st FlightStep, vars map[string]string, jar cookieJar) error {
+	hr, err := f.build(ctx, st, vars, jar)
 	if err != nil {
 		return err
 	}
@@ -353,6 +449,7 @@ func (f *flightSender) step(ctx context.Context, st FlightStep, vars map[string]
 	if err != nil {
 		return fmt.Errorf("%s: %w", st.File, err)
 	}
+	jar.take(hr.URL.Hostname(), resp.Header)
 	body, err := io.ReadAll(io.LimitReader(resp.Body, MaxBody+1))
 	resp.Body.Close()
 	if err != nil {
@@ -375,7 +472,7 @@ func (f *flightSender) step(ctx context.Context, st FlightStep, vars map[string]
 
 // build makes the HTTP request of a step: the main template's headers, then
 // the file's, variables put in, held to the destination the file names.
-func (f *flightSender) build(ctx context.Context, st FlightStep, vars map[string]string) (*http.Request, error) {
+func (f *flightSender) build(ctx context.Context, st FlightStep, vars map[string]string, jar cookieJar) (*http.Request, error) {
 	r := st.req
 	method, path, host, body := r.method, r.path, r.host, string(r.body)
 	headers := map[string]string{}
@@ -449,6 +546,9 @@ func (f *flightSender) build(ctx context.Context, st FlightStep, vars map[string
 	}
 	for k, v := range headers {
 		hr.Header.Set(k, v)
+	}
+	if c := jar.merge(u.Hostname(), hr.Header.Get("Cookie")); c != "" {
+		hr.Header.Set("Cookie", c)
 	}
 	return hr, nil
 }

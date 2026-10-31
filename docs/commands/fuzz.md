@@ -128,6 +128,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - `-preflight FILE` and `-postflight FILE` name raw request files, sent before and after each request.
 - `-preflight-var 'TOKEN:name="csrf" value="([^"]+)"'` or `-preflight-var-auto 'TOKEN:csrf'` reads a value from the answer. `TOKEN` in the request stands for it.
 - `-preflight-mode` and `-preflight-error` set when they run and what a failed one does.
+- A cookie a flight's answer sets (`Set-Cookie`) goes with the requests after it to the same host, as a Burp macro's session does: the next flight, the fuzz request and the postflight. With `per-request` the cookies are those of that request's flights; with `per-thread` each thread keeps its own, and what its postflight sets goes on. They are merged with `-b` and a `Cookie` header: the flight's newer value wins for the same name, other names stay. A cookie the answer expires is dropped.
 - They carry your `-H` and `-b`. Each goes through the scope, the budget, the pace and the ledger.
 - A value read from an answer can never change the scheme, host or port of a request. ffuf's `-preflight-anyhost` does not exist here.
   - Values come from the target, and the request carries your cookies and headers. A `Host: TOKEN` line or a `TOKEN/path` is refused: `preflight/postflight failed … cannot choose where requests go`. The failure makes exit 3.
