@@ -208,7 +208,7 @@ func renewer(roles []role, loginURL string, quiet bool) func(int) error {
 			fetch.Reset()
 			fetch.Extra = base
 			_, err := quietly(quiet, func() (*report, error) {
-				_, err := signIn(nil, loginURL, r.user, r.pass, newReport("roles"))
+				_, err := signIn(nil, loginURL, r.user, r.pass, newReport("roles"), nil)
 				return nil, err
 			})
 			s := fetch.Extra.Clone()

@@ -830,14 +830,18 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("the run signs in at %s as %s with Chrome first", *login, *loginUser))
 	} else if *login != "" {
 		base := fetch.CurrentExtra().Clone()
-		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
+		if base == nil {
+			base = http.Header{} // not nil: signIn reads nil as "the headers now sent"
+		}
+		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep, base)
 		if err != nil {
 			return err
 		}
 		loginHome = home
 		loginRenew = func(context.Context) error {
-			fetch.SetExtra(base.Clone())
-			_, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
+			// The requests going on meanwhile keep the old session until the
+			// new one is set: a stripped one would answer them as a visitor.
+			_, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep, base)
 			return err
 		}
 		// The page the login ended on is the signed-in app.
@@ -2140,7 +2144,7 @@ func hasHost(seeds []types.Seed, raw string) bool {
 // signIn signs in on loginURL with Chrome (b, or a browser of its own) and
 // adds the session to every request; it returns the page the login ended
 // on. What Chrome was refused on the way is listed in rep.
-func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (string, error) {
+func signIn(b *browser.Browser, loginURL, user, pass string, rep *report, base http.Header) (string, error) {
 	if pass == "" {
 		pass = os.Getenv("AZHAQ_LOGIN_PASS")
 	}
@@ -2164,8 +2168,13 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 	if len(s.Cookies) == 0 && s.Bearer == "" {
 		return "", fmt.Errorf("-login %s: signed in, but the site set no cookie and stored no token", loginURL)
 	}
-	// Built apart and set whole: requests in flight read fetch.Extra.
-	extra := fetch.CurrentExtra().Clone()
+	// Built apart and set whole: requests in flight read fetch.Extra, and keep
+	// the old session until the new one is ready. base is the headers the new
+	// session is added to; nil: the ones now sent.
+	if base == nil {
+		base = fetch.CurrentExtra()
+	}
+	extra := base.Clone()
 	if extra == nil {
 		extra = make(http.Header)
 	}
