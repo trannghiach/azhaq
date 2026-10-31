@@ -102,6 +102,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 		udpFilt   int // open|filtered ports of addresses that answered nothing else, not listed
 		udpSilent int // those addresses
 		withOpen  int
+		asked     int // addresses scanned wholly or in part, for a range a limit stopped
 		// The closed UDP ports of addresses that have no row, and those addresses.
 		udpRefused, udpRefusing int
 	)
@@ -179,6 +180,11 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			if s.err != nil {
 				res := result{err: s.err}
 				if stopped(s.err) {
+					if s.asked > 0 {
+						mu.Lock()
+						asked++
+						mu.Unlock()
+					}
 					// What it found is kept; azhaq resume asks the rest.
 					if res.row = c.partialRow(ip, ip, all, ports, s, prior, resumed, edgeName, edge); res.row != nil {
 						res.row["prefix"] = pf.String()
@@ -187,6 +193,9 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 				record(res)
 				return
 			}
+			mu.Lock()
+			asked++
+			mu.Unlock()
 			if resumed {
 				s, ports = withPrior(s, prior), all
 			}
@@ -250,6 +259,10 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 		return meta, emitErr
 	}
 	if stopped(first) {
+		// The rows of the addresses it reached are kept; this row says how
+		// many that was, as the finished range's does for all of them.
+		raw, _ := json.Marshal(map[string]any{"range": true, "prefix": pf.String(), "addresses": asked, "stopped": true, "open": []int{}})
+		_ = emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC(), Keep: true})
 		return types.RunMeta{Status: types.StatusCapped, EmitCount: meta.EmitCount}, first
 	}
 	if first != nil {

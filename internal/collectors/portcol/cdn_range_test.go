@@ -3,6 +3,7 @@ package portcol
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net"
 	"net/netip"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/miekg/dns"
 
 	"github.com/trannghiach/azhaq/internal/dnsr"
+	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -176,5 +178,37 @@ func TestRangeAddressNotScannedTwice(t *testing.T) {
 	}
 	if _, err := c.Run(context.Background(), *ipSeed, emit); err != nil || asked.Load() != 4 {
 		t.Fatalf("the address was asked again: %d %v", asked.Load(), err)
+	}
+}
+
+// A range a limit stops says how many addresses it asked, those that left no
+// row included, in a kept row of its own.
+func TestStoppedRangeCountsTheAddressesAsked(t *testing.T) {
+	var takes atomic.Int32
+	c := New(nil, []int{9}, 0)
+	c.Workers = 1
+	c.Scanner.Detect = portscan.DetectNone
+	c.Scanner.Take = func() error {
+		if takes.Add(1) > 3 {
+			return neterr.ErrBudget // the budget is spent on the fourth address
+		}
+		return nil
+	}
+	var obs []types.Observation
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypePrefix, Keys: map[string]string{"prefix": "127.0.0.0/29"}}, func(o types.Observation) error { obs = append(obs, o); return nil })
+	if !errors.Is(err, neterr.ErrBudget) {
+		t.Fatalf("%v", err)
+	}
+	var rng map[string]any
+	for i, r := range rows(t, obs) {
+		if r["range"] == true {
+			rng = r
+			if !obs[i].Keep {
+				t.Error("the count of a stopped range is not kept")
+			}
+		}
+	}
+	if rng == nil || rng["addresses"] != float64(3) {
+		t.Errorf("range row %v, want 3 addresses asked", rng)
 	}
 }

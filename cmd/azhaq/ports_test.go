@@ -253,6 +253,24 @@ func listenOpen(t *testing.T, n int, gone ...int) []int {
 	return ports
 }
 
+// A scan the request budget stops counts the addresses it asked, partly or
+// wholly, so the summary reconciles with the rows it printed.
+func TestPortsStoppedSummaryCountsTheAddressScanned(t *testing.T) {
+	t.Chdir(t.TempDir())
+	ports := listenOpen(t, 6)
+	spec := fmt.Sprintf("%d,%d,%d,%d,%d,%d", ports[0], ports[1], ports[2], ports[3], ports[4], ports[5])
+	out, rep, code := runContract(t, "ports", "-host", "127.0.0.1", "-p", spec, "-order", "asc", "-detect", "none", "-max-requests", "3", "-db", "s.db")
+	if code != exitLimit {
+		t.Fatalf("exit %d, want %d\n%+v", code, exitLimit, rep)
+	}
+	if n := len(lines(out)); n != 3 || rep.Results != 3 {
+		t.Errorf("%d rows printed, results %d, want the 3 open ports asked", n, rep.Results)
+	}
+	if rep.Counts["addresses"] != 1 {
+		t.Errorf("counts %v: the one address asked is not counted", rep.Counts)
+	}
+}
+
 // A scan the request budget stops, resumed under the same budget and then
 // without one: each run prints the open ports it found and its summary
 // counts those rows; the workspace's last row holds every open port, and
