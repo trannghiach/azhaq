@@ -52,6 +52,7 @@ What `why` says for a name:
 | `headers` | the set of header names |
 | `location` | the redirect target |
 | `lines` | its line count |
+| `body` | its body, on a page that gave the same body three times in a row |
 | `reflected` | the name's value came back more often than random names' values do |
 | `named` | the page printed the name |
 

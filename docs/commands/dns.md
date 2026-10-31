@@ -99,6 +99,7 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 
 ### Which names get a row
 - `-json` gives a row for every name a resolver answered, one that does not exist too: `status_code` is `NXDOMAIN` and there are no records.
+- A name no resolver answered gets no row in either form. It is counted as `no answer`.
 - With a type flag (`-a`, `-mx`, …), only the names that have a record of that type get a row.
 - With `-rcode`, only the names whose answer has that code get a row.
 

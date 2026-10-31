@@ -97,7 +97,7 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
 - A `host:port` is asked that port only, unless `-p`, `-tp` or `-pf` is given. They then apply to every target.
 - A range is split into blocks of 256 addresses. The run takes them one at a time and records them. So a range has no size limit and is not expanded in memory, and `azhaq resume` continues it.
 - A name costs the DNS queries of its A and AAAA records and no others.
-- One row is made for each address. A name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it.
+- One row is made for each address. A name's first two IPv4 and first two IPv6 addresses are scanned, IPv6 where this machine can reach it. `-sa` scans every address, and `-iv 4` or `-iv 6` keeps one family.
 - An address that shows nothing has no row.
 - `-wn` scans only the addresses that accept or refuse a connect to 80 or 443. `-sn` lists them and scans nothing.
 - For `-wn` and `-sn`, an address is up when a connect to 80 or 443 is accepted or refused, asked twice. A host that drops both is called down.
