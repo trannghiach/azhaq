@@ -183,6 +183,13 @@ func exportTo(path, format, origin string, safe bool, w io.Writer) error {
 		if err != nil {
 			return err
 		}
+		if paths, _ := doc["paths"].(map[string]any); len(paths) == 0 {
+			on := ""
+			if servers, _ := doc["servers"].([]any); len(servers) > 0 {
+				on = " on " + servers[0].(map[string]any)["url"].(string)
+			}
+			fmt.Fprintf(os.Stderr, "azhaq export: no API routes found%s: wrote a description with no paths\n", on)
+		}
 		if safe {
 			omitSkipped(doc)
 		}
@@ -225,10 +232,13 @@ var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 // fields), from forms and from what answered. x-azhaq on each operation
 // says where it came from and how the route answered a GET; an operation
 // of a route the run left alone, from the served description or guessed,
-// carries x-azhaq-skipped and the reason (flagSkipped).
+// carries x-azhaq-skipped and the reason (flagSkipped). A workspace with no
+// API route still gives a valid description, with no paths: a pipeline
+// reading the export gets a document whether or not the run found a thing.
 func openAPI(g *graphView, origin string) (map[string]any, error) {
 	byOrigin := map[string][]engine.MapEntry{}
 	queried := map[string][]engine.MapEntry{}
+	urls := map[string]int{} // every URL row, by origin
 	for _, r := range g.rows {
 		if r.Entity.Type != types.TypeURL {
 			continue
@@ -238,6 +248,7 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 			continue
 		}
 		o := u.Scheme + "://" + u.Host
+		urls[o]++
 		switch {
 		case isAPI(r) || len(r.Forms) > 0:
 			byOrigin[o] = append(byOrigin[o], r)
@@ -253,14 +264,24 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 		}
 	}
 	origin = strings.TrimSuffix(origin, "/")
+	if origin == "" { // no API route: describe the origin with most URLs
+		for o, n := range urls {
+			if n > urls[origin] || (n == urls[origin] && o < origin) {
+				origin = o
+			}
+		}
+	}
 	rows := slices.Concat(byOrigin[origin], queried[origin])
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("no API routes found%s", map[bool]string{true: " on " + origin}[origin != ""])
+	title := "Routes mapped on " + origin
+	if origin == "" {
+		title = "No routes mapped"
 	}
 	doc := map[string]any{
 		"openapi": "3.0.3",
-		"info":    map[string]any{"title": "Routes mapped on " + origin, "version": version, "description": "Mapped by azhaq " + version + " from " + g.path + ": the target's own API description where it serves one, plus what its scripts call and its pages link to. Seen, not a contract."},
-		"servers": []any{map[string]any{"url": origin}},
+		"info":    map[string]any{"title": title, "version": version, "description": "Mapped by azhaq " + version + " from " + g.path + ": the target's own API description where it serves one, plus what its scripts call and its pages link to. Seen, not a contract."},
+	}
+	if origin != "" {
+		doc["servers"] = []any{map[string]any{"url": origin}}
 	}
 	s := &spec{paths: map[string]any{}, shapes: map[string]string{}, graphql: map[string]gqlEndpoint{}}
 	for _, ep := range graphqlEndpoints(g.obs) {

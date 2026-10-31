@@ -48,12 +48,21 @@ func benchOpenAPI() *openAPIRow {
 	apps := []struct {
 		name, url string
 		slow      bool
+		lab       bool // one of the shared lab apps: brought up when it is not
 	}{
-		{"Juice Shop", juiceURL, false}, {"VAmPI", vampiURL, false}, {"DVGA", "http://127.0.0.1:5013/", false},
-		{"duplicate /blog and /blog/", "http://" + ln.Addr().String() + "/", false}, {"ginandjuice.shop", ginURL, true},
+		{"Juice Shop", juiceURL, false, false}, {"VAmPI", vampiURL, false, false}, {"DVGA", "http://127.0.0.1:5013/", false, true},
+		{"duplicate /blog and /blog/", "http://" + ln.Addr().String() + "/", false, false}, {"ginandjuice.shop", ginURL, true, false},
 	}
 	row := &openAPIRow{}
+	labs := newLabSet()
 	for i, a := range apps {
+		if a.lab {
+			if err := labs.up(strings.TrimSuffix(a.url, "/")); err != nil {
+				row.Specs = append(row.Specs, openAPISpec{App: a.name, Problems: []string{"not run, the app is down: " + err.Error()}})
+				addCheck("openapi: the export of "+a.name+" is a valid OpenAPI 3 document", false, "not run, the app it needs is down: %v", err)
+				continue
+			}
+		}
 		db := filepath.Join(dir, fmt.Sprintf("app%d-%s.db", i, time.Now().Format("150405")))
 		args := []string{"run", "-url", a.url, "-db", db, "-quiet"}
 		if a.slow { // a public site: 5 requests per second
