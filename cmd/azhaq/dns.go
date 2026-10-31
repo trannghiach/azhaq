@@ -13,7 +13,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"os/signal"
 	"regexp"
 	"sort"
 	"strconv"
@@ -297,7 +296,7 @@ func cmdDNS(args []string) error {
 	if *tmpl != "" {
 		r.tmpl = parseTemplate(*tmpl)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	if *maxtime > 0 {
 		var cancel context.CancelFunc
@@ -313,6 +312,9 @@ func cmdDNS(args []string) error {
 	}
 	if !cf.stream && in.asked.Load() == 0 && len(in.counts) == 0 && len(in.notes) == 0 && len(in.failed) == 0 {
 		return usagef("no names to resolve: give -d NAME, -l FILE or names on stdin")
+	}
+	if !cf.stream && in.asked.Load() == 0 && len(in.notes) == 0 && len(in.failed) == 0 && ctx.Err() == nil && in.allOutsideScope() {
+		return in.outsideScope() // nothing was asked: every name was outside the scope
 	}
 	r.summarize(ctx, args, *maxtime)
 	if c.db != "" {
@@ -659,6 +661,29 @@ func (in *dnsInput) left(why, what string) {
 	if in.counts[why] <= 3 {
 		in.skipped = append(in.skipped, engine.Skip{Target: what, Reason: why})
 	}
+}
+
+// allOutsideScope: every input left out was left out for the scope.
+func (in *dnsInput) allOutsideScope() bool {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	return len(in.counts) == 1 && in.counts["outside the scope"] > 0
+}
+
+// outsideScope is the usage error for names that are all outside the scope.
+func (in *dnsInput) outsideScope() error {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	var eg []string
+	for _, sk := range in.skipped {
+		eg = append(eg, sk.Target)
+	}
+	n := in.counts["outside the scope"]
+	list := strings.Join(eg, ", ")
+	if n > len(eg) {
+		list += fmt.Sprintf(" and %d more", n-len(eg))
+	}
+	return usagef("every target is outside the scope (%d left out): %s; check -allow, -deny and -scope", n, list)
 }
 
 func (in *dnsInput) note(s string) {

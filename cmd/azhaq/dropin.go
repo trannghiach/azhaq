@@ -205,6 +205,9 @@ func runPreset(c *common, args []string, rep *report, see func(types.Entity, typ
 	}
 	observer = see
 	out := runOut{embedded: true, scratch: dir != ""}
+	if c.json && !c.silent {
+		out.progress = "json" // the run is hushed; a long one still says it is working
+	}
 	err := mapTarget(append(args, "-db", db), rep, &out)
 	observer = nil
 	if dir != "" {

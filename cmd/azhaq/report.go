@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/engine"
@@ -17,7 +15,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/takeover"
-	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -375,31 +372,19 @@ func mapRowJSON(r engine.MapEntry) map[string]any {
 	return row
 }
 
-// progressTicker prints a line on stderr every half minute while a run
-// works, so a long run is not mistaken for a hung one.
-func progressTicker(ctx context.Context, st *store.Store, silent bool) func() {
-	if silent {
-		return func() {}
+// progressMode says how a command that works for long reports it on stderr:
+// "" for none (-quiet, unless -v), "json" with -json, else "text". forced is
+// what a drop-in decided for itself ("json" for its -json).
+func progressMode(quiet, verbose, asJSON bool, forced string) string {
+	switch {
+	case forced != "":
+		return forced
+	case quiet && !verbose:
+		return ""
+	case asJSON:
+		return "json"
 	}
-	done := make(chan struct{})
-	var once sync.Once
-	t0 := time.Now()
-	go func() {
-		t := time.NewTicker(30 * time.Second)
-		defer t.Stop()
-		for {
-			select {
-			case <-done:
-				return
-			case <-ctx.Done():
-				return
-			case <-t.C:
-				fmt.Fprintf(os.Stderr, "azhaq: working, %s: %d tasks done, %d requests sent\n",
-					time.Since(t0).Round(time.Second), st.TasksDone(), fetch.Sent())
-			}
-		}
-	}()
-	return func() { once.Do(func() { close(done) }) }
+	return "text"
 }
 
 // takeoverRow is a name another party may take over, and why.

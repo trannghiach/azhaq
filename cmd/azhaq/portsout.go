@@ -139,9 +139,11 @@ func (o *portOut) add(r portRow) {
 	case r.State == "up":
 		o.w.line(r.IP)
 	case r.Proto == "udp":
-		if r.State == "open" { // open|filtered rows are in the JSON
-			o.w.line(r.Host + ":" + strconv.Itoa(r.Port) + "/udp")
+		line := r.Host + ":" + strconv.Itoa(r.Port) + "/udp"
+		if r.State != "open" {
+			line += " " + r.State // a silent port is not an answering one: the state tells which
 		}
+		o.w.line(line)
 	default:
 		o.w.line(r.Host + ":" + strconv.Itoa(r.Port))
 	}

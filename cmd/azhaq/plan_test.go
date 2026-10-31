@@ -121,3 +121,58 @@ func TestPlanChromeWrites(t *testing.T) {
 		t.Errorf("-browser-writes alone: %v", err)
 	}
 }
+
+// The sends of a plan are true of what it plans: GET requests only when
+// nothing else is sent, and a line for each port scan, UDP probe, POST body
+// and sign-in that is.
+func TestPlanSendsNameWhatIsPlanned(t *testing.T) {
+	joined := func(args ...string) string {
+		return strings.Join(planJSON(t, append([]string{"-url", "http://127.0.0.1:3001/"}, args...)...).Sends, "\n")
+	}
+	if s := joined(); !strings.HasPrefix(s, "GET requests only") {
+		t.Errorf("a plain run: %s", s)
+	}
+	s := joined("-ports", "top-100")
+	for _, want := range []string{"TCP connects (full handshakes) to 100 ports of each address", "each open port is asked what it is", "one HEAD /"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("-ports top-100 lacks %q:\n%s", want, s)
+		}
+	}
+	if strings.HasPrefix(s, "GET requests only") {
+		t.Errorf("a port scan is not GET only:\n%s", s)
+	}
+	if s := joined("-ports", "22,80", "-port-detect", "none"); !strings.Contains(s, "to 2 ports") || !strings.Contains(s, "closed at once") || strings.Contains(s, "HEAD /") {
+		t.Errorf("-port-detect none:\n%s", s)
+	}
+	if s := joined("-ports", "none", "-ports-udp", "top"); !strings.Contains(s, "UDP datagrams to 25 ports") || strings.Contains(s, "TCP connects") {
+		t.Errorf("-ports-udp:\n%s", s)
+	}
+	for flag, want := range map[string][]string{
+		"-graphql":      {"-graphql"},
+		"-submit-forms": {"-submit-forms"},
+	} {
+		if s := joined(flag); !strings.Contains(s, "POST requests") || !strings.Contains(s, want[0]) || strings.HasPrefix(s, "GET requests only") {
+			t.Errorf("%s:\n%s", flag, s)
+		}
+	}
+	if s := joined("-params", "small", "-params-method", "JSON", "-params-writes"); !strings.Contains(s, "JSON requests whose body holds the parameter names") {
+		t.Errorf("-params-method JSON:\n%s", s)
+	}
+	if s := joined("-params", "small"); !strings.HasPrefix(s, "GET requests only") {
+		t.Errorf("-params by GET:\n%s", s)
+	}
+	if s := joined("-login", "http://127.0.0.1:3001/login", "-login-user", "bob", "-login-pass", "x"); !strings.Contains(s, "Chrome signs in at http://127.0.0.1:3001/login as bob") {
+		t.Errorf("-login:\n%s", s)
+	}
+	// -passive leaves the pages out, not the port scan.
+	s = joined("-passive", "-ports", "top-100")
+	if strings.Contains(s, "nothing to the targets") || !strings.Contains(s, "TCP connects") {
+		t.Errorf("-passive -ports:\n%s", s)
+	}
+	if s := joined("-passive"); !strings.Contains(s, "nothing to the targets (-passive)") {
+		t.Errorf("-passive:\n%s", s)
+	}
+	if r := planJSON(t, "-url", "http://127.0.0.1:3001/", "-passive", "-ports", "top-100").Requests; r.Passive {
+		t.Errorf("-passive -ports says no request goes to the targets: %+v", r)
+	}
+}

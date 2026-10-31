@@ -99,9 +99,14 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 		down, out int
 		filtAddrs int
 		edgeAddrs int
-		udpFilt   int
+		udpFilt   int // open|filtered ports of addresses that answered nothing else, not listed
+		udpSilent int // those addresses
 		withOpen  int
 	)
+	// One address given is not a sweep: it is asked about, so its silent
+	// UDP ports are rows. In a range, an address that answered nothing at
+	// all (down, or dropping UDP) would be a screenful of them.
+	single := pf.Bits() == pf.Addr().BitLen()
 	sem := make(chan struct{}, workers)
 	record := func(res result) {
 		mu.Lock()
@@ -191,6 +196,9 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 					return
 				}
 			}
+			// Silent ports are rows where the address showed life (a reply, a
+			// refusal or an open port), or was the one asked.
+			listed := len(udp.OpenFiltered) > 0 && (single || len(s.open) > 0 || len(udp.Open) > 0 || udp.Closed > 0)
 			mu.Lock()
 			switch {
 			case !s.up:
@@ -204,18 +212,19 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			if edge && !c.CDNFull {
 				edgeAddrs++
 			}
-			udpFilt += len(udp.OpenFiltered)
+			if len(udp.OpenFiltered) > 0 && !listed {
+				udpFilt += len(udp.OpenFiltered)
+				udpSilent++
+			}
 			mu.Unlock()
 			// An address that shows nothing has no row: the range's row counts them.
-			if len(s.open) == 0 && len(udp.Open) == 0 && !(c.Discover == DiscoverOnly && s.up) {
+			if len(s.open) == 0 && len(udp.Open) == 0 && !listed && !(c.Discover == DiscoverOnly && s.up) {
 				return
 			}
 			row := c.row(ip, ip, ports, s, edgeName, edge)
 			row["prefix"] = pf.String()
 			if len(c.UDPPorts) > 0 && !edge && s.up && c.Discover != DiscoverOnly {
-				u := udp
-				u.OpenFiltered = nil // the range's row counts them
-				addUDP(row, u, len(c.UDPPorts))
+				addUDP(row, udp, len(c.UDPPorts))
 			}
 			follow := len(s.open) > 0 || len(udp.Open) > 0
 			if follow {
@@ -240,7 +249,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 	}
 	rng := map[string]any{"range": true, "prefix": pf.String(), "addresses": len(addrs) - out, "with_open": withOpen,
 		"scanned": len(c.portsOf("")), "down": down, "outside_scope": out, "filtered_addresses": filtAddrs,
-		"cdn_addresses": edgeAddrs, "udp_open_filtered_n": udpFilt, "open": []int{}}
+		"cdn_addresses": edgeAddrs, "udp_silent_ports": udpFilt, "udp_silent_addresses": udpSilent, "open": []int{}}
 	raw, _ := json.Marshal(rng)
 	if err := emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC()}); err != nil {
 		return meta, err

@@ -2,11 +2,17 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"net/netip"
 	"os"
+	"slices"
+	"strings"
 
+	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/scopefile"
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -80,4 +86,51 @@ func cmdScope(args []string) error {
 		fmt.Printf("  skip  %s\n", r)
 	}
 	return nil
+}
+
+// seedOutsideRange is a range seed that no address of can pass the scope.
+func seedOutsideRange(rules scope.Rules, s types.Seed) bool {
+	s = normalize.Seed(s)
+	if s.Type != types.TypePrefix {
+		return false
+	}
+	pf, err := netip.ParsePrefix(s.Key())
+	return err == nil && !rules.AllowsPrefix(pf)
+}
+
+// outsideScope is the usage error of a run whose every target is outside
+// the scope: it names them (the blocks of a range as the range), and nothing
+// was sent.
+func outsideScope(targets []string) error {
+	if len(targets) == 0 {
+		return usagef("every target is outside the scope (0 left out)")
+	}
+	var v4 []ipRange
+	var names []string
+	for _, t := range targets {
+		pf, err := netip.ParsePrefix(t)
+		if err != nil || !pf.Addr().Is4() {
+			names = append(names, t)
+			continue
+		}
+		pf = pf.Masked()
+		lo := binary.BigEndian.Uint32(pf.Addr().AsSlice())
+		v4 = append(v4, ipRange{lo, lo + uint32(uint64(1)<<(32-pf.Bits())-1)})
+	}
+	for _, pf := range cover(v4) {
+		names = append(names, strings.TrimSuffix(pf.String(), "/32"))
+	}
+	for i, n := range names {
+		names[i] = strings.TrimSuffix(n, "/128")
+	}
+	slices.Sort(names)
+	shown := names
+	if len(shown) > 5 {
+		shown = shown[:5]
+	}
+	list := strings.Join(shown, ", ")
+	if len(names) > len(shown) {
+		list += fmt.Sprintf(" and %d more", len(names)-len(shown))
+	}
+	return usagef("every target is outside the scope (%d left out): %s; check -allow, -deny and -scope", len(names), list)
 }

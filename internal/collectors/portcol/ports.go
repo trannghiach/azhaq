@@ -332,7 +332,7 @@ const unroutedKey = "ipv6_not_scanned"
 func Notes(obs []types.StoredObservation) []string {
 	names := map[string]bool{}
 	var silent []string // address: ports, where a few ports answered neither way, twice
-	udpFiltered, udpLimited := 0, 0
+	var udp udpSummary
 	var unprobed []string // address: open ports left without the protocol probes
 	var unresolved []string
 	var stopped []string // addresses the open-port threshold stopped
@@ -348,6 +348,9 @@ func Notes(obs []types.StoredObservation) []string {
 			Unrouted   []string `json:"ipv6_not_scanned"`
 			Filtered   []int    `json:"filtered_ports"`
 			UDPFilt    []int    `json:"udp_open_filtered"`
+			UDPUnlist  int      `json:"udp_unlisted"`
+			UDPSilentN int      `json:"udp_silent_ports"`
+			UDPSilentA int      `json:"udp_silent_addresses"`
 			Unresolved string   `json:"unresolved"`
 			Threshold  bool     `json:"threshold"`
 			CDN        string   `json:"cdn"`
@@ -376,6 +379,8 @@ func Notes(obs []types.StoredObservation) []string {
 			if p.Edges > 0 {
 				edges = append(edges, fmt.Sprintf("%d addresses of a range", p.Edges))
 			}
+			udp.silentN += p.UDPSilentN
+			udp.silentIPs += p.UDPSilentA
 			continue
 		}
 		if p.Unresolved != "" {
@@ -393,8 +398,11 @@ func Notes(obs []types.StoredObservation) []string {
 		if len(p.Unrouted) > 0 {
 			names[p.Host] = true
 		}
-		udpFiltered += len(p.UDPFilt)
-		udpLimited += p.UDPLimit
+		who := p.IP
+		if who == "" {
+			who = p.Host
+		}
+		udp.add(who, p.UDPFilt, p.UDPUnlist, p.UDPLimit)
 		if p.Unprobed > 0 {
 			unprobed = append(unprobed, fmt.Sprintf("%s: %d", p.IP, p.Unprobed))
 		}
@@ -447,7 +455,7 @@ func Notes(obs []types.StoredObservation) []string {
 		sort.Strings(unprobed)
 		out = append(out, "open ports whose protocol was not probed, after several others on the same address could not be named (a firewall or tarpit that accepts every connect): "+strings.Join(unprobed, "; "))
 	}
-	return append(out, udpNotes(udpFiltered, udpLimited)...)
+	return append(out, udp.notes()...)
 }
 
 // listOf is up to n of items, then how many more.

@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"net/netip"
 	"testing"
 
 	"github.com/trannghiach/azhaq/types"
@@ -109,5 +110,43 @@ func TestCompileMatchesPlainRules(t *testing.T) {
 	}
 	if (Rules{}).Compile().Allows("anything") != true {
 		t.Error("empty rules refuse")
+	}
+}
+
+// A range is a target only where some address of it can pass: a domain
+// rule never matches an address, an allow range must touch it, and a deny
+// range holding it whole leaves nothing to ask.
+func TestAllowsPrefix(t *testing.T) {
+	for _, c := range []struct {
+		rules Rules
+		pf    string
+		want  bool
+	}{
+		{Rules{}, "10.0.0.0/8", true},
+		{Rules{Allow: []string{"127.0.0.1"}}, "127.0.0.2/32", false},
+		{Rules{Allow: []string{"127.0.0.1"}}, "127.0.0.1/32", true},
+		{Rules{Allow: []string{"127.0.0.1"}}, "127.0.0.0/30", true},
+		{Rules{Allow: []string{"127.0.0.1"}}, "127.0.0.4/30", false},
+		{Rules{Allow: []string{"10.1.0.0/16"}}, "10.0.0.0/8", true},    // the rule is inside the range
+		{Rules{Allow: []string{"10.0.0.0/8"}}, "10.1.2.0/24", true},    // the range is inside the rule
+		{Rules{Allow: []string{"10.1.0.0/16"}}, "10.2.0.0/24", false},  // neither
+		{Rules{Allow: []string{"example.test"}}, "10.0.0.0/24", false}, // a name never allows an address
+		{Rules{Deny: []string{"10.0.0.0/8"}}, "10.1.0.0/24", false},
+		{Rules{Deny: []string{"10.1.0.0/24"}}, "10.0.0.0/8", true}, // a part denied, the rest asked
+		{Rules{Deny: []string{"10.0.0.7"}}, "10.0.0.7/32", false},
+		{Rules{Allow: []string{"2001:db8::/32"}}, "2001:db8:1::/120", true},
+		{Rules{Allow: []string{"2001:db8::/32"}}, "2001:db9::/120", false},
+		{Rules{Allow: []string{"10.0.0.0/8"}}, "2001:db8::/120", false},
+	} {
+		pf := netip.MustParsePrefix(c.pf)
+		for _, compiled := range []bool{false, true} {
+			r := c.rules
+			if compiled {
+				r = r.Compile()
+			}
+			if got := r.AllowsPrefix(pf); got != c.want {
+				t.Errorf("%+v %s (compiled %v): %v, want %v", c.rules, c.pf, compiled, got, c.want)
+			}
+		}
 	}
 }

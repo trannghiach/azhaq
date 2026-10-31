@@ -6,7 +6,7 @@ There are two ways to use one:
 
 ```
 azhaq run -url https://app.example.com/ -exec ./my-connector   # Azhaq starts it with the run's seeds
-azhaq ingest -in facts.jsonl                                   # load output produced earlier
+azhaq ingest facts.jsonl                                       # load output produced earlier (several files, or - for stdin; -in FILE too)
 ```
 
 `azhaq ingest` also reads what the usual tools write, so their results can join a graph without a connector: subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines, an ffuf JSON report (`-of json`) or its `-json` lines, Azhaq's own `export`, and plain lines of URLs, hostnames and addresses. Each line is read by its fields; the summary counts the lines of each format. Into a workspace, the facts join its newest run.
@@ -14,8 +14,8 @@ azhaq ingest -in facts.jsonl                                   # load output pro
 An answer httpx, katana or ffuf got to a GET is recorded as Azhaq's own probe records one (an `application` observation with `url`, `status`, `title`, `server`, `content_type`, `tech`, `length`, `words`, `lines`, `ms`, `ip`, `location`, `final_url`, `final_status`), so exports read it as theirs: `targets`, `burp` and `html` list it as a web service, the map and `openapi` as how the URL answered. httpx's `status_code` after `-fr` is where the redirects ended; it is taken in as Azhaq's `status`, the first answer (`chain_status_codes[0]`), with `final_status` the last. An httpx line that `failed` is a request with no answer (`error`). A request katana sent with another method (a form it filled), or saw a page's script send (`-xhr`), is what the route takes, not its answer: the method, and the body's field names (a JSON object's keys, a urlencoded or multipart form's names), as a call in a script is. The forms katana read (`-fx`) are the page's forms. katana follows redirects unless run with `-dr`, and says nothing of them: a URL it reached through one is taken in with the final page's status, length and forms. Run katana with `-dr` for each URL's own answer. An ffuf run with `-X` and another method says only that the route takes it.
 
 ```
-subfinder -d example.com -json | azhaq ingest -in - -db example.db
-httpx -l hosts.txt -json -o httpx.jsonl && azhaq ingest -in httpx.jsonl -db example.db
+subfinder -d example.com -json | azhaq ingest - -db example.db
+httpx -l hosts.txt -json -o httpx.jsonl && azhaq ingest httpx.jsonl katana.jsonl -db example.db
 ```
 
 Names taken in this way are `unresolved` until a run or `azhaq dns` looks them up; the dnsx and httpx lines that carry addresses count as resolved.

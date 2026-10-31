@@ -54,7 +54,7 @@ func init() {
 		{name: "plan", group: groupMap, run: cmdPlan,
 			summary: "show what a run would do and send, without sending anything",
 			usage:   "(-url URL | -domain D | -list FILE | -scope … -program P) [run flags]",
-			output:  "the collectors that would run on each seed, the seeds left out of scope, the active techniques asked for, the third-party source queries (counted) and a bound on the requests to the targets: per web service, and the cap",
+			output:  "the collectors that would run on each seed, the seeds left out of scope, the active techniques asked for, what is sent to the targets (GET requests only, or each port scan, UDP probe, POST body and sign-in that is planned), the third-party source queries (counted) and a bound on the requests to the targets: per web service, and the cap",
 			examples: []string{
 				"azhaq plan -url https://app.example.com/",
 				"azhaq plan -scope bugcrowd -program tesla -dirs words.txt",
@@ -259,10 +259,11 @@ func init() {
 			}},
 		{name: "ingest", group: groupWS, run: cmdIngest,
 			summary: "add other tools' results to a database (subfinder, dnsx, httpx, katana, naabu, nuclei, gau and ffuf output, or connector facts)",
-			usage:   "-in FILE [-db FILE]",
+			usage:   "FILE… | -in FILE | - [-db FILE]",
 			output:  "the map of what was added",
 			examples: []string{
-				"subfinder -d example.com -json | azhaq ingest -in - -db example.db",
+				"azhaq ingest httpx.jsonl katana.jsonl -db example.db",
+				"subfinder -d example.com -json | azhaq ingest - -db example.db",
 				"httpx -l hosts.txt -json | azhaq ingest -in - -db example.db && azhaq export -db example.db -format targets",
 			}},
 		{name: "ledger", group: groupWS, run: cmdLedger,
@@ -341,7 +342,7 @@ var exitCodes = []struct {
 	{exitError, "error: the command could not do its job"},
 	{exitUsage, "usage: bad flags or input (targets all outside the scope given too), nothing was sent"},
 	{exitPartial, "finished, but some sources or requests failed: the results are usable, the summary on stderr lists what failed"},
-	{exitLimit, "stopped by a limit (-max-requests, -timeout, -daily-requests, -max-items) or by the kill file (-kill-file) with work left: azhaq resume -db FILE continues"},
+	{exitLimit, "stopped by a limit (-max-requests, -timeout, -daily-requests, -max-items) or by the kill file (-kill-file) or by a signal (Ctrl-C, SIGTERM, SIGHUP) with work left: azhaq resume -db FILE continues"},
 }
 
 // exitErr carries an exit code out of a command whose summary already

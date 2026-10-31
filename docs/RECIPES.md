@@ -101,7 +101,7 @@ The flags and the config are [notify's](https://github.com/projectdiscovery/noti
 ```
 azhaq export -db acme.db -format targets | nuclei -l -
 azhaq export -db acme.db -format burp > scope.json
-httpx -l hosts.txt -json | azhaq ingest -in - -db acme.db
+httpx -l hosts.txt -json | azhaq ingest - -db acme.db
 ```
 
 `ingest` reads subfinder, dnsx, httpx, katana, naabu, nuclei and gau JSON lines and ffuf output. Lines it cannot read are skipped and counted.

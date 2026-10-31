@@ -403,6 +403,7 @@ func cmdPorts(args []string) error {
 	seen := map[string]bool{}
 	var scanned float64 // addresses asked
 	var unresolved int
+	var silentUDP bool // a row is open|filtered: the rows are not all open ports
 	start := time.Now()
 	see := func(_ types.Entity, o types.Observation) {
 		if o.Collector != "azhaq-ports" {
@@ -457,6 +458,11 @@ func cmdPorts(args []string) error {
 			}
 			n, _ := strconv.Atoi(port)
 			state, _ := svc["state"].(string)
+			if state != "open" {
+				mu.Lock()
+				silentUDP = true
+				mu.Unlock()
+			}
 			row := portRow{Host: host, IP: ip, Port: n, Proto: "udp", State: state, At: time.Now(), Fields: map[string]any{}}
 			for _, k := range []string{"service", "product", "version", "banner"} {
 				if v, ok := svc[k]; ok {
@@ -484,6 +490,9 @@ func cmdPorts(args []string) error {
 	rep.Counts = map[string]int{"addresses": int(scanned)}
 	if unresolved > 0 {
 		rep.Counts["did not resolve"] = unresolved
+	}
+	if silentUDP {
+		rep.what = "ports"
 	}
 	if *sn {
 		rep.what = "addresses up"
