@@ -90,7 +90,7 @@ jobs:
         run: |
           cd "$HOME/trial"
           { [ -f REPORT.md ] && echo REPORT.md
-            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' \) -size -2M 2>/dev/null; } > "$HOME/ci/list"
+            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' \) -size -2M 2>/dev/null || true; } > "$HOME/ci/list"
           tail -n 300 "$HOME/ci/stream.jsonl" > "$HOME/ci/stream-tail.jsonl" 2>/dev/null || true
           tar czf "$HOME/ci/trial.tgz" -T "$HOME/ci/list" -C "$HOME/ci" stream-tail.jsonl stderr.txt
           age -r "$AGE_RECIPIENT" -o "$HOME/ci/trial.tgz.age" "$HOME/ci/trial.tgz"
@@ -188,7 +188,7 @@ jobs:
         run: |
           cd "$HOME/trial"
           { for f in REPORT.md leads.jsonl phases.log surface-*.txt; do [ -f "$f" ] && echo "$f"; done
-            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' -o -name '*.jsonl' \) -size -2M 2>/dev/null; } > "$HOME/ci/list"
+            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' -o -name '*.jsonl' \) -size -2M 2>/dev/null || true; } > "$HOME/ci/list"
           tail -n 300 "$HOME/ci/stream.ts.jsonl" > "$HOME/ci/stream-tail.jsonl" 2>/dev/null || true
           gzip -9 -c "$HOME/ci/stream.ts.jsonl" > "$HOME/ci/stream.ts.jsonl.gz" 2>/dev/null || true
           [ "$(stat -c %s "$HOME/ci/stream.ts.jsonl.gz" 2>/dev/null || echo 0)" -gt 41943040 ] && rm -f "$HOME/ci/stream.ts.jsonl.gz"
