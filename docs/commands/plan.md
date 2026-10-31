@@ -95,7 +95,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-org` | string |  | seed Organization name |
 | `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
 | `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
-| `-cloud` | string |  | CloudAccount JSON inventory (local file) |
 | `-exec` | string |  | connector command (seeds on stdin, facts on stdout) |
 | `-demo` | bool |  | run against the built-in fixture server (no internet) |
 

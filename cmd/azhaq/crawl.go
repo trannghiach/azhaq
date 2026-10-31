@@ -128,7 +128,7 @@ func cmdCrawl(args []string) error {
 	rep := newReport("crawl")
 	rep.what = "URLs"
 	// The application only: no subdomain, archive or certificate fan-out.
-	run := []string{"-list", path, "-skip", "azhaq-subdomains,azhaq-urls,azhaq-rdap,azhaq-tls,azhaq-cloud", "-no-favicon", "-backoff", "-retry=1", "-cookie-jar"}
+	run := []string{"-list", path, "-skip", "azhaq-subdomains,azhaq-urls,azhaq-rdap,azhaq-tls", "-no-favicon", "-backoff", "-retry=1", "-cookie-jar"}
 	if !*noFill {
 		run = append(run, "-fill-forms")
 	}

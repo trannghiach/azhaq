@@ -22,7 +22,7 @@ Four kinds of record make up the graph: seeds, entities, observations and edges.
 - `IPAddress`: ports, TLS, reverse DNS and the network
 - `Prefix` and `ASN`: announced prefixes, and the reverse DNS of a range
 - `Organization`
-- `CloudAccount`
+- `CloudAccount`: for connectors only, given in an `-in` file
 
 `Certificate`, `Email` and `Application` are defined but unused.
 
@@ -109,7 +109,6 @@ Sources Azhaq does not query itself can be plugged in as external programs: see 
 | `azhaq-render`, `azhaq-shots` | Chrome: rendered pages and their requests; screenshots |
 | `azhaq-search` | Shodan, FOFA and Netlas, with keys |
 | `azhaq-rdap` | registration data and nameservers |
-| `azhaq-cloud` | domains, hosts and URLs from a local cloud inventory |
 
 ### Details by collector
 
@@ -592,7 +591,7 @@ A route keeps up to three places per page, calls first. A route read from a sour
 
 `crawl` is `run` with these turned off:
 
-- the subdomain, archive, certificate, RDAP and cloud collectors;
+- the subdomain, archive, certificate and RDAP collectors;
 - the 32 path checks;
 - the favicon;
 - the source-map guesses, which ask `main.js.map` next to a script that names none.

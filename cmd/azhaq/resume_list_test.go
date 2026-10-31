@@ -82,3 +82,24 @@ func TestResumeDropsRemovedFlags(t *testing.T) {
 		t.Errorf("gone %q", gone)
 	}
 }
+
+// -cloud FILE was replaced by -l: a stored run that has it goes on without,
+// and the note says what to use.
+func TestResumeDropsCloud(t *testing.T) {
+	got, gone := dropRemovedFlags([]string{"-url", "https://app.test/", "-cloud", "/tmp/inv.json", "-depth=2", "-cloud=/tmp/b.json"})
+	if want := []string{"-url", "https://app.test/", "-depth=2"}; !slices.Equal(got, want) {
+		t.Errorf("args %q, want %q", got, want)
+	}
+	if !slices.Equal(gone, []string{"-cloud", "-cloud"}) || !strings.Contains(removedWhy(gone), "-l FILE") || strings.Contains(removedWhy(gone), "GET") {
+		t.Errorf("gone %q: %s", gone, removedWhy(gone))
+	}
+}
+
+func TestRunCloudIsUsageError(t *testing.T) {
+	for _, f := range []func([]string) error{cmdRun, cmdPlan} {
+		err := f([]string{"-cloud", "inv.json"})
+		if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "-cloud") {
+			t.Errorf("-cloud: %v", err)
+		}
+	}
+}

@@ -164,12 +164,6 @@ func TestResolveDBFlagAndEnv(t *testing.T) {
 	}
 }
 
-func TestLoadSeedsCloudMissing(t *testing.T) {
-	if _, err := loadSeeds("", "", filepath.Join(t.TempDir(), "nope.json"), ""); err == nil {
-		t.Fatal("want missing cloud file")
-	}
-}
-
 func TestApplyExtraNeedsCookiePair(t *testing.T) {
 	if err := applyExtra([]string{"nosesame"}, nil); err == nil {
 		t.Fatal("want cookie error")

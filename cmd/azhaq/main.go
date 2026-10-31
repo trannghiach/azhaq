@@ -204,7 +204,6 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs := newFlags("run")
 	url := fs.String("url", "", "seed URL")
 	org := fs.String("org", "", "seed Organization name")
-	cloud := fs.String("cloud", "", "CloudAccount JSON inventory (local file)")
 	in := fs.String("in", "", "JSONL seeds")
 	list := fs.String("list", "", "targets, one per line: URL, host, host:port or IP (- for stdin)")
 	var asns, cidrs stringsFlag
@@ -450,8 +449,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	var seeds []types.Seed
 	var listLines []string // kept in the workspace, for azhaq resume
 	if *demo {
-		if *url != "" || *org != "" || *cloud != "" || *in != "" {
-			fmt.Fprintln(os.Stderr, "azhaq: -demo ignores -url/-org/-cloud/-in")
+		if *url != "" || *org != "" || *in != "" {
+			fmt.Fprintln(os.Stderr, "azhaq: -demo ignores -url/-org/-in")
 		}
 		srv := demoServer()
 		defer srv.Close()
@@ -459,7 +458,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		seeds = []types.Seed{{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}}
 	} else {
 		var err error
-		seeds, err = loadSeeds(*url, *org, *cloud, *in)
+		seeds, err = loadSeeds(*url, *org, *in)
 		if err != nil {
 			return err
 		}
@@ -519,10 +518,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			}
 		}
 		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" {
-			return usagef("need a target: -url, -domain, -list, -scope, -asn, -cidr, -org, -cloud, -in, -facts, -exec or -demo")
+			return usagef("need a target: -url, -domain, -list, -scope, -asn, -cidr, -org, -in, -facts, -exec or -demo")
 		}
 		if *execCmd != "" && len(seeds) == 0 {
-			return usagef("-exec needs a seed (-url, -org, -cloud, or -in)")
+			return usagef("-exec needs a seed (-url, -org or -in)")
 		}
 	}
 
@@ -1831,7 +1830,7 @@ func demoServer() *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func loadSeeds(url, org, cloud, path string) ([]types.Seed, error) {
+func loadSeeds(url, org, path string) ([]types.Seed, error) {
 	var seeds []types.Seed
 	if url != "" {
 		u, err := parseCLIURL(url)
@@ -1842,12 +1841,6 @@ func loadSeeds(url, org, cloud, path string) ([]types.Seed, error) {
 	}
 	if org != "" {
 		seeds = append(seeds, types.Seed{Type: types.TypeOrganization, Keys: map[string]string{"name": org}})
-	}
-	if cloud != "" {
-		if _, err := os.Stat(cloud); err != nil {
-			return nil, fmt.Errorf("cloud inventory: %w", err)
-		}
-		seeds = append(seeds, types.Seed{Type: types.TypeCloudAccount, Keys: map[string]string{"id": cloud, "path": cloud}})
 	}
 	if path != "" {
 		data, err := os.ReadFile(path)

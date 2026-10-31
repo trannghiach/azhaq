@@ -64,7 +64,7 @@ A row takes the strongest level any of its sources reaches, in this order:
 | --- | --- |
 | `answered` | This run requested it and the server answered: a status, not the origin's any-path answer, not a 404 or 410. |
 | `browser` | Chrome, loading the page (`-browser`), sent the request itself, or the write it would have sent. Seen on the wire, not only written in a script. |
-| `described` | An API description the run read lists it: OpenAPI or Swagger, or a cloud inventory given to the run. |
+| `described` | An API description the run read lists it: OpenAPI or Swagger. |
 | `called` | A script calls it, with a `fetch` or XHR call and its method. Not asked, and not seen to happen. |
 | `linked` | A page links to it, a form submits to it, or a script names it in a string or as a route. |
 | `archived` | Only archive sources hold it: Wayback, Common Crawl, OTX, urlscan, Arquivo. |

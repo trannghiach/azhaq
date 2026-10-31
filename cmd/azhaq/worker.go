@@ -42,7 +42,7 @@ type workerConfig struct {
 // own process does (sign in, Chrome, third-party sources, DNS).
 var coordinatorOnly = map[string]bool{
 	"db": true, "serve": true, "worker-token": true, "resume-run": true, "worker-of": true,
-	"url": true, "domain": true, "list": true, "in": true, "org": true, "cloud": true, "asn": true, "cidr": true,
+	"url": true, "domain": true, "list": true, "in": true, "org": true, "asn": true, "cidr": true,
 	"scope": true, "program": true, "facts": true, "exec": true, "demo": true,
 	"login": true, "login-user": true, "login-pass": true, "cookie": true, "header": true,
 	"urls": true, "urls-subs": true, "urls-sources": true, "urls-mc": true, "urls-fc": true, "urls-mt": true, "urls-ft": true,

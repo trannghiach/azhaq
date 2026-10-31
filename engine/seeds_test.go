@@ -4,42 +4,16 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
-	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/fake"
 	"github.com/trannghiach/azhaq/internal/collectors/rdapcol"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
-
-func TestCloudBecomesDomain(t *testing.T) {
-	inv := filepath.Join(t.TempDir(), "inv.json")
-	if err := os.WriteFile(inv, []byte(`{"domains":["cloud.example.test"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st.Close() })
-	cat := catalog.New()
-	cloudcol.Register(cat)
-	fake.Register(cat, "www.cloud.example.test")
-	eng := &engine.Engine{Cat: cat, Store: st}
-	seed := types.Seed{Type: types.TypeCloudAccount, Keys: map[string]string{"id": "lab", "path": inv}}
-	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 2, MaxItems: 16}); err != nil {
-		t.Fatal(err)
-	}
-	if !hasTypeKey(st, types.TypeDomain, "cloud.example.test") {
-		ents, _ := st.Entities()
-		t.Fatalf("cloud domain missing: %+v", ents)
-	}
-}
 
 func TestOrgBecomesDomain(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

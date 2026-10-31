@@ -10,7 +10,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/collectors/apicol"
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/collectors/brutecol"
-	"github.com/trannghiach/azhaq/internal/collectors/cloudcol"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/dnscol"
@@ -148,5 +147,4 @@ func Register(cat *catalog.Catalog, o Options) {
 	subcol.Register(cat, sub)
 	cat.MustRegister(urlcol.New(o.URLs))
 	rdapcol.Register(cat, client)
-	cloudcol.Register(cat)
 }

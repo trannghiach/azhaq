@@ -50,7 +50,7 @@ func evidenceLevel(collector, kind, via, seen string, p evidenceFields) string {
 		}
 	}
 	switch collector {
-	case "azhaq-openapi", "azhaq-cloud":
+	case "azhaq-openapi", "azhaq-cloud": // azhaq-cloud: stores of earlier versions
 		return EvDescribed
 	case "azhaq-js":
 		if via == "js-call" {

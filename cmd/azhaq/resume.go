@@ -76,7 +76,7 @@ func cmdResume(args []string) error {
 	}
 	runArgs, gone := dropRemovedFlags(runArgs)
 	if len(gone) > 0 && !wantsJSON(rest) {
-		fmt.Fprintf(os.Stderr, "azhaq: the run was started with %s, which azhaq no longer has: every GET found in scope is requested, whatever its name says; ignored\n", strings.Join(gone, ", "))
+		fmt.Fprintf(os.Stderr, "azhaq: the run was started with %s, which azhaq no longer has: %s; ignored\n", strings.Join(gone, ", "), removedWhy(gone))
 	}
 	if !hasFlag(rest, "list") {
 		if runArgs, err = listFromWorkspace(db, id, runArgs); err != nil {
@@ -147,9 +147,25 @@ func listFromWorkspace(db, id string, args []string) ([]string, error) {
 }
 
 // removedFlags are options of earlier versions: -all-gets and -get-words
-// held back GETs by their names, which azhaq no longer does. A stored run
-// that has them goes on without.
-var removedFlags = map[string]bool{"all-gets": false, "get-words": true} // true: takes a value
+// held back GETs by their names, which azhaq no longer does; -cloud read
+// seeds from an inventory file, which -l does. A stored run that has them
+// goes on without.
+var removedFlags = map[string]bool{"all-gets": false, "get-words": true, "cloud": true} // true: takes a value
+
+// removedWhy says what replaces the removed flags that were found.
+func removedWhy(gone []string) string {
+	var why []string
+	for _, g := range gone {
+		w := "every GET found in scope is requested, whatever its name says"
+		if g == "-cloud" {
+			w = "-l FILE takes its domains, hosts and URLs, one per line"
+		}
+		if !slices.Contains(why, w) {
+			why = append(why, w)
+		}
+	}
+	return strings.Join(why, "; ")
+}
 
 // dropRemovedFlags is args without the removed flags, and their names.
 func dropRemovedFlags(args []string) (out, gone []string) {
@@ -199,7 +215,7 @@ func keptArgs(args []string) []string {
 			}
 			out = append(out, "-header="+val)
 			continue
-		case "list", "in", "cloud", "facts", "paths", "providers", "resolvers", "dns-brute", "dirs", "params", "params-targets", "screenshots", "urls", "ledger", "kill-file":
+		case "list", "in", "facts", "paths", "providers", "resolvers", "dns-brute", "dirs", "params", "params-targets", "screenshots", "urls", "ledger", "kill-file":
 			// Files and directories, made absolute: azhaq resume may run
 			// from another directory.
 			if !inline && takesValue {
