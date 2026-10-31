@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `dirs`, `fuzz`, `params`, `probe`: a `-timeout` or `-maxtime` that fell while a run waited for its `-rate` ended the run as complete with exit 0 after a few requests, and `resume` found nothing left. It is a stop: exit 4, `complete: false`, the words not asked left, and `resume` asks exactly those. The host pace, `-rl`, and the params, port and DNS pacers had the same flaw.
+- `subs`: crt.sh's database is asked with `LIMIT 10000` first, as subfinder does, in a quarter of the source's time, so a slow database no longer holds a live run for 30 s; a full page of 10,000 rows is asked again without the limit, then from the JSON API, and the source's note says which path gave the names.
+- `probe -path` with a full URL input joins onto the URL's path and keeps its query, as httpx does (`http://h/a?q=1` with `-path /login` asks `/a/login?q=1`); it replaced both. A bare host still asks the path at the root.
 - `urls -mc` and `-fc` judge OTX's URLs by the `httpcode` it records and urlscan.io's by the page `status` (`-mt` and `-ft` by its `mimeType`); a URL with no recorded status is not kept by `-mc` and not dropped by `-fc`. Before, OTX's URLs were kept unfiltered under a note that OTX has no status, so `-mc 200` printed URLs recorded as 0 and 404.
 - `dns -axfr`: a zone that no server transferred is a failed technique, listed under `failed` with exit 3, in text and `-json` alike; before, the run ended complete with a note.
 - `probe -p` replaces the port of a `host:port` or URL input, as httpx does: `-l 127.0.0.1:3001 -p 5002` asks port 5002, and `input` stays the line as given. Without `-p`, an input still asks its own port once.
