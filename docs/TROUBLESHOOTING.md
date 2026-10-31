@@ -64,6 +64,8 @@
 
 **`subs` lists names with `"unverified": true`.** Without `-live`, subs does not look names up in DNS. The names only subdomain.center guessed (most of its answer is made up) or only the name history held are listed, flagged, and counted in `unverified`; `-live` checks them and leaves out what does not resolve.
 
+**A source says `answered 200 with an error, not names`.** The server sent its quota or error page with a success status, which a plain reader takes for an empty list. Azhaq reads it as a failure and quotes the page (`API count exceeded - Increase Quota with Membership`); the source's names are missing from the run. Wait, give the source a key in the provider file, or leave it out with `-exclude-sources`.
+
 **A source answered 429.** The source is asked again after its `Retry-After`, up to three times; the summary says how long that took (`crtname answered 429; it was asked again 1 times after 2 s`). A source that asks for more than 30 s, or keeps refusing, is not waited for and its names are missing from the run: the note says so and the source's row has `gave_up_429`. Slow the sources with `-source-rate N`, or leave the source out with `-exclude-sources`.
 
 **`subs -live` lists a name with no address.** It is a CNAME whose target gives no address (or does not exist). `dnsx -a -cname` lists it too; `cname` holds the chain, and a dangling one is also in the summary's `takeover`.

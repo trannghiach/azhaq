@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/answer"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
@@ -76,6 +77,16 @@ type errStatus struct {
 
 func (e errStatus) Error() string { return fmt.Sprintf("%s answered %d", e.host, e.code) }
 
+// errAnswer is a 200 whose body is an error (a quota page, a JSON error),
+// not data: the archive has not answered.
+type errAnswer struct {
+	host, why string
+}
+
+func (e errAnswer) Error() string {
+	return fmt.Sprintf("%s answered 200 with an error, not URLs: %s", e.host, e.why)
+}
+
 // errLimited is a source that kept answering 429 or 503.
 type errLimited struct {
 	status int
@@ -135,7 +146,12 @@ func (g *getter) open(ctx context.Context, raw string) (io.ReadCloser, error) {
 			continue
 		}
 		if resp.StatusCode == http.StatusOK {
-			return resp.Body, nil
+			body, why := answer.Screen(resp.Body)
+			if why != "" {
+				body.Close()
+				return nil, errAnswer{host: hostOf(raw), why: why}
+			}
+			return body, nil
 		}
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 		resp.Body.Close()

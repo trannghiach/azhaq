@@ -30,12 +30,13 @@ type mirror struct {
 	reqs []string
 	// wayback maps a page number to the CDX JSON rows; a page it lacks is a 400.
 	wayback map[string][]string
-	status  map[string]int // path → status to answer instead
+	status  map[string]int    // path → status to answer instead
+	text    map[string]string // path → a 200 body to answer instead
 	slow    map[string]time.Duration
 }
 
 func newMirror(t *testing.T, wayback map[string][]string) *mirror {
-	m := &mirror{wayback: wayback, status: map[string]int{}, slow: map[string]time.Duration{}}
+	m := &mirror{wayback: wayback, status: map[string]int{}, text: map[string]string{}, slow: map[string]time.Duration{}}
 	m.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		m.mu.Lock()
 		m.reqs = append(m.reqs, r.URL.RequestURI())
@@ -50,6 +51,10 @@ func newMirror(t *testing.T, wayback map[string][]string) *mirror {
 		}
 		if code != 0 {
 			w.WriteHeader(code)
+			return
+		}
+		if body, ok := m.text[r.URL.Path]; ok {
+			fmt.Fprint(w, body)
 			return
 		}
 		q := r.URL.Query()
@@ -583,6 +588,49 @@ func TestRawLeavesUrlscanTaskURLsOut(t *testing.T) {
 		}
 		if len(got) != want {
 			t.Errorf("raw=%v: %v", raw, got)
+		}
+	}
+}
+
+// An archive that answers 200 with a quota page or a JSON error has not
+// answered: the source failed, with the archive's words.
+func TestAnErrorAnswerIsAFailedArchive(t *testing.T) {
+	for name, path := range map[string]string{"wayback": "/wayback", "commoncrawl": "/cc/idx", "otx": "/otx/domain/example.org/url_list", "urlscan": "/urlscan", "arquivo": "/arquivo"} {
+		for _, body := range []string{`{"error":"quota exceeded"}`, `{"message":"Too Many Requests"}`, "error: slow down", `<html><title>Attention Required! | Cloudflare</title></html>`} {
+			m := newMirror(t, pages)
+			m.text[path] = body
+			summary, _, _, err := run(t, Options{Bases: m.bases(), Client: m.Client(), Only: []string{name}}, context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			row := summary["sources"].(map[string]any)[name].(map[string]any)
+			if e := fmt.Sprint(row["error"]); !strings.Contains(e, "answered 200 with an error, not URLs") || row["count"].(float64) != 0 {
+				t.Errorf("%s given %q: %v", name, body, row)
+			}
+			if summary["degraded"] != true {
+				t.Errorf("%s given %q: not degraded: %v", name, body, summary)
+			}
+		}
+	}
+}
+
+// What is not an error is not a failure: Common Crawl's "No Captures found"
+// object, and an empty answer.
+func TestAnEmptyAnswerIsNotAFailedArchive(t *testing.T) {
+	for name, path := range map[string]string{"commoncrawl": "/cc/idx", "arquivo": "/arquivo", "otx": "/otx/domain/example.org/url_list"} {
+		for _, body := range []string{`{"error": "No Captures found for: example.org/*"}`, `{"has_next":false,"url_list":[]}`, ""} {
+			if name == "otx" && body == "" {
+				continue // not JSON: the source's own decoder fails it
+			}
+			m := newMirror(t, pages)
+			m.text[path] = body
+			summary, _, _, err := run(t, Options{Bases: m.bases(), Client: m.Client(), Only: []string{name}}, context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row := summary["sources"].(map[string]any)[name].(map[string]any); row["error"] != nil {
+				t.Errorf("%s given %q: %v", name, body, row)
+			}
 		}
 	}
 }

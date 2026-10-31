@@ -274,6 +274,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	throttles := make([]throttle, len(run))
 	partials := make([]partialNames, len(run))
 	notes := make([]rowNote, len(run))
+	answers := make([]answerLog, len(run))
 	h := newHinter(ctx, domain, c.opts.MaxNames)
 	// A padding source's guesses are resolved as its rounds arrive; that
 	// needs resolvers and a reason: a source that guesses, or the history.
@@ -305,6 +306,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		sctx = context.WithValue(sctx, partialKey{}, &partials[i])
 		sctx = withThrottle(sctx, &throttles[i])
 		sctx = context.WithValue(sctx, noteKey{}, &notes[i])
+		sctx = context.WithValue(sctx, answerKey{}, &answers[i])
 		if chk != nil {
 			sctx = context.WithValue(sctx, checkerKey{}, chk)
 		}
