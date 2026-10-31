@@ -164,7 +164,7 @@ Workspaces and exports are files in the server's `-dir`, on the machine the serv
 
 Each workspace has two more files, described in [Concepts](CONCEPTS.md):
 
-- The ledger, `juice.db.ledger.jsonl`, has one line for each request or connection the tools sent to a target for that workspace. Each line holds the hash of the one before. `azhaq ledger -verify FILE` checks it, and `-csv` prints it for a client.
+- The ledger, `juice.db.ledger.jsonl`, has one line for each request, connection or query the tools sent for that workspace, to targets, third-party sources and resolvers. Each line holds the hash of the one before. `azhaq ledger -verify FILE` checks it, and `-csv` prints it for a client.
 - `juice.db.stop` is the workspace's kill switch. While it exists, a call that uses the workspace sends nothing more and ends stopped (`the kill switch: kill file … exists`). `azhaq_resume` continues once the file is removed.
 
 No tool argument turns either off.

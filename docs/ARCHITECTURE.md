@@ -213,14 +213,14 @@ Limits:
 
 ### The request budget
 
-Every request to a target asks `fetch.Spend` first. This covers:
+Every request to a target asks `egress.Spend` first. This covers:
 
 - GETs and each redirect hop;
 - path and parameter guesses;
 - the GraphQL query;
 - a page loaded in Chrome.
 
-Every other request Chrome sends is counted as it leaves (`fetch.Take`). That means a page's scripts, images and calls, a redirect, a login and a WebSocket's handshake. These are paced by `-rate` like the run's own requests, and refused once the budget is spent. A page or a screenshot that lost requests to the budget ends `capped`. `azhaq resume` loads it again.
+Every other request Chrome sends is counted as it leaves (`egress.Take`). That means a page's scripts, images and calls, a redirect, a login and a WebSocket's handshake. These are paced by `-rate` like the run's own requests, and refused once the budget is spent. A page or a screenshot that lost requests to the budget ends `capped`. `azhaq resume` loads it again.
 
 A request the budget refuses fails with `neterr.ErrBudget`. The engine marks every task's context, so a refusal counts even when a collector takes the failed request for a missing page. Such a task:
 
@@ -316,27 +316,29 @@ Tasks the budget stopped before run last, one at a time and cheapest first, by t
 
 ### The request ledger and the kill switch
 
-`internal/ledger` keeps a tamper-evident record of what a run sends to a target. Each entry is one JSON line with these fields: `seq`, `time`, `kind`, `method`, `target`, `host`, `rule`, `collector`, `prev` and `hash`.
+`internal/ledger` keeps a tamper-evident record of what a run sends: to targets, to third-party sources and to resolvers. Each entry is one JSON line with these fields: `seq`, `time`, `class`, `kind`, `method`, `target`, `host`, `rule`, `collector`, `prev` and `hash`. A line without a `class` is from a ledger written before classes, and is a target's; `omitempty` keeps its hash the same, so those ledgers still verify.
 
 - `hash` is the sha256 of `prev` and the entry's JSON without `hash`. An edited, removed or reordered line breaks the chain from there on.
 - A line is flushed before the request goes, so a crash loses nothing that was sent.
 - `Open` continues the chain of a file that exists. `azhaq resume` and later runs into the workspace append to the same file. `azhaq roles` opens one ledger in its `-dir` for all its runs.
 - `Match` names the scope rule that allows each host, from the run's `-allow` and `-scope`.
 
-The hooks are where a request leaves the process:
+The hooks are where a request leaves the process, and all of them are in [Egress](#egress):
 
-| Hook | Records | `kind` |
+| Hook | Records | `class`, `kind` |
 | --- | --- | --- |
-| `fetch.Client` and `fetch.Do` | every target-facing transport | `http` |
-| `portscan` and `tlscol` | connects | `tcp` |
-| `portscan` and `tlscol` | datagrams | `udp` |
-| the browser | the requests it lets Chrome send | `chrome` |
+| the transport of every client egress makes | each request | `target` or `source`, `http` |
+| `egress.PortDialer`, `ConnectTarget`, `DialTLS` | connects | `target`, `tcp` |
+| `egress.PortDialer` | datagrams | `target`, `udp` |
+| `egress.DialSource`, `OpenSourceDB` | the mail server, crt.sh's database | `source`, `tcp` |
+| `egress.DNSExchanger` | each query | `dns`, `dns` |
+| the browser | the requests it lets Chrome send | `target`, `chrome` |
 
-DNS queries and the third-party sources are not targets and are not recorded. Neither are the requests of a connector, which Azhaq does not send.
+Only a target's lines are held back after a kill and asked again on resume. The requests of a connector, which Azhaq does not send, and the user's own endpoints (`own`) are not recorded.
 
-`fetch.SetKill` watches for the kill file every 100 ms (`fetch.KillCheck`). Once it sees the file, it also ends every wait for the pace (`fetch.Pace`). So a request counted before the file appeared is not sent after it.
+`egress.SetKill` watches for the kill file every 100 ms (`egress.KillCheck`). Once it sees the file, it also ends every wait for the pace (`egress.Pace`). So a request counted before the file appeared is not sent after it.
 
-Once the file exists, `Spend`, `Take` and `Spent` refuse with `neterr.ErrKilled`, which is also an `ErrBudget`. So every collector that leaves work for `azhaq resume` on a spent budget does so here. The run ends with exit 4, and `stopped` names the kill switch.
+Once the file exists, `Spend`, `Take` and `Spent` refuse with `neterr.ErrKilled`, which is also an `ErrBudget`, and so does every client, dialer, DNS exchange and Chrome connection egress hands out. Every collector that leaves work for `azhaq resume` on a spent budget does so here. The run ends with exit 4, and `stopped` names the kill switch.
 
 Without a workspace of its own, a run has no default ledger or kill file. This is a drop-in command without `-db`.
 
@@ -359,9 +361,68 @@ The run stores that as if it had run the task itself (`Engine.Record`).
 - A task a worker holds longer than its lease (15 minutes) is queued again. Tasks lent when the run stops are left for `azhaq resume`.
 - The request budget counts every process's requests. `-rate` and `-host-parallel` apply per process.
 
+## Egress
+
+Only `internal/egress` opens an outbound connection. A run has one `Policy`, set from its flags before anything is sent; everything that leaves the machine goes through what the Policy hands out, so a control cannot be skipped by a call site that forgot it. Nearly every safety bug of the past was a path that skipped one control (scope, `-deny-path`, the budget, the pace, the proxy, the kill file, the ledger); the controls now live in one place, and the rule is checked by the lint job and by `go test`.
+
+### The Policy
+
+`egress.Current()` is the Policy of the run (`egress.Use` replaces it, `fetch.Reset` and `egress.Reset` clear it for a test). It holds:
+
+| Control | Set by | Applies to |
+| --- | --- | --- |
+| Scope: `Allow(host)` and `OpenHeaders` | `-allow`, `-deny`, `-scope` | the URL's host, the `Host` header, every header that names a host (`scope.NamesHost`) and the TLS server name of a request to a target; the address of a connect to a port |
+| `-deny-path`: `DenyPath` and `OnDenied` | `-deny-path` | a request to a target (through `ledger.Transport`) |
+| Budget: `MaxRequests`, `Spend`, `Take`, `Refund`, `Count`, `Sent` | `-max-requests`, `-daily-requests` | requests to targets, counted by their sender before they go |
+| Pace: `SetRate`, `Pace` | `-rate` | requests to targets |
+| Proxy: `TargetProxy` | `-proxy` | requests to targets; a source or a resolver has its own proxy flag |
+| Resolver: `SetResolver` | the run's `-resolvers` pool | the addresses a target client connects to |
+| Kill file: `SetKill`, `Killed` | `-kill-file` | every class but the user's own |
+| Session check: `SessionTick` | `-login`, `-cookie` | the requests `Spend` counts |
+
+The per-host cap and pace (`-max-host-requests`, `-host-rate`), the cache, the retries and the origin-down rule stay in `internal/fetch`: they belong to a GET's politeness, not to what may leave.
+
+### The classes
+
+Every request, connection or query has a class, written on its line of the ledger:
+
+| Class | What it is | Held to | Recorded as |
+| --- | --- | --- | --- |
+| `target` | a host the run was pointed at | scope, `-deny-path`, kill file; counted and paced by its sender; `-proxy` | `http`, `tcp`, `udp`, `chrome` |
+| `source` | a third party asked about the targets: subdomain sources, archives, RDAP, RIPEstat, search engines, scope platforms, notifications, crt.sh's PostgreSQL, the mail server | kill file; the proxy given for sources | `http`, `tcp` |
+| `dns` | a resolver | kill file; the pool's pace | `dns`: the name in `host`, its type in `method`, the resolver in `target` |
+| `own` | an endpoint of the user's own: a replay proxy, a worker's link to its run, where `-seal-to` posts | nothing | not recorded: the seal is posted after the ledger is sealed |
+
+### What egress hands out
+
+| Call | For |
+| --- | --- |
+| `TargetClient`, `TargetFrom(c)`, `Tweak(c, f)`, `Pinned(c, ip)`, `H2Client` | HTTP to targets |
+| `SourceClient`, `SourceFrom(c)` | HTTP to a source |
+| `OwnClient` | HTTP to the user's own endpoint |
+| `DialTarget`, `ConnectTarget`, `ConnectTargetTLS`, `DialTLS` | raw connections to a target (JARM, pipelining, `azhaq-tls`) |
+| `PortDialer` (`TCP`, `TCPDirect`, `TLS`, `UDP`, `UDPAnySource`) | the connects and datagrams of a port scan |
+| `DNSExchanger` (`Exchange`, `ExchangeAt`, `Transfer`) | queries, zone transfers and traces |
+| `DialSource`, `DialSourceTLS`, `OpenSourceDB` | the mail server, crt.sh's database |
+| `DialProxy` | the user's proxy |
+| `ChromeGuard`, `LaunchChrome` | Chrome: every connection goes through the guard, which dials through egress |
+
+A client made by egress checks each request before it leaves. A request that fails a check is refused with `neterr.ErrOutOfScope`, `neterr.Denied` or `neterr.ErrKilled` and nothing is sent; one the sender had counted is given back with `Refund`.
+
+### Adding a client
+
+Ask egress for it. If what you need is not there, add it there, with the checks of its class, and a test in `internal/egress`. Do not build an `http.Client`, a `net.Dialer`, a `dns.Client` or a Chrome allocator anywhere else. Two checks say so:
+
+- the `lint` job of CI runs `golangci-lint` with `forbidigo` (`.golangci.yml`): the default client and transport, `http.Get`, `net.Dial` and `net.Dialer`, `tls.Dial`, `dns.Client`, `http2.Transport`, the Chrome allocators, `smtp.Dial`, `pq.NewConnector` and `sql.OpenDB` are forbidden outside `internal/egress`, `bench/` and tests;
+- `TestOnlyEgressOpensConnections` in `internal/egress` walks the tree and forbids the same names, and the literals `http.Client{}`, `http.Transport{}`, `net.Dialer{}`, `tls.Dialer{}` and `dns.Client{}`, which forbidigo cannot tell from the types of a signature.
+
+### The contract test
+
+`TestEgressContract` in `cmd/azhaq` runs each command that sends something (`run`, `probe`, `crawl`, `dirs`, `fuzz`, `params`, `shots`, `ports`, `urls`, `dns`) against servers of the machine only, behind a counting proxy or listener. The target's count, the proxy's, the ledger's and the summary's must be one number, so a request that went round the proxy shows as a server count above the proxy's and one that skipped the ledger as a ledger count below it. `TestEgressContractControls` checks the budget (the server saw exactly the budget), `-deny-path` (the path was never asked), the kill file (nothing was sent) and the scope. A command added to the registry without an entry in `egressContract` fails `TestEgressContractNamesEveryCommand`: it says how the command sends (its own case, through another command, or not at all).
+
 ## HTTP
 
-All HTTP collectors share one client (`internal/fetch`):
+All HTTP collectors share one client (`internal/fetch`, which gets its transport from [egress](#egress)):
 
 - Redirects are not followed automatically. Each hop is recorded. The status stored is that of the URL that was requested, so `/admin → 303 → /login` records `/admin` as 303.
 - At most 10 requests are in flight per host (`-host-parallel`, katana's concurrency). Concurrent requests for the same URL share one fetch.
@@ -376,11 +437,11 @@ All HTTP collectors share one client (`internal/fetch`):
 
 One rule set, enforced where every request passes:
 
-- `fetch.DeniedBy` is set from the rules. `fetch.DoReq` and `SubmitForm` refuse a URL it matches with `neterr.Denied` before the cache, the budget or the network, and a redirect to one is recorded with its `Location` and not followed.
-- `ledger.Transport`, which every HTTP client of a run sends through (the fuzz sender, the path sweep, parameter search, the roles' replays), refuses it too, giving back the request it had counted.
+- `egress.DeniedBy` is set from the rules. `fetch.DoReq` and `SubmitForm` refuse a URL it matches with `neterr.Denied` before the cache, the budget or the network, and a redirect to one is recorded with its `Location` and not followed.
+- `ledger.Transport`, under every target client egress makes (the fuzz sender, the path sweep, parameter search, the roles' replays), refuses it too, giving back the request it had counted.
 - Chrome's Fetch domain fails the request (`internal/browser/scope.go`), pages and scripts alike.
 - The scheduler keeps a matching URL seed out of the queue; the path sweep leaves a matching word unsent; `fuzz` does not send a matching input; a parameter search skips a matching page.
-- Each URL kept out is told to `fetch.OnDenied`, which the engine writes as a `skipped` observation (`-deny-path REGEX`), so it is `skipped` in the map and listed in the summary. `fuzz` counts its inputs per rule.
+- Each URL kept out is told to the hook the engine sets with `egress.SetOnDenied`, which writes it as a `skipped` observation (`-deny-path REGEX`), so it is `skipped` in the map and listed in the summary. `fuzz` counts its inputs per rule.
 - A worker holds the same rules (they travel in `GET /v1/run`) and sends the URLs it kept out with its outcome (`Outcome.Denied`); `Engine.Record` writes them as the run would.
 - `roles` holds the rules over each replay it sets up (`holdDeny`), `azhaq mcp -deny-path` hands them to every tool call, and `plan` prints them.
 
@@ -772,6 +833,7 @@ How the pool behaves:
 - A timeout, SERVFAIL or REFUSED moves the query to another resolver. `-retry` sets the attempts, 3 by default.
 - Every question carries an EDNS0 buffer of 4,096 bytes, as dnsx asks, so a long answer arrives over UDP. A truncated answer, or one larger than the buffer, is retried over TCP.
 - `-proxy socks5://` sends every query over TCP through the proxy.
+- Every query goes through `egress.DNSExchanger`, which enters it in the ledger as a `dns` line (`dns -ledger FILE` keeps one for a command without a workspace) and refuses it once the kill file exists. The pool chooses and paces the resolvers.
 - Each name is resolved once per run.
 - Special-use names (`localhost`, `*.test`, `*.local`) and single labels go to the system resolver instead, so `/etc/hosts` and local DNS still work.
 - In `dns`, naming resolvers with `-r` sends every name to them, as dnsx does.
@@ -923,9 +985,9 @@ A command line that gives its own filters does not calibrate.
 
 ### Sending and scope
 
-Sending is behind `fuzz.Sender`, so the engine runs against a fake in tests. The real sender sends through `internal/fetch`. So every request spends the run's budget, is paced by `-rate`, goes in the ledger and stops at the kill file.
+Sending is behind `fuzz.Sender`, so the engine runs against a fake in tests. The real sender sends through `internal/fetch`, with a transport from egress changed by `egress.Tweak`. So every request spends the run's budget, is paced by `-rate`, goes in the ledger and stops at the kill file; the policy holds its `Host` header and `-sni` to the scope too.
 
-`-replay-proxy` copies go through a second client that has no ledger, budget or pace. It is the user's proxy, not a target.
+`-replay-proxy` copies go through an own client (`egress.OwnClient`) that has no ledger, budget or pace. It is the user's proxy, not a target.
 
 The host of `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise. For example, `FUZZ.example.com` gives `example.com`. An input whose host is outside the scope is not sent, and is counted in the summary.
 
@@ -1146,7 +1208,7 @@ Chrome goes only where the run's own requests may (`internal/browser/scope.go`).
 
 When Chrome starts, every request of the browser is paused through the DevTools Fetch domain. That covers pages, frames, workers and service workers alike. The domain is enabled for the whole browser before any tab opens.
 
-- A request is sent on when its host is in the scope. This is the predicate the HTTP client uses, `fetch.Allow`.
+- A request is sent on when its host is in the scope. This is the predicate the HTTP client uses, the policy's scope (`egress.Allows`).
 - Without a scope, a request is sent on when its host is in the site of a page Chrome was pointed at. This is how a redirect without a scope is followed. The site is `fetch.Site`: the registrable domain, or the address.
 - Any other request is failed (`BlockedByClient`) before it leaves the machine.
 - `data:`, `blob:` and `about:` URLs pass, as nothing is sent.
@@ -1373,7 +1435,7 @@ The greeting and the HTTP head (`Server`, `X-Powered-By`) also give `product` an
 
 A port that stays silent is identified by what it answers. The code is in `internal/portscan/identify.go`. The protocols are in `proto_db.go`, `proto_msg.go`, `proto_dir.go` and `proto_net.go`. Each is written from its public specification, named in a comment.
 
-Every step is a connect that is paced, counted by `fetch.Take` and recorded in the ledger. The steps are:
+Every step is a connect that is paced, counted by `egress.Take` and recorded in the ledger. The steps are:
 
 1. The request of a protocol whose usual port this is, on the connection already open.
 2. The `HEAD /`.
@@ -1434,7 +1496,7 @@ What a result means:
 
 A host that refused some ports and answered nothing on a few others is probably rate-limiting its ICMP replies. Linux sends about one a second. Up to 80 such silent ports are asked again one at a time at that pace. More are left `open|filtered`, and counted in `udp_limited` and the summary. Loopback is not rate-limited and is not paced.
 
-Each datagram takes `fetch.Take`, is paced and goes in the ledger as `udp`. An address in a CDN or WAF range is not asked.
+Each datagram takes `egress.Take`, is paced and goes in the ledger as `udp`. An address in a CDN or WAF range is not asked.
 
 The `ports` row keeps these fields:
 
@@ -1686,7 +1748,8 @@ internal/
   connector/              JSONL protocol for external collectors
   cdnranges/              CDN, WAF and cloud address ranges, read on first use
   dnsr/                   resolver pool and wildcard detection
-  fetch/                  shared HTTP client, request budget and pace, kill switch
+  egress/                 the only code that opens a connection: the Policy (scope, budget, pace, proxies, kill file) and the clients, dialers and exchanges it hands out
+  fetch/                  GET politeness, cache, sessions and the answers a request gives
   fingerprint/            technologies, CDN ranges, favicon hash
   fuzz/                   the engine of azhaq fuzz
   hunt/                   the ranking behind azhaq hunt

@@ -1,6 +1,6 @@
 # azhaq ledger
 
-Check, count or export the record of every request and connection a run sent to a target.
+Check, count or export the record of every request, connection and query a run sent: to targets, to third-party sources and to resolvers.
 
 ## Synopsis
 
@@ -69,6 +69,10 @@ Lines follow the last seal when a run was killed, crashed or is still running, o
 The summary and the other exit codes are the shared ones: see [the summary](../OUTPUT.md#the-summary) and [exit codes](../OUTPUT.md#exit-codes).
 
 ## Details
+
+### Classes
+
+Each line has a class: `target` (a host the run was pointed at), `source` (a third party asked about the targets) or `dns` (a resolver). `-summary` counts by class, and `-csv` has a `class` column. A ledger written before classes has none on its lines: they read as targets and verify as before. The other way does not hold: an older azhaq cannot verify a ledger whose lines have a `class`.
 
 ### What -verify proves
 

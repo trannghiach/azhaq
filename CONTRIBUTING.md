@@ -43,6 +43,7 @@ It needs commitlint, installed once: `npm i -g @commitlint/cli@19.8.1`. Merge, `
 ## Code
 
 - `gofmt`, `go vet ./...` and `go test -race ./...` pass on CI for every push.
+- Nothing outside `internal/egress` builds an `http.Client`, a `net.Dialer`, a `dns.Client` or a Chrome allocator, or calls `net.Dial`, `http.Get` and the like: ask egress for the client, so scope, budget, pace, proxy, kill file and ledger apply. The `lint` job and `go test ./internal/egress` check it; [Architecture: Egress](docs/ARCHITECTURE.md#egress) says how to add one.
 - A fix comes with a test that fails before it.
 - Comments are short and say why, not what. An exported name's comment starts with the name.
 - Flags and output fields are documented in `docs/`; tests in `cmd/azhaq` check the docs against the flags.

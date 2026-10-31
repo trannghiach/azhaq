@@ -320,17 +320,17 @@ azhaq ledger -csv app.db.ledger.jsonl > sent.csv
 touch app.db.stop
 ```
 
-Every run with a workspace writes `app.db.ledger.jsonl` next to it. It has one line for each request or connection sent to a target. A line holds the time, the URL or `ip:port`, the scope rule that allowed it and the collector. Each line also holds the hash of the one before.
+Every run with a workspace writes `app.db.ledger.jsonl` next to it. It has one line for each request, connection or DNS query the run sent, to a target, a third-party source or a resolver. A line holds the time, its class (`target`, `source` or `dns`), the URL or `ip:port`, the scope rule that allowed it and the collector. Each line also holds the hash of the one before.
 
 - Give the client's blue team `azhaq ledger -csv`.
 - Show `-verify` passing on the file as delivered. It exits 0 when the file is intact. An edited, removed or reordered line is exit 3, and the message names the first bad line.
-- `-summary` counts by kind, host, method and scope rule.
+- `-summary` counts by class, kind, host, method and scope rule. The target lines are what the targets received; the `source` and `dns` lines are what third parties and resolvers did.
 
 `touch app.db.stop` stops the run. Within a tenth of a second nothing more is sent, not even requests already waiting for `-rate`, and the run exits 4. Remove the file, and `azhaq resume -db app.db` continues.
 
 **Catches**
 
-- DNS queries and the third-party sources of `subs` and `urls` are not in the ledger, because they are not targets.
+- DNS queries and the third-party sources of `subs` and `urls` are in the ledger too, as `dns` and `source` lines. A count of what the targets received is the `target` lines. The standalone `notify` and `scope` commands have no ledger.
 - A drop-in command without `-db` writes a ledger only with `-ledger FILE`.
 
 ## Watch a program and get alerts

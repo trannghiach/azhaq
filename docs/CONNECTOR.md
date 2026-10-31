@@ -15,7 +15,7 @@ A connector is a separate program, and what it sends is its own. Azhaq does not 
 
 - do not count against `-max-requests`;
 - are not paced by `-rate`;
-- are not in the request ledger (`DB.ledger.jsonl`, which lists what Azhaq itself sent to a target).
+- are not in the request ledger (`DB.ledger.jsonl`, which lists what Azhaq itself sent).
 
 Facts taken in with `azhaq ingest` were not sent by this run, so they are not in the ledger either.
 

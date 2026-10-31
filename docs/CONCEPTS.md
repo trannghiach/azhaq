@@ -200,19 +200,22 @@ A port scan that the budget or the kill file cut short keeps the open ports it f
 
 ## The ledger and its seal
 
-The ledger is the record of what a run sent. It has one JSON line for each request or connection sent to a target:
+The ledger is the record of what a run sent. It has one JSON line for each request, connection or query the run sends, with its class:
 
-- HTTP requests.
-- Chrome's requests, each once it has left, and its WebSocket handshakes with their path.
-- TCP connects and TLS handshakes.
-- UDP datagrams.
+- `target`: a host the run was pointed at.
+  - HTTP requests.
+  - Chrome's requests, each once it has left, and its WebSocket handshakes with their path.
+  - TCP connects and TLS handshakes.
+  - UDP datagrams.
+- `source`: a third party asked about the targets: the subdomain sources, the archives of `urls`, RDAP and RIPEstat, search engines, a scope platform, the services `notify` posts to, crt.sh's database and a mail server.
+- `dns`: each query sent to a resolver.
 
-Each line has its time, the URL or `ip:port`, the host, the scope rule that allowed it and the collector. [OUTPUT](OUTPUT.md#the-ledger) lists the fields.
+Each line has its time, its class, the URL or `ip:port`, the host, the scope rule that allowed it (a target's) and the collector. [OUTPUT](OUTPUT.md#the-ledger) lists the fields. The ledger lists everything a run sends: the code that sends is `internal/egress`, and no other code can open a connection.
 
 - **Chain.** Each line carries the hash of the one before, so an edited, removed or reordered line is caught.
 - **Seal.** A run that ends writes a `seal` line, so lines cut from the end are caught too. The summary names the seal (`sealed 3f9c…`), and `ledger -verify` prints the last one.
 - **Limit.** The chain alone cannot tell a ledger from one with lines removed and the rest re-chained. A seal kept apart from the file can: see [What `-verify` proves](commands/ledger.md#what--verify-proves), [Checking against a kept seal](commands/ledger.md#checking-against-a-kept-seal) and [Keeping the seal elsewhere](commands/ledger.md#keeping-the-seal-elsewhere).
-- **Not listed.** DNS queries, the third-party sources of `subs` and `urls`, and the RDAP registry are not targets.
+- **Not listed.** The user's own endpoints: a `-replay-proxy`, the link of a worker to its run, and where `-seal-to` posts the seal. They are not requests about a target. Chrome's own background services are refused, not sent.
 - **File.** `DB.ledger.jsonl` sits next to the workspace. Later runs into the workspace, and `azhaq resume`, append to it.
 - **Options.** `-ledger FILE` writes it elsewhere, and `-ledger off` writes none. A drop-in command without `-db` writes one only with `-ledger FILE`.
 - **Roles.** `azhaq roles` keeps one ledger, `roles.ledger.jsonl`, in its `-dir`.
@@ -373,5 +376,5 @@ azhaq sends a GET to every URL it finds in scope. It cannot know what a GET does
 - A URL that carries a scanner's payload in its path or query never enters the map. Examples are `<script>`, `../../etc/passwd` and `union select`, as archives often keep them. A scanner's own test file never enters either.
 - No request to a target goes to a host outside the [scope](#scope), Chrome's included. Without a scope, requests stay on the site.
 - Third-party sources (subdomain lists, archives, RDAP) are asked about your domains. `-passive` sends nothing to the targets.
-- Every request and connection to a target goes in the [ledger](#the-ledger-and-its-seal). DNS queries and third-party sources do not.
+- Every request, connection and query goes in the [ledger](#the-ledger-and-its-seal), by class: `target`, `source` or `dns`. Only the scope and `-deny-path` hold a target's; the kill file stops all three.
 - `-rate` paces what is sent and `-max-requests` caps it: see [budget, pace and the kill switch](#budget-pace-and-the-kill-switch).

@@ -169,7 +169,7 @@ A second kind of `next:` line follows from what this run measured. It is for a p
 
 ## The ledger
 
-The ledger is one JSON line for each request or connection sent to a target. What it is, the chain of hashes and the seal are in [Concepts](CONCEPTS.md#the-ledger-and-its-seal). `azhaq ledger` checks, counts and exports it: see the [`ledger` page](commands/ledger.md). It records what azhaq sends: the requests of a helper outside azhaq, such as a `-role-cmd` command logging in, are not in it.
+The ledger is one JSON line for each request, connection or query a run sends, to a target, a third-party source or a resolver. What it is, the chain of hashes and the seal are in [Concepts](CONCEPTS.md#the-ledger-and-its-seal). `azhaq ledger` checks, counts and exports it: see the [`ledger` page](commands/ledger.md). It records what azhaq sends: the requests of a helper outside azhaq, such as a `-role-cmd` command logging in, are not in it.
 
 A line has:
 
@@ -179,16 +179,18 @@ A line has:
 | `time` | When it was sent, UTC. |
 | `class` | What it was sent to: `target`, `source`, `dns` or `own`. A line without one, from a ledger written before classes, is a `target`. |
 | `kind` | `http`, `tcp`, `udp`, `dns`, `chrome` or `seal`. See below. |
-| `method` | The HTTP method. Not on `tcp` and `udp` lines. |
-| `target` | The URL as sent, query string included, for `http` and `chrome`. `ip:port` for `tcp` and `udp`. |
-| `host` | The host the request was for. |
+| `method` | The HTTP method. For `dns`, the record type (`A`). Not on `tcp` and `udp` lines. |
+| `target` | The URL as sent, query string included, for `http` and `chrome`. `ip:port` for `tcp` and `udp`. The resolver (`ip:port`, or its URL for DoH) for `dns`. |
+| `host` | The host the request was for. For `dns`, the name asked. |
 | `vhost` | The `Host` header sent, when it is not the URL's. |
 | `body` | The first 16 hex digits of the sha256 of the request body, on an `http` line that has one: [resume](CONCEPTS.md#workspaces-runs-and-resuming) uses it to tell two writes to one URL apart. |
 | `rule` | The scope rule that allowed it (`-allow`, `-scope`). Empty when the run has no rules. |
 | `collector` | What sent it, for the lines that say. |
 | `prev`, `hash` | The previous line's hash, and the hex sha256 of `prev` and this line's JSON without `hash`. |
 
-- `tcp`: a connect of `ports`, or a TLS handshake of `ports` or `azhaq-tls`.
+- `tcp`: a connect of `ports`, or a TLS handshake of `ports` or `azhaq-tls`; for a `source`, the connection to crt.sh's database or a mail server.
+- `dns`: a query to a resolver, a zone transfer or a trace step. A retry or a second opinion is a line of its own.
+- `source` lines are `http` or `tcp`, with no `rule`: the scope holds targets, not the third parties asked about them.
 - `chrome`: a request Chrome sent, listed once it left. One that Chrome dropped before sending is not listed, and not counted.
 - A Chrome WebSocket handshake is `ws://host:port/path?query`, and `wss://host:port` inside TLS.
 - `seal`: the end of a run, with no target.
