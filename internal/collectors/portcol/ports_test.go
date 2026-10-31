@@ -144,7 +144,7 @@ func TestUDPFieldsInTheRow(t *testing.T) {
 		row.UDPClosed != 1 || row.UDPScanned != 3 || len(row.Services) != 2 || row.Services[0].State != "open" || row.Services[1].State != "open|filtered" {
 		t.Errorf("row %s", obs[0].Payload)
 	}
-	if n := Notes(obs); len(n) != 1 || n[0][:8] != "udp: 1 o" {
+	if n := Notes(obs); len(n) != 1 || !strings.HasPrefix(n[0], "1 UDP port open|filtered") {
 		t.Errorf("notes %q", n)
 	}
 }

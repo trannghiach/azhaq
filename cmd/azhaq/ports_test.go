@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
+	"net"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -116,5 +119,50 @@ func TestRowJSONShape(t *testing.T) {
 	}
 	if got := r.csvRow([]string{"host", "port", "cdn", "cdn-name"}); !reflect.DeepEqual(got, []string{"h", "80", "true", "cloudflare"}) {
 		t.Errorf("%v", got)
+	}
+}
+
+// A UDP port that stays silent is a result: a row with the state
+// open|filtered in -json, a line with the state in plain output, counted
+// in the summary, and a note says what the state means.
+func TestPortsListsSilentUDPPort(t *testing.T) {
+	t.Chdir(t.TempDir())
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer pc.Close()
+	go func() {
+		buf := make([]byte, 64)
+		for {
+			if _, _, err := pc.ReadFrom(buf); err != nil {
+				return
+			}
+		}
+	}()
+	port := pc.LocalAddr().(*net.UDPAddr).Port
+	gone, _ := net.ListenPacket("udp", "127.0.0.1:0")
+	gonePort := gone.LocalAddr().(*net.UDPAddr).Port
+	gone.Close()
+	pu := fmt.Sprintf("%d,%d", port, gonePort)
+
+	out, errOut, code := cli(t, "ports", "-host", "127.0.0.1", "-p", "none", "-pu", pu, "-connect-timeout", "200ms", "-json")
+	var row struct {
+		Port  int    `json:"port"`
+		Proto string `json:"protocol"`
+		State string `json:"state"`
+	}
+	if n := len(lines(out)); n != 1 || json.Unmarshal([]byte(lines(out)[0]), &row) != nil || row.Port != port || row.Proto != "udp" || row.State != "open|filtered" {
+		t.Fatalf("rows %q", out)
+	}
+	sum := sumMap(t, errOut)
+	notes, _ := json.Marshal(sum["notes"])
+	if code != exitOK || sum["results"] != float64(1) || !strings.Contains(string(notes), "1 UDP port open|filtered: no reply and no ICMP port unreachable") {
+		t.Errorf("exit %d, summary %v", code, sum)
+	}
+
+	out, _, _ = cli(t, "ports", "-host", "127.0.0.1", "-p", "none", "-pu", pu, "-connect-timeout", "200ms", "-silent")
+	if want := fmt.Sprintf("127.0.0.1:%d/udp open|filtered", port); strings.TrimSpace(out) != want {
+		t.Errorf("plain output %q, want %q", out, want)
 	}
 }
