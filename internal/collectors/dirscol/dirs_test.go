@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
@@ -371,5 +372,38 @@ func TestSweepAsksWithoutAcceptLikeFfuf(t *testing.T) {
 	})
 	if length == float64(len(plain)) {
 		t.Errorf("-H Accept did not reach the server: /app is %v bytes", length)
+	}
+}
+
+// Calibration asks its guesses together: a sweep of 27 words on a slow
+// service waited four round trips for it, one at a time, before the sweep.
+func TestCalibrationAsksItsGuessesTogether(t *testing.T) {
+	for _, tc := range []struct {
+		threads, want int
+	}{{40, 5}, {1, 1}} {
+		fetch.Reset()
+		var inFlight, widest atomic.Int64
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n := inFlight.Add(1)
+			defer inFlight.Add(-1)
+			for {
+				old := widest.Load()
+				if n <= old || widest.CompareAndSwap(old, n) {
+					break
+				}
+			}
+			// Each guess waits for the others (the four shapes and the
+			// extension's) or a moment, so a sequential calibration shows.
+			for i := 0; i < 12 && inFlight.Load() < 5; i++ {
+				time.Sleep(5 * time.Millisecond)
+			}
+			http.NotFound(w, r)
+		}))
+		c := New(srv.Client(), Options{Words: []string{"admin"}, Extensions: []string{"php"}, Threads: tc.threads, Rate: 1000})
+		c.calibrate(context.Background(), srv.URL+"/", schemeHost(srv.URL+"/"))
+		srv.Close()
+		if widest.Load() != int64(tc.want) {
+			t.Errorf("-t %d: %d guesses in flight at most, want %d", tc.threads, widest.Load(), tc.want)
+		}
 	}
 }

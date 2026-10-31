@@ -557,14 +557,34 @@ func (c *Collector) calibrate(ctx context.Context, dir, host string) calibration
 		probes = append(probes, p)
 		shapes = append(shapes, p+"."+strings.TrimPrefix(ext, "."))
 	}
+	// Asked together, up to the sweep's threads (a round trip, not one per
+	// shape), and read in the order of the shapes.
+	type answer struct {
+		r  response
+		ok bool
+	}
+	answers := make([]answer, len(shapes))
+	sem := make(chan struct{}, max(1, min(c.Opts.Threads, len(shapes))))
+	var wg sync.WaitGroup
 	for i, s := range shapes {
 		if c.limiter.Wait(ctx, host) != nil {
 			break
 		}
-		r, err := c.get(ctx, dir+s, probes[i])
-		if err != nil {
+		sem <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			r, err := c.get(ctx, dir+s, probes[i])
+			answers[i] = answer{r, err == nil}
+		}()
+	}
+	wg.Wait()
+	for i, a := range answers {
+		if !a.ok {
 			continue
 		}
+		r := a.r
 		for _, b := range cal.base {
 			if b.Status == r.Status && b.Length != r.Length {
 				cal.vary[r.Status] = true
