@@ -11,27 +11,114 @@ azhaq shots -u TARGET | -l FILE | -nmap FILE | -nessus FILE | stdin  [-p PORTS] 
 ## Examples
 
 ```
+# A list of services into a directory
 azhaq shots -l services.txt -dir shots
-azhaq shots -u http://127.0.0.1:3001/rest/products/search   # a path and query are kept
-azhaq shots -u 192.0.2.0/28 -p small -rate 5   # a range, ports 80 and 443
+
+# One page: its path and query are kept
+azhaq shots -u http://127.0.0.1:3001/rest/products/search
+
+# A range, ports 80 and 443, 5 requests a second
+azhaq shots -u 192.0.2.0/28 -p small -rate 5
+
+# The services of an nmap scan, as full-page JPEGs
 azhaq shots -nmap scan.xml -shot-format jpeg -shot-fullpage
 ```
 
+## What it does
+
+`shots` (and `run -screenshots`) takes a picture of each web service with a Chrome on the machine.
+
+1. Takes the services from `-u`, `-l`, `-nmap`, `-nessus` or stdin. A URL with a path or query keeps them.
+2. Starts one Chrome and opens up to 6 tabs in it at once, as gowitness runs 6 threads. `-tabs N` changes that.
+3. Loads each page and saves a picture of it. Chrome is held to the scope.
+4. Records what Chrome saw: response headers, TLS session, the technologies of the rendered page, console messages and the network log.
+5. Marks a page `partial` when it was not fully loaded, and the run exits 3.
+6. Groups look-alike pages by a perceptual hash in `export -format html`, one file with the pictures embedded.
+
+What shapes it:
+
+- Which services: `-u 192.0.2.0/28`, `-p small|medium|large|8000-8010,3000`, `-no-http`, `-no-https`, `-nmap FILE` (an `nmap -oX` file) and `-nessus FILE`.
+- How they are shot: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-chrome`, `-chrome-proxy`, `-chrome-profile` and `-H`.
+
 ## Output
 
-URL and picture file per line; -json: one object per page with {"url","file","title","final_url","phash","response_code","headers","tls","technologies","console","network"}, and {"partial":true} when the page was not fully loaded (exit 3), or drew without assets of hosts outside the scope ("blocked", "blocked_hosts": a note, and the exit code does not change, the scope is yours); text: partial (3 off-scope assets blocked: cdn.example.com)
+Plain: one line per page, with its URL and picture file. `-json`: one object per page. `-csv FILE` writes the scalar columns.
 
-One object per page: `url`, `file` (the picture, `.png` or `.jpg`), `file_name`, `file_path` (absolute), `format`, `title`, `final_url`, `bytes` (the picture's), `probed_at`, `phash` (also `perception_hash`: `p:` and 16 hex digits of a DCT perceptual hash; pages 10 bits or fewer apart look alike), and what Chrome saw: `response_code`, `response_reason`, `protocol`, `content_length` (the document's bytes on the wire), `headers` (`[{"key","value"}]`), `tls` (`protocol`, `key_exchange`, `cipher`, `subject_name`, `san_list`, `issuer`, `valid_from`, `valid_to`, `server_signature_algorithm`, `encrypted_client_hello`), `technologies` (`[{"value"}]`, fingerprinted on the rendered page and its headers), `console` (`[{"type","value"}]`: `console.*` calls and uncaught errors, up to 200), `network` (every request the page made: `request_type`, `method`, `status_code`, `url`, `remote_ip`, `mime_type`, `time_ms`, `bytes`, `error`; up to 2000, `network_more` counts the rest) and, with `-shot-html`, `html_file`. A page that was not fully loaded when the picture was taken has `partial`, `unloaded` (images, styles, scripts, fonts and media of it not loaded, or failed) and `resources` (how many it asked for), and `note`; the run then exits 3. Chrome is held to the scope, so what a page loads from a host outside it (a CDN's styles, fonts and scripts) is never asked for, and the picture is drawn without it: that page has `partial`, `blocked` (how many of its requests were refused) and `blocked_hosts`, and a `note` that says how to allow them (`-allow cdn.jsdelivr.net`, with `-allow` for the page's own host too when no scope was named, since any `-allow` replaces the default scope). That does not change the exit code: the scope is yours, so a page partial only for it is marked and noted, and the run still exits 0 (a page whose own in-scope assets did not load exits 3, as above). The text line of such a row ends `partial (3 off-scope assets blocked: cdn.jsdelivr.net)`, and the gallery tags it the same way (`partial_why` in its API). The refused URLs are also in the summary's skipped list, once each. Nothing outside the scope is loaded by default. All of it is read from events Chrome already sends: it costs no request. `-csv FILE` writes the scalar columns.
+| Field | Meaning |
+| --- | --- |
+| `url`, `final_url` | The URL asked, and where it ended. |
+| `file` | The picture: `.png` or `.jpg`. |
+| `file_name`, `file_path` | The picture's name, and its absolute path. |
+| `format` | `png` or `jpeg`. |
+| `title` | The page's title. |
+| `bytes` | The picture's size in bytes. |
+| `probed_at` | When the page was probed. |
+| `phash`, `perception_hash` | A perceptual hash of the picture. See [Details](#perceptual-hash). |
+| `response_code`, `response_reason`, `protocol` | What Chrome saw. |
+| `content_length` | The document's bytes on the wire. |
+| `headers` | `[{"key","value"}]`. |
+| `tls` | `protocol`, `key_exchange`, `cipher`, `subject_name`, `san_list`, `issuer`, `valid_from`, `valid_to`, `server_signature_algorithm`, `encrypted_client_hello`. |
+| `technologies` | `[{"value"}]`, fingerprinted on the rendered page and its headers. |
+| `console` | `[{"type","value"}]`: `console.*` calls and uncaught errors, up to 200. |
+| `network` | Every request the page made, up to 2000. `network_more` counts the rest. See [Details](#network-log). |
+| `html_file` | The rendered HTML, with `-shot-html`. |
+| `partial`, `unloaded`, `resources`, `note` | Set when the page was not fully loaded. See [Partial pages](#partial-pages). |
+| `partial`, `blocked`, `blocked_hosts`, `note` | Set when the picture was drawn without assets of hosts outside the scope. See [Partial pages](#partial-pages). |
+
+All of it is read from events Chrome already sends. It costs no request.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). Two cases are specific to `shots`:
+
+- A page whose own in-scope assets did not load is `partial`, and the run exits 3.
+- A page that is partial only because assets of hosts outside the scope were blocked is marked and noted. The run still exits 0, because the scope is yours.
 
 ## Details
 
-**Screenshots.** `shots` (and `run -screenshots`) take a picture of each web service with a Chrome on the machine. A URL with a path or query is kept; `-u 192.0.2.0/28`, `-p small|medium|large|8000-8010,3000`, `-no-http`, `-no-https`, `-nmap FILE` (an `nmap -oX` file) and `-nessus FILE` say which services; `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-chrome`, `-chrome-proxy`, `-chrome-profile` and `-H` shape them. Each page's row has its response headers, TLS session, the technologies of the rendered page, console messages and network log. At a set `-rate` a page's time runs from when it last moved, so a slow pace gives whole pictures, not blank ones; a picture taken before the page's images, styles and scripts loaded is marked `partial` and the run exits 3. Look-alike pages are grouped by a perceptual hash in `export -format html`, a single file whose pictures are embedded.
+### Perceptual hash
 
-**Screenshots and the budget.** A page's images, scripts and styles each count against `-max-requests`. When too few are left, Chrome is refused them and no image is saved; `shots` and `run -screenshots` say it: `note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 requests and 8 were left (raise -max-requests)`. The figure is how many requests the page made when it was cut short. A run starts one Chrome and opens up to 6 tabs in it at once, as gowitness runs 6 threads (`-tabs N` changes it).
+- `phash` is also `perception_hash`: `p:` and 16 hex digits of a DCT perceptual hash.
+- Pages 10 bits or fewer apart look alike.
+
+### Network log
+
+- `network` entries have `request_type`, `method`, `status_code`, `url`, `remote_ip`, `mime_type`, `time_ms`, `bytes` and `error`.
+- Past 2000, `network_more` counts the rest.
+
+### Partial pages
+
+A page that was not fully loaded when the picture was taken has these fields, and the run exits 3:
+
+- `partial`.
+- `unloaded`: its images, styles, scripts, fonts and media that did not load, or failed.
+- `resources`: how many it asked for.
+- `note`.
+
+### Pages that need hosts outside the scope
+
+- Chrome is held to the scope. What a page loads from a host outside it, such as a CDN's styles, fonts and scripts, is never asked for. The picture is drawn without it.
+- The page then has `partial`, `blocked` (how many of its requests were refused), `blocked_hosts` and a `note` that says how to allow them.
+- To allow them, use `-allow cdn.jsdelivr.net`. When no scope was named, add `-allow` for the page's own host too, since any `-allow` replaces the default scope.
+- This does not change the exit code: see [Summary and exit codes](#summary-and-exit-codes).
+- The text line of such a row ends `partial (3 off-scope assets blocked: cdn.jsdelivr.net)`. The gallery tags it the same way, with `partial_why` in its API.
+- The refused URLs are also in the summary's skipped list, once each.
+- Nothing outside the scope is loaded by default.
+
+### Pace
+
+At a set `-rate`, a page's time runs from when it last moved. A slow pace gives whole pictures, not blank ones.
+
+### Screenshots and the budget
+
+- A page's images, scripts and styles each count against `-max-requests`.
+- When too few are left, Chrome is refused them and no image is saved. `shots` and `run -screenshots` say it:
+
+```
+note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 requests and 8 were left (raise -max-requests)
+```
+
+- The figure is how many requests the page made when it was cut short.
 
 ## Flags
 
