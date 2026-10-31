@@ -285,7 +285,7 @@ func landing(res fetch.Result) fetch.Result {
 // filter that drops them). A timeout once connected, a reset or an answer
 // that is not HTTP come from something that listens.
 func nothingListens(err error) bool {
-	if errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrOutOfScope) || errors.Is(err, neterr.ErrEndsSession) {
+	if errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrOutOfScope) || errors.Is(err, neterr.ErrDenied) {
 		return false
 	}
 	if neterr.UnknownHost(err) || dialTimeout(err) || errors.Is(err, neterr.ErrOriginDown) {

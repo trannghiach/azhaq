@@ -85,8 +85,8 @@ func exportAs(path, format, origin string, w io.Writer) error {
 	return exportTo(path, format, origin, false, w)
 }
 
-// exportTo writes one format; safe leaves the routes the run left alone
-// out of an OpenAPI description (see omitSkipped).
+// exportTo writes one format; safe leaves the routes the run did not
+// request out of an OpenAPI description (see omitSkipped).
 // countWriter counts what passes through, so an empty export can say why.
 type countWriter struct {
 	w io.Writer
@@ -231,8 +231,9 @@ var placeholder = regexp.MustCompile(`\{[^}/]*\}`)
 // does not list are added from what scripts call (method, query, body
 // fields), from forms and from what answered. x-azhaq on each operation
 // says where it came from and how the route answered a GET; an operation
-// of a route the run left alone, from the served description or guessed,
-// carries x-azhaq-skipped and the reason (flagSkipped). A workspace with no
+// of a route the run did not request (-deny-path), from the served
+// description or guessed, carries x-azhaq-skipped and the reason
+// (flagSkipped). A workspace with no
 // API route still gives a valid description, with no paths: a pipeline
 // reading the export gets a document whether or not the run found a thing.
 func openAPI(g *graphView, origin string) (map[string]any, error) {
@@ -310,17 +311,17 @@ func openAPI(g *graphView, origin string) (map[string]any, error) {
 	return doc, nil
 }
 
-// flagSkipped marks every operation of a route the run deliberately did
-// not request (coverage skipped: /createdb, /logout, a name that says a
-// GET there changes something). The served description lists such a
-// route like any other, and a tool importing the export would send it;
-// x-azhaq-skipped: true and x-azhaq-skipped-reason on the operation say
-// azhaq left it alone, and -safe (omitSkipped) drops it. A route the run
-// requested is never flagged, nor is a URL left alone for its query
-// (/items?action=delete): that is not the route's own operation.
+// flagSkipped marks every operation of a route the run did not request
+// (coverage skipped: a path a -deny-path rule keeps out). The served
+// description lists such a route like any other, and a tool importing the
+// export would send it; x-azhaq-skipped: true and x-azhaq-skipped-reason
+// on the operation say azhaq did not request it, and -safe (omitSkipped)
+// drops it. A route the run requested is never flagged, nor is a URL
+// skipped for its query (/items?id=3): that is not the route's own
+// operation.
 func (s *spec) flagSkipped(g *graphView, origin string) {
 	reasons := skipReasons(g.obs)
-	skipped := map[string]string{} // path key → why the run left it alone
+	skipped := map[string]string{} // path key → why the run did not request it
 	asked := map[string]bool{}     // path keys the run has another URL of
 	for _, r := range g.rows {
 		if r.Entity.Type != types.TypeURL {
@@ -340,7 +341,7 @@ func (s *spec) flagSkipped(g *graphView, origin string) {
 		}
 		why := reasons[r.Entity.ID]
 		if why == "" {
-			why = engine.SkipStateChanging
+			why = "not requested"
 		}
 		skipped[p] = why
 	}
@@ -363,8 +364,7 @@ func (s *spec) flagSkipped(g *graphView, origin string) {
 	}
 }
 
-// skipReasons is why each URL the run left alone was left alone, by
-// entity: the reason and the word in its name that decided it.
+// skipReasons is why each URL the run did not request was not, by entity.
 func skipReasons(obs []types.StoredObservation) map[string]string {
 	out := map[string]string{}
 	for _, o := range obs {
@@ -373,16 +373,11 @@ func skipReasons(obs []types.StoredObservation) map[string]string {
 		}
 		var p struct {
 			Skipped string `json:"skipped"`
-			Word    string `json:"word"`
 		}
 		if json.Unmarshal(o.Payload, &p) != nil || p.Skipped == "" {
 			continue
 		}
-		why := p.Skipped
-		if p.Word != "" {
-			why += " (" + p.Word + ")"
-		}
-		out[o.EntityID] = why
+		out[o.EntityID] = p.Skipped
 	}
 	return out
 }
@@ -601,9 +596,9 @@ func (s *spec) addRoute(r engine.MapEntry) {
 			continue
 		}
 		if r.Coverage == "skipped" && (m == "get" || m == "head") {
-			// Left alone because a GET there changes something
-			// (/setup.php?action=reset): a tool importing the description
-			// would send it, nor are its names the route's.
+			// Not requested, kept out by -deny-path (/setup.php?action=reset):
+			// a tool importing the description would send it, nor are its
+			// names the route's.
 			continue
 		}
 		if have, ok := item[m].(map[string]any); ok {
@@ -803,7 +798,7 @@ func unknownBody(content map[string]any) bool {
 
 // takesQuery: a page found or requested with a query string of its own
 // (a link to /item?id=3), which is a GET that takes those names. Not a
-// link the run left alone because a GET there changes something.
+// link the run did not request (-deny-path).
 func takesQuery(r engine.MapEntry) bool {
 	switch r.Coverage {
 	case "gone", "catchall", "skipped":

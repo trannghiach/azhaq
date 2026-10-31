@@ -26,7 +26,6 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
 // ErrNoChrome means no Chrome or Chromium was found.
@@ -398,7 +397,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
 	p.Partial = p.Unloaded > 0
 	if err == nil && b.Interact > 0 {
-		p.Interaction = b.interact(tab, p.URL, b.Interact, webextract.StateChanging)
+		p.Interaction = b.interact(tab, p.URL, b.Interact)
 	}
 	b.settle(t)
 	mu.Lock()

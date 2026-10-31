@@ -111,6 +111,13 @@ type Skipper interface {
 	Skip(seed types.Seed) bool
 }
 
+// Forgetter is optional. A collector that remembers the URLs it has
+// reported, to report each once, forgets one when the page is asked again
+// because the session its first answer came with had ended.
+type Forgetter interface {
+	Forget(url string)
+}
+
 // Asker is optional. A passive collector says, without asking anything,
 // which third parties it would ask about a seed, one query each (a source
 // may page through its answer), so azhaq plan can count them.

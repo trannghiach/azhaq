@@ -108,7 +108,7 @@ func pickCanaries(roles []role, answers map[string]map[string]answer, made map[s
 		}
 		best, rank := "", 99
 		for u, a := range answers[r.name] {
-			if !reads(a) || !replayable(u, own) || logoutPath.MatchString(pathOf(u)) {
+			if !reads(a) || !replayable(u, own) {
 				continue
 			}
 			b, ok := answers[anon][u]
@@ -255,6 +255,7 @@ func (rr *roleReplay) setup() {
 	fetch.ProxyURL = rolesProxy
 	own := rr.own
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	holdDeny()
 	fetch.Extra = rr.roles[rr.i].session.Clone()
 }
 

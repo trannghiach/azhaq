@@ -284,6 +284,12 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.done(t)
 		b.fail(root, ev.RequestID) // a window a page opened, being closed
 		return
+	case raw != "" && fetch.CheckDenied(raw) != nil:
+		// The user's own -deny-path rule: never requested, and listed with
+		// the rule by fetch (not as a refusal of the scope).
+		b.done(t)
+		b.fail(root, ev.RequestID)
+		return
 	case !b.allowed(raw):
 		r.url, r.host = listable(raw) // an image on a third party's host is listed: its query may carry the page's data
 	case t != nil && !write && (t.lean && (decoration(ev.ResourceType) || chatter(raw)) || !t.lean && icon(raw)):

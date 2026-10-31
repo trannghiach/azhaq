@@ -94,8 +94,9 @@ func TestCrawlWithoutSubmitFormsSendsNoPost(t *testing.T) {
 	}
 }
 
-// A POST form left alone is named in the summary, with why.
-func TestCrawlSubmitFormsNamesTheFormsItLeavesAlone(t *testing.T) {
+// A POST form that is not sent is named in the summary, with why; one
+// whose address says delete is sent like any other: a name decides nothing.
+func TestCrawlSubmitFormsNamesTheFormsItDoesNotSend(t *testing.T) {
 	var mu sync.Mutex
 	var posts []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,19 +109,20 @@ func TestCrawlSubmitFormsNamesTheFormsItLeavesAlone(t *testing.T) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, `<html><body><form action="/delete/account" method="post"><input name="id" value="1"></form>
 <form action="/up" method="post" enctype="multipart/form-data"><input type="file" name="f"></form>
-<form action="http://elsewhere.test/in" method="post"><input name="q"></form></body></html>`)
+<form action="http://elsewhere.test/in" method="post"><input name="q"></form>
+<form action="/admin/wipe" method="post"><input name="id" value="1"></form></body></html>`)
 	}))
 	t.Cleanup(srv.Close)
 	_, errOut, err := captureBoth(t, func() error {
-		return cmdCrawl([]string{"-u", srv.URL + "/", "-allow", "127.0.0.1", "-submit-forms", "-db", filepath.Join(t.TempDir(), "w.db")})
+		return cmdCrawl([]string{"-u", srv.URL + "/", "-allow", "127.0.0.1", "-submit-forms", "-deny-path", `^/admin/`, "-db", filepath.Join(t.TempDir(), "w.db")})
 	})
 	if err != nil && exitCode(err) != exitPartial {
 		t.Fatal(err)
 	}
-	if len(posts) != 0 {
-		t.Errorf("posts %q, want none", posts)
+	if len(posts) != 1 || posts[0] != "/delete/account" {
+		t.Errorf("posts %q, want only /delete/account", posts)
 	}
-	for _, want := range []string{"/delete/account was not submitted", "/up was not submitted", "http://elsewhere.test/in was not submitted: it is outside the crawl's scope"} {
+	for _, want := range []string{"/up was not submitted", "http://elsewhere.test/in was not submitted: it is outside the crawl's scope", "/admin/wipe was not submitted: -deny-path ^/admin/"} {
 		if !strings.Contains(errOut, want) {
 			t.Errorf("the summary lacks %q:\n%s", want, errOut)
 		}

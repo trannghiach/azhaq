@@ -48,9 +48,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
 // Skip: only with -browser, and only pages (not scripts, assets or API
-// routes, which render nothing); never a logout page while signed in.
+// routes, which render nothing).
 func (c *Collector) Skip(seed types.Seed) bool {
-	if c.Browser == nil || fetch.EndsSession(seed.Keys["url"]) {
+	if c.Browser == nil {
 		return true
 	}
 	switch webextract.ClassifyURL(seed.Keys["url"]) {

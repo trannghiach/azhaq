@@ -65,6 +65,8 @@ func (e *Engine) RunLocal(ctx context.Context, seeds []types.Seed, b Budgets) er
 	if e.Store != nil {
 		catalog.Claim = e.Store.Claim
 		defer func() { catalog.Claim = nil }()
+		fetch.OnDenied = e.noteDenied
+		defer func() { fetch.OnDenied = nil }()
 	}
 	if b.Resume && e.Store != nil {
 		if err := s.restore(); err != nil {
@@ -261,12 +263,12 @@ func (s *scheduler) add(raw types.Seed, depth int, hint bool) {
 	if s.seen[k] {
 		return
 	}
-	if hint && seed.Type == types.TypeURL && !s.b.Passive && !s.b.AllGets {
-		// Found in a page, a script or an archive: a GET there would do
-		// something (log out, reset, save). It stays in the map unrequested.
-		if w := webextract.StateChanging(seed.Key()); w != "" {
+	if seed.Type == types.TypeURL {
+		// The user's own rule (-deny-path): the URL stays in the map, listed
+		// as not requested.
+		if rule := s.b.Scope.DeniedPath(seed.Key()); rule != "" {
 			s.seen[k] = true
-			s.e.noteSkip(seed, w)
+			s.e.noteDenied(seed.Key(), rule)
 			return
 		}
 	}
@@ -436,13 +438,23 @@ func (s *scheduler) loop(ctx context.Context) {
 	}
 	for {
 		if ctx.Err() == nil {
+			s.redoSession()
 			s.dispatch(ctx)
 		} else {
 			s.release()
 		}
 		s.flush()
 		if s.inflight == 0 {
-			return
+			if ctx.Err() == nil {
+				// The requests since the last check are checked too.
+				fetch.EndCheck(ctx)
+				s.redoSession()
+				s.dispatch(ctx)
+				s.flush()
+			}
+			if s.inflight == 0 {
+				return
+			}
 		}
 		select {
 		case f := <-s.results:
@@ -454,6 +466,47 @@ func (s *scheduler) loop(ctx context.Context) {
 		case <-tick:
 			s.expire()
 		}
+	}
+}
+
+// redoSession asks again the pages whose answers a session that ended gave
+// without it (fetch.TakeRedo): what the collectors reported of them is
+// dropped, and their tasks run again.
+func (s *scheduler) redoSession() {
+	urls := fetch.TakeRedo()
+	if len(urls) == 0 || s.e.Store == nil {
+		return
+	}
+	var touch []catalog.Collector
+	for _, col := range s.e.Cat.Where(types.TypeURL) {
+		if catalog.InfoOf(col).Kind == catalog.Touch {
+			touch = append(touch, col)
+		}
+	}
+	names := make([]string, len(touch))
+	for i, col := range touch {
+		names[i] = col.Name()
+	}
+	for _, raw := range urls {
+		seed := normalize.Seed(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}})
+		if seed.Key() == "" || !s.seen[seedKey(seed)] {
+			continue
+		}
+		var keys []string
+		for _, col := range touch {
+			keys = append(keys, workID(col.Name(), seed))
+		}
+		for _, col := range touch {
+			if f, ok := col.(catalog.Forgetter); ok {
+				f.Forget(seed.Key())
+			}
+		}
+		_ = s.e.Store.Unsee(keys)
+		if ent, err := s.e.Store.UpsertEntity(seed.Type, seed.Key(), time.Now().UTC()); err == nil {
+			_ = s.e.Store.DropObservations(ent.ID, names)
+		}
+		delete(s.seen, seedKey(seed))
+		s.add(seed, 0, true)
 	}
 }
 

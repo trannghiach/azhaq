@@ -89,6 +89,9 @@ func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.Ty
 
 func (c *Collector) Outputs() []string { return []string{"url"} }
 
+// Forget lets a script be read again (catalog.Forgetter).
+func (c *Collector) Forget(raw string) { c.parsed.Delete(raw) }
+
 // Skip declines API routes, assets other than scripts, and scripts already
 // parsed, so they do not spend the run's item budget.
 func (c *Collector) Skip(seed types.Seed) bool {

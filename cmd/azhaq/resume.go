@@ -74,6 +74,10 @@ func cmdResume(args []string) error {
 	if !wantsJSON(rest) {
 		fmt.Fprintf(os.Stderr, "azhaq: resuming run %s of %s, %d tasks known and not done\n", id, db, left)
 	}
+	runArgs, gone := dropRemovedFlags(runArgs)
+	if len(gone) > 0 && !wantsJSON(rest) {
+		fmt.Fprintf(os.Stderr, "azhaq: the run was started with %s, which azhaq no longer has: every GET found in scope is requested, whatever its name says; ignored\n", strings.Join(gone, ", "))
+	}
 	if !hasFlag(rest, "list") {
 		if runArgs, err = listFromWorkspace(db, id, runArgs); err != nil {
 			return err
@@ -140,6 +144,28 @@ func listFromWorkspace(db, id string, args []string) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// removedFlags are options of earlier versions: -all-gets and -get-words
+// held back GETs by their names, which azhaq no longer does. A stored run
+// that has them goes on without.
+var removedFlags = map[string]bool{"all-gets": false, "get-words": true} // true: takes a value
+
+// dropRemovedFlags is args without the removed flags, and their names.
+func dropRemovedFlags(args []string) (out, gone []string) {
+	for i := 0; i < len(args); i++ {
+		name, _, inline := strings.Cut(strings.TrimLeft(args[i], "-"), "=")
+		takes, removed := removedFlags[name]
+		if !strings.HasPrefix(args[i], "-") || !removed {
+			out = append(out, args[i])
+			continue
+		}
+		gone = append(gone, "-"+name)
+		if takes && !inline && i+1 < len(args) {
+			i++
+		}
+	}
+	return out, gone
 }
 
 // keptArgs are the run options stored for azhaq resume: everything but the

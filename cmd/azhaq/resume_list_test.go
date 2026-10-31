@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,5 +67,18 @@ func TestStreamFound(t *testing.T) {
 	want := "found  url     http://a.test/x\nfound  answer  http://a.test/  [200] Home\n"
 	if err != nil || out != want {
 		t.Errorf("%q, want %q", out, want)
+	}
+}
+
+// A run stored with the options that held GETs back by name goes on
+// without them, and the resume says so.
+func TestResumeDropsRemovedFlags(t *testing.T) {
+	got, gone := dropRemovedFlags([]string{"-url", "https://app.test/", "-all-gets", "-get-words", "exec,import", "-depth=2", "--get-words=x", "-all-gets=true", "-skip", "azhaq-dns"})
+	want := []string{"-url", "https://app.test/", "-depth=2", "-skip", "azhaq-dns"}
+	if !slices.Equal(got, want) {
+		t.Errorf("args %q, want %q", got, want)
+	}
+	if !slices.Equal(gone, []string{"-all-gets", "-get-words", "-get-words", "-all-gets"}) {
+		t.Errorf("gone %q", gone)
 	}
 }

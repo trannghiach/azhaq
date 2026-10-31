@@ -168,7 +168,7 @@ func Skips(ents []types.Entity, obs []types.StoredObservation) []Skip {
 		keys[e.ID] = e.Key
 	}
 	// A URL a path or parameter guess asked for was requested, whatever
-	// the crawler then chose: it is not listed as left alone.
+	// the crawler then chose: it is not listed as skipped.
 	asked := map[string]bool{}
 	for _, o := range obs {
 		if (o.Kind == "url" || o.Kind == "application") && o.Collector != "azhaq-js" && o.Collector != "azhaq-crawl" && statusOf(o.Payload) > 0 {

@@ -18,7 +18,6 @@ var weights = map[string]int{
 	"object-id":       35, // 15 when the route has no GET: a write alone
 	"unauth-write":    25, // 10 when no GET showed that it answers
 	"upload":          35,
-	"state-change":    30,
 	"password-in-url": 30, // a GET form with a password field: it lands in logs and history
 	"param-command":   40,
 	"param-url":       35,

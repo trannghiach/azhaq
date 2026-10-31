@@ -190,12 +190,6 @@ func (h *hunter) url(r engine.MapEntry) {
 			c.add("upload", fmt.Sprintf("file field %s in a %s form to %s", strings.Join(f.Files, ", "), f.Method, f.Action))
 		}
 	}
-	if r.Coverage == "skipped" && strings.Contains(r.Proof, "skipped=looks like a GET would change something") {
-		w := proofWord(r.Proof)
-		if !logoutWord[w] {
-			c.add("state-change", "GET that looks state-changing, left alone ("+w+")")
-		}
-	}
 	if names := inputNames(r); len(names) > 0 {
 		w := weights["input"]
 		if writesBody(r) {
@@ -267,20 +261,6 @@ func passwordField(fields []string) string {
 		}
 	}
 	return ""
-}
-
-var logoutWord = map[string]bool{"logout": true, "signout": true, "logoff": true, "sign-out": true}
-
-func proofWord(proof string) string {
-	i := strings.Index(proof, "word=")
-	if i < 0 {
-		return "?"
-	}
-	w := proof[i+5:]
-	if j := strings.IndexByte(w, ' '); j >= 0 {
-		w = w[:j]
-	}
-	return w
 }
 
 func exposedFile(path string) (int, string) {

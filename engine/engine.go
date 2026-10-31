@@ -41,6 +41,7 @@ type Engine struct {
 
 	secured sync.Map // hosts whose http URLs are the https site's (scheme.go)
 	recent  sync.Map // entities upserted a moment ago (upsertRecent)
+	denied  sync.Map // URLs a -deny-path rule kept out, noted once
 }
 
 func (e *Engine) Plan(seeds []types.Seed) []types.WorkItem {
@@ -561,12 +562,22 @@ func (e *Engine) NoteExternalError(seeds []types.Seed, collector string, err err
 	return nil
 }
 
-// SkipStateChanging is the reason given for a found URL that was not
-// requested because it looks like a GET there would change something.
-const SkipStateChanging = "looks like a GET would change something"
+// noteDenied records a URL a -deny-path rule kept out of the run.
+func (e *Engine) noteDenied(raw, rule string) {
+	if e == nil || e.Store == nil {
+		return
+	}
+	if n, err := normalize.URL(raw); err == nil {
+		raw = n
+	}
+	if _, dup := e.denied.LoadOrStore(raw, true); dup {
+		return
+	}
+	e.noteSkip(types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": raw}}, fetch.DenyReason(rule))
+}
 
-// noteSkip records a URL the run found and chose not to request.
-func (e *Engine) noteSkip(seed types.Seed, word string) {
+// noteSkip records a URL the run found and did not request, and why.
+func (e *Engine) noteSkip(seed types.Seed, reason string) {
 	if e == nil || e.Store == nil {
 		return
 	}
@@ -575,7 +586,7 @@ func (e *Engine) noteSkip(seed types.Seed, word string) {
 	if err != nil {
 		return
 	}
-	payload, _ := json.Marshal(map[string]string{"skipped": SkipStateChanging, "word": word})
+	payload, _ := json.Marshal(map[string]string{"skipped": reason})
 	_, _ = e.Store.AddObservation(ent.ID, types.Observation{
 		Collector: "azhaq-http", Source: "run", Kind: "skipped", Payload: payload, ObservedAt: now,
 	})

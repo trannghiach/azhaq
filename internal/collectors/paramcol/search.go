@@ -22,7 +22,6 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
-	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -72,10 +71,9 @@ type search struct {
 	known   map[string]bool
 	// fixed are names found earlier, sent with every request of a later
 	// pass (see deepen); fixedW is what they add to a request, in bytes.
-	fixed   []pair
-	fixedW  int
-	sem     chan struct{}
-	session bool // the run or the page's own headers carry a session
+	fixed  []pair
+	fixedW int
+	sem    chan struct{}
 
 	ref       answer
 	slack     int // size difference the page shows between identical requests
@@ -116,12 +114,6 @@ func newSearch(c *Collector, ctx context.Context, u *url.URL, tg Target) *search
 		// older Node): stay under it
 		// and under a lower one when it shows one.
 		s.maxBytes = getBytes - len(u.RawQuery) - len(tg.Include)
-	}
-	s.session = fetch.HasSession()
-	for _, h := range tg.Header {
-		if k, v, ok := strings.Cut(h, ":"); ok && fetch.SessionHeader(strings.TrimSpace(k), strings.TrimSpace(v)) {
-			s.session = true
-		}
 	}
 	for k := range u.Query() {
 		s.known[k] = true
@@ -397,19 +389,14 @@ func presence(n []string) string {
 }
 
 // candidates are the names to try: trimmed, without repeats, without what
-// the request already carries and, with a session, without what reads like
-// an action.
+// the request already carries.
 func (s *search) candidates() []string {
 	var words []string
 	seen := map[string]bool{}
-	careful := s.session && !s.c.Opts.AllGets
 	for _, w := range s.c.Opts.Words {
 		w = strings.TrimSpace(w)
 		if w == "" || s.known[w] || seen[w] {
 			continue
-		}
-		if careful && webextract.StateChanging("/?action="+url.QueryEscape(w)) != "" {
-			continue // with a session, a name like delete or logout is not sent
 		}
 		if s.method == XML && !xmlName(w) {
 			s.badXML++
@@ -662,9 +649,9 @@ func (s *search) once(q []pair, quiet bool) (a answer, wait time.Duration, ok bo
 	if err := s.c.limiter.Wait(s.ctx, s.base.Host); err != nil {
 		return answer{}, 0, false
 	}
-	if fetch.EndsSessionWith(s.base.String(), s.session) {
+	if rule := fetch.DeniedBy(s.base.String()); rule != "" {
 		s.mu.Lock()
-		s.skip = "the page's address ends the session"
+		s.skip = fetch.DenyReason(rule)
 		s.mu.Unlock()
 		return answer{}, 0, false
 	}

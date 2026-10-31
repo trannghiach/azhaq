@@ -439,9 +439,8 @@ func emptyCredential(name, v string) bool {
 }
 
 // gets are the pages a role's history reached, on the target: one request
-// each, with the status the history saw. A GET a name says changes
-// something, a logout, a script or a file is left out, as it is from any
-// replay.
+// each, with the status the history saw. A script or a file is left out,
+// as it is from any replay.
 func (h *history) gets(sc histScope, own map[string]bool) (urls []string, seen map[string]int) {
 	seen = map[string]int{}
 	for _, e := range h.entries {
@@ -450,9 +449,6 @@ func (h *history) gets(sc histScope, own map[string]bool) (urls []string, seen m
 		}
 		u, err := normalize.URL(e.url)
 		if err != nil || !replayable(u, own) {
-			continue
-		}
-		if pu, err := url.Parse(u); err != nil || endsSession(pu) {
 			continue
 		}
 		if _, ok := seen[u]; !ok {
@@ -473,6 +469,7 @@ func readHistoryURLs(r role, urls []string, got map[string]answer, raw map[strin
 	fetch.SetRate(rate)
 	fetch.ProxyURL = rolesProxy
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	holdDeny()
 	fetch.Extra = r.session.Clone()
 	ctx := context.Background()
 	client := fetch.Client(nil)

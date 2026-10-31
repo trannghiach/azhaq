@@ -239,6 +239,7 @@ type tally struct {
 	extra            []string // other things that must hold, when they do not
 	note             string   // detail that is not a failure
 	skipCounterEqual bool     // the counter holds only what can be counted (closed ports)
+	stderr           string   // what the process said, for what its summary must say
 }
 
 func (t tally) problems() []string {
@@ -436,7 +437,7 @@ func httpTally(label string, r azResult, ledgerPath string, ledgerFrom int, p *c
 	for _, s := range p.since(seenFrom) {
 		seen = append(seen, s.key())
 	}
-	t := tally{label: label, exit: r.exit, summary: summaryRequests(r.stderr), ledger: ledgerKeys(es, p.origin), counter: seen, ledgerOf: es}
+	t := tally{label: label, exit: r.exit, summary: summaryRequests(r.stderr), ledger: ledgerKeys(es, p.origin), counter: seen, ledgerOf: es, stderr: r.stderr}
 	if t.summary < 0 {
 		t.note = "stderr ends: " + clip(lastLine(r.stderr), 160)
 	}
@@ -594,7 +595,9 @@ func (c *claims) caseShots() {
 	}, nil)
 }
 
-// 4. DVWA, signed in; with and without Chrome. No logout, and no request
+// 4. DVWA, signed in; with and without Chrome. A found GET is requested,
+// logout.php included, and a session it ends is never lost without a word:
+// the summary says the session ended and was signed in again. No request
 // Chrome answered from its cache.
 func (c *claims) caseDVWA() {
 	for _, browser := range []bool{false, true} {
@@ -614,7 +617,11 @@ func (c *claims) caseDVWA() {
 		}, func(t *tally, px *countProxy) {
 			for _, s := range px.since(0) {
 				if strings.Contains(s.Target, "logout.php") {
-					t.extra = append(t.extra, "a request to logout.php reached the app: "+s.key())
+					if !strings.Contains(t.stderr, "the session ended") {
+						t.extra = append(t.extra, "a request to logout.php reached the app and the summary does not say the session ended: "+s.key())
+					} else {
+						t.note = "logout.php was requested; the summary says the session ended and what was done"
+					}
 					break
 				}
 			}

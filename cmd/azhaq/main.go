@@ -49,7 +49,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/internal/timing"
-	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
@@ -213,7 +212,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs.Var(&cidrs, "cidr", "seed an address range such as 192.0.2.0/24 (repeatable)")
 	render := fs.Bool("browser", false, "also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome)")
 	browserWrites := fs.Bool("browser-writes", false, "let pages in Chrome send their writes (POST, PUT, DELETE…, beacons, forms posted on load) as a user's browser would: they change data on the target; by default Chrome sends only GET, HEAD and OPTIONS outside signing in, and maps the writes it does not send")
-	interact := fs.Bool("interact", false, "with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; writes a click would send are mapped, not sent, and a click on log out, delete, … is not made")
+	interact := fs.Bool("interact", false, "with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; a click is made whatever its label says, and the writes it would send are refused by their method and mapped, not sent")
 	interactClicks := fs.Int("interact-clicks", 12, "clicks -interact makes on each page")
 	shots := fs.String("screenshots", "", "save a screenshot of each web service's front page in this directory (needs Chrome)")
 	tabs := fs.Int("tabs", 6, "Chrome tabs open at once for screenshots and -browser (gowitness -t)")
@@ -369,13 +368,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	graphqlWordlist := fs.String("graphql-wordlist", "", "extra probe words (one per line), tried and recombined with the built-in ones when a GraphQL endpoint's introspection is off and its schema has to be recovered from validation errors")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
-	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
-	getWords := fs.String("get-words", "", "request found URLs left alone for these words only, comma-separated (exec,import): finer than -all-gets")
 	knownFiles := fs.String("known-files", "", "ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths")
 	proxyFlag := fs.String("proxy", "", "send requests to targets through this proxy (http://, https:// or socks5://); Chrome too (default: $HTTP_PROXY, $HTTPS_PROXY)")
 	crawlScope := fs.String("crawl-scope", "", "the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address)")
 	crawlAny := fs.Bool("crawl-any-host", false, "follow links to any host, within -allow and -deny (katana's -ns)")
-	var cookies, headers, allow, deny, domains, crawlIn, crawlOut stringsFlag
+	var cookies, headers, allow, deny, denyPath, domains, crawlIn, crawlOut stringsFlag
 	fs.Var(&crawlIn, "crawl-in", "follow only URLs that match this regex (repeatable)")
 	fs.Var(&crawlOut, "crawl-out", "never follow URLs that match this regex (repeatable)")
 	fs.Var(&domains, "domain", "seed Domain, for subdomain discovery (repeatable)")
@@ -383,8 +380,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	fs.Var(&headers, "header", "extra request header K: V (repeatable)")
 	fs.Var(&allow, "allow", "a domain, host or address range the run may touch; with any -allow, nothing else is requested (repeatable)")
 	fs.Var(&deny, "deny", "a domain, host or address range the run must not touch, even when given as a target (repeatable)")
+	fs.Var(&denyPath, "deny-path", "a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if err := scope.CompilePaths(denyPath); err != nil {
+		return usagef("%v", err)
 	}
 	out.json, out.quiet = *jsonOut, *quiet
 	// Port lists are checked before anything is sent (a sign-in comes first).
@@ -550,7 +551,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			allow = append(allow, headerHosts(fetch.Extra)...)
 		}
 	}
-	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}.Compile()
+	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...), DenyPath: append([]string(nil), denyPath...)}.Compile()
 	if err := hostHeadersInScope(fetch.Extra, rules); err != nil {
 		return err
 	}
@@ -652,7 +653,6 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	budgets.FailOnErrors = *failErrs
 	budgets.FailOnCapped = *failCapped
 	budgets.Passive = *passive
-	budgets.AllGets = *allGets
 	budgets.Scope = rules
 	if *depth == 0 {
 		budgets.MaxDepth = 1
@@ -672,9 +672,6 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	budgets.Skip = map[string]bool{}
 	if *noPaths {
 		budgets.Skip["azhaq-paths"] = true
-	}
-	for _, w := range splitList(*getWords) {
-		webextract.AllowedWords[strings.ToLower(w)] = true
 	}
 	for _, name := range splitList(*skip) {
 		budgets.Skip[name] = true
@@ -700,6 +697,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if !budgets.Scope.Empty() {
 		fetch.Allow = budgets.Scope.Allows
+	}
+	if len(budgets.Scope.DenyPath) > 0 {
+		fetch.DenyPath = budgets.Scope.DeniedPath
 	}
 	if *crawlScope != "" || *crawlAny || len(crawlIn) > 0 || len(crawlOut) > 0 {
 		var roots []string
@@ -817,11 +817,20 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return fmt.Errorf("-screenshots and -browser: %w", err)
 		}
 	}
+	var loginHome string
+	var loginRenew func(context.Context) error
 	if *login != "" && out.plan {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("the run signs in at %s as %s with Chrome first", *login, *loginUser))
 	} else if *login != "" {
+		base := fetch.Extra.Clone()
 		home, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
 		if err != nil {
+			return err
+		}
+		loginHome = home
+		loginRenew = func(context.Context) error {
+			fetch.SetExtra(base.Clone())
+			_, err := signIn(opts.Browser, *login, *loginUser, *loginPass, rep)
 			return err
 		}
 		// The page the login ended on is the signed-in app.
@@ -869,7 +878,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 				}
 			}
 		}
-		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate, AllGets: *allGets,
+		opts.Params = paramcol.Options{Words: words, PerHost: *paramsPerHost, Rate: *paramsRate,
 			Threads: *paramsThreads, Chunk: *paramsChunk, Method: method, Writes: *paramsWrites, Include: *paramsInclude,
 			Delay: *paramsDelay, Stable: *paramsStable, Timeout: *paramsTimeout, Targets: targets}
 	}
@@ -881,7 +890,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 				return err
 			}
 		}
-		opts.Dirs = dirscol.Options{Words: words, Extensions: splitList(*dirsExt), Depth: *dirsDepth, Threads: *dirsThreads, Rate: *dirsRate, AllGets: *allGets}
+		opts.Dirs = dirscol.Options{Words: words, Extensions: splitList(*dirsExt), Depth: *dirsDepth, Threads: *dirsThreads, Rate: *dirsRate}
 		given := map[string]string{}
 		for k, v := range dirsMatch {
 			given[k] = *v
@@ -1127,6 +1136,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	if !out.scratch {
 		stopKeep = engine.KeepResponses(st, *resumeRun != "")
 	}
+	if !out.plan {
+		watchSession(ctx, seeds, loginHome, *login, loginRenew, rep)
+	}
 	localErr := eng.RunLocal(ctx, seeds, budgets)
 	stopKeep()
 	if localErr != nil && !errors.Is(localErr, context.Canceled) && !errors.Is(localErr, context.DeadlineExceeded) {
@@ -1170,6 +1182,12 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	fillReport(rep, path, seeds, ents, obs, rows)
+	if err := fetch.SessionLost(); err != nil {
+		// Said once, as a failure of its own: exit 3, never a quiet anonymous run.
+		if !slices.ContainsFunc(rep.Failed, func(f engine.Failure) bool { return strings.HasPrefix(f.Error, "the session ended") }) {
+			rep.Failed = append(rep.Failed, engine.Failure{Collector: "azhaq-session", Error: err.Error(), Count: 1})
+		}
+	}
 	if *render {
 		if n, pages := browserOnly(obs); pages > 0 && n == 0 {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("-browser: Chrome rendered %d pages and found no URL the static pass had not; a run without it maps the same with fewer requests", pages))
@@ -1677,7 +1695,7 @@ func cmdExport(args []string) error {
 	dbPath := fs.String("db", "", "sqlite path (default: last run)")
 	format := fs.String("format", "jsonl", "jsonl (everything), urls, hosts (names that resolve), names (every name), targets (web services, for nuclei -l), openapi, graphql (introspection JSON), sdl (GraphQL schema), burp (the run's scope), html, graphml, secrets")
 	origin := fs.String("origin", "", "openapi: the origin to describe (default: the one with most API routes); graphql, sdl: the endpoints of an origin, or one endpoint's URL")
-	safe := fs.Bool("safe", false, "openapi: leave out the routes the run left alone as state-changing (otherwise they carry x-azhaq-skipped: true), for a tool that must not touch them")
+	safe := fs.Bool("safe", false, "openapi: leave out the routes the run did not request, such as those -deny-path kept out (otherwise they carry x-azhaq-skipped: true)")
 	if err := parse(fs, args); err != nil {
 		return err
 	}
@@ -2137,19 +2155,22 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 	if len(s.Cookies) == 0 && s.Bearer == "" {
 		return "", fmt.Errorf("-login %s: signed in, but the site set no cookie and stored no token", loginURL)
 	}
-	if fetch.Extra == nil {
-		fetch.Extra = make(http.Header)
+	// Built apart and set whole: requests in flight read fetch.Extra.
+	extra := fetch.Extra.Clone()
+	if extra == nil {
+		extra = make(http.Header)
 	}
+	defer func() { fetch.SetExtra(extra) }()
 	if len(s.Cookies) > 0 {
 		c := strings.Join(s.Cookies, "; ")
-		if old := fetch.Extra.Get("Cookie"); old != "" {
+		if old := extra.Get("Cookie"); old != "" {
 			c = old + "; " + c
 		}
-		fetch.Extra.Set("Cookie", c)
+		extra.Set("Cookie", c)
 	}
 	what := fmt.Sprintf("%d cookies", len(s.Cookies))
-	if s.Bearer != "" && fetch.Extra.Get("Authorization") == "" {
-		fetch.Extra.Set("Authorization", "Bearer "+s.Bearer)
+	if s.Bearer != "" && extra.Get("Authorization") == "" {
+		extra.Set("Authorization", "Bearer "+s.Bearer)
 		if b.Header == nil {
 			b.Header = map[string]any{}
 		}

@@ -27,7 +27,8 @@ func TestWriteMethods(t *testing.T) {
 }
 
 // A HAR gives the owner's writes on the run's hosts, without the session
-// that sent them (cookies, tokens, a CSRF token), and never a logout.
+// that sent them (cookies, tokens, a CSRF token). The method decides what
+// is replayed, not the name of the URL: a POST to /logout is one of them.
 func TestHARWrites(t *testing.T) {
 	h := map[string]any{"log": map[string]any{"entries": []any{
 		entry("POST", "http://app.test/api/items", `{"basketId":7}`, 201, "Authorization", "Bearer secret", "X-CSRF-Token", "c", "Cookie", "s=1", "Content-Type", "application/json"),
@@ -43,7 +44,7 @@ func TestHARWrites(t *testing.T) {
 		t.Fatal(err)
 	}
 	ws, err := harWrites("alice", path, map[string]bool{"POST": true, "PUT": true}, map[string]bool{"app.test": true})
-	if err != nil || len(ws) != 1 {
+	if err != nil || len(ws) != 2 || ws[1].method != "POST" || ws[1].url != "http://app.test/logout" {
 		t.Fatalf("%+v %v", ws, err)
 	}
 	w := ws[0]

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,7 +39,7 @@ func cmdFuzz(args []string) error {
 	fs.Lookup("o").Usage = "write the report to this file, in the format -of says (json by default; a name ending .txt gets what stdout shows, as before)"
 	fs.BoolVar(&c.silent, "s", false, "ffuf's name for -silent")
 	rawURL := fs.String("u", "", "target URL; the keyword (FUZZ) may stand anywhere in it, in the host too")
-	var lists, headers, cookies, allow, deny, inputCmds, encs, acStrategies, acStrings stringsFlag
+	var lists, headers, cookies, allow, deny, denyPath, inputCmds, encs, acStrategies, acStrings stringsFlag
 	fs.Var(&lists, "w", "wordlist `FILE[:KEYWORD]` (- for stdin; repeatable; a comma list is several; the keyword is FUZZ without one)")
 	mode := fs.String("mode", "clusterbomb", "how several wordlists combine: clusterbomb (every combination), pitchfork (line by line) or sniper (one wordlist in each §marked§ place of the request in turn)")
 	method := fs.String("X", "", "HTTP method (default GET, POST with -d); the keyword may stand in it")
@@ -109,6 +110,7 @@ func cmdFuzz(args []string) error {
 	program := fs.String("program", "", "the program to take from a -scope list")
 	fs.Var(&allow, "allow", "a domain, host or address range the run may touch (repeatable); default: the host of -u")
 	fs.Var(&deny, "deny", "a domain, host or address range the run must not touch (repeatable)")
+	fs.Var(&denyPath, "deny-path", "a regular expression on a URL's path and query: an input whose URL it matches is never sent, and is listed as not requested (repeatable)")
 	flights := &flightFlags{}
 	fs.Var(flightFile{flights, false}, "preflight", "a raw request file sent before each fuzzing request (repeatable, in order); it carries -H and -b of the command, and is held to the scope, budget and pace")
 	fs.Var(flightVar{flights, false, false}, "preflight-var", "a value read from the answer of the -preflight before it: NAME:regexp (the first group; the body, then the headers); NAME in later requests stands for it (repeatable)")
@@ -326,6 +328,11 @@ func cmdFuzz(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := scope.CompilePaths(denyPath); err != nil {
+		return usagef("%v", err)
+	}
+	rules.DenyPath = denyPath
+	rules = rules.Compile()
 
 	// The output files, checked before the first request: a run that finds
 	// it cannot write its report only at the end has wasted its requests.
@@ -337,6 +344,9 @@ func cmdFuzz(args []string) error {
 	fetch.Reset()
 	fetch.SetRate(*rate)
 	fetch.MaxRequests = *maxReq
+	if len(denyPath) > 0 {
+		fetch.DenyPath = rules.DeniedPath
+	}
 	to := time.Duration(*timeout * float64(time.Second))
 	sender, err := fuzz.NewSender(fuzz.HTTPOptions{Timeout: to, Threads: *threads, Follow: *follow, Allow: rules.Allows,
 		Proxy: *proxy, ReplayProxy: *replayProxy, IgnoreBody: *ignoreBody, Raw: *raw, SNI: *sni, HTTP2: *http2,
@@ -356,7 +366,7 @@ func cmdFuzz(args []string) error {
 		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads, Sender: sender,
 		Calibrate: calibrate, CalKeyword: *ack, CalGroups: calGroups, Recursion: *recursion, Depth: *depth, Strategy: *strategy,
 		MaxTimeJob: time.Duration(*maxtimeJob * float64(time.Second)), DelayMin: dmin, DelayMax: dmax,
-		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OpenHeaders: openHeaders, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
+		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, DenyPath: rules.DeniedPath, OpenHeaders: openHeaders, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
 		Progress: new(fuzz.Progress),
 	}
 	cfg.Skip, cfg.SkipTotal = takeFuzzSkip(tmpl)
@@ -499,6 +509,9 @@ func cmdFuzz(args []string) error {
 	}
 	if st.OutOfScope > 0 {
 		rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d inputs", st.OutOfScope), Reason: "their host is outside the scope"})
+	}
+	for _, rule := range slices.Sorted(maps.Keys(st.Denied)) {
+		rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d inputs, the first %s", st.Denied[rule], st.DeniedURL[rule]), Reason: fetch.DenyReason(rule)})
 	}
 	if len(st.Filters) > 0 {
 		rep.Notes = append(rep.Notes, "auto-calibration filtered out answers with "+strings.Join(st.Filters, ", "))

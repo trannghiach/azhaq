@@ -105,6 +105,12 @@ func (c *Collector) Skip(seed types.Seed) bool {
 
 func (c *Collector) Outputs() []string { return []string{"application"} }
 
+// Forget lets the answer of raw be reported again (catalog.Forgetter).
+func (c *Collector) Forget(raw string) {
+	c.emitted.Delete(raw)
+	c.ownURL.Delete(raw)
+}
+
 func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Observation) error) (types.RunMeta, error) {
 	groups := c.targets(seed)
 	if seed.Type == types.TypeURL && len(groups) == 0 {

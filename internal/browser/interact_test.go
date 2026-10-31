@@ -13,32 +13,27 @@ import (
 	"github.com/trannghiach/azhaq/internal/fetch"
 )
 
-func TestRiskyCandidatesAreNotClicked(t *testing.T) {
-	changing := func(u string) string {
-		if u == "/items/remove?id=1" {
-			return "remove"
-		}
-		return ""
-	}
+// Only what is not a page of the site is left alone, whatever its words say.
+func TestOnlyDownloadsAndNonPageLinksAreLeftAlone(t *testing.T) {
 	for _, c := range []candidate{
-		{Text: "Log out"}, {Text: "Sign Out"}, {Text: "Delete all"}, {Text: "Reset password"},
-		{Text: "Go", Href: "/logout"}, {Text: "x", Href: "mailto:a@b.c"}, {Text: "x", Href: "javascript:void(0)"},
-		{Text: "pdf", Download: true}, {Text: "x", Href: "/items/remove?id=1"},
+		{Text: "x", Href: "mailto:a@b.c"}, {Text: "x", Href: "javascript:void(0)"}, {Text: "x", Href: "tel:1"},
+		{Text: "pdf", Download: true},
 	} {
-		if !skipCandidate(c, changing) {
+		if !skipCandidate(c) {
 			t.Errorf("%+v would be clicked", c)
 		}
 	}
-	for _, c := range []candidate{{Text: "Reports"}, {Text: "Inbox", Href: "/inbox"}, {Text: "Save"}, {Text: "", Tag: "button"}} {
-		if skipCandidate(c, changing) {
+	for _, c := range []candidate{{Text: "Reports"}, {Text: "Inbox", Href: "/inbox"}, {Text: "Save"}, {Text: "", Tag: "button"},
+		{Text: "Log out", Href: "/logout"}, {Text: "Delete all"}, {Text: "x", Href: "/items/remove?id=1"}} {
+		if skipCandidate(c) {
 			t.Errorf("%+v is left alone", c)
 		}
 	}
 }
 
-// Clicking finds what only a click brings, and sends no write: the
-// button that deletes and the link that logs out are not clicked, and the
-// write the Save button sends is refused.
+// Clicking finds what only a click brings, and sends no write: the GET a
+// "Log out" click makes is requested like any other, and the writes the
+// Delete and Save buttons send are refused by their method and mapped.
 func TestInteractClicksAndSendsNoWrite(t *testing.T) {
 	b := startChrome(t)
 	b.Interact = 8
@@ -70,7 +65,7 @@ func TestInteractClicksAndSendsNoWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(srv.got(), " ")
-	if !strings.Contains(got, "/api/reports") || strings.Contains(got, "/api/bye") || strings.Contains(got, "/api/delete-all") {
+	if !strings.Contains(got, "/api/reports") || !strings.Contains(got, "/api/bye") || strings.Contains(got, "/api/delete-all") {
 		t.Errorf("requests %q", got)
 	}
 	mu.Lock()
@@ -78,7 +73,7 @@ func TestInteractClicksAndSendsNoWrite(t *testing.T) {
 	if len(writes) != 0 {
 		t.Errorf("writes sent: %v", writes)
 	}
-	if p.Interaction.Clicks < 2 || p.Interaction.Skipped < 2 || !slices.ContainsFunc(p.Interaction.Routes, func(r string) bool { return strings.HasSuffix(r, "/reports") }) {
+	if p.Interaction.Clicks < 3 || !slices.ContainsFunc(p.Interaction.Routes, func(r string) bool { return strings.HasSuffix(r, "/reports") }) {
 		t.Errorf("%+v", p.Interaction)
 	}
 	if len(p.Writes) == 0 {

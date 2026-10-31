@@ -418,10 +418,6 @@ func (c *Collector) postForm(ctx context.Context, page string, f webextract.Form
 		fetch.Note("a POST form to " + f.Action + " was not submitted: it uploads a file or has nothing to send")
 		return nil
 	}
-	if w := webextract.StateChanging(f.Action); w != "" {
-		fetch.Note("a POST form to " + f.Action + " was not submitted: its address looks like it would " + w + " something")
-		return nil
-	}
 	if _, dup := c.submitted.LoadOrStore(key, true); dup {
 		return nil
 	}

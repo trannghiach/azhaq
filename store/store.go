@@ -1118,3 +1118,30 @@ func (s *Store) LoadSeeds() ([]types.Seed, error) {
 	}
 	return seeds, nil
 }
+
+// Unsee forgets that this run did the pieces of work with these keys, so
+// that they are done again (a page asked again after a new sign-in).
+func (s *Store) Unsee(keys []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range keys {
+		if _, err := s.q().Exec(`DELETE FROM idempotency WHERE key = ?`, s.runID+k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DropObservations deletes what the collectors reported of an entity in
+// the current run: answers a lost session made wrong, before they are
+// asked again.
+func (s *Store) DropObservations(entityID string, collectors []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range collectors {
+		if _, err := s.q().Exec(`DELETE FROM observations WHERE entity_id = ? AND run_id = ? AND collector = ?`, entityID, s.runID, c); err != nil {
+			return err
+		}
+	}
+	return nil
+}

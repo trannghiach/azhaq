@@ -66,6 +66,9 @@ type Config struct {
 	// them, with no scope rule, so what they name is what was authorized.
 	Allow       func(host string) bool
 	OpenHeaders map[string]bool
+	// DenyPath, when set, returns the user's -deny-path rule a request's
+	// URL matches, or "": that request is not sent.
+	DenyPath func(raw string) string
 	// OriginTrips unanswered requests in a row stop the run: the target is
 	// down. Zero: never. With TripOnAnyError every error counts, not only a
 	// missing answer (-se).
@@ -117,19 +120,21 @@ type Result struct {
 
 // Stats says how the run went.
 type Stats struct {
-	Requests   int      // sent, retries and calibration included
-	Matches    int      // results given
-	Errors     int      // requests that failed, after one retry
-	OutOfScope int      // inputs not sent for their host
-	Jobs       int      // the start and each directory recursion followed
-	Spent      bool     // the request budget ran out
-	Down       []string // origins that stopped answering
-	Filters    []string // what calibration added, "size 1234"
-	StoppedBy  string   // a guard of the run that ended it (-sf, -sa)
-	Replayed   int      // matches sent through the replay proxy
-	ReplayErr  int      // replays that failed
-	Timeouts   []string // requests that timed out while -mt or -ft is on: their inputs
-	CutJobs    []string // jobs ended by -maxtime-job, with how far each got
+	Requests   int               // sent, retries and calibration included
+	Matches    int               // results given
+	Errors     int               // requests that failed, after one retry
+	OutOfScope int               // inputs not sent for their host
+	Denied     map[string]int    // inputs not sent for a -deny-path rule, by rule
+	DeniedURL  map[string]string // the first URL each rule kept out
+	Jobs       int               // the start and each directory recursion followed
+	Spent      bool              // the request budget ran out
+	Down       []string          // origins that stopped answering
+	Filters    []string          // what calibration added, "size 1234"
+	StoppedBy  string            // a guard of the run that ended it (-sf, -sa)
+	Replayed   int               // matches sent through the replay proxy
+	ReplayErr  int               // replays that failed
+	Timeouts   []string          // requests that timed out while -mt or -ft is on: their inputs
+	CutJobs    []string          // jobs ended by -maxtime-job, with how far each got
 	Notes      []string
 	// Done: inputs of the first request answered in a row from Start, so a
 	// stopped run goes on from Start+Done. Queued: recursions not started.
@@ -425,6 +430,9 @@ func (e *engine) task(ctx context.Context, j job, tmpl Template, input map[strin
 		e.count(func(s *Stats) { s.OutOfScope++ })
 		return true
 	}
+	if e.denied(&req) {
+		return true
+	}
 	resp, err := e.send(ctx, &req)
 	if err != nil {
 		return !errors.Is(err, neterr.ErrBudget) && ctx.Err() == nil
@@ -679,7 +687,7 @@ func (e *engine) calibrate(ctx context.Context, t Template, input map[string]str
 			}
 			in[e.cfg.CalKeyword] = s
 			req := t.Expand(in)
-			if !e.inScope(&req) {
+			if !e.inScope(&req) || e.denied(&req) {
 				continue
 			}
 			resp, err := e.send(ctx, &req)
@@ -747,6 +755,26 @@ func (e *engine) calibrateFilters(rs []*Response, key string) {
 	e.count(func(s *Stats) {
 		s.Notes = append(s.Notes, "auto-calibration: answers to names that cannot exist share no size, word count or line count, so a group of them set no filter")
 	})
+}
+
+// denied says whether a -deny-path rule keeps req out, and counts it.
+func (e *engine) denied(req *Request) bool {
+	if e.cfg.DenyPath == nil {
+		return false
+	}
+	rule := e.cfg.DenyPath(req.URL)
+	if rule == "" {
+		return false
+	}
+	e.count(func(s *Stats) {
+		if s.Denied == nil {
+			s.Denied, s.DeniedURL = map[string]int{}, map[string]string{}
+		}
+		if s.Denied[rule]++; s.DeniedURL[rule] == "" {
+			s.DeniedURL[rule] = req.URL
+		}
+	})
+	return true
 }
 
 // inScope says whether req may be sent: its URL's host and every host a

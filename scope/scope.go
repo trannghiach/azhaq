@@ -2,8 +2,11 @@
 package scope
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
+	"net/url"
+	"regexp"
 	"strings"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -17,11 +20,77 @@ import (
 //	*.example.com    the same (bug bounty scopes write wildcards this way)
 //	=api.example.com that host only
 //	10.0.0.0/8       addresses in the range; 192.0.2.7 is one address
+//
+// DenyPath holds the user's own rules for paths (-deny-path): a regular
+// expression matched against a URL's path, and against path and query
+// together. A URL it matches is never requested. azhaq adds none itself.
 type Rules struct {
-	Allow []string
-	Deny  []string
+	Allow    []string
+	Deny     []string
+	DenyPath []string
 
 	idx *index // from Compile: lookups that do not read every rule
+}
+
+// CompilePaths checks the -deny-path expressions, so a bad one is a usage
+// error before any request goes out.
+func CompilePaths(patterns []string) error {
+	for _, p := range patterns {
+		if _, err := regexp.Compile(p); err != nil {
+			return fmt.Errorf("-deny-path %q is not a regular expression: %v", p, err)
+		}
+	}
+	return nil
+}
+
+// DeniedPath is the -deny-path rule that keeps raw out, as it was written,
+// or "" when none does. It reads the path as sent and decoded, with and
+// without the query, so an escaped dot or slash does not step round a rule.
+func (r Rules) DeniedPath(raw string) string {
+	if len(r.DenyPath) == 0 {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	forms := []string{u.Path}
+	if e := u.EscapedPath(); e != u.Path {
+		forms = append(forms, e)
+	}
+	if u.RawQuery != "" {
+		for _, f := range forms[:len(forms):len(forms)] {
+			forms = append(forms, f+"?"+u.RawQuery)
+		}
+	}
+	paths := r.paths()
+	for i, re := range paths {
+		if re == nil {
+			continue
+		}
+		for _, f := range forms {
+			if re.MatchString(f) {
+				return r.DenyPath[i]
+			}
+		}
+	}
+	return ""
+}
+
+// paths are the compiled -deny-path expressions, nil where one does not compile.
+func (r Rules) paths() []*regexp.Regexp {
+	if r.idx != nil && len(r.idx.paths) == len(r.DenyPath) {
+		return r.idx.paths
+	}
+	return compilePaths(r.DenyPath)
+}
+
+func compilePaths(patterns []string) []*regexp.Regexp {
+	out := make([]*regexp.Regexp, len(patterns))
+	for i, p := range patterns {
+		out[i], _ = regexp.Compile(p)
+	}
+	return out
 }
 
 func (r Rules) Empty() bool {
@@ -188,11 +257,14 @@ func allDigits(s string) bool {
 // targets, each one an allow rule, asks about each host in constant time
 // instead of reading every rule. Rules built by hand work as before.
 func (r Rules) Compile() Rules {
-	r.idx = &index{allow: compileSet(r.Allow), deny: compileSet(r.Deny)}
+	r.idx = &index{allow: compileSet(r.Allow), deny: compileSet(r.Deny), paths: compilePaths(r.DenyPath)}
 	return r
 }
 
-type index struct{ allow, deny ruleSet }
+type index struct {
+	allow, deny ruleSet
+	paths       []*regexp.Regexp
+}
 
 // ruleSet holds rules by kind, to answer hostMatch for a host without
 // reading them all.

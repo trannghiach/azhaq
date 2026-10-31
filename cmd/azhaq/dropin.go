@@ -134,7 +134,7 @@ var flagName = regexp.MustCompile(`\B-[a-z][a-z0-9-]*[a-z0-9]`)
 
 // targetFlags are the flags of every command that sends requests to
 // targets: scope, pace, budget, time, session.
-var targetFlags = []string{"scope", "program", "allow", "deny", "rate", "max-requests", "timeout", "H=header", "cookie", "v", "ledger", "kill-file"}
+var targetFlags = []string{"scope", "program", "allow", "deny", "deny-path", "rate", "max-requests", "timeout", "H=header", "cookie", "v", "ledger", "kill-file"}
 
 // inputs gathers targets from repeatable flags, a file ("-" for stdin),
 // or stdin when it is a pipe and nothing else was given.
@@ -678,7 +678,7 @@ func cmdDirs(args []string) error {
 	list := fs.String("l", "", "file of services (- for stdin)")
 	words := fs.String("w", "", "wordlist (default: SecLists' common.txt, built in: "+strconv.Itoa(len(dirscol.DefaultWords()))+" words)")
 	specs := []string{"e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate",
-		"H=header", "cookie", "all-gets", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "ledger", "kill-file"}
+		"H=header", "cookie", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "deny-path", "ledger", "kill-file"}
 	for _, m := range dirsMatchers {
 		specs = append(specs, m.flag+"=dirs-"+m.flag)
 	}

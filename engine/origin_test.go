@@ -21,7 +21,7 @@ import (
 
 // An origin that accepts connections and never answers gets
 // fetch.OriginTrips requests, no more: the rest of its work ends capped,
-// listed as left alone with the reason, and waits for azhaq resume.
+// listed as skipped with the reason, and waits for azhaq resume.
 func TestDeadOriginStopsTheRun(t *testing.T) {
 	fetch.Reset()
 	t.Cleanup(fetch.Reset)
@@ -76,7 +76,7 @@ func TestDeadOriginStopsTheRun(t *testing.T) {
 		}
 	}
 	if len(left) != len(seeds)-fetch.OriginTrips {
-		t.Errorf("left alone for the origin: %v", left)
+		t.Errorf("not requested for the origin: %v", left)
 	}
 	failed := 0
 	for _, f := range engine.Failures(ents, obs) {

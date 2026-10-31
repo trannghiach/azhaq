@@ -79,6 +79,43 @@ var Extra http.Header
 // requested, not even as a redirect target.
 var Allow func(host string) bool
 
+// DenyPath, when set, is the user's own rule for paths (-deny-path): it
+// returns the rule a URL's path matches, or "". Such a URL is never
+// requested: not by a collector, not as a redirect, not by Chrome.
+var DenyPath func(raw string) string
+
+// OnDenied, when set, hears of each request DenyPath kept out, so the run
+// can list it as not requested.
+var OnDenied func(raw, rule string)
+
+// DeniedBy is the -deny-path rule that keeps raw out, or "".
+func DeniedBy(raw string) string {
+	if DenyPath == nil {
+		return ""
+	}
+	return DenyPath(raw)
+}
+
+// DenyReason is how a rule is named in a list of what was not requested.
+func DenyReason(rule string) string { return "-deny-path " + rule }
+
+// CheckDenied is nil for a URL no -deny-path rule keeps out, else the
+// error to refuse it with; it tells OnDenied. Nothing has been spent or sent.
+func CheckDenied(raw string) error { return denied(raw) }
+
+func denied(raw string) error {
+	rule := DeniedBy(raw)
+	if rule == "" {
+		return nil
+	}
+	if f := OnDenied; f != nil {
+		f(raw, rule)
+	} else {
+		Note(raw + " was not requested: " + DenyReason(rule))
+	}
+	return &neterr.Denied{Rule: rule}
+}
+
 // resolver, when set, gives the addresses to connect to for a name: the
 // run's own DNS answers, so a service is reached at the address its
 // names were seen to resolve to. Unset, or no answer: the system
@@ -228,6 +265,9 @@ func Reset() {
 	hostSem = map[string]chan struct{}{}
 	Extra = nil
 	Allow = nil
+	DenyPath = nil
+	OnDenied = nil
+	resetSession()
 	SetResolver(nil)
 	Keep = nil
 	Memos = nil
@@ -606,11 +646,11 @@ func Do(ctx context.Context, c *http.Client, raw string) (Result, bool, error) {
 // for this request only): its answer is kept apart from the GET's.
 func DoReq(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, bool, error) {
 	key := rq.Key(raw)
-	if EndsSession(raw) {
-		return Result{}, false, neterr.ErrEndsSession
-	}
 	if !inScope(raw) {
 		return Result{}, false, neterr.ErrOutOfScope
+	}
+	if err := denied(raw); err != nil {
+		return Result{}, false, err
 	}
 	cacheMu.Lock()
 	if e, ok := cache[key]; ok {
@@ -642,7 +682,7 @@ func DoReq(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, bo
 	inflight[key] = wait
 	cacheMu.Unlock()
 
-	if Keep != nil {
+	if _, again := redoKeys.LoadAndDelete(key); Keep != nil && !again {
 		if res, ok := Keep.Load(key); ok {
 			// Asked before this run was stopped: not sent, not counted.
 			cacheMu.Lock()
@@ -705,6 +745,9 @@ func DoReq(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, bo
 	delete(inflight, key)
 	close(wait)
 	cacheMu.Unlock()
+	if err == nil {
+		sessionSaw(raw, res)
+	}
 	if err == nil && Tap != nil {
 		Tap(raw, res)
 	}
@@ -842,7 +885,7 @@ func do(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, error
 			break
 		}
 		next, err := resp.Request.URL.Parse(loc)
-		if err != nil || !inScope(next.String()) || !followable(raw, next.String()) {
+		if err != nil || !inScope(next.String()) || !followable(raw, next.String()) || denied(next.String()) != nil {
 			break // the hop is recorded with its Location; the target is not requested
 		}
 		if RespectHSTS && next.Scheme == "http" && resp.Header.Get("Strict-Transport-Security") != "" {
@@ -924,11 +967,13 @@ func ApplySweepHeaders(req *http.Request) {
 }
 
 func applyHeaders(req *http.Request, defaultAccept bool) {
+	extraMu.RLock()
 	for k, vs := range Extra {
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}
 	}
+	extraMu.RUnlock()
 	// Go sends req.Host, not a Host header: -H 'Host: x' sets it.
 	if h := req.Header.Get("Host"); h != "" {
 		req.Host = h
@@ -1107,13 +1152,12 @@ func inScope(raw string) bool {
 	return err != nil || u.Hostname() == "" || Allow(u.Hostname())
 }
 
-var logoutWords = []string{"logout", "log-out", "log_out", "signout", "sign-out", "sign_out", "logoff"}
-
-// EndsSession: a run with a session never requests a logout URL.
 // HasSession says whether the run sends a session: a cookie, an
 // Authorization header, or a header whose name says it carries a token
 // or a key.
 func HasSession() bool {
+	extraMu.RLock()
+	defer extraMu.RUnlock()
 	for k, vs := range Extra {
 		if len(vs) > 0 && SessionHeader(k, vs[0]) {
 			return true
@@ -1131,27 +1175,6 @@ func SessionHeader(k, v string) bool {
 	k = strings.ToLower(k)
 	for _, w := range []string{"cookie", "auth", "token", "session", "key", "secret", "csrf", "xsrf"} {
 		if strings.Contains(k, w) {
-			return true
-		}
-	}
-	return false
-}
-
-func EndsSession(raw string) bool { return EndsSessionWith(raw, HasSession()) }
-
-// EndsSessionWith is EndsSession for a request that carries a session of
-// its own (session) besides the run's.
-func EndsSessionWith(raw string, session bool) bool {
-	if !session {
-		return false
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return false
-	}
-	p := strings.ToLower(u.Path)
-	for _, w := range logoutWords {
-		if strings.Contains(p, w) {
 			return true
 		}
 	}

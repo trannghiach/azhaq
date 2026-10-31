@@ -9,12 +9,14 @@ import (
 	"net/http/httptest"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -87,15 +89,17 @@ func TestSweepCalibratesAndRecurses(t *testing.T) {
 	}
 }
 
-func TestSweepKeepsSessionAlive(t *testing.T) {
+// No word is held back, with a session or without: what a GET does on the
+// server is not told by its name.
+func TestSweepHoldsNoWordBackWithASession(t *testing.T) {
 	fetch.Reset()
 	defer fetch.Reset()
 	fetch.Extra = http.Header{"Cookie": {"session=1"}}
 	srv := spa(t)
 	c := New(srv.Client(), Options{Words: []string{"logout", "admin"}, Rate: 1000})
 	got, _ := sweepOf(t, c, srv.URL+"/")
-	if strings.Join(got, " ") != "/admin" {
-		t.Errorf("with a session, logout must not be requested: %v", got)
+	if strings.Join(got, " ") != "/admin /logout" {
+		t.Errorf("with a session, every word is requested: %v", got)
 	}
 }
 
@@ -405,5 +409,44 @@ func TestCalibrationAsksItsGuessesTogether(t *testing.T) {
 		if widest.Load() != int64(tc.want) {
 			t.Errorf("-t %d: %d guesses in flight at most, want %d", tc.threads, widest.Load(), tc.want)
 		}
+	}
+}
+
+// The user's -deny-path rule holds back a word, with or without a
+// session, and says so: the word is not sent and is listed with the rule.
+func TestSweepDenyPathHoldsAWordBackAndListsIt(t *testing.T) {
+	fetch.Reset()
+	defer fetch.Reset()
+	var asked sync.Map
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked.Store(r.URL.Path, true)
+		if r.URL.Path == "/admin" {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	fetch.DenyPath = scope.Rules{DenyPath: []string{`^/logout`}}.Compile().DeniedPath
+	c := New(srv.Client(), Options{Words: []string{"logout", "admin"}, Rate: 1000, NoCalibration: true})
+	var skipped map[string]any
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {
+		if o.Kind == "skipped" {
+			_ = json.Unmarshal(o.Payload, &skipped)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := asked.Load("/logout"); ok {
+		t.Error("/logout was requested")
+	}
+	if _, ok := asked.Load("/admin"); !ok {
+		t.Error("/admin was not requested")
+	}
+	urls, _ := skipped["urls"].([]any)
+	if skipped["skipped"] != "-deny-path ^/logout" || len(urls) != 1 || urls[0] != srv.URL+"/logout" {
+		t.Errorf("skipped %v", skipped)
 	}
 }

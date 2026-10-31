@@ -80,9 +80,6 @@ func TestScoringTable(t *testing.T) {
 		{"upload form", urlRow(o+"/up", "page", "visited", 200, func(r *engine.MapEntry) {
 			r.Forms = []engine.MapForm{{Method: "POST", Action: o + "/up", Files: []string{"f"}}}
 		}), "upload", 35},
-		{"state-changing GET left alone", urlRow(o+"/wipe", "page", "skipped", 0, func(r *engine.MapEntry) {
-			r.Proof = "skipped=looks like a GET would change something word=wipe"
-		}), "state-change", 30},
 		{"password in a GET form", urlRow(o+"/pw", "page", "visited", 200, func(r *engine.MapEntry) {
 			r.Forms = []engine.MapForm{{Method: "GET", Action: o + "/pw", Fields: []string{"password_new"}}}
 		}), "password-in-url", 30 + weights["input"]},

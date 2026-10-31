@@ -246,8 +246,9 @@ func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths
 	default:
 		p.Sends = []string{"GET requests to the targets and what they lead to inside the scope"}
 	}
-	if !b.AllGets {
-		p.Sends = append(p.Sends, "found URLs that look like a GET would change something (logout, delete, save, reset…) are listed, not requested (-all-gets to request them)")
+	p.Sends = append(p.Sends, "azhaq cannot know what a GET does on the server: every URL found in scope is requested, and writes (POST, PUT, PATCH, DELETE) only with their flags")
+	for _, rule := range b.Scope.DenyPath {
+		p.Sends = append(p.Sends, "never requested, by any collector or Chrome: a URL whose path or query matches -deny-path "+rule)
 	}
 	switch {
 	case send.chrome && send.chromeWrites:

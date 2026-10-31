@@ -52,6 +52,10 @@ var rolesHostRules scope.Rules
 // (-har, -burp, -allow of roles); -deny and a scope's out rules always hold.
 func rolesScope(runArgs []string, sc histScope, allows []string) (scope.Rules, error) {
 	allow, deny := runFlagValues(runArgs, "allow"), runFlagValues(runArgs, "deny")
+	denyPath := runFlagValues(runArgs, "deny-path")
+	if err := scope.CompilePaths(denyPath); err != nil {
+		return scope.Rules{}, usagef("%v", err)
+	}
 	if specs := runFlagValues(runArgs, "scope"); len(specs) > 0 {
 		var program string
 		if ps := runFlagValues(runArgs, "program"); len(ps) > 0 {
@@ -70,7 +74,15 @@ func rolesScope(runArgs []string, sc histScope, allows []string) (scope.Rules, e
 	for _, a := range allows {
 		allow = append(allow, strings.TrimSpace(a))
 	}
-	return scope.Rules{Allow: allow, Deny: deny}.Compile(), nil
+	return scope.Rules{Allow: allow, Deny: deny, DenyPath: denyPath}.Compile(), nil
+}
+
+// holdDeny keeps the run's -deny-path rules over a replay, which resets
+// fetch's state before it sets its own scope.
+func holdDeny() {
+	if len(rolesHostRules.DenyPath) > 0 {
+		fetch.DenyPath = rolesHostRules.DeniedPath
+	}
 }
 
 // roleRow is one endpoint across the sessions.
@@ -149,10 +161,10 @@ func cmdRoles(args []string) error {
 	dir := fs.String("dir", "", "directory for one database per role (default: azhaq-roles-<time>)")
 	jsonl := fs.Bool("jsonl", false, "one JSON object per endpoint (same as -json)")
 	asJSON := fs.Bool("json", false, "one JSON object per endpoint, and only the summary, as JSON, on stderr")
-	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session, and each role's objects with the others (GETs that change nothing only)")
+	replay := fs.Bool("replay", true, "ask every endpoint one session reached with every other session, and each role's objects with the others (reads only, by method: GET; a write is replayed only with -replay-writes)")
 	replayMax := fs.Int("replay-max", 2000, "requests the replay may send, over all roles")
 	all := fs.Bool("all", false, "also list endpoints that answer every role the same, or with each role's own data")
-	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins, never a logout), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
+	writesSpec := fs.String("replay-writes", "", "also replay writes with every other role's session: post,put,patch (add delete to delete objects). They change data on the target and go only to the -url hosts, or the -allow/-scope given in the run options. The writes are each role's own from -har or -burp (sent only to the history's origins), and the PUT and PATCH (an empty object, the owner's first: a server that replaces on PUT may clear the owner's own object) and DELETE the runs' routes take, on each role's objects. A cross-role write is claimed only when the owner's object, read as the owner before and after, changed the way the write asks")
 	dryWrites := fs.Bool("dry-writes", false, "with -replay-writes: list the writes it would send, with whose and why, and send none")
 	writesCanary := fs.Bool("replay-writes-canary", false, "with -replay-writes: change one short string field of a PUT or PATCH body to a unique value for each role it is replayed with, before it is sent, so a write that would otherwise replay the owner's own value back (no change to read back) can still be proved; never on by default, since it changes data, and restoring the field afterward is not done")
 	fs.Var(&hars, "har", "NAME=FILE: the requests account NAME sent, as a browser or proxy saved them (HAR). Every GET is a page the role reached, its Authorization and Cookie headers of the latest request are its session (unless -role gives headers), its writes are replayed with -replay-writes. Without -- run options this is the whole input: no crawl")
@@ -491,6 +503,7 @@ func cmdRoles(args []string) error {
 		fetch.Reset()
 		fetch.SetRate(rate)
 		fetch.ProxyURL = rolesProxy
+		holdDeny()
 		n, err := askControls(roles, rows, own, pages, refusalRE, max(0, *replayMax-replayed))
 		fetch.Reset()
 		rep.Requests += int64(n)
@@ -814,7 +827,7 @@ func noteCap(rep *report, prefix string, err error) {
 
 // replayAll asks each URL some role reached, and each object URL made
 // from the roles' answers, with every role that has no answer for it,
-// through that role's session. Only GETs that change nothing, on the
+// through that role's session. Only GETs (by method), on the
 // run's own hosts, are sent. URLs go by rank (objects given with -id,
 // the roles' own objects, what the runs reached, other objects), then
 // name, and one is taken only while the budget holds every role's
@@ -982,10 +995,9 @@ func hostSet(hosts []string) map[string]bool {
 	return own
 }
 
-// replayable: a page or API route on the run's hosts, asked with GET and
-// a name that does not say it does something.
+// replayable: a page or API route on the run's hosts, asked with GET.
 func replayable(u string, own map[string]bool) bool {
-	if strings.Contains(u, "{") || !own[normalize.HostFromURL(u)] || webextract.StateChanging(u) != "" {
+	if strings.Contains(u, "{") || !own[normalize.HostFromURL(u)] {
 		return false
 	}
 	switch webextract.ClassifyURL(u) {
@@ -1363,8 +1375,8 @@ func cmdHeaders(r role) ([]string, error) {
 // the list items that name their owner, and every answer the run kept
 // without its body (a URL the paths collector found keeps its status
 // only), so that no answer is compared by its status alone. A JSON answer
-// that is not the one the run stored is left as stored. Only GETs that
-// change nothing, on the run's own hosts, are asked.
+// that is not the one the run stored is left as stored. Only GETs
+// (by method), on the run's own hosts, are asked.
 func readBodies(got map[string]answer, raw map[string]string, seen runSeen, own map[string]bool) {
 	ctx := context.Background()
 	client := fetch.Client(nil)

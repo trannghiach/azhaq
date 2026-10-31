@@ -55,9 +55,6 @@ type Options struct {
 	Chunk   int     // names per request at most; default 500 (arjun: 250); fewer where the server refuses a long query
 	PerHost int     // pages searched per host; default 20
 	Rate    float64 // requests per second per host; 0: no limit, as arjun
-	// AllGets also sends, with a session, names that read like an action
-	// (delete, reset…); by default they are left out.
-	AllGets bool
 	// Backoff are the waits before asking again after a 429, 418 or 503;
 	// a Retry-After longer than one is used instead. Default 1, 2 and 4 s.
 	Backoff []time.Duration
@@ -258,7 +255,7 @@ func (s *search) give(page string, emit func(types.Observation) error, found map
 	return types.RunMeta{Status: types.StatusOK, EmitCount: 1}, nil
 }
 
-// skipped says the page was left alone and why.
+// skipped says the page was not searched and why.
 func (s *search) skipped(emit func(types.Observation) error, page string) error {
 	why := s.skip
 	if why == "" {
@@ -268,8 +265,8 @@ func (s *search) skipped(emit func(types.Observation) error, page string) error 
 }
 
 // noted emits a page's row with no parameters and a note for the summary: a
-// page left alone is said, not dropped. (The summary's list of requests
-// left alone omits pages the run asked, so a note carries it.)
+// page not searched is said, not dropped. (The summary's list of requests
+// not sent omits pages the run asked, so a note carries it.)
 func noted(emit func(types.Observation) error, page, note string) error {
 	payload, _ := json.Marshal(map[string]any{"url": page, "requests": 0, "params": []string{}, "note": note})
 	return emit(types.Observation{Collector: Name, Source: page, Kind: "params", Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC()})

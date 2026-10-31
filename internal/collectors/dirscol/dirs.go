@@ -26,7 +26,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
-	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -66,10 +65,6 @@ type Options struct {
 	// -mc. A Set with filters but no matcher reports nothing: give it the
 	// default status matcher (DefaultStatus) first.
 	Set *fuzz.Set
-	// AllGets also sends, with a session, the words that read like an
-	// action (delete, reset, logout…); by default they are listed, not
-	// requested.
-	AllGets bool
 	// NoCalibration skips the guesses at paths that cannot exist: the user
 	// set the filters by hand (-fc -fs -fw -fl -fr), as in ffuf without -ac.
 	NoCalibration bool
@@ -192,7 +187,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	meta := types.RunMeta{Status: types.StatusOK}
 	queue := []dirLevel{{url: base, depth: 1}}
 	var all []hit
-	var skipped []string // guesses not sent: nobody saw them exist, so they are no URLs of the map
+	var skipped []heldURL // guesses not sent: nobody saw them exist, so they are no URLs of the map
 	requests, filtered, failed, limited := 0, 0, 0, 0
 	// Each hit is kept as it is found, as ffuf prints it: a run stopped by
 	// Ctrl-C or the budget keeps what it found so far. Hits are handed over
@@ -270,8 +265,16 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		return meta, err
 	}
 	meta.EmitCount++
-	if len(skipped) > 0 {
-		raw, _ := json.Marshal(map[string]any{"skipped": "with a session, a GET there could change something", "urls": skipped})
+	byRule := map[string][]string{}
+	var rules []string
+	for _, h := range skipped {
+		if _, ok := byRule[h.rule]; !ok {
+			rules = append(rules, h.rule)
+		}
+		byRule[h.rule] = append(byRule[h.rule], h.url)
+	}
+	for _, rule := range rules {
+		raw, _ := json.Marshal(map[string]any{"skipped": fetch.DenyReason(rule), "urls": byRule[rule]})
 		if err := emit(types.Observation{Collector: Name, Source: base, Kind: "skipped", Payload: raw, Confidence: 0.9, ObservedAt: time.Now().UTC()}); err != nil {
 			return meta, err
 		}
@@ -279,6 +282,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	return meta, nil
 }
+
+// heldURL is a word's URL a -deny-path rule keeps out, and the rule.
+type heldURL struct{ url, rule string }
 
 type dirLevel struct {
 	url   string
@@ -313,11 +319,11 @@ const (
 
 // sweep guesses every word (and word.ext) under dir, handing the hits to
 // found in batches from one goroutine, so no request waits for a write;
-// held lists the URLs not sent because, with a session, a GET there could
-// change something; spent says the request budget ran out before it was
+// held lists the URLs not sent because a -deny-path rule keeps them out;
+// spent says the request budget ran out before it was
 // through; limited counts the answers that were 429, which no default
 // matcher keeps; err is what found returned.
-func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) error) (_ []hit, _ int, _ int, failed, limited int, held []string, spent bool, err error) {
+func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) error) (_ []hit, _ int, _ int, failed, limited int, held []heldURL, spent bool, err error) {
 	host := schemeHost(dir)
 	cal := calibration{echo: map[int]bool{}, vary: map[int]bool{}}
 	if !c.Opts.NoCalibration {
@@ -326,7 +332,6 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			return nil, 0, 0, 0, 0, nil, false, dead
 		}
 	}
-	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
 	for _, w := range c.Opts.Words {
 		// An empty word asks for the base URL itself, as in ffuf.
@@ -340,8 +345,8 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			words = append(words, w+"."+strings.TrimPrefix(ext, "."))
 		}
 		for _, t := range words {
-			if careful && (webextract.StateChanging(dir+escapeWord(t)) != "" || fetch.EndsSession(dir+escapeWord(t))) {
-				held = append(held, dir+escapeWord(t))
+			if rule := fetch.DeniedBy(dir + escapeWord(t)); rule != "" {
+				held = append(held, heldURL{dir + escapeWord(t), rule})
 				continue
 			}
 			targets = append(targets, t)
@@ -389,7 +394,7 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			out.Store(true)
 		}
 		if err != nil {
-			if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrEndsSession) {
+			if !out.Load() && ctx.Err() == nil && !errors.Is(err, neterr.ErrDenied) {
 				nfailed.Add(1)
 			}
 			return err
@@ -420,7 +425,7 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 			}
 			err := ask(targets[first])
 			first++
-			if err == nil || errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrEndsSession) || ctx.Err() != nil {
+			if err == nil || errors.Is(err, neterr.ErrBudget) || errors.Is(err, neterr.ErrDenied) || ctx.Err() != nil {
 				lost = nil
 				break
 			}
@@ -493,9 +498,6 @@ type response struct {
 // get asks for target. probe, set for calibration, is the name asked: the
 // answer says whether its body repeats it.
 func (c *Collector) get(ctx context.Context, target, probe string) (response, error) {
-	if fetch.EndsSession(target) {
-		return response{}, neterr.ErrEndsSession
-	}
 	// A guess the run made before it was stopped is not sent again (not
 	// with a pattern: the memo holds no body).
 	memo := fetch.Memos != nil && !c.needBody
@@ -629,7 +631,7 @@ func (c *Collector) calibrate(ctx context.Context, dir, host string) (cal calibr
 			lost = nil
 			break
 		}
-		if lost == nil && !errors.Is(a.err, neterr.ErrBudget) && !errors.Is(a.err, neterr.ErrEndsSession) && ctx.Err() == nil {
+		if lost == nil && !errors.Is(a.err, neterr.ErrBudget) && !errors.Is(a.err, neterr.ErrDenied) && ctx.Err() == nil {
 			lost = a.err
 		}
 	}

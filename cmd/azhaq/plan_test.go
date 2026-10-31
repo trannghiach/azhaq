@@ -132,6 +132,12 @@ func TestPlanSendsNameWhatIsPlanned(t *testing.T) {
 	if s := joined(); !strings.HasPrefix(s, "GET requests only") {
 		t.Errorf("a plain run: %s", s)
 	}
+	if s := joined(); strings.Contains(s, "deny-path") || strings.Contains(s, "look like") || !strings.Contains(s, "azhaq cannot know what a GET does on the server") {
+		t.Errorf("a plain run holds back nothing by name:\n%s", s)
+	}
+	if s := joined("-deny-path", `^/admin/`, "-deny-path", `action=wipe`); !strings.Contains(s, "matches -deny-path ^/admin/") || !strings.Contains(s, "matches -deny-path action=wipe") {
+		t.Errorf("-deny-path:\n%s", s)
+	}
 	s := joined("-ports", "top-100")
 	for _, want := range []string{"TCP connects (full handshakes) to 100 ports of each address", "each open port is asked what it is", "one HEAD /"} {
 		if !strings.Contains(s, want) {

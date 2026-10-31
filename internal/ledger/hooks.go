@@ -66,6 +66,11 @@ func bodySum(req *http.Request) string {
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
+// Deny, when set, is asked about each request before it is sent: an error
+// holds it back (a -deny-path rule). Every client of the run sends through
+// Transport, so no collector steps round the rule.
+var Deny func(raw string) error
+
 // Unsent is called for a request Transport held back after it was counted
 // (fetch gives it back to the budget).
 var Unsent func()
@@ -118,6 +123,17 @@ func TCP(ctx context.Context, host, addr string) {
 type Transport struct{ Base http.RoundTripper }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if f := Deny; f != nil && req.URL != nil {
+		if err := f(req.URL.String()); err != nil {
+			if req.Body != nil {
+				req.Body.Close()
+			}
+			if Unsent != nil {
+				Unsent()
+			}
+			return nil, err
+		}
+	}
 	if l := Active(); l != nil && req.URL != nil && !Safe(req.Method) && l.refused(req.Method, req.URL.Redacted(), bodySum(req), false) {
 		if req.Body != nil {
 			req.Body.Close()

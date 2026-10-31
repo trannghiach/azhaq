@@ -9,10 +9,28 @@ import (
 	"syscall"
 )
 
-// ErrEndsSession is returned instead of requesting a URL that looks like
-// a logout while the run carries a session (-cookie or an Authorization
-// header): one GET there would log the rest of the run out.
-var ErrEndsSession = errors.New("not requested: it would end the session")
+// ErrDenied is returned instead of requesting a URL whose path a
+// -deny-path rule keeps out. Denied carries the rule.
+var ErrDenied = errors.New("not requested: -deny-path")
+
+// Denied is ErrDenied naming the rule that matched.
+type Denied struct{ Rule string }
+
+func (e *Denied) Error() string { return "not requested: -deny-path " + e.Rule }
+
+func (e *Denied) Is(target error) bool { return target == ErrDenied }
+
+// ErrSessionLost is what a signed-in run refuses its requests with when its
+// session ended and it cannot sign in again: it never goes on as an
+// anonymous run. SessionLost carries the message.
+var ErrSessionLost = errors.New("the session ended")
+
+// SessionLost is ErrSessionLost saying how the session ended.
+type SessionLost struct{ Msg string }
+
+func (e *SessionLost) Error() string { return e.Msg }
+
+func (e *SessionLost) Is(target error) bool { return target == ErrSessionLost }
 
 // ErrOutOfScope is returned instead of requesting a host the run's scope
 // (-allow, -deny, -scope) excludes.
@@ -63,7 +81,7 @@ func (e *OriginDown) Is(target error) bool { return target == ErrOriginDown }
 // Quiet errors are not failures of the run: a name that does not exist,
 // or a request Azhaq chose not to send.
 func Quiet(err error) bool {
-	return UnknownHost(err) || errors.Is(err, ErrEndsSession) || errors.Is(err, ErrOutOfScope) || errors.Is(err, ErrOriginDown) || errors.Is(err, ErrNotRepeated)
+	return UnknownHost(err) || errors.Is(err, ErrDenied) || errors.Is(err, ErrOutOfScope) || errors.Is(err, ErrOriginDown) || errors.Is(err, ErrNotRepeated)
 }
 
 func UnknownHost(err error) bool {

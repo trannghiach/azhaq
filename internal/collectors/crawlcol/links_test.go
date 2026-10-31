@@ -174,8 +174,9 @@ func TestPostFormsAreSubmittedOnlyWhenAsked(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// /logout is left alone by its name; /login goes with neutral values.
-	if len(posts) != 1 || posts[0] != "/login user=azhaq&pw=azhaqP4ssw0rd" {
+	// -submit-forms is the user's word for every POST form, whatever its
+	// action is called: /logout is sent like /login, with neutral values.
+	if len(posts) != 2 || posts[0] != "/login user=azhaq&pw=azhaqP4ssw0rd" || posts[1] != "/logout x=azhaq" {
 		t.Errorf("posts %v", posts)
 	}
 	var seenPost bool

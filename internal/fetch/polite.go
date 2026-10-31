@@ -279,12 +279,18 @@ func attempt(ctx, rctx context.Context, c *http.Client, method, raw string, sent
 		if err := beforeSend(ctx, raw); err != nil {
 			return nil, nil, false, nil, err
 		}
+		// Counted before the request is built: a new sign-in the count
+		// brings about (the session check) is in the headers it carries.
+		if err := Spend(ctx); err != nil {
+			return nil, nil, false, nil, err
+		}
 		var rd io.Reader
 		if len(sent) > 0 {
 			rd = bytes.NewReader(sent)
 		}
 		req, err := http.NewRequestWithContext(rctx, method, raw, rd)
 		if err != nil {
+			Refund()
 			return nil, nil, false, nil, err
 		}
 		ApplyHeaders(req)
@@ -294,9 +300,6 @@ func attempt(ctx, rctx context.Context, c *http.Client, method, raw string, sent
 		withJar(req)
 		if dump {
 			reqDump = dumpRequest(req, sent)
-		}
-		if err := Spend(ctx); err != nil {
-			return nil, nil, false, reqDump, err
 		}
 		resp, err = c.Do(req)
 		body, trunc = nil, false

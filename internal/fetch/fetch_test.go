@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/scope"
 )
 
 func TestDoSingleflight(t *testing.T) {
@@ -268,21 +269,62 @@ func TestHostParallel(t *testing.T) {
 	}
 }
 
-func TestNoLogoutWithSession(t *testing.T) {
+// What a URL is called says nothing about what a GET there does: a run
+// with a session requests a logout URL like any other.
+func TestLogoutNamedURLIsRequestedWithSession(t *testing.T) {
 	Reset()
 	defer Reset()
 	hits := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits++ }))
 	defer srv.Close()
-	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/rest/user/logout"); err != nil {
-		t.Fatalf("anonymous run may visit logout: %v", err)
-	}
 	Extra = http.Header{"Authorization": {"Bearer x"}}
-	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/account/Sign-Out?next=/"); !errors.Is(err, neterr.ErrEndsSession) {
-		t.Fatalf("logout with a session: %v", err)
+	for _, p := range []string{"/rest/user/logout", "/account/Sign-Out?next=/", "/createdb"} {
+		if _, _, err := Do(context.Background(), srv.Client(), srv.URL+p); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
 	}
-	if hits != 1 {
-		t.Errorf("requests %d, want 1", hits)
+	if hits != 3 {
+		t.Errorf("requests %d, want 3", hits)
+	}
+}
+
+// The user's own rule keeps a path out: not as a request, not as a
+// redirect target, and it is told to OnDenied.
+func TestDenyPathKeepsAPathOut(t *testing.T) {
+	Reset()
+	defer Reset()
+	var mu sync.Mutex
+	asked := map[string]bool{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		asked[r.URL.RequestURI()] = true
+		mu.Unlock()
+		if r.URL.Path == "/go" {
+			http.Redirect(w, r, "/admin/reset", http.StatusFound)
+		}
+	}))
+	defer srv.Close()
+	rules := scope.Rules{DenyPath: []string{`^/admin/`, `action=wipe`}}.Compile()
+	DenyPath = rules.DeniedPath
+	var told []string
+	OnDenied = func(raw, rule string) { told = append(told, rule) }
+	for _, p := range []string{"/admin/users", "/%61dmin/users", "/page?action=wipe"} {
+		_, _, err := Do(context.Background(), srv.Client(), srv.URL+p)
+		var d *neterr.Denied
+		if !errors.As(err, &d) || !errors.Is(err, neterr.ErrDenied) {
+			t.Errorf("%s: %v", p, err)
+		}
+	}
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/go"); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 1 || !asked["/go"] {
+		t.Errorf("requested %v, want only /go", asked)
+	}
+	if len(told) != 4 || told[0] != `^/admin/` || told[2] != `action=wipe` {
+		t.Errorf("told %v", told)
 	}
 }
 

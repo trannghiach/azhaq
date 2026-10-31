@@ -14,7 +14,7 @@ import (
 // WriteFacts is what the writes of page say: each route of its origin
 // with the methods and names it was sent (op source "browser"), as a
 // script's call says it, never fetched for it; and the writes Chrome did
-// not send, listed as left alone (browser.WriteReason).
+// not send, listed as not sent (browser.WriteReason).
 func WriteFacts(collector, page string, ws []browser.Write) []types.Observation {
 	now := time.Now().UTC()
 	var out []types.Observation

@@ -131,7 +131,7 @@ func writesFrom(owner, from string, entries []histEntry, methods map[string]bool
 	seen := map[string]bool{}
 	for _, e := range entries {
 		u, err := url.Parse(e.url)
-		if !methods[e.method] || err != nil || !own[normalize.Hostname(u.Hostname())] || endsSession(u) {
+		if !methods[e.method] || err != nil || !own[normalize.Hostname(u.Hostname())] {
 			continue
 		}
 		w := writeReq{owner: owner, method: e.method, url: e.url, header: http.Header{}, from: from, status: e.status}
@@ -160,12 +160,6 @@ func filepathBase(p string) string {
 	}
 	return p
 }
-
-var logoutPath = regexp.MustCompile(`(?i)log[-_]?out|sign[-_]?out|log[-_]?off`)
-
-// endsSession: a write that ends the session it is sent with spoils the
-// comparison; it is never replayed.
-func endsSession(u *url.URL) bool { return logoutPath.MatchString(u.Path) }
 
 // mapWrites are the writes the routes the runs found take, filled with
 // each role's own objects: PATCH with an empty object, which asks for the
@@ -235,6 +229,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 	fetch.SetRate(rate)
 	fetch.ProxyURL = rolesProxy
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	holdDeny()
 	client := *fetch.Client(nil)
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	sent := 0

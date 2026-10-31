@@ -198,7 +198,7 @@ func (r *report) print(w io.Writer) {
 		}
 		for _, why := range reasons {
 			ts := byReason[why]
-			line := fmt.Sprintf("  - left alone, %s: %s", why, strings.Join(ts[:min(len(ts), 3)], ", "))
+			line := fmt.Sprintf("  - not requested, %s: %s", why, strings.Join(ts[:min(len(ts), 3)], ", "))
 			if len(ts) > 3 {
 				line += fmt.Sprintf(" and %d more", len(ts)-3)
 			}
@@ -535,7 +535,8 @@ func partialShots(obs []types.StoredObservation) bool {
 }
 
 // interactNotes say what -interact did: the clicks made, the candidates
-// left alone, the routes found and the writes the clicks would have sent.
+// not clicked (downloads, mail and phone links), the routes found and the
+// writes the clicks would have sent.
 func interactNotes(obs []types.StoredObservation) []string {
 	var pages, clicks, skipped, routes, writes int
 	for _, o := range obs {
@@ -558,5 +559,5 @@ func interactNotes(obs []types.StoredObservation) []string {
 	if pages == 0 {
 		return nil
 	}
-	return []string{fmt.Sprintf("-interact: %d clicks on %d pages found %d routes; %d buttons and links left alone for their words (log out, delete, …); the %d writes the clicks tried were mapped, not sent", clicks, pages, routes, skipped, writes)}
+	return []string{fmt.Sprintf("-interact: %d clicks on %d pages found %d routes; %d downloads and mail or phone links not clicked; the %d writes the clicks tried were mapped, not sent", clicks, pages, routes, skipped, writes)}
 }

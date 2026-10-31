@@ -106,8 +106,8 @@ func TestOpenAPIExport(t *testing.T) {
 
 // A site shaped like DVWA: forms that submit to their own page (action
 // "#" or none), a menu linking /fi/?page=include.php from every page, and
-// links a GET to which changes something (the run leaves them alone, and
-// so must a tool importing the description).
+// links the user ruled out with -deny-path (the run does not request them,
+// and the description has no operation for them).
 func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
 	fetch.Reset()
 	menu := `<a href="/sqli/">sqli</a> <a href="/upload/">upload</a> <a href="/security.php">security</a> <a href="/fi/?page=include.php">fi</a>` +
@@ -141,7 +141,9 @@ func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
 	crawlcol.Register(cat, site.Client())
 	eng := &engine.Engine{Cat: cat, Store: st}
 	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": site.URL + "/"}}
-	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64}); err != nil {
+	rules := scope.Rules{DenyPath: []string{`phpids=on`, `action=reset`}}.Compile()
+	fetch.DenyPath = rules.DeniedPath
+	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 3, MaxItems: 64, Scope: rules}); err != nil {
 		t.Fatal(err)
 	}
 	st.Close()
@@ -190,7 +192,7 @@ func TestOpenAPIFormsOfAMappedSite(t *testing.T) {
 		}
 	}
 	if d.Paths["/setup.php"] != nil {
-		t.Errorf("/setup.php, never requested, is in the description: %v", d.Paths["/setup.php"])
+		t.Errorf("/setup.php, which answered 404, is in the description: %v", d.Paths["/setup.php"])
 	}
 	up := d.Paths["/upload/"]["post"].Body
 	if up == nil || up.Content["multipart/form-data"].Schema.Properties["uploaded"].Format != "binary" ||

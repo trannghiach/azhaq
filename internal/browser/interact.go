@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"regexp"
 	"strings"
 	"time"
 
@@ -14,11 +13,11 @@ import (
 // Interaction: with Browser.Interact set, a page that has loaded has its
 // buttons, links and menus clicked, up to that many clicks, to find the
 // routes and requests only a click brings: the part of katana's headless
-// mode that matters to a map. It sends nothing a page load does not: the
-// writes a click would send are refused and mapped as before
-// (Browser.Writes is not set by it), a click on something that looks like
-// it ends a session or deletes is not made, and Chrome stays held to the
-// scope and the budget.
+// mode that matters to a map. A click is a click whatever its words say,
+// as it is for katana: a link's GET is requested. It sends no write: the
+// writes a click would send are refused by their method and mapped
+// (Browser.Writes is not set by it), and Chrome stays held to the scope
+// and the budget.
 
 const candidatesJS = `(() => {
   const sel = 'a[href], button, [role=button], [role=link], [role=tab], [role=menuitem], [onclick], [routerlink], [ng-click], [data-toggle], summary, input[type=button], input[type=submit]';
@@ -49,32 +48,27 @@ type candidate struct {
 	Type     string `json:"type"`
 }
 
-// risky says whether a click is left alone: its words or its address say
-// it ends the session, deletes or changes something.
-var risky = regexp.MustCompile(`(?i)log\s?out|sign\s?out|delete|remove|erase|reset|unsubscribe|deactivate|close account|destroy|revoke|purge`)
-
-func skipCandidate(c candidate, stateChanging func(string) string) bool {
-	if c.Download || risky.MatchString(c.Text) || risky.MatchString(c.Href) {
+// skipCandidate says whether a click is left alone: a download, or an
+// address that is not a page of the site (mail, a phone call, a script).
+func skipCandidate(c candidate) bool {
+	if c.Download {
 		return true
 	}
 	h := strings.ToLower(strings.TrimSpace(c.Href))
-	if strings.HasPrefix(h, "mailto:") || strings.HasPrefix(h, "tel:") || strings.HasPrefix(h, "javascript:") || strings.HasPrefix(h, "blob:") {
-		return true
-	}
-	return stateChanging != nil && c.Href != "" && stateChanging(c.Href) != ""
+	return strings.HasPrefix(h, "mailto:") || strings.HasPrefix(h, "tel:") || strings.HasPrefix(h, "javascript:") || strings.HasPrefix(h, "blob:")
 }
 
 // Interaction is what clicking a page found.
 type Interaction struct {
 	Clicks    int      // clicks made
-	Skipped   int      // candidates left alone for what their words or address say
+	Skipped   int      // candidates left alone: downloads, mail and phone links
 	Routes    []string // where the page's address went after a click (a route, a hash route), not the page's own
 	Snapshots []string // the page's HTML after a click that changed it, up to 12
 }
 
 // interact clicks the page's candidates, one at a time, putting the page
 // back where it was after each: by history, else by loading it again.
-func (b *Browser) interact(tab context.Context, start string, max int, stateChanging func(string) string) Interaction {
+func (b *Browser) interact(tab context.Context, start string, max int) Interaction {
 	var in Interaction
 	tried := map[string]bool{}
 	sameURL := func(a, c string) bool { return a == c }
@@ -96,7 +90,7 @@ func (b *Browser) interact(tab context.Context, start string, max int, stateChan
 				continue
 			}
 			tried[c.Key] = true
-			if skipCandidate(*c, stateChanging) {
+			if skipCandidate(*c) {
 				in.Skipped++
 				continue
 			}

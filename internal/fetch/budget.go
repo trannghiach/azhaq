@@ -52,6 +52,22 @@ func Spend(ctx context.Context) error { return spend(ctx, true) }
 func SpendUnpaced(ctx context.Context) error { return spend(ctx, false) }
 
 func spend(ctx context.Context, paced bool) error {
+	if err := spendCount(ctx, paced); err != nil {
+		return err
+	}
+	if err := sessionTick(ctx); err != nil {
+		Refund() // never sent: the session ended
+		if w, _ := ctx.Value(refusedKey{}).(*watch); w != nil {
+			w.used.Add(-1)
+		}
+		return err
+	}
+	return nil
+}
+
+// spendCount is spend without the session check: for the check's own
+// requests.
+func spendCount(ctx context.Context, paced bool) error {
 	w, _ := ctx.Value(refusedKey{}).(*watch)
 	if err := Killed(); err != nil {
 		if w != nil {
@@ -200,7 +216,10 @@ func Refund() {
 	}
 }
 
-func init() { ledger.Unsent = Refund }
+func init() {
+	ledger.Unsent = Refund
+	ledger.Deny = denied
+}
 
 // Count accounts for requests already sent without asking (a worker
 // process's): they count against the budget, which may then be spent.

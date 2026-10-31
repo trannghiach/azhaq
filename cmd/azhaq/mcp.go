@@ -20,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 )
 
@@ -52,17 +53,21 @@ type mcpServer struct {
 
 func cmdMCP(args []string) error {
 	fs := newFlags("mcp")
-	var allow, deny stringsFlag
+	var allow, deny, denyPath stringsFlag
 	scopeSpec := fs.String("scope", "", "a program's scope every tool is held to: a file, or hackerone, bugcrowd, intigriti, yeswehack with -program")
 	program := fs.String("program", "", "the program to take from -scope")
 	fs.Var(&allow, "allow", "a domain or host the tools may touch (repeatable); with -scope, added to it")
 	fs.Var(&deny, "deny", "a domain or host the tools must not touch (repeatable)")
+	fs.Var(&denyPath, "deny-path", "a regular expression on a URL's path and query: a URL it matches is never requested by any tool (repeatable)")
 	budget := fs.Int64("max-requests", 0, "requests to targets all tool calls together may send (0: no cap)")
 	rate := fs.Float64("rate", 0, "requests per second to targets in every tool call (0: no pace)")
 	dir := fs.String("dir", "azhaq-mcp", "directory for the workspaces the tools write")
 	unlocked := fs.Bool("unlocked", false, "serve without a scope: any target a tool is given may be touched (port scans stay refused)")
 	if err := parse(fs, args); err != nil {
 		return err
+	}
+	if err := scope.CompilePaths(denyPath); err != nil {
+		return usagef("%v", err)
 	}
 	if *scopeSpec == "" && len(allow) == 0 && !*unlocked {
 		// An assistant names its own targets: without a scope, nothing
@@ -91,8 +96,11 @@ func cmdMCP(args []string) error {
 	for _, d := range deny {
 		s.lock = append(s.lock, "-deny", d)
 	}
+	for _, d := range denyPath {
+		s.lock = append(s.lock, "-deny-path", d)
+	}
 	s.locked = len(allow) > 0
-	fmt.Fprintf(os.Stderr, "azhaq mcp %s: %d allow and %d deny rules, budget %s, workspaces in %s\n", version, len(allow), len(deny), budgetText(*budget), *dir)
+	fmt.Fprintf(os.Stderr, "azhaq mcp %s: %d allow, %d deny and %d deny-path rules, budget %s, workspaces in %s\n", version, len(allow), len(deny), len(denyPath), budgetText(*budget), *dir)
 	ctx, stop := stopContext()
 	defer stop()
 	done := make(chan error, 1)
@@ -1192,7 +1200,7 @@ func (s *mcpServer) resumable(db string) (string, error) {
 			}
 		default:
 			// Only what the tools of a server start comes back: a run started
-			// elsewhere with -all-gets, -dirs or -dns-brute is not resumed here.
+			// elsewhere with -dirs or -dns-brute is not resumed here.
 			if !mcpRunFlags[k] {
 				return "", fmt.Errorf("the run in workspace %q was started with -%s, which no tool of this server starts: map it again with azhaq_map", ws, k)
 			}
@@ -1204,7 +1212,7 @@ func (s *mcpServer) resumable(db string) (string, error) {
 // mcpRunFlags are the run options the tools of a server start runs with.
 var mcpRunFlags = map[string]bool{
 	"url": true, "domain": true, "cidr": true, "passive": true, "browser": true, "graphql": true, "depth": true, "timeout": true,
-	"header": true, "login": true, "login-user": true, "max-requests": true, "rate": true, "deny": true, "quiet": true,
+	"header": true, "login": true, "login-user": true, "max-requests": true, "rate": true, "deny": true, "deny-path": true, "quiet": true,
 	"json": true, "probe": true, "no-favicon": true, "skip": true, "port-rate": true, "max-items": true, "live": true,
 }
 

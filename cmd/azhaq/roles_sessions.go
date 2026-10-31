@@ -280,6 +280,7 @@ func refusalReason(r role, u string, own map[string]bool) string {
 	fetch.Reset()
 	defer fetch.Reset()
 	fetch.Allow = func(h string) bool { return own[normalize.Hostname(h)] }
+	holdDeny()
 	fetch.Extra = r.session.Clone()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
