@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	ledgerHelp   = "write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given)"
+	ledgerHelp   = "write every request, connection and DNS query the run sends (to targets, third-party sources and resolvers) to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given)"
 	killFileHelp = "stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop)"
 	sealToHelp   = "when the run ends, append the ledger's seal as one JSON line ({\"time\",\"ledger\",\"seal\",\"entries\"}) to this file, or POST it to this URL: kept where the run's own files are not, so azhaq ledger -verify -seal can tell the ledger from one with lines removed and the rest re-chained to look intact"
 )
@@ -168,7 +168,7 @@ func (r *runLedger) close(rep *report) {
 	}
 	c, _ := ledger.Verify(path)
 	seal := r.l.Last()
-	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %d requests and connections recorded in %s, sealed %s (azhaq ledger -verify %s -seal %s; the seal alone proves no line was later removed and the rest re-chained)", c.Entries, path, seal, path, seal))
+	rep.Notes = append(rep.Notes, fmt.Sprintf("ledger: %d requests, connections and queries recorded in %s, sealed %s (azhaq ledger -verify %s -seal %s; the seal alone proves no line was later removed and the rest re-chained)", c.Entries, path, seal, path, seal))
 	if r.sealTo != "" {
 		if err := sendSeal(r.sealTo, path, seal, c.Entries); err != nil {
 			rep.Notes = append(rep.Notes, fmt.Sprintf("-seal-to %s: %v: the seal is only in %s, next to the run's own files", r.sealTo, err, path))

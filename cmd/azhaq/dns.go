@@ -156,7 +156,7 @@ func cmdDNS(args []string) error {
 	alias("wildcard-domain", "wd", "same as -wildcard-domain")
 	noWild := fs.Bool("no-wildcard", false, "print names even when they only resolve because their zone has a wildcard")
 	proxyURL := fs.String("proxy", "", "send DNS through this socks5 proxy (socks5://host:port), over TCP")
-	inherit(fs, "resolvers", "dns-rate", "scope", "program", "allow", "deny")
+	inherit(fs, "resolvers", "dns-rate", "scope", "program", "allow", "deny", "ledger")
 	alias("resolvers", "r", "same as -resolvers")
 	if err := parse(fs, args); err != nil {
 		return err
@@ -279,6 +279,20 @@ func cmdDNS(args []string) error {
 	}
 	rep := newReport("dns")
 	rep.what = "names"
+	// Every query goes in the ledger, when one is asked for: a dns command has
+	// no workspace to keep one next to.
+	led, err := startLedger(fs.Lookup("ledger").Value.String(), "", c.db, c.db == "", cf.rules, "")
+	if err != nil {
+		return err
+	}
+	sealed := false
+	sealLedger := func() {
+		if !sealed {
+			sealed = true
+			led.close(rep)
+		}
+	}
+	defer sealLedger()
 	r := &dnsRun{cf: cf, pool: pool, wild: dnsr.NewWildcards(pool), w: w, rep: rep, resolvers: resolvers, in: in, failed: map[string]*engine.Failure{}}
 	r.keepOn = c.db != ""
 	if cf.hosts {
@@ -318,6 +332,7 @@ func cmdDNS(args []string) error {
 		rep.DB = c.db
 		rep.Next = append(rep.Next, "azhaq query -db "+c.db)
 	}
+	sealLedger()
 	return rep.finish(c.json, c.silent)
 }
 

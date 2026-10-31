@@ -19,7 +19,7 @@ func cmdLedger(args []string) error {
 	fs := newFlags("ledger")
 	verify := fs.String("verify", "", "check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal")
 	seal := fs.String("seal", "", "with -verify: a seal hash kept where the run's own files are not (or a file of one per line, or the JSON lines -seal-to writes) that must be one of the chain's seals; without it, -verify cannot tell the file from one with lines removed and the rest re-chained to look intact")
-	summary := fs.String("summary", "", "count the ledger's requests and connections by class, kind, host and method, with the first and last time")
+	summary := fs.String("summary", "", "count the ledger's requests, connections and queries by class, kind, host and method, with the first and last time")
 	csvOut := fs.String("csv", "", "print the ledger as CSV")
 	asJSON := fs.Bool("json", false, "with -summary: one JSON object")
 	if err := parse(fs, args); err != nil {
@@ -140,7 +140,7 @@ func ledgerSummary(path string, asJSON bool) error {
 		fmt.Println(string(raw))
 		return nil
 	}
-	fmt.Printf("%s: %d requests and connections\n", path, n)
+	fmt.Printf("%s: %d requests, connections and queries\n", path, n)
 	if n == 0 {
 		return nil
 	}

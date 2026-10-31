@@ -96,7 +96,7 @@ The summary and the other exit codes are the shared ones: see [the summary](../O
 The summary of a run that wrote a ledger has this note:
 
 ```
-ledger: N requests and connections recorded in FILE, sealed HASH (azhaq ledger -verify FILE -seal HASH; the seal alone proves no line was later removed and the rest re-chained)
+ledger: N requests, connections and queries recorded in FILE, sealed HASH (azhaq ledger -verify FILE -seal HASH; the seal alone proves no line was later removed and the rest re-chained)
 ```
 
 ## Flags
@@ -106,7 +106,7 @@ ledger: N requests and connections recorded in FILE, sealed HASH (azhaq ledger -
 | --- | --- | --- | --- |
 | `-verify` | string |  | check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal |
 | `-seal` | string |  | with -verify: a seal hash kept where the run's own files are not (or a file of one per line, or the JSON lines -seal-to writes) that must be one of the chain's seals; without it, -verify cannot tell the file from one with lines removed and the rest re-chained to look intact |
-| `-summary` | string |  | count the ledger's requests and connections by class, kind, host and method, with the first and last time |
+| `-summary` | string |  | count the ledger's requests, connections and queries by class, kind, host and method, with the first and last time |
 | `-json` | bool |  | with -summary: one JSON object |
 | `-csv` | string |  | print the ledger as CSV |
 <!-- flags:end -->

@@ -99,7 +99,7 @@ var helpSpecs = map[string]helpSpec{
 			{"Record types", `a aaaa cname ns txt srv ptr mx soa caa any axfr all e`},
 			{"What to ask", `no-wildcard`},
 			{"Answer format and filters", `resp resp-only rcode response-type-filter`},
-			{"Scope and safety", `allow deny scope program`},
+			{"Scope and safety", `allow deny scope program ledger`},
 			{"Pace and limits", `rl t dns-rate retry timeout maxtime`},
 			{"Network", `resolvers proxy`},
 			{"Output", `db json o silent v`},
