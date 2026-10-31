@@ -508,6 +508,11 @@ func TestSelfConnectIsNotOpen(t *testing.T) {
 // Scanning the ephemeral range of loopback reports only ports something
 // listens on, however many closed ones meet themselves.
 func TestEphemeralRangeHasNoPhantomPorts(t *testing.T) {
+	// It connects to every ephemeral port of the machine, other packages'
+	// test servers included: CI runs it alone, after the other tests.
+	if os.Getenv("AZHAQ_EPHEMERAL_SCAN") == "" {
+		t.Skip("scans every ephemeral port; run alone: AZHAQ_EPHEMERAL_SCAN=1 go test ./internal/portscan -run EphemeralRange")
+	}
 	listeners := func() map[int]bool {
 		m := map[int]bool{}
 		for _, file := range []string{"/proc/net/tcp", "/proc/net/tcp6"} {

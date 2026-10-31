@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -429,14 +430,25 @@ func TestMakesNoOutgoingConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer target.Close()
+	// A connection counts when it sends a request: another package's test
+	// running at the same time (the ephemeral-range port scan) may connect
+	// to this listener and close without a byte.
+	var handlers sync.WaitGroup
 	go func() {
 		for {
 			c, err := target.Accept()
 			if err != nil {
 				return
 			}
-			hits.Add(1)
-			c.Close()
+			handlers.Add(1)
+			go func() {
+				defer handlers.Done()
+				defer c.Close()
+				_ = c.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+				if n, _ := c.Read(make([]byte, 1)); n > 0 {
+					hits.Add(1)
+				}
+			}()
 		}
 	}()
 	oldT, oldR := http.DefaultTransport, net.DefaultResolver
@@ -487,6 +499,7 @@ func TestMakesNoOutgoingConnection(t *testing.T) {
 		}
 	}
 	time.Sleep(50 * time.Millisecond)
+	handlers.Wait()
 	if n := hits.Load(); n != 0 {
 		t.Errorf("%d outgoing connections", n)
 	}

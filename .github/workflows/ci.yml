@@ -40,6 +40,9 @@ jobs:
               grep -E -- '--- FAIL|panic:|_test.go:[0-9]+:|^FAIL|signal: |\[build failed\]|^# ' test.log | head -20 || true; } | while IFS= read -r l; do echo "::error::$l"; done
             exit 1
           }
+      - name: ephemeral range
+        # It connects to every ephemeral port, so it runs with nothing else.
+        run: AZHAQ_EPHEMERAL_SCAN=1 go test -race -count=1 ./internal/portscan -run TestEphemeralRangeHasNoPhantomPorts
       - name: govulncheck
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: licenses
