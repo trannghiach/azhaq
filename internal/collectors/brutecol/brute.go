@@ -70,24 +70,55 @@ func (b *Brute) Run(ctx context.Context, seed types.Seed, emit func(types.Observ
 }
 
 // Permute resolves variations of each live hostname it is given: numbers
-// next to the ones in the first label, common environment words joined to
-// it, and those words in its place. Each name is tried once per run.
+// and regions, and common words joined to the first label, put after it,
+// before the name and in its place (api-dev, api.dev, dev.api, dev). Each
+// name is tried once per run; the user limits what is asked, not this.
 type Permute struct {
 	Pool    *dnsr.Pool
 	Wild    *dnsr.Wildcards
 	Words   []string // default: PermuteWords
-	PerHost int      // candidates per hostname; default 120
+	PerHost int      // candidates per hostname; 0: every one
 	Workers int
 
 	mu    sync.Mutex
 	tried map[string]bool // candidates, including the names found
 }
 
-// PermuteWords are joined to and substituted for the first label.
-var PermuteWords = []string{
+// PermuteWords are joined to, put after and substituted for the first label:
+// the words alterx's default patterns use, and others of the same kind.
+var PermuteWords = dedupe([]string{
 	"dev", "development", "stage", "staging", "stg", "test", "testing", "qa", "uat", "prod", "production",
 	"preprod", "pre", "sandbox", "demo", "beta", "alpha", "internal", "int", "admin", "api", "app",
 	"old", "new", "legacy", "v1", "v2", "v3", "backup", "bak", "tmp", "local", "corp", "eu", "us", "ap",
+	"k8s", "origin", "raw", "web", "service", "grafana", "wordpress", "wp", "mta-sts", "tech", "private",
+	"public", "login", "role", "backend", "cloud", "mail", "oauth", "oauth2", "vpn", "lab", "live", "data",
+	"mobile", "search", "stats", "final", "ldap", "media", "docs", "eng", "engineering", "market", "compute",
+	"cdn", "acc", "access", "blogs", "blog", "careers", "client", "cms", "cms1", "conf", "dmz", "drupal",
+	"faq", "ir", "log", "logs", "dashboard", "monitor", "mysql", "mssql", "db", "partner", "payment", "pay",
+	"office", "plugins", "shop", "prometheus", "stripe", "forum", "manager", "server", "core", "content",
+	"ads", "shopify", "o1", "s1", "s3", "promotion", "temp", "my", "proxy", "asset", "assets", "atlas",
+	"build", "builds", "code", "info", "image", "review", "developers", "developer", "administrator", "www",
+	"www1", "www2", "netlify", "storage",
+})
+
+// PermuteNumbers follow the first label (api → api1, api2024), and
+// PermuteRegions stand before the name (us-east-1.api.example.com).
+var (
+	PermuteNumbers = []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "18", "20", "21", "22", "23", "24",
+		"2017", "2018", "2019", "2020", "2021", "2022", "2023", "2024"}
+	PermuteRegions = []string{"us-east-1", "us-east-2", "us-west-1", "us-west-2", "eu-east-1", "eu-central-1"}
+)
+
+func dedupe(in []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, s := range in {
+		if !seen[s] {
+			seen[s] = true
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func (p *Permute) Name() string { return PermuteName }
@@ -117,16 +148,13 @@ func (p *Permute) Run(ctx context.Context, seed types.Seed, emit func(types.Obse
 		words = PermuteWords
 	}
 	limit := p.PerHost
-	if limit <= 0 {
-		limit = 120
-	}
 	var names []string
 	p.mu.Lock()
 	if p.tried == nil {
 		p.tried = map[string]bool{}
 	}
 	for _, n := range variants(host, words) {
-		if len(names) >= limit {
+		if limit > 0 && len(names) >= limit {
 			break
 		}
 		if n != host && !p.tried[n] {
@@ -145,20 +173,30 @@ func (p *Permute) Run(ctx context.Context, seed types.Seed, emit func(types.Obse
 }
 
 // variants of host: first label a.b.example.com is "a", rest "b.example.com".
+// Every kind of candidate comes early (numbers and regions first, then each
+// word in all its places), so that a limit on the names asked still takes
+// all of them.
 func variants(host string, words []string) []string {
 	i := strings.IndexByte(host, '.')
 	if i <= 0 {
 		return nil
 	}
 	first, rest := host[:i], host[i:]
+	seen := map[string]bool{host: true}
 	var out []string
-	add := func(l string) {
-		if label.MatchString(l) {
-			out = append(out, l+rest)
+	put := func(n string) {
+		if !seen[n] {
+			seen[n] = true
+			out = append(out, n)
 		}
 	}
-	// numbers: api2 → api1, api3; web-01 → web-02
-	if m := regexp.MustCompile(`^(.*?)(\d+)$`).FindStringSubmatch(first); m != nil {
+	add := func(l string) {
+		if label.MatchString(l) {
+			put(l + rest)
+		}
+	}
+	// numbers: api2 → api1, api3; web-01 → web-02; and alterx's, api → api1, api2024
+	if m := trailingNumber.FindStringSubmatch(first); m != nil {
 		n, _ := strconv.Atoi(m[2])
 		for _, d := range []int{-2, -1, 1, 2, 3} {
 			if v := n + d; v >= 0 {
@@ -170,21 +208,29 @@ func variants(host string, words []string) []string {
 			add(first + d)
 		}
 	}
-	for _, w := range words {
-		add(w + "-" + first)
-		add(first + "-" + w)
-		add(first + w)
+	for _, n := range PermuteNumbers {
+		add(first + n)
 	}
-	for _, w := range words {
-		add(w) // the word in place of the first label
-	}
-	for _, w := range words {
-		if label.MatchString(w) {
-			out = append(out, w+"."+host) // one level below
+	for _, r := range PermuteRegions {
+		if label.MatchString(r) {
+			put(r + "." + host)
 		}
+	}
+	for _, w := range words {
+		if !label.MatchString(w) {
+			continue
+		}
+		add(w)                      // the word in place of the first label
+		add(first + "-" + w)        // api-dev
+		add(w + "-" + first)        // dev-api
+		put(w + "." + host)         // one level below: dev.api.example.com
+		put(first + "." + w + rest) // the word after the first label: api.dev.example.com
+		add(first + w)              // apidev
 	}
 	return out
 }
+
+var trailingNumber = regexp.MustCompile(`^(.*?)(\d+)$`)
 
 // PermuteSample is two of the names Permute would ask for host: a number
 // next to its first label and an environment word joined to it.

@@ -4,11 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/miekg/dns"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/trannghiach/azhaq/internal/dnsr"
 	"github.com/trannghiach/azhaq/types"
@@ -121,5 +125,100 @@ func TestPermuteSampleIsWhatPermuteAsks(t *testing.T) {
 	}
 	if s := PermuteSample("example"); len(s) != 0 {
 		t.Errorf("a name with no dot: %v", s)
+	}
+}
+
+// Every kind of variation is asked for a name, and a limit on the names asked
+// still takes all of them: the kinds come early, not after the joined words.
+func TestVariantsHaveEveryKind(t *testing.T) {
+	kinds := map[string]string{
+		"number":       "api1.example.org",
+		"long number":  "api2024.example.org",
+		"region":       "us-east-1.api.example.org",
+		"in place":     "dev.example.org",
+		"joined":       "api-dev.example.org",
+		"prefixed":     "dev-api.example.org",
+		"run together": "apidev.example.org",
+		"one below":    "dev.api.example.org",
+		"after label":  "api.dev.example.org",
+	}
+	all := variants("api.example.org", PermuteWords)
+	for _, limit := range []int{len(all), 120, 60} {
+		have := map[string]bool{}
+		for _, n := range all[:limit] {
+			have[n] = true
+		}
+		for kind, name := range kinds {
+			if !have[name] {
+				t.Errorf("first %d variations lack the %s kind (%s)", limit, kind, name)
+			}
+		}
+	}
+	// One below is what the help promises: dev.api.example.org, not only api-dev.
+	p := pool(t)
+	perm := &Permute{Pool: p, Wild: dnsr.NewWildcards(p)}
+	if perm.PerHost != 0 {
+		t.Errorf("a default limit per name: %d", perm.PerHost)
+	}
+}
+
+// What alterx's default patterns make of a name, azhaq makes too: the same
+// words, numbers and regions, in the same places. The patterns are read from
+// alterx's module in the module cache.
+func TestVariantsCoverAlterxDefaults(t *testing.T) {
+	out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Skip(err)
+	}
+	files, _ := filepath.Glob(filepath.Join(strings.TrimSpace(string(out)), "github.com/projectdiscovery/alterx@*", "permutations.yaml"))
+	if len(files) == 0 {
+		t.Skip("alterx is not in the module cache; its default patterns have 6 per word, 1 per number and 1 per region")
+	}
+	raw, err := os.ReadFile(files[len(files)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg struct {
+		Patterns []string            `yaml:"patterns"`
+		Payloads map[string][]string `yaml:"payloads"`
+	}
+	if err := yaml.Unmarshal(raw, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	for _, host := range []string{"api.example.org", "web-01.example.org", "a.b.example.org"} {
+		i := strings.IndexByte(host, '.')
+		sub, suffix := host[:i], host[i+1:]
+		want := map[string]bool{}
+		for _, pat := range cfg.Patterns {
+			for _, kind := range []string{"word", "number", "region"} {
+				tag := "{{" + kind + "}}"
+				if !strings.Contains(pat, tag) {
+					continue
+				}
+				for _, v := range cfg.Payloads[kind] {
+					n := strings.NewReplacer(tag, v, "{{sub}}", sub, "{{suffix}}", suffix).Replace(pat)
+					if n != host {
+						want[n] = true
+					}
+				}
+			}
+		}
+		have := map[string]bool{}
+		for _, n := range variants(host, PermuteWords) {
+			have[n] = true
+		}
+		var missing []string
+		for n := range want {
+			if !have[n] {
+				missing = append(missing, n)
+			}
+		}
+		sort.Strings(missing)
+		if len(missing) > 0 {
+			t.Errorf("%s: %d of alterx's %d names are not asked, such as %v", host, len(missing), len(want), missing[:min(5, len(missing))])
+		}
+		if len(have) < len(want) {
+			t.Errorf("%s: %d variations, alterx's defaults make %d", host, len(have), len(want))
+		}
 	}
 }

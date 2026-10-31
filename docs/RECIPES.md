@@ -439,7 +439,7 @@ The first line is `subfinder | alterx | dnsx`. The second does it inside the who
 
 **You get:** the names no source gave, that resolve. In `-json` their `source` is `permute`. The summary counts them as `found by guessing`, and `asked by guessing` is how many variations were asked.
 
-- Each name found gets up to 120 variations: a number next to its first label (`api2` gives `api1`, `api3`), an environment word joined to it (`api-dev`, `dev-api`, `apidev`), and the word in place of the label (`dev`). The words are `dev`, `stage`, `test`, `qa`, `prod`, `admin`, `api`, `v1` and more.
+- Each name found gets every variation, about 800 for `api.example.com`, at least what alterx's default patterns make of it: a number next to its first label (`api2` gives `api1`, `api3`; `api` gives `api1` to `api2024`), a region before the name (`us-east-1.api`), and each of about 130 words joined to the first label (`api-dev`, `dev-api`, `apidev`), after it (`api.dev`), before the name (`dev.api.example.com`, one level below) and in place of the label (`dev`). The words include `dev`, `stage`, `test`, `qa`, `prod`, `admin`, `v1`, `k8s` and `grafana`. Nothing cuts them per name: you bound the run with `-dns-rate` (the pace) and `-max-time`.
 - A name a variation found is not varied again.
 - Wildcard answers are left out. A name with a CNAME whose target is gone is a name that exists, and a takeover candidate.
 
