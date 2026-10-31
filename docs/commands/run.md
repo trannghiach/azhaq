@@ -78,6 +78,10 @@ found in
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+**Path checks stop at their answer.** The checks that guess where an API description sits (`openapi.json`, `swagger.json`, `api-docs`, `v3/api-docs`, …, and the same names again under each API base the run found, such as `/rest/` or `/v3/`) are asked one at a time, likeliest first. They stop at the first answer that is an OpenAPI or Swagger document with paths, or the Swagger UI or ReDoc page that loads one. Once an origin has served a description, here or through `azhaq-openapi`, its other locations are not asked, and the summary counts them: `note: path checks: 28 skipped (an API description was already found)`. Every other check (`robots.txt`, `login`, `admin`, `graphql`, `.git/HEAD`, …) is still asked. A Swagger UI whose script holds the document (Juice Shop's `/api-docs/`) is read from the script, and the names next to it are not guessed. A page that is byte for byte what the site root answers for a made-up path (a single-page app's shell) is the catch-all answer of a directory whose own baseline was not asked, so that baseline is not requested; a directory with answers of its own is still asked.
+
 ## Flags
 
 <!-- flags:begin run -->

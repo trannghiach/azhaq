@@ -27,6 +27,12 @@ One object per page: `url`, `file` (the picture, `.png` or `.jpg`), `file_name`,
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+**Screenshots.** `shots` (and `run -screenshots`) take a picture of each web service with a Chrome on the machine. A URL with a path or query is kept; `-u 192.0.2.0/28`, `-p small|medium|large|8000-8010,3000`, `-no-http`, `-no-https`, `-nmap FILE` (an `nmap -oX` file) and `-nessus FILE` say which services; `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-chrome`, `-chrome-proxy`, `-chrome-profile` and `-H` shape them. Each page's row has its response headers, TLS session, the technologies of the rendered page, console messages and network log. At a set `-rate` a page's time runs from when it last moved, so a slow pace gives whole pictures, not blank ones; a picture taken before the page's images, styles and scripts loaded is marked `partial` and the run exits 3. Look-alike pages are grouped by a perceptual hash in `export -format html`, a single file whose pictures are embedded.
+
+**Screenshots and the budget.** A page's images, scripts and styles each count against `-max-requests`. When too few are left, Chrome is refused them and no image is saved; `shots` and `run -screenshots` say it: `note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 requests and 8 were left (raise -max-requests)`. The figure is how many requests the page made when it was cut short. A run starts one Chrome and opens up to 6 tabs in it at once, as gowitness runs 6 threads (`-tabs N` changes it).
+
 ## Flags
 
 <!-- flags:begin shots -->

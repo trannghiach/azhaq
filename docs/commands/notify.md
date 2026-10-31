@@ -44,6 +44,23 @@ Every request has 30 seconds. A 429, a 5xx or a failed connection is tried again
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+### Notifications
+
+`watch -notify` takes a webhook URL, and `azhaq notify` sends any text the way [notify](https://github.com/projectdiscovery/notify) does, with its flags and its `provider-config.yaml`:
+
+```
+azhaq subs -d example.com -live | azhaq notify -bulk -pc ~/.config/notify/provider-config.yaml
+azhaq watch -db h1.db -every 24h -notify-config provider-config.yaml -- -scope hackerone -program acme
+```
+
+`provider-config.yaml` is notify's file: without one both lines stop with exit 2 and send nothing. [docs/MIGRATING.md](../MIGRATING.md#notify-azhaq-notify) has a sample.
+
+A webhook URL is a secret. Azhaq never prints it: an error from a hook names the host and what went wrong, not the path or query, and not a token a server echoes back. So that it need not stand on the command line, where `ps` shows it to every user, `-notify @FILE` reads URLs from a file (one a line) and `AZHAQ_NOTIFY` holds them too (comma-separated); a provider config keeps its tokens in the file, and a word that starts with `$` in it is replaced by that environment variable.
+
+A 429 or a 5xx is tried again (three tries, `Retry-After` honoured); a message longer than a service takes is sent in parts, not cut. A delivery that did not arrive is named in the summary and the exit code is 3: `azhaq notify` and `azhaq watch` do not exit 0 over a lost message. [Output](#output) lists the providers and what each one sends.
+
 ## Flags
 
 <!-- flags:begin notify -->

@@ -51,6 +51,20 @@ A report never says what the evidence does not hold. A row with no control, a bo
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+`azhaq report -dir DIR` writes up what `roles` found as one Markdown report per finding, ready to paste into HackerOne or Bugcrowd, or into a red team's client report. It reads the evidence the roles run kept in `DIR/roles.db` and sends nothing.
+
+```
+$ azhaq report -dir azhaq-roles-20261028-101500
+azhaq report: 3 reports in azhaq-roles-20261028-101500/reports
+  …/01-proved-get-books-v1-book-title.md  [proved] Broken object level authorization: bob reads alice's book via GET /books/v1/{book_title}
+  …/02-proved-get-books-v1-book-title.md  [proved] Broken object level authorization: alice reads bob's book via GET /books/v1/{book_title}
+  …/03-unrated-get-users-v1-debug.md  [unrated] Excessive data exposure: anyone reads password via GET /users/v1/_debug
+```
+
+Without `-url`, it writes a report for each listed row whose verdict is `reads another role's object`, `writes another role's object`, `anyone writes another role's object` or `anyone reads sensitive fields`, ordered by confidence (`proved`, `likely`, `guess`, then rows that carry none). With `-url URL` (and `-method M` for a write row) it writes that one report to standard output. `-format md|json` picks the form, `-o PATH` a file or a directory, `-redact` also masks hosts (`<host>`) and identifiers (`<id-1>`). Each report has a title naming the bug class, a two-sentence summary, a severity that is labelled a guess and says why, numbered steps with the curl commands from the evidence (the sessions as `$ALICE_TOKEN`, `$BOB_TOKEN`), the evidence (the owner's answer, the reader's, and the control: what a made-up identifier returned), the row's `owner_by` quoted as the reason the object is the owner's, impact and remediation by class, and notes. A report never says what the evidence does not hold: a row with no control, a body that was not kept or no `owner_by` says so under "Missing from the evidence store". Read a redacted report once before sharing it: an identifier no kept body names in an identifier field is not masked. [Output](#output) has the flags and the JSON fields.
+
 ## Flags
 
 <!-- flags:begin report -->

@@ -44,6 +44,29 @@ The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md
 
 A name ending `.csv`, `.ecsv`, `.html`, `.md` or `.ejson` takes that format without `-of`; a name ending `.txt` and no `-of` gets the text of stdout. `-or` writes no file for a run with no matches (the summary says so). `-od DIR` writes each match's request and answer as one file named by the md5 of its text, shown as `| RES |` in the text output and `resultfile` in the reports.
 
+**`fuzz`** puts words from a wordlist into a request, anywhere in it: the path, a query value, a header (`Host: FUZZ.example.com` for virtual hosts), the method, a JSON or form body. It takes ffuf's flags and counts as ffuf does (words are spaces plus one, lines newlines plus one, the same match and filter rules, the same calibration), so a command line moved from ffuf gives the same results:
+
+- input: `-w FILE[:KEYWORD]` (repeatable, `-w a.txt,b.txt`, `-` for stdin), `-mode clusterbomb|pitchfork|sniper` (`§…§` marks the places), `-e`, `-ic`, `-D` (dirsearch `%EXT%`), `-enc 'FUZZ:urlencode b64encode'` (all of ffuf's encoders, in process), `-input-cmd`/`-input-num`/`-input-shell`, `-request FILE` with `-request-proto` (a raw request as Burp saves it; `-u`, `-X`, `-d`, `-H`, `-b` replace parts of it);
+- request: `-u -X -d` (`-data`, `-data-ascii`, `-data-binary`), `-H`, `-b` (`-cookie`), `-r`, `-timeout`, `-x` (an http, https, socks5 or socks5h proxy), `-replay-proxy` (each match sent once more through a proxy such as Burp), `-ignore-body`, `-raw`, `-sni`, `-http2`, `-cc`/`-ck`; servers back to TLS 1.0 are reached; a body compressed with gzip, deflate or brotli is decoded, so `-fs` counts the decoded bytes even when `-H 'Accept-Encoding: gzip, deflate, br'` is given;
+- matchers and filters: `-mc -ms -mw -ml -mr -mt` and `-fc -fs -fw -fl -fr -ft` (`-mt '>1000'`, `-ft '<100'`: milliseconds to the first byte), `-mmode`, `-fmode`;
+- calibration: `-ac` (off by default, as in ffuf), `-ack`, `-acs basic|advanced|NAME`, `-acc STRING`, `-ach`;
+- recursion: `-recursion`, `-recursion-depth`, `-recursion-strategy default|greedy`, `-maxtime-job`;
+- pace and stops: `-t`, `-rate`, `-p 0.1` or `-p 0.1-2.0`, `-maxtime`, `-sf`, `-sa`, `-se` (and `-se-after N`);
+- reports: `-o FILE` with `-of json|ejson|csv|ecsv|html|md|all`, `-od DIR` (the raw request and answer of each match), `-or`; `-json` prints ffuf's fields on stdout;
+- `-preflight FILE` and `-postflight FILE` (raw request files sent before and after each request; `-preflight-var 'TOKEN:name="csrf" value="([^"]+)"'` or `-preflight-var-auto 'TOKEN:csrf'` read a value from the answer, and `TOKEN` in the request stands for it; `-preflight-mode`, `-preflight-error`). They carry your `-H` and `-b`, and each goes through the scope, the budget, the pace and the ledger. A value read from an answer can never change the scheme, host or port of a request: ffuf's `-preflight-anyhost` does not exist here;
+- `-config FILE`, else `~/.config/ffuf/ffufrc` or `~/.ffufrc`: ffuf's TOML settings, read as flags in front of the command line's own;
+- `-control FILE`: steer a run that goes (`echo 'rate 2' >> FILE`, `pause`, `resume`, `fs 4242`, `afs 100`, `fs none`, `show`, `savejson out.json`, `queueshow`, `queuedel N`, `queueskip`, `stop`), in place of ffuf's console. With stderr on a terminal and no `-s`, `-silent` or `-json`, a status line is printed over itself each second.
+
+It differs from ffuf in these ways:
+
+- Auto-calibration is off unless `-ac` is given (`-acs`, `-acc` and `-ach` imply it), as in ffuf, so a command line moved from ffuf gives ffuf's matches. It needs the keyword `FUZZ`, or the one `-ack` names, in the request; without it a note says nothing was calibrated. Calibration requests are paced by `-rate` and counted by `-max-requests`; ffuf's are not.
+- The default matcher is `-mc 200-299,301,302,307,401,403,405,500`, unless `-ms`, `-mw`, `-ml`, `-mr` or `-mt` is given alone, as in ffuf.
+- With several wordlists, `-mode pitchfork` runs as long as the longest list and the shorter ones start over (4 users and 3 passwords make 4 requests, as in ffuf 2.3).
+- Every request goes through the run's budget and pace (`-max-requests`, `-rate`) and the ledger, and stops at the kill file. The host in `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise; when the keyword starts the host (`FUZZ.example.com`) the scope is its domain. A request to a host outside the scope is not sent, and the summary counts it. The copies `-replay-proxy` sends go to the proxy you named: they are not requests to the target, so they are not in the ledger, the budget or the pace, and the summary says how many were sent.
+- Five unanswered requests in a row stop the run: the target is down (exit 3, the origin is listed under "did not answer"). `-se` makes it twice `-t` failures of any kind, as ffuf's; `-se-after N` names the number. `-sf`, `-sa` and `-maxtime-job` say what they did in the summary (exit 4 for the first two, a note for the last).
+- `-timeout` is seconds per request, as in ffuf. `-o` writes ffuf's report, in the order the inputs were asked; `-o NAME.txt` without `-of` writes what stdout shows, as before. `-db FILE` keeps the matches in a workspace as ffuf results are, for `query`, `show` and `export`.
+- Not in `fuzz`: ffuf's scrapers (`-scraperfile`, `-scrapers`), `-search` and its history files (`-db` and `azhaq show` keep the matches), `-audit-log` (the hash-chained `-ledger` is the record of requests).
+
 ## Flags
 
 <!-- flags:begin fuzz -->

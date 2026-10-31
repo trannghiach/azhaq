@@ -62,6 +62,8 @@ A page's `id` is stable for a workspace file and URL. The first page of 2,000 pi
 
 Exit codes: 0 when stopped with Ctrl-C and everything could be read; 1 when no workspace could be read or it holds no screenshot; 3 when a workspace was skipped or picture files are missing, said on stderr and on the page.
 
+**Screenshot gallery.** `azhaq gallery -db shots.db` (or `-workspace DIR` for a directory of workspaces) serves a local page, `http://127.0.0.1:7180/`, to go through thousands of pictures: a grid with each page's URL, title, status and technologies, filters (status, technology, host, title, partial, look-alike group), one tile for each group of look-alikes, search of URL, title and kept page text (`title:login tech:nginx body:"sign in"`), and a page per shot with its picture, headers, cookies, TLS, network log, console and the `azhaq show` command. It is embedded in the binary, works offline, reads only the workspace and sends nothing to any target; the same data is a JSON API under `/api/` ([The JSON API](#the-json-api)).
+
 ## Flags
 
 <!-- flags:begin gallery -->

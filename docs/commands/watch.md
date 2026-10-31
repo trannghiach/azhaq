@@ -59,6 +59,20 @@ Notifications. `-notify URL` posts the text to a webhook: Slack and Discord inco
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+`watch` also says what changed in an app's API surface, tied to the script that calls each route. A frontend deploy that adds a route adds attack surface, and the first report is the one that pays:
+
+```
+~ 4 API routes
+    + POST /api/v2/export {format, userId}  (main.js)
+    ~ /api/orders/{id}: +DELETE  (main.js)
+    ~ PUT /api/profile: +role  (main.js)
+    - /api/legacy/report  (main.js)
+```
+
+`+` is a new route with its methods and the names it sends. `~ /route: +DELETE` is a method added to a known route; `~ PUT /route: +role` a name its call now sends. `-` is a route the previous run's scripts or API description named and no source names now. Routes are compared where a script or an API description names them: one only a crawl or a guess finds is not reported new, and one found only by guessing or in an archive is never reported gone. Placeholder names (`{id}` or `{orderId}`), identifiers, ordering and case are not changes, so the same app mapped twice reports no route change. The first run of a workspace lists none. The same text goes to Slack, Discord and Telegram, and the JSON of `-json`, `-notify-cmd` and generic hooks has a `routes` field ([Output](#output)).
+
 ## Flags
 
 <!-- flags:begin watch -->

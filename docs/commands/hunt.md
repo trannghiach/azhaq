@@ -56,6 +56,24 @@ The score is the sum of the row's signals, each counted once at its highest weig
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
+## Details
+
+### Where to look first
+
+A map of thousands of routes does not say where to start. `azhaq hunt -db app.db` ranks it. It reads the workspace and sends nothing. One row per route template (`/rest/basket/6` and `/rest/basket/7` are one row), each with its score, the reasons for it and the command to run next:
+
+```
+$ azhaq hunt -db app.db
+  1   57  http://app/api/orders/{id}  object-id: {id} in the path; path-data: "orders" in /api/orders/{id}, named, not requested; unauth-write: DELETE: nothing that names it asks for credentials (not tried)  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
+  2   33  http://app/api/v2/export  object-id: identifier parameter userId; unauth-write: POST: nothing that names it asks for credentials (not tried); input: takes format, userId  → next: azhaq roles -role anon -role 'user=Authorization: Bearer …' -- -url http://app/
+$ azhaq roles -json -role anon -role 'user=Authorization: Bearer …' -- -url https://app/ > roles.jsonl
+$ azhaq hunt -db app.db -roles roles.jsonl -limit 10
+```
+
+The score is the sum of a row's signals, each counted once. What raises a row: a role reading or writing another role's object (from `-roles`, with the evidence and its confidence quoted; the heaviest weights, 95 to 110, scaled by confidence); a name another party may take over; a credential in a script (the file is named) or a source map; a backup, key or database file, a directory listing; admin, debug, config and internal paths; API descriptions and GraphQL endpoints; an object identifier in the path or an `id` parameter; parameters that take a URL, a file, a command, a redirect or a query; a write method no description asks credentials for; a file upload form; a GET that looks state-changing; a server error. First seen within `-since` (default 7 days) adds a little when the workspace holds older URLs too, and a row with only that never ranks. Static assets, scripts, catch-all pages and pages that are gone never rank. Ties go to the target before fan-out, then to the row with more distinct signals, then by key. `-limit` (default 25) keeps the best rows.
+
+The `next` command is a real invocation: `azhaq roles show -dir DIR URL` for a cross-role row (DIR is the `-dir` of the roles run), `azhaq roles …` for an identifier, `azhaq params -u URL -w WORDLIST` for a page that takes input, `azhaq show -db FILE URL` for the rest. [Output](#output) lists the signals.
+
 ## Flags
 
 <!-- flags:begin hunt -->

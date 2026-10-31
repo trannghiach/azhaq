@@ -60,10 +60,10 @@ func TestRegressROL15DocsSayHeaderRolesLackCookies(t *testing.T) {
 	}
 }
 
-// ROL-20: the README's roles section names show -dir.
-func TestRegressROL20READMENamesRolesShowDir(t *testing.T) {
-	if !strings.Contains(readDoc(t, "../../README.md"), "`azhaq roles show -dir DIR URL` prints the answers") {
-		t.Error("README does not document azhaq roles show -dir")
+// ROL-20: the roles page names show -dir.
+func TestRegressROL20RolesPageNamesRolesShowDir(t *testing.T) {
+	if !strings.Contains(readDoc(t, "../../docs/commands/roles.md"), "`azhaq roles show -dir DIR URL` prints the answers") {
+		t.Error("docs/commands/roles.md does not document azhaq roles show -dir")
 	}
 }
 
