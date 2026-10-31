@@ -1273,7 +1273,23 @@ func (r *dnsRun) transfer(ctx context.Context, host string, d *dnsr.Data) {
 	}
 	d.AXFRData = chain // an empty chain says it was tried, as dnsx's does
 	if len(chain.Data) == 0 {
-		r.noteAXFR(fmt.Sprintf("-axfr %s: no server transferred the zone", host))
+		// Asked for with -axfr and every server refused: a failed technique, not a quiet note.
+		r.failAXFR(host, fmt.Sprintf("-axfr: no server transferred the zone (%d asked)", len(servers)))
+	}
+}
+
+// failAXFR records a transfer that no server gave, for the summary's failed list and exit 3.
+func (r *dnsRun) failAXFR(host, why string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	e := r.failed[why]
+	if e == nil {
+		e = &engine.Failure{Collector: "azhaq-dns", Error: why}
+		r.failed[why] = e
+	}
+	e.Count++
+	if len(e.Targets) < 100 {
+		e.Targets = append(e.Targets, host)
 	}
 }
 

@@ -153,7 +153,7 @@ azhaq dns -l 192.0.2.0/24 -ptr -resp
 
 - A dangling CNAME is listed with the service it points at: a takeover candidate.
 - `-all` and `-resp` print records in dnsx's form.
-- `-axfr` asks only name servers in scope.
+- `-axfr` asks only name servers in scope, the zone's first and then the `-r` resolvers, as dnsx does. When no server transfers the zone it is a failure (exit 3); dnsx prints the row with an empty `axfr` and exits 0.
 - `-db` keeps the answers for `query` and `export`.
 - `-maxtime` stops a long run, and the summary says where to go on.
 

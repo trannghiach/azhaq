@@ -542,6 +542,43 @@ func TestDNSTransferIsHeldToTheScope(t *testing.T) {
 	}
 }
 
+// -axfr asks the same servers in text and in -json, and -json keeps the
+// transfer on the row of a zone apex that has no A record. A transfer no
+// server gave is a failed technique asked for: the failed list and exit 3.
+func TestDNSAXFRJSONAndTextAskTheSameServers(t *testing.T) {
+	t.Chdir(t.TempDir())
+	lab := startLab(t)
+	labZoneMu.Lock()
+	old := labZone["lab.zz."]
+	labZone["lab.zz."] = []string{"NS ns.lab.zz.", "SOA ns.lab.zz. h.lab.zz. 5 1 2 3 4"}
+	labZoneMu.Unlock()
+	t.Cleanup(func() { labZoneMu.Lock(); labZone["lab.zz."] = old; labZoneMu.Unlock() })
+	args := []string{"-d", "lab.zz", "-r", lab.addr, "-axfr", "-allow", "lab.zz", "-timeout", "300ms"}
+	ls, jrep, code := dnsOut(t, append(args, "-json")...)
+	r := dnsRows(t, ls)["lab.zz"]
+	axfr, _ := r["axfr"].(map[string]any)
+	if chain, _ := axfr["chain"].([]any); len(chain) != 1 || code != exitOK {
+		t.Fatalf("a transfer that worked is not on the row (exit %d): %v\n%+v", code, ls, jrep)
+	}
+	ts, _, _ := dnsOut(t, append(args, "-resp")...)
+	if !strings.Contains(strings.Join(ts, "\n"), "ns.lab.zz. 60 IN A 127.0.0.1") {
+		t.Errorf("the text form lost the zone: %v", ts)
+	}
+	if len(jrep.Notes) != 1 || !strings.Contains(jrep.Notes[0], "127.0.0.1:53 did not transfer") {
+		t.Errorf("the notes name only the server that failed: %v", jrep.Notes)
+	}
+	// The lab refuses the zone of another name: every server fails.
+	for _, form := range []string{"-json", "-resp"} {
+		_, rep, code := dnsOut(t, "-d", "www.lab.zz", "-r", lab.addr, "-axfr", "-allow", "lab.zz", "-timeout", "300ms", form)
+		if code != exitPartial {
+			t.Errorf("%s: exit %d, want %d", form, code, exitPartial)
+		}
+		if form == "-json" && (len(rep.Failed) != 1 || !strings.Contains(rep.Failed[0].Error, "no server transferred the zone (1 asked)") || !reflect.DeepEqual(rep.Failed[0].Targets, []string{"www.lab.zz"})) {
+			t.Errorf("failed %+v", rep.Failed)
+		}
+	}
+}
+
 func TestDNSHostsFile(t *testing.T) {
 	t.Chdir(t.TempDir())
 	lab := startLab(t)

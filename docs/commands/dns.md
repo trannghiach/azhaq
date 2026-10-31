@@ -110,6 +110,13 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 - `-all` asks every type but AXFR. AXFR is asked with `-axfr` only, because it connects to the name servers.
 - An address gets PTR only.
 
+### Zone transfer
+- `-axfr` asks the zone's name servers on port 53 first, then each `-r` resolver at its own port, over TCP, as dnsx does. Text and `-json` ask the same servers.
+- A name server outside the scope is not asked, and the summary says so.
+- `-json` gives the name's row with `axfr`: its `chain` holds one entry for each server that transferred the zone. An `axfr` with no `chain` says the transfer was tried and no server gave it.
+- A note names each server that did not transfer the zone.
+- When no server transferred it, the summary lists `-axfr: no server transferred the zone` under `failed` and the exit code is 3: the technique was asked for and gave nothing.
+
 ### Wildcards
 - A name that only resolves through a wildcard zone is left out of `a`, `aaaa` and `cname`.
 - `-no-wildcard` keeps it.
