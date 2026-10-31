@@ -1,0 +1,4407 @@
+{
+ "vulhub": {
+  "repo": "https://github.com/vulhub/vulhub",
+  "commit": "9b90d4276f84feed6333286afeb7e1250379a1da",
+  "license": "MIT"
+ },
+ "categories": [
+  "ci-cd",
+  "cms",
+  "framework",
+  "datastore",
+  "admin-panel",
+  "middleware",
+  "messaging",
+  "monitoring",
+  "mail-other"
+ ],
+ "entries": [
+  {
+   "id": "jenkins--CVE-2017-1000353",
+   "path": "jenkins/CVE-2017-1000353",
+   "product": "Jenkins",
+   "family": "jenkins",
+   "version": "2.46.1",
+   "cve": [
+    "CVE-2017-1000353"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "jenkins": {
+     "image": "vulhub/jenkins:2.46.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "jenkins",
+     "host_port": 50000,
+     "container_port": 50000,
+     "transport": "tcp",
+     "protocol": "jenkins-agent",
+     "primary": false
+    },
+    {
+     "service": "jenkins",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "Jenkins 2.46.1 LTS and earlier: unauthenticated remote code execution through the CLI remoting channel (Java deserialization).",
+   "mem_mb": 550,
+   "ready_s": 90,
+   "names": [
+    "ci",
+    "jenkins",
+    "build"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "jenkins--CVE-2018-1000861",
+   "path": "jenkins/CVE-2018-1000861",
+   "product": "Jenkins",
+   "family": "jenkins",
+   "version": "2.138",
+   "cve": [
+    "CVE-2018-1000861"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "jenkins": {
+     "image": "vulhub/jenkins:2.138"
+    }
+   },
+   "ports": [
+    {
+     "service": "jenkins",
+     "host_port": 50000,
+     "container_port": 50000,
+     "transport": "tcp",
+     "protocol": "jenkins-agent",
+     "primary": false
+    },
+    {
+     "service": "jenkins",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "Jenkins before 2.153: the Stapler routing lets an unauthenticated user call methods that run Groovy outside the sandbox.",
+   "mem_mb": 550,
+   "ready_s": 90,
+   "names": [
+    "ci",
+    "jenkins",
+    "build"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "jenkins--CVE-2024-23897",
+   "path": "jenkins/CVE-2024-23897",
+   "product": "Jenkins",
+   "family": "jenkins",
+   "version": "2.441",
+   "cve": [
+    "CVE-2024-23897"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "jenkins": {
+     "image": "vulhub/jenkins:2.441"
+    }
+   },
+   "ports": [
+    {
+     "service": "jenkins",
+     "host_port": 50000,
+     "container_port": 50000,
+     "transport": "tcp",
+     "protocol": "jenkins-agent",
+     "primary": false
+    },
+    {
+     "service": "jenkins",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "jenkins",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "Jenkins before 2.442: the CLI argument parser expands @file and returns the first lines of any file the server can read.",
+   "mem_mb": 600,
+   "ready_s": 90,
+   "names": [
+    "ci",
+    "jenkins",
+    "build"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "nexus--CVE-2020-10199",
+   "path": "nexus/CVE-2020-10199",
+   "product": "Sonatype Nexus Repository",
+   "family": "nexus",
+   "version": "3.21.1",
+   "cve": [
+    "CVE-2020-10199"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "web": {
+     "image": "vulhub/nexus:3.21.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8081,
+     "container_port": 8081,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8081,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In the version <= 3.21.1, a EL injection vulnerability has been discovered that allows for an attacker with any type of account on Nexus Repository to execute arbitrary code by crafting a malicious request to Nexus Repository.",
+   "mem_mb": 1300,
+   "ready_s": 240,
+   "names": [
+    "artifacts",
+    "nexus",
+    "repo"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "nexus--CVE-2024-4956",
+   "path": "nexus/CVE-2024-4956",
+   "product": "Sonatype Nexus Repository",
+   "family": "nexus",
+   "version": "3.68.0",
+   "cve": [
+    "CVE-2024-4956"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "web": {
+     "image": "vulhub/nexus:3.68.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8081,
+     "container_port": 8081,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8081,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Nexus Repository 3 before 3.68.1: an unauthenticated path traversal returns any file the server can read.",
+   "mem_mb": 1400,
+   "ready_s": 240,
+   "names": [
+    "artifacts",
+    "nexus",
+    "repo"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "xxl-job--unacc",
+   "path": "xxl-job/unacc",
+   "product": "XXL-JOB",
+   "family": "xxl-job",
+   "version": "2.2.0",
+   "cve": [],
+   "category": "ci-cd",
+   "services": {
+    "admin": {
+     "image": "vulhub/xxl-job:2.2.0-admin"
+    },
+    "executor": {
+     "image": "vulhub/xxl-job:2.2.0-executor"
+    },
+    "db": {
+     "image": "mysql:5.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "admin",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "executor",
+     "host_port": 9999,
+     "container_port": 9999,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "XXL-JOB 2.2.0: the executor on 9999 has no access token, so anyone can run commands through its REST API.",
+   "mem_mb": 700,
+   "ready_s": 120,
+   "names": [
+    "jobs",
+    "scheduler",
+    "cron"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "saltstack--CVE-2020-11651",
+   "path": "saltstack/CVE-2020-11651",
+   "product": "SaltStack Salt master",
+   "family": "salt",
+   "version": "2019.2.3",
+   "cve": [
+    "CVE-2020-11651"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "saltstack": {
+     "image": "vulhub/saltstack:2019.2.3"
+    }
+   },
+   "ports": [
+    {
+     "service": "saltstack",
+     "host_port": 8000,
+     "container_port": 8000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "saltstack",
+     "host_port": 4505,
+     "container_port": 4505,
+     "transport": "tcp",
+     "protocol": "zeromq",
+     "primary": false
+    },
+    {
+     "service": "saltstack",
+     "host_port": 4506,
+     "container_port": 4506,
+     "transport": "tcp",
+     "protocol": "zeromq",
+     "primary": false
+    },
+    {
+     "service": "saltstack",
+     "host_port": 2222,
+     "container_port": 22,
+     "transport": "tcp",
+     "protocol": "ssh",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "SaltStack Salt master: authentication bypass on the ZeroMQ ports (CVE-2020-11651) and directory traversal (CVE-2020-11652) give command execution and file read.",
+   "mem_mb": 250,
+   "ready_s": 60,
+   "names": [
+    "salt",
+    "config",
+    "ops"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "git--CVE-2017-8386",
+   "path": "git/CVE-2017-8386",
+   "product": "Git over SSH (git-shell)",
+   "family": "git",
+   "version": "2.12.2",
+   "cve": [
+    "CVE-2017-8386"
+   ],
+   "category": "ci-cd",
+   "services": {
+    "git": {
+     "image": "vulhub/git:2.12.2-with-openssh"
+    }
+   },
+   "ports": [
+    {
+     "service": "git",
+     "host_port": 3322,
+     "container_port": 22,
+     "transport": "tcp",
+     "protocol": "ssh",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "expect": "^SSH-",
+    "port": 3322
+   },
+   "summary": "git-shell before 2.12.3 lets an SSH user with a restricted shell read arbitrary files through a crafted upload-pack path.",
+   "mem_mb": 60,
+   "ready_s": 20,
+   "names": [
+    "git",
+    "scm",
+    "code"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "wordpress--CVE-2026-63030",
+   "path": "wordpress/CVE-2026-63030",
+   "product": "WordPress",
+   "family": "wordpress",
+   "version": "6.9.4",
+   "cve": [
+    "CVE-2026-63030"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/wordpress:6.9.4"
+    },
+    "db": {
+     "image": "mysql:8.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "WordPress 6.9.4: a pre-authentication chain of two core bugs creates an administrator account.",
+   "mem_mb": 550,
+   "ready_s": 120,
+   "names": [
+    "blog",
+    "www",
+    "wp",
+    "site",
+    "marketing"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "joomla--CVE-2023-23752",
+   "path": "joomla/CVE-2023-23752",
+   "product": "Joomla!",
+   "family": "joomla",
+   "version": "4.2.7",
+   "cve": [
+    "CVE-2023-23752"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/joomla:4.2.7"
+    },
+    "mysql": {
+     "image": "mysql:5.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Joomla 4.2.7: the REST API returns the application configuration, including database credentials, to anyone who adds public=true.",
+   "mem_mb": 450,
+   "ready_s": 90,
+   "names": [
+    "www",
+    "news",
+    "portal",
+    "site"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "joomla--CVE-2017-8917",
+   "path": "joomla/CVE-2017-8917",
+   "product": "Joomla!",
+   "family": "joomla",
+   "version": "3.7.0",
+   "cve": [
+    "CVE-2017-8917"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/joomla:3.7.0"
+    },
+    "mysql": {
+     "image": "mysql:5.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Joomla 3.7.0: SQL injection in the com_fields component, unauthenticated.",
+   "mem_mb": 350,
+   "ready_s": 90,
+   "names": [
+    "www",
+    "news",
+    "portal",
+    "site"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "joomla--CVE-2015-8562",
+   "path": "joomla/CVE-2015-8562",
+   "product": "Joomla!",
+   "family": "joomla",
+   "version": "3.4.5",
+   "cve": [
+    "CVE-2015-8562"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/joomla:3.4.5"
+    },
+    "mysql": {
+     "image": "mysql:5.5"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Joomla 3.4.5: the session handler deserializes a crafted User-Agent header, giving unauthenticated remote code execution.",
+   "mem_mb": 330,
+   "ready_s": 90,
+   "names": [
+    "old",
+    "intranet",
+    "www2"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "tikiwiki--CVE-2020-15906",
+   "path": "tikiwiki/CVE-2020-15906",
+   "product": "Tiki Wiki CMS Groupware",
+   "family": "tikiwiki",
+   "version": "21.1",
+   "cve": [
+    "CVE-2020-15906"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/tikiwiki:21.1"
+    },
+    "db": {
+     "image": "mysql:5.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "db",
+     "host_port": 3306,
+     "container_port": 3306,
+     "transport": "tcp",
+     "protocol": "mysql",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Tiki Wiki 21.1 and earlier: after 50 failed logins the admin account is locked, and a blank password then logs in as admin.",
+   "mem_mb": 500,
+   "ready_s": 120,
+   "names": [
+    "wiki",
+    "kb",
+    "docs"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "showdoc--CNVD-2020-26585",
+   "path": "showdoc/CNVD-2020-26585",
+   "product": "ShowDoc",
+   "family": "showdoc",
+   "version": "2.8.2",
+   "cve": [
+    "CNVD-2020-26585"
+   ],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/showdoc:2.8.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "ShowDoc version before 2.8.7, an unrestricted and unauthenticated file upload issue is found and attacker is able to upload a webshell and execute arbitrary code on server.",
+   "mem_mb": 120,
+   "ready_s": 40,
+   "names": [
+    "docs",
+    "api-docs",
+    "showdoc"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "showdoc--3.2.5-sqli",
+   "path": "showdoc/3.2.5-sqli",
+   "product": "ShowDoc",
+   "family": "showdoc",
+   "version": "3.2.4",
+   "cve": [],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/showdoc:3.2.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "ShowDoc version <= 3.2.5, an unauthenticated SQL injection issue is found and attacker is able to steal user password and token from SQLite database.",
+   "mem_mb": 130,
+   "ready_s": 40,
+   "names": [
+    "docs",
+    "api-docs",
+    "showdoc"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "v2board--1.6-privilege-escalation",
+   "path": "v2board/1.6-privilege-escalation",
+   "product": "V2Board",
+   "family": "v2board",
+   "version": "1.6.1",
+   "cve": [],
+   "category": "cms",
+   "services": {
+    "web": {
+     "image": "vulhub/v2board:1.6.1"
+    },
+    "db": {
+     "image": "mysql:5.7"
+    },
+    "redis": {
+     "image": "redis:7-alpine"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "V2Board 1.6.1: a normal user can obtain an administrator token through the API (privilege escalation).",
+   "mem_mb": 500,
+   "ready_s": 90,
+   "names": [
+    "panel",
+    "portal",
+    "billing"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "owncloud--CVE-2023-49103",
+   "path": "owncloud/CVE-2023-49103",
+   "product": "ownCloud",
+   "family": "owncloud",
+   "version": "10.12.1",
+   "cve": [
+    "CVE-2023-49103"
+   ],
+   "category": "cms",
+   "services": {
+    "owncloud": {
+     "image": "vulhub/owncloud:10.12.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "owncloud",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "CVE-2023-49103 is a critical information disclosure vulnerability in this app, affecting graphapi versions 0.2.0 through 0.3.0.",
+   "mem_mb": 450,
+   "ready_s": 120,
+   "names": [
+    "files",
+    "cloud",
+    "share"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "struts2--s2-045",
+   "path": "struts2/s2-045",
+   "product": "Apache Struts",
+   "family": "struts2",
+   "version": "2.3.30",
+   "cve": [
+    "CVE-2017-5638"
+   ],
+   "category": "framework",
+   "services": {
+    "struts2": {
+     "image": "vulhub/struts2:2.3.30"
+    }
+   },
+   "ports": [
+    {
+     "service": "struts2",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Struts 2.3.30: S2-045, remote code execution through the Content-Type header (Jakarta multipart parser).",
+   "mem_mb": 400,
+   "ready_s": 60,
+   "names": [
+    "app",
+    "portal",
+    "legacy"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "struts2--s2-061",
+   "path": "struts2/s2-061",
+   "product": "Apache Struts",
+   "family": "struts2",
+   "version": "2.5.25",
+   "cve": [
+    "CVE-2020-17530"
+   ],
+   "category": "framework",
+   "services": {
+    "struts2": {
+     "image": "vulhub/struts2:2.5.25"
+    }
+   },
+   "ports": [
+    {
+     "service": "struts2",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In the versions prior to Struts 2.5.25, when evaluated on raw user input in tag attributes, may lead to remote code execution.",
+   "mem_mb": 400,
+   "ready_s": 60,
+   "names": [
+    "app",
+    "portal",
+    "web"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "spring--CVE-2022-22965",
+   "path": "spring/CVE-2022-22965",
+   "product": "Spring Framework (Spring MVC)",
+   "family": "spring",
+   "version": "5.3.17",
+   "cve": [
+    "CVE-2022-22965"
+   ],
+   "category": "framework",
+   "services": {
+    "spring": {
+     "image": "vulhub/spring-webmvc:5.3.17"
+    }
+   },
+   "ports": [
+    {
+     "service": "spring",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A Spring MVC or Spring WebFlux application running on JDK 9+ may be vulnerable to remote code execution (RCE) via data binding.",
+   "mem_mb": 350,
+   "ready_s": 60,
+   "names": [
+    "api",
+    "service",
+    "app"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "spring--CVE-2022-22947",
+   "path": "spring/CVE-2022-22947",
+   "product": "Spring Cloud Gateway",
+   "family": "spring",
+   "version": "3.1.0",
+   "cve": [
+    "CVE-2022-22947"
+   ],
+   "category": "framework",
+   "services": {
+    "spring": {
+     "image": "vulhub/spring-cloud-gateway:3.1.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "spring",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "spring",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Applications using Spring Cloud Gateway in the version prior to 3.1.0 and 3.0.6, are vulnerable to a code injection attack when the Gateway Actuator endpoint is enabled, exposed and unsecured.",
+   "mem_mb": 400,
+   "ready_s": 60,
+   "names": [
+    "gateway",
+    "gw",
+    "edge-api"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "thinkphp--5-rce",
+   "path": "thinkphp/5-rce",
+   "product": "ThinkPHP",
+   "family": "thinkphp",
+   "version": "5.0.20",
+   "cve": [],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/thinkphp:5.0.20"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In its version 5, as the framework processes controller name incorrectly, it can execute any method if the website doesn't have mandatory routing enabled (which is default), resulting in a RCE vulnerability.",
+   "mem_mb": 60,
+   "ready_s": 30,
+   "names": [
+    "shop",
+    "app",
+    "mall"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "laravel--CVE-2021-3129",
+   "path": "laravel/CVE-2021-3129",
+   "product": "Laravel (Ignition)",
+   "family": "laravel",
+   "version": "8.4.2",
+   "cve": [
+    "CVE-2021-3129"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/laravel:8.4.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Ignition before 2.5.2, as used in Laravel and other products, allows unauthenticated remote attackers to execute arbitrary code because of insecure usage of file_get_contents() and file_put_contents().",
+   "mem_mb": 80,
+   "ready_s": 30,
+   "names": [
+    "app",
+    "dash",
+    "portal"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "django--CVE-2018-14574",
+   "path": "django/CVE-2018-14574",
+   "product": "Django",
+   "family": "django",
+   "version": "2.0.7",
+   "cve": [
+    "CVE-2018-14574"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/django:2.0.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8000,
+     "container_port": 8000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Django versions before 2.0.8 and 1.11.15 contain an open redirect vulnerability in CommonMiddleware when both `django.middleware.common.CommonMiddleware` and the `APPEND_SLASH` setting are enabled.",
+   "mem_mb": 80,
+   "ready_s": 30,
+   "names": [
+    "app",
+    "web",
+    "backend"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "fastjson--1.2.24-rce",
+   "path": "fastjson/1.2.24-rce",
+   "product": "Fastjson (Spring Boot app)",
+   "family": "fastjson",
+   "version": "1.2.24",
+   "cve": [
+    "CVE-2017-18349"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/fastjson:1.2.24"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8090,
+     "container_port": 8090,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8090,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Fastjson 1.2.24: JSON parsing with autoType creates arbitrary classes, giving remote code execution.",
+   "mem_mb": 300,
+   "ready_s": 40,
+   "names": [
+    "api",
+    "service",
+    "rest"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "shiro--CVE-2016-4437",
+   "path": "shiro/CVE-2016-4437",
+   "product": "Apache Shiro",
+   "family": "shiro",
+   "version": "1.2.4",
+   "cve": [
+    "CVE-2016-4437"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/shiro:1.2.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Attackers can forge user cookies using Shiro's default key, triggering a Java deserialization vulnerability that allows arbitrary command execution on the target machine.",
+   "mem_mb": 350,
+   "ready_s": 60,
+   "names": [
+    "admin",
+    "portal",
+    "oa"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "rails--CVE-2018-3760",
+   "path": "rails/CVE-2018-3760",
+   "product": "Ruby on Rails",
+   "family": "rails",
+   "version": "5.0.7",
+   "cve": [
+    "CVE-2018-3760"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/rails:5.0.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "There is a path traversal vulnerability caused by secondary decoding in Sprockets 3.7.1 and lower versions.",
+   "mem_mb": 200,
+   "ready_s": 40,
+   "names": [
+    "app",
+    "web",
+    "rails"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "next.js--CVE-2025-29927",
+   "path": "next.js/CVE-2025-29927",
+   "product": "Next.js",
+   "family": "nextjs",
+   "version": "15.2.2",
+   "cve": [
+    "CVE-2025-29927"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/nextjs:15.2.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "When configured to use middleware for authentication and authorization purposes, versions prior to 14.2.25 and 15.2.3 are vulnerable to an authorization bypass.",
+   "mem_mb": 200,
+   "ready_s": 30,
+   "names": [
+    "app",
+    "dashboard",
+    "web"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "flask--ssti",
+   "path": "flask/ssti",
+   "product": "Flask",
+   "family": "flask",
+   "version": "1.1.1",
+   "cve": [],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/flask:1.1.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8000,
+     "container_port": 8000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A Server-Side Template Injection (SSTI) vulnerability can occur when user input is directly rendered in Jinja2 templates without proper sanitization, potentially leading to remote code execution.",
+   "mem_mb": 50,
+   "ready_s": 20,
+   "names": [
+    "tools",
+    "util",
+    "internal"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "gradio--CVE-2024-1561",
+   "path": "gradio/CVE-2024-1561",
+   "product": "Gradio",
+   "family": "gradio",
+   "version": "4.12.0",
+   "cve": [
+    "CVE-2024-1561"
+   ],
+   "category": "framework",
+   "services": {
+    "web": {
+     "image": "vulhub/gradio:4.12.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 7860,
+     "container_port": 7860,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 7860,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In Gradio versions prior to 4.13, the `component_server` endpoint allows attackers to invoke arbitrary methods of the `Component` class.",
+   "mem_mb": 300,
+   "ready_s": 40,
+   "names": [
+    "ml",
+    "demo",
+    "ai"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "redis--4-unacc",
+   "path": "redis/4-unacc",
+   "product": "Redis",
+   "family": "redis",
+   "version": "4.0.14",
+   "cve": [],
+   "category": "datastore",
+   "services": {
+    "redis": {
+     "image": "vulhub/redis:4.0.14"
+    }
+   },
+   "ports": [
+    {
+     "service": "redis",
+     "host_port": 6379,
+     "container_port": 6379,
+     "transport": "tcp",
+     "protocol": "redis",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "send": "PING\r\n",
+    "expect": "PONG|NOAUTH",
+    "port": 6379
+   },
+   "summary": "Redis 4.0.14 without a password: master-slave replication lets a client load a module and run commands.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "cache",
+    "redis",
+    "kv"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "redis--CVE-2022-0543",
+   "path": "redis/CVE-2022-0543",
+   "product": "Redis (Debian build)",
+   "family": "redis",
+   "version": "5.0.7",
+   "cve": [
+    "CVE-2022-0543"
+   ],
+   "category": "datastore",
+   "services": {
+    "redis": {
+     "image": "vulhub/redis:5.0.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "redis",
+     "host_port": 6379,
+     "container_port": 6379,
+     "transport": "tcp",
+     "protocol": "redis",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "send": "PING\r\n",
+    "expect": "PONG|NOAUTH",
+    "port": 6379
+   },
+   "summary": "Reginaldo Silva discovered that due to a packaging issue on Debian/Ubuntu, a remote attacker with the ability to execute arbitrary Lua scripts could possibly escape the Lua sandbox and execute arbitrary code on the host.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "cache",
+    "redis",
+    "session"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "couchdb--CVE-2022-24706",
+   "path": "couchdb/CVE-2022-24706",
+   "product": "Apache CouchDB",
+   "family": "couchdb",
+   "version": "3.2.1",
+   "cve": [
+    "CVE-2022-24706"
+   ],
+   "category": "datastore",
+   "services": {
+    "couchdb": {
+     "image": "vulhub/couchdb:3.2.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "couchdb",
+     "host_port": 5984,
+     "container_port": 5984,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "couchdb",
+     "host_port": 4369,
+     "container_port": 4369,
+     "transport": "tcp",
+     "protocol": "epmd",
+     "primary": false
+    },
+    {
+     "service": "couchdb",
+     "host_port": 9100,
+     "container_port": 9100,
+     "transport": "tcp",
+     "protocol": "erlang-dist",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 5984,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache CouchDB 3.2.1: the Erlang distribution port uses the default cookie, so a remote node can run commands.",
+   "mem_mb": 150,
+   "ready_s": 40,
+   "names": [
+    "couch",
+    "db",
+    "docs-db"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "elasticsearch--CVE-2014-3120",
+   "path": "elasticsearch/CVE-2014-3120",
+   "product": "Elasticsearch",
+   "family": "elasticsearch",
+   "version": "1.1.1",
+   "cve": [
+    "CVE-2014-3120"
+   ],
+   "category": "datastore",
+   "services": {
+    "es": {
+     "image": "vulhub/elasticsearch:1.1.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "es",
+     "host_port": 9200,
+     "container_port": 9200,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "es",
+     "host_port": 9300,
+     "container_port": 9300,
+     "transport": "tcp",
+     "protocol": "elasticsearch-transport",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 9200,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "The default configuration in Elasticsearch before 1.2 enables dynamic scripting, which allows remote attackers to execute arbitrary MVEL expressions and Java code via the source parameter to `_search`.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "search",
+    "es",
+    "logs"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "elasticsearch--CVE-2015-1427",
+   "path": "elasticsearch/CVE-2015-1427",
+   "product": "Elasticsearch",
+   "family": "elasticsearch",
+   "version": "1.4.2",
+   "cve": [
+    "CVE-2015-1427"
+   ],
+   "category": "datastore",
+   "services": {
+    "es": {
+     "image": "vulhub/elasticsearch:1.4.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "es",
+     "host_port": 9200,
+     "container_port": 9200,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "es",
+     "host_port": 9300,
+     "container_port": 9300,
+     "transport": "tcp",
+     "protocol": "elasticsearch-transport",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 9200,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "ElasticSearch versions prior to 1.3.8 and 1.4.3 contain a vulnerability in the Groovy scripting engine that allows attackers to bypass the sandbox protection and execute arbitrary code on the server.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "search",
+    "es",
+    "index"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "mysql--CVE-2012-2122",
+   "path": "mysql/CVE-2012-2122",
+   "product": "MySQL",
+   "family": "mysql",
+   "version": "5.5.23",
+   "cve": [
+    "CVE-2012-2122"
+   ],
+   "category": "datastore",
+   "services": {
+    "mysql": {
+     "image": "vulhub/mysql:5.5.23"
+    }
+   },
+   "ports": [
+    {
+     "service": "mysql",
+     "host_port": 3306,
+     "container_port": 3306,
+     "transport": "tcp",
+     "protocol": "mysql",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "expect": "[0-9]\\.[0-9]",
+    "port": 3306
+   },
+   "summary": "MySQL 5.5.23: a wrong password is accepted about one time in 256 attempts, so repeating the login gets in.",
+   "mem_mb": 200,
+   "ready_s": 30,
+   "names": [
+    "db",
+    "mysql",
+    "sql"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "postgres--CVE-2018-1058",
+   "path": "postgres/CVE-2018-1058",
+   "product": "PostgreSQL",
+   "family": "postgres",
+   "version": "9.6.7",
+   "cve": [
+    "CVE-2018-1058"
+   ],
+   "category": "datastore",
+   "services": {
+    "postgres": {
+     "image": "vulhub/postgres:9.6.7"
+    }
+   },
+   "ports": [
+    {
+     "service": "postgres",
+     "host_port": 5432,
+     "container_port": 5432,
+     "transport": "tcp",
+     "protocol": "postgresql",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "send_hex": "0000000804d2162f",
+    "expect": "^[NS]",
+    "port": 5432
+   },
+   "summary": "A logical error exists in versions 9.3 through 10, where superusers can unknowingly execute malicious code created by regular users, leading to unexpected operations.",
+   "mem_mb": 60,
+   "ready_s": 20,
+   "names": [
+    "db",
+    "pg",
+    "postgres"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "influxdb--CVE-2019-20933",
+   "path": "influxdb/CVE-2019-20933",
+   "product": "InfluxDB",
+   "family": "influxdb",
+   "version": "1.6.6",
+   "cve": [
+    "CVE-2019-20933"
+   ],
+   "category": "datastore",
+   "services": {
+    "web": {
+     "image": "vulhub/influxdb:1.6.6"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8086,
+     "container_port": 8086,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8086,
+    "path": "/ping",
+    "status_below": 500
+   },
+   "summary": "InfluxDB before 1.7.6 has an authentication bypass vulnerability in the authenticate function in `services/httpd/handler.go` because a JWT token may have an empty SharedSecret (aka shared secret).",
+   "mem_mb": 60,
+   "ready_s": 20,
+   "names": [
+    "metrics-db",
+    "influx",
+    "tsdb"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "neo4j--CVE-2021-34371",
+   "path": "neo4j/CVE-2021-34371",
+   "product": "Neo4j",
+   "family": "neo4j",
+   "version": "3.4.18",
+   "cve": [
+    "CVE-2021-34371"
+   ],
+   "category": "datastore",
+   "services": {
+    "web": {
+     "image": "vulhub/neo4j:3.4.18"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 7474,
+     "container_port": 7474,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 7687,
+     "container_port": 7687,
+     "transport": "tcp",
+     "protocol": "bolt",
+     "primary": false
+    },
+    {
+     "service": "web",
+     "host_port": 1337,
+     "container_port": 1337,
+     "transport": "tcp",
+     "protocol": "java-rmi",
+     "primary": false
+    },
+    {
+     "service": "web",
+     "host_port": 34444,
+     "container_port": 34444,
+     "transport": "tcp",
+     "protocol": "java-rmi",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 7474,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Neo4j through 3.4.18 (with the shell server enabled) exposes an RMI service that arbitrarily deserializes Java objects, e.g., through setSessionVariable.",
+   "mem_mb": 600,
+   "ready_s": 60,
+   "names": [
+    "graph",
+    "neo4j",
+    "kg"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "solr--CVE-2019-17558",
+   "path": "solr/CVE-2019-17558",
+   "product": "Apache Solr",
+   "family": "solr",
+   "version": "8.2.0",
+   "cve": [
+    "CVE-2019-17558"
+   ],
+   "category": "datastore",
+   "services": {
+    "solr": {
+     "image": "vulhub/solr:8.2.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "solr",
+     "host_port": 8983,
+     "container_port": 8983,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "solr",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8983,
+    "path": "/solr/",
+    "status_below": 500
+   },
+   "summary": "Apache Solr 5.0.0 to Apache Solr 8.3.1 are vulnerable to a Remote Code Execution through the VelocityResponseWriter.",
+   "mem_mb": 550,
+   "ready_s": 60,
+   "names": [
+    "solr",
+    "search",
+    "catalog"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "h2database--CVE-2018-10054",
+   "path": "h2database/CVE-2018-10054",
+   "product": "H2 Database console (Spring app)",
+   "family": "h2",
+   "version": "1.4.197",
+   "cve": [
+    "CVE-2018-10054"
+   ],
+   "category": "datastore",
+   "services": {
+    "web": {
+     "image": "vulhub/spring-with-h2database:1.4.197"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Spring Boot app with the H2 web console open to all hosts (H2 before 1.4.198): the console runs SQL and a crafted JDBC URL gives code execution.",
+   "mem_mb": 350,
+   "ready_s": 60,
+   "names": [
+    "db-admin",
+    "h2",
+    "devdb"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "hugegraph--CVE-2024-27348",
+   "path": "hugegraph/CVE-2024-27348",
+   "product": "Apache HugeGraph",
+   "family": "hugegraph",
+   "version": "1.2.0",
+   "cve": [
+    "CVE-2024-27348"
+   ],
+   "category": "datastore",
+   "services": {
+    "web": {
+     "image": "vulhub/hugegraph:1.2.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache HugeGraph 1.2.0: the Gremlin API allows a sandbox bypass, giving remote code execution.",
+   "mem_mb": 700,
+   "ready_s": 90,
+   "names": [
+    "graph",
+    "hugegraph",
+    "kg"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "phpmyadmin--CVE-2018-12613",
+   "path": "phpmyadmin/CVE-2018-12613",
+   "product": "phpMyAdmin",
+   "family": "phpmyadmin",
+   "version": "4.8.1",
+   "cve": [
+    "CVE-2018-12613"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/phpmyadmin:4.8.1"
+    },
+    "mysql": {
+     "image": "mysql:5.5"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "The vulnerability is in the `index.php`, causing files iclusion vulnerabilitiy.",
+   "mem_mb": 250,
+   "ready_s": 60,
+   "names": [
+    "pma",
+    "phpmyadmin",
+    "dbadmin"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "phpmyadmin--CVE-2016-5734",
+   "path": "phpmyadmin/CVE-2016-5734",
+   "product": "phpMyAdmin",
+   "family": "phpmyadmin",
+   "version": "4.4.15.6",
+   "cve": [
+    "CVE-2016-5734"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/phpmyadmin:4.4.15.6"
+    },
+    "mysql": {
+     "image": "mysql:5.5"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "The vulnerability is in the `preg_replace` function, because the information submitted by the user can be spliced into the first parameter.",
+   "mem_mb": 250,
+   "ready_s": 60,
+   "names": [
+    "pma",
+    "phpmyadmin",
+    "dbadmin"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "adminer--CVE-2021-21311",
+   "path": "adminer/CVE-2021-21311",
+   "product": "Adminer",
+   "family": "adminer",
+   "version": "4.7.8",
+   "cve": [
+    "CVE-2021-21311"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/adminer:4.7.8"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In adminer from version 4.0.0 and before 4.7.9 there is a server-side request forgery vulnerability on error page of Elasticsearch and ClickHouse.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "adminer",
+    "dbtool",
+    "sql"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "pgadmin--CVE-2022-4223",
+   "path": "pgadmin/CVE-2022-4223",
+   "product": "pgAdmin 4",
+   "family": "pgadmin",
+   "version": "6.16",
+   "cve": [
+    "CVE-2022-4223"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/pgadmin:6.16"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 5050,
+     "container_port": 5050,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 5050,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "pgAdmin 4 before 6.17: the validate-binary-path API runs an attacker-chosen binary, giving authenticated remote code execution.",
+   "mem_mb": 300,
+   "ready_s": 60,
+   "names": [
+    "pgadmin",
+    "dbadmin",
+    "pg-ui"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "mongo-express--CVE-2019-10758",
+   "path": "mongo-express/CVE-2019-10758",
+   "product": "mongo-express",
+   "family": "mongo-express",
+   "version": "0.53.0",
+   "cve": [
+    "CVE-2019-10758"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/mongo-express:0.53.0"
+    },
+    "mongo": {
+     "image": "mongo:3.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8081,
+     "container_port": 8081,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8081,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "If an attacker can successfully log in, or if the target server hasn't changed the default credentials (`admin:pass`), they can execute arbitrary Node.js code.",
+   "mem_mb": 300,
+   "ready_s": 40,
+   "names": [
+    "mongo",
+    "mongo-ui",
+    "dbadmin"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "webmin--CVE-2019-15107",
+   "path": "webmin/CVE-2019-15107",
+   "product": "Webmin",
+   "family": "webmin",
+   "version": "1.910",
+   "cve": [
+    "CVE-2019-15107"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/webmin:1.910"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 10000,
+     "container_port": 10000,
+     "transport": "tcp",
+     "protocol": "https",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "https",
+    "port": 10000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "The vulnerability exists in the password reset page, which allows unauthenticated users to execute arbitrary commands through a simple POST request.",
+   "mem_mb": 100,
+   "ready_s": 30,
+   "names": [
+    "webmin",
+    "sysadmin",
+    "ops"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "supervisor--CVE-2017-11610",
+   "path": "supervisor/CVE-2017-11610",
+   "product": "Supervisor",
+   "family": "supervisor",
+   "version": "3.3.2",
+   "cve": [
+    "CVE-2017-11610"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/supervisor:3.3.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 9001,
+     "container_port": 9001,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 9001,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Supervisor 3.3.2: the XML-RPC interface on 9001 allows an unauthenticated client to run commands.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "supervisor",
+    "procs",
+    "workers"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "glassfish--CVE-2017-1000028",
+   "path": "glassfish/CVE-2017-1000028",
+   "product": "Eclipse GlassFish admin console",
+   "family": "glassfish",
+   "version": "4.1",
+   "cve": [
+    "CVE-2017-1000028"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "glassfish": {
+     "image": "vulhub/glassfish:4.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "glassfish",
+     "host_port": 4848,
+     "container_port": 4848,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "glassfish",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 4848,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A vulnerability in GlassFish allows attackers to read arbitrary files through UTF-8 Overlong Encoding attack.",
+   "mem_mb": 600,
+   "ready_s": 90,
+   "names": [
+    "glassfish",
+    "jee-admin",
+    "appserver"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "1panel--CVE-2024-39907",
+   "path": "1panel/CVE-2024-39907",
+   "product": "1Panel",
+   "family": "1panel",
+   "version": "1.10.10",
+   "cve": [
+    "CVE-2024-39907"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "1panel": {
+     "image": "vulhub/1panel:1.10.10"
+    }
+   },
+   "ports": [
+    {
+     "service": "1panel",
+     "host_port": 10086,
+     "container_port": 10086,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 10086,
+    "path": "/entrance",
+    "status_below": 500
+   },
+   "summary": "CVE-2024-39907 is a collection of multiple SQL injection vulnerabilities present in the 1Panel control panel.",
+   "mem_mb": 150,
+   "ready_s": 40,
+   "names": [
+    "panel",
+    "1panel",
+    "hosting"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "nginx-ui--CVE-2026-27944",
+   "path": "nginx-ui/CVE-2026-27944",
+   "product": "Nginx UI",
+   "family": "nginx-ui",
+   "version": "2.3.2",
+   "cve": [
+    "CVE-2026-27944"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/nginx-ui:2.3.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 9000,
+     "container_port": 9000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 9000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "CVE-2026-27944 is a critical vulnerability in Nginx UI affecting all versions before 2.3.3.",
+   "mem_mb": 100,
+   "ready_s": 30,
+   "names": [
+    "nginx-ui",
+    "edge-admin",
+    "lb-admin"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "jupyter--notebook-rce",
+   "path": "jupyter/notebook-rce",
+   "product": "Jupyter Notebook",
+   "family": "jupyter",
+   "version": "5.2.2",
+   "cve": [],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/jupyter-notebook:5.2.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8888,
+     "container_port": 8888,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8888,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "If the administrator doesn't configure a password for Jupyter Notebook, this will lead to an unauthorized access vulnerability where attackers can create a console and execute arbitrary Python code and commands.",
+   "mem_mb": 120,
+   "ready_s": 30,
+   "names": [
+    "notebook",
+    "jupyter",
+    "ds"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "elfinder--CVE-2021-32682",
+   "path": "elfinder/CVE-2021-32682",
+   "product": "elFinder",
+   "family": "elfinder",
+   "version": "2.1.58",
+   "cve": [
+    "CVE-2021-32682"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/elfinder:2.1.58"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "There is a arguments injection vulnerability found in the elFinder 2.1.48 and before.",
+   "mem_mb": 60,
+   "ready_s": 20,
+   "names": [
+    "files",
+    "fm",
+    "assets-admin"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "superset--CVE-2023-27524",
+   "path": "superset/CVE-2023-27524",
+   "product": "Apache Superset",
+   "family": "superset",
+   "version": "2.0.1",
+   "cve": [
+    "CVE-2023-27524"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/superset:2.0.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8088,
+     "container_port": 8088,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8088,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Superset contains a hardcoded JWT secret key vulnerability (CVE-2023-27524).",
+   "mem_mb": 900,
+   "ready_s": 120,
+   "names": [
+    "bi",
+    "superset",
+    "reports"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "openfire--CVE-2023-32315",
+   "path": "openfire/CVE-2023-32315",
+   "product": "Openfire admin console",
+   "family": "openfire",
+   "version": "4.7.4",
+   "cve": [
+    "CVE-2023-32315"
+   ],
+   "category": "admin-panel",
+   "services": {
+    "web": {
+     "image": "vulhub/openfire:4.7.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 9090,
+     "container_port": 9090,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 9090,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In the version prior to 4.7.4 and 4.6.7, Openfire's administrative console (the Admin Console), a web-based application, was found to be vulnerable to a path traversal attack via the setup environment.",
+   "mem_mb": 450,
+   "ready_s": 90,
+   "names": [
+    "chat",
+    "xmpp",
+    "im"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "tomcat--CVE-2020-1938",
+   "path": "tomcat/CVE-2020-1938",
+   "product": "Apache Tomcat",
+   "family": "tomcat",
+   "version": "9.0.30",
+   "cve": [
+    "CVE-2020-1938"
+   ],
+   "category": "middleware",
+   "services": {
+    "tomcat": {
+     "image": "vulhub/tomcat:9.0.30"
+    }
+   },
+   "ports": [
+    {
+     "service": "tomcat",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "tomcat",
+     "host_port": 8009,
+     "container_port": 8009,
+     "transport": "tcp",
+     "protocol": "ajp13",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Tomcat 9.0.30: the AJP connector on 8009 reads files from the web root and can include them as JSP (Ghostcat).",
+   "mem_mb": 250,
+   "ready_s": 40,
+   "names": [
+    "tomcat",
+    "app",
+    "legacy"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "tomcat--tomcat8",
+   "path": "tomcat/tomcat8",
+   "product": "Apache Tomcat (manager, weak login)",
+   "family": "tomcat",
+   "version": "8.0",
+   "cve": [],
+   "category": "middleware",
+   "services": {
+    "tomcat": {
+     "image": "vulhub/tomcat:8.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "tomcat",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Tomcat 8.0 with the manager application and a weak administrator password, so a WAR upload gives code execution.",
+   "mem_mb": 250,
+   "ready_s": 40,
+   "names": [
+    "tomcat",
+    "app",
+    "old-app"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "jboss--CVE-2017-12149",
+   "path": "jboss/CVE-2017-12149",
+   "product": "JBoss Application Server",
+   "family": "jboss",
+   "version": "6.1.0",
+   "cve": [
+    "CVE-2017-12149"
+   ],
+   "category": "middleware",
+   "services": {
+    "jboss": {
+     "image": "vulhub/jboss:as-6.1.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "jboss",
+     "host_port": 9990,
+     "container_port": 9990,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": false
+    },
+    {
+     "service": "jboss",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "In JBoss AS 5.x/6.x, the ReadOnlyAccessFilter filter in the HttpInvoker component attempts to deserialize data streams from clients without performing any security checks, resulting in a deserialization vulnerability.",
+   "mem_mb": 600,
+   "ready_s": 150,
+   "names": [
+    "jboss",
+    "jee",
+    "appsrv"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "jetty--CVE-2021-28164",
+   "path": "jetty/CVE-2021-28164",
+   "product": "Eclipse Jetty",
+   "family": "jetty",
+   "version": "9.4.37",
+   "cve": [
+    "CVE-2021-28164"
+   ],
+   "category": "middleware",
+   "services": {
+    "web": {
+     "image": "vulhub/jetty:9.4.37"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Jetty 9.4.37: an encoded dot segment (%2e) bypasses the protection of WEB-INF and discloses its files.",
+   "mem_mb": 250,
+   "ready_s": 40,
+   "names": [
+    "jetty",
+    "svc",
+    "web"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "apache-cxf--CVE-2024-28752",
+   "path": "apache-cxf/CVE-2024-28752",
+   "product": "Apache CXF",
+   "family": "cxf",
+   "version": "3.2.14",
+   "cve": [
+    "CVE-2024-28752"
+   ],
+   "category": "middleware",
+   "services": {
+    "cxf": {
+     "image": "vulhub/apache-cxf:3.2.14"
+    }
+   },
+   "ports": [
+    {
+     "service": "cxf",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A SSRF vulnerability using the Aegis DataBinding in versions of Apache CXF before 4.0.4, 3.6.3 and 3.5.8 allows an attacker to perform SSRF style attacks on webservices that take at least one parameter of any type.",
+   "mem_mb": 300,
+   "ready_s": 40,
+   "names": [
+    "soap",
+    "ws",
+    "cxf"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "nginx--CVE-2017-7529",
+   "path": "nginx/CVE-2017-7529",
+   "product": "nginx",
+   "family": "nginx",
+   "version": "1.13.2",
+   "cve": [
+    "CVE-2017-7529"
+   ],
+   "category": "middleware",
+   "services": {
+    "nginx": {
+     "image": "vulhub/nginx:1.13.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "nginx",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Nginx versions since 0.5.6 up to and including 1.13.2 are vulnerable to integer overflow vulnerability in nginx range filter module resulting into leak of potentially sensitive information triggered by specially crafted request.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "cdn",
+    "static",
+    "edge"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "php--CVE-2019-11043",
+   "path": "php/CVE-2019-11043",
+   "product": "nginx with PHP-FPM",
+   "family": "php",
+   "version": "7.2.10",
+   "cve": [
+    "CVE-2019-11043"
+   ],
+   "category": "middleware",
+   "services": {
+    "nginx": {
+     "image": "nginx:1"
+    },
+    "php": {
+     "image": "vulhub/php:7.2.10-fpm"
+    }
+   },
+   "ports": [
+    {
+     "service": "nginx",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "nginx with PHP-FPM 7.2.10: a crafted path with %0a corrupts FPM memory and runs commands (CVE-2019-11043).",
+   "mem_mb": 100,
+   "ready_s": 20,
+   "names": [
+    "web",
+    "php",
+    "www"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "php--fpm",
+   "path": "php/fpm",
+   "product": "PHP-FPM (FastCGI exposed)",
+   "family": "php-fpm",
+   "version": "7.1.3",
+   "cve": [],
+   "category": "middleware",
+   "services": {
+    "php": {
+     "image": "vulhub/php:7.1.3-fpm"
+    }
+   },
+   "ports": [
+    {
+     "service": "php",
+     "host_port": 9000,
+     "container_port": 9000,
+     "transport": "tcp",
+     "protocol": "fastcgi",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 9000
+   },
+   "summary": "PHP-FPM 7.1.3 reachable on 9000 over FastCGI: anyone can run a PHP file already on the host.",
+   "mem_mb": 60,
+   "ready_s": 15,
+   "names": [
+    "fpm",
+    "php",
+    "backend"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "php--CVE-2012-1823",
+   "path": "php/CVE-2012-1823",
+   "product": "PHP (CGI mode)",
+   "family": "php",
+   "version": "5.4.1",
+   "cve": [
+    "CVE-2012-1823"
+   ],
+   "category": "middleware",
+   "services": {
+    "php": {
+     "image": "vulhub/php:5.4.1-cgi"
+    }
+   },
+   "ports": [
+    {
+     "service": "php",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "PHP 5.4.1 in CGI mode: a query string without = is passed to php-cgi as command-line flags, giving source disclosure and code execution.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "old-web",
+    "php",
+    "legacy"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "uwsgi--unacc",
+   "path": "uwsgi/unacc",
+   "product": "uWSGI behind nginx",
+   "family": "uwsgi",
+   "version": "2.0.17",
+   "cve": [],
+   "category": "middleware",
+   "services": {
+    "nginx": {
+     "image": "nginx:1-alpine"
+    },
+    "web": {
+     "image": "vulhub/uwsgi-python:2.0.17"
+    }
+   },
+   "ports": [
+    {
+     "service": "nginx",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 8000,
+     "container_port": 8000,
+     "transport": "tcp",
+     "protocol": "uwsgi",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "uWSGI 2.0.17: the uwsgi protocol port is open without authentication, so magic variables can run commands.",
+   "mem_mb": 80,
+   "ready_s": 20,
+   "names": [
+    "py",
+    "api",
+    "uwsgi"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "dubbo--CVE-2019-17564",
+   "path": "dubbo/CVE-2019-17564",
+   "product": "Apache Dubbo",
+   "family": "dubbo",
+   "version": "2.7.3",
+   "cve": [
+    "CVE-2019-17564"
+   ],
+   "category": "middleware",
+   "services": {
+    "provider": {
+     "image": "vulhub/dubbo:2.7.3"
+    },
+    "zookeeper": {
+     "image": "zookeeper:3.7.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "provider",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "zookeeper",
+     "host_port": 2181,
+     "container_port": 2181,
+     "transport": "tcp",
+     "protocol": "zookeeper",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Dubbo 2.7.3: the HTTP protocol deserializes request bodies with Spring's HttpInvoker, giving remote code execution.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "rpc",
+    "dubbo",
+    "svc"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "flink--CVE-2020-17518",
+   "path": "flink/CVE-2020-17518",
+   "product": "Apache Flink",
+   "family": "flink",
+   "version": "1.11.2",
+   "cve": [
+    "CVE-2020-17518"
+   ],
+   "category": "middleware",
+   "services": {
+    "flink": {
+     "image": "vulhub/flink:1.11.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "flink",
+     "host_port": 8081,
+     "container_port": 8081,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "flink",
+     "host_port": 6123,
+     "container_port": 6123,
+     "transport": "tcp",
+     "protocol": "tcp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8081,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A vulnerability in Apache Flink 1.5.1 and later versions allows attackers to write uploaded files to arbitrary locations on the local file system through a maliciously crafted HTTP header in the REST API request.",
+   "mem_mb": 600,
+   "ready_s": 60,
+   "names": [
+    "flink",
+    "stream",
+    "etl"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "spark--unacc",
+   "path": "spark/unacc",
+   "product": "Apache Spark standalone",
+   "family": "spark",
+   "version": "2.3.1",
+   "cve": [],
+   "category": "middleware",
+   "services": {
+    "master": {
+     "image": "vulhub/spark:2.3.1"
+    },
+    "slave": {
+     "image": "vulhub/spark:2.3.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "master",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "master",
+     "host_port": 7077,
+     "container_port": 7077,
+     "transport": "tcp",
+     "protocol": "spark-rpc",
+     "primary": false
+    },
+    {
+     "service": "master",
+     "host_port": 6066,
+     "container_port": 6066,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": false
+    },
+    {
+     "service": "slave",
+     "host_port": 8081,
+     "container_port": 8081,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache Spark standalone master: the REST submission port accepts applications without authentication, giving code execution.",
+   "mem_mb": 900,
+   "ready_s": 60,
+   "names": [
+    "spark",
+    "analytics",
+    "etl"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "nacos--CVE-2021-29441",
+   "path": "nacos/CVE-2021-29441",
+   "product": "Nacos",
+   "family": "nacos",
+   "version": "1.4.0",
+   "cve": [
+    "CVE-2021-29441"
+   ],
+   "category": "middleware",
+   "services": {
+    "web": {
+     "image": "vulhub/nacos:1.4.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8848,
+     "container_port": 8848,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "web",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8848,
+    "path": "/nacos/",
+    "status_below": 500
+   },
+   "summary": "Nacos 1.4.0: any request with the User-Agent Nacos-Server skips the authentication filter.",
+   "mem_mb": 700,
+   "ready_s": 90,
+   "names": [
+    "nacos",
+    "config",
+    "registry"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "java--rmi-registry-bind-deserialization",
+   "path": "java/rmi-registry-bind-deserialization",
+   "product": "Java RMI registry",
+   "family": "java-rmi",
+   "version": "8u131",
+   "cve": [],
+   "category": "middleware",
+   "services": {
+    "rmi": {
+     "image": "vulhub/j2ee:8u131"
+    }
+   },
+   "ports": [
+    {
+     "service": "rmi",
+     "host_port": 1099,
+     "container_port": 1099,
+     "transport": "tcp",
+     "protocol": "java-rmi",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 1099
+   },
+   "summary": "Java RMI registry 8u131: the registry accepts bind calls from remote clients and deserializes the object, giving code execution.",
+   "mem_mb": 60,
+   "ready_s": 15,
+   "names": [
+    "rmi",
+    "svc",
+    "jmx"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "goahead--CVE-2017-17562",
+   "path": "goahead/CVE-2017-17562",
+   "product": "GoAhead embedded web server",
+   "family": "goahead",
+   "version": "3.6.4",
+   "cve": [
+    "CVE-2017-17562"
+   ],
+   "category": "middleware",
+   "services": {
+    "web": {
+     "image": "vulhub/goahead:3.6.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "GoAhead before 3.6.5 allows remote code execution if CGI is enabled and a CGI program is dynamically linked.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "device",
+    "cam",
+    "gw"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "activemq--CVE-2015-5254",
+   "path": "activemq/CVE-2015-5254",
+   "product": "Apache ActiveMQ",
+   "family": "activemq",
+   "version": "5.11.1",
+   "cve": [
+    "CVE-2015-5254"
+   ],
+   "category": "messaging",
+   "services": {
+    "activemq": {
+     "image": "vulhub/activemq:5.11.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "activemq",
+     "host_port": 61616,
+     "container_port": 61616,
+     "transport": "tcp",
+     "protocol": "openwire",
+     "primary": false
+    },
+    {
+     "service": "activemq",
+     "host_port": 8161,
+     "container_port": 8161,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8161,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache ActiveMQ version 5.x before the 5.13.0 security vulnerability, the vulnerability caused by the program does not limit the classes that can be serialized in the proxy.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "mq",
+    "activemq",
+    "queue"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "activemq--CVE-2023-46604",
+   "path": "activemq/CVE-2023-46604",
+   "product": "Apache ActiveMQ",
+   "family": "activemq",
+   "version": "5.17.3",
+   "cve": [
+    "CVE-2023-46604"
+   ],
+   "category": "messaging",
+   "services": {
+    "activemq": {
+     "image": "vulhub/activemq:5.17.3"
+    }
+   },
+   "ports": [
+    {
+     "service": "activemq",
+     "host_port": 61616,
+     "container_port": 61616,
+     "transport": "tcp",
+     "protocol": "openwire",
+     "primary": false
+    },
+    {
+     "service": "activemq",
+     "host_port": 8161,
+     "container_port": 8161,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "activemq",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8161,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "OpenWire protocol is designed by ActiveMQ, to allow native access to ActiveMQ from a number of different languages and platforms.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "mq",
+    "activemq",
+    "broker"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "activemq--CVE-2024-32114",
+   "path": "activemq/CVE-2024-32114",
+   "product": "Apache ActiveMQ",
+   "family": "activemq",
+   "version": "6.1.1",
+   "cve": [
+    "CVE-2024-32114"
+   ],
+   "category": "messaging",
+   "services": {
+    "activemq": {
+     "image": "vulhub/activemq:6.1.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "activemq",
+     "host_port": 61616,
+     "container_port": 61616,
+     "transport": "tcp",
+     "protocol": "openwire",
+     "primary": false
+    },
+    {
+     "service": "activemq",
+     "host_port": 8161,
+     "container_port": 8161,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "activemq",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8161,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "CVE-2024-32114 is a vulnerability in Apache ActiveMQ 6.x before 6.1.2 where the default configuration does not secure the API web context.",
+   "mem_mb": 500,
+   "ready_s": 60,
+   "names": [
+    "mq",
+    "activemq",
+    "queue"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "rocketmq--CVE-2023-33246",
+   "path": "rocketmq/CVE-2023-33246",
+   "product": "Apache RocketMQ broker",
+   "family": "rocketmq",
+   "version": "5.1.0",
+   "cve": [
+    "CVE-2023-33246"
+   ],
+   "category": "messaging",
+   "services": {
+    "rocketmq": {
+     "image": "vulhub/rocketmq:5.1.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "rocketmq",
+     "host_port": 10911,
+     "container_port": 10911,
+     "transport": "tcp",
+     "protocol": "rocketmq",
+     "primary": true
+    },
+    {
+     "service": "rocketmq",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 10911
+   },
+   "summary": "Apache RocketMQ 5.1.0: the broker accepts configuration updates without authentication, giving remote command execution.",
+   "mem_mb": 500,
+   "ready_s": 60,
+   "names": [
+    "rmq",
+    "rocketmq",
+    "events"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "rocketmq--CVE-2023-37582",
+   "path": "rocketmq/CVE-2023-37582",
+   "product": "Apache RocketMQ name server",
+   "family": "rocketmq",
+   "version": "5.1.0",
+   "cve": [
+    "CVE-2023-37582"
+   ],
+   "category": "messaging",
+   "services": {
+    "namesrv": {
+     "image": "vulhub/rocketmq:5.1.0"
+    },
+    "broker": {
+     "image": "vulhub/rocketmq:5.1.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "namesrv",
+     "host_port": 9876,
+     "container_port": 9876,
+     "transport": "tcp",
+     "protocol": "rocketmq",
+     "primary": true
+    },
+    {
+     "service": "namesrv",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    },
+    {
+     "service": "broker",
+     "host_port": 10911,
+     "container_port": 10911,
+     "transport": "tcp",
+     "protocol": "rocketmq",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 9876
+   },
+   "summary": "In RocketMQ versions 5.1.1 and below, there exists an arbitrary file write vulnerability in the NameServer component.",
+   "mem_mb": 800,
+   "ready_s": 60,
+   "names": [
+    "rmq",
+    "rocketmq",
+    "mq-ns"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "celery--celery3_redis_unauth",
+   "path": "celery/celery3_redis_unauth",
+   "product": "Redis (Celery 3 broker)",
+   "family": "redis",
+   "version": "latest",
+   "cve": [],
+   "category": "messaging",
+   "services": {
+    "redis": {
+     "image": "redis"
+    },
+    "celery": {
+     "image": "vulhub/celery:3.1.23"
+    }
+   },
+   "ports": [
+    {
+     "service": "redis",
+     "host_port": 6379,
+     "container_port": 6379,
+     "transport": "tcp",
+     "protocol": "redis",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "send": "PING\r\n",
+    "expect": "PONG|NOAUTH",
+    "port": 6379
+   },
+   "summary": "Redis without a password used as the Celery 3 broker: a client can queue a pickle task that runs code on the worker.",
+   "mem_mb": 40,
+   "ready_s": 10,
+   "names": [
+    "broker",
+    "tasks",
+    "celery"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "grafana--CVE-2021-43798",
+   "path": "grafana/CVE-2021-43798",
+   "product": "Grafana",
+   "family": "grafana",
+   "version": "8.2.6",
+   "cve": [
+    "CVE-2021-43798"
+   ],
+   "category": "monitoring",
+   "services": {
+    "web": {
+     "image": "vulhub/grafana:8.2.6"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "In December 2021, a Twitter user disclosed a 0day vulnerability, that unauthenticated attackers could use this vulnerability to step up web path and download arbitrary files through a craft url of Grafana 8.x.",
+   "mem_mb": 150,
+   "ready_s": 30,
+   "names": [
+    "grafana",
+    "metrics",
+    "dash"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "grafana--CVE-2024-9264",
+   "path": "grafana/CVE-2024-9264",
+   "product": "Grafana",
+   "family": "grafana",
+   "version": "11.0.0",
+   "cve": [
+    "CVE-2024-9264"
+   ],
+   "category": "monitoring",
+   "services": {
+    "grafana": {
+     "image": "vulhub/grafana:11.0.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "grafana",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "CVE-2024-9264 is a critical vulnerability in Grafana's experimental SQL Expressions feature, affecting versions 11.0.0 through 11.0.5, 11.1.0 through 11.1.6, and 11.2.0 through 11.2.1.",
+   "mem_mb": 200,
+   "ready_s": 30,
+   "names": [
+    "grafana",
+    "metrics",
+    "dash"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "grafana--admin-ssrf",
+   "path": "grafana/admin-ssrf",
+   "product": "Grafana",
+   "family": "grafana",
+   "version": "8.5.4",
+   "cve": [],
+   "category": "monitoring",
+   "services": {
+    "web": {
+     "image": "vulhub/grafana:8.5.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/login",
+    "status_below": 500
+   },
+   "summary": "Grafana 8.5.4: a logged-in administrator can make the server request internal URLs through data source settings (SSRF).",
+   "mem_mb": 150,
+   "ready_s": 30,
+   "names": [
+    "grafana",
+    "metrics",
+    "boards"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "zabbix--CVE-2017-2824",
+   "path": "zabbix/CVE-2017-2824",
+   "product": "Zabbix",
+   "family": "zabbix",
+   "version": "3.0.3",
+   "cve": [
+    "CVE-2017-2824"
+   ],
+   "category": "monitoring",
+   "services": {
+    "server": {
+     "image": "vulhub/zabbix:3.0.3-server"
+    },
+    "agent": {
+     "image": "vulhub/zabbix:3.0.3-server"
+    },
+    "mysql": {
+     "image": "mysql:5"
+    },
+    "web": {
+     "image": "vulhub/zabbix:3.0.3-web"
+    }
+   },
+   "ports": [
+    {
+     "service": "server",
+     "host_port": 10051,
+     "container_port": 10051,
+     "transport": "tcp",
+     "protocol": "zabbix-trapper",
+     "primary": false
+    },
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Zabbix 3.0.3: the server's trapper port runs commands for an unauthenticated client when remote commands are enabled.",
+   "mem_mb": 700,
+   "ready_s": 180,
+   "names": [
+    "zabbix",
+    "monitor",
+    "noc"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "ntopng--CVE-2021-28073",
+   "path": "ntopng/CVE-2021-28073",
+   "product": "ntopng",
+   "family": "ntopng",
+   "version": "4.2",
+   "cve": [
+    "CVE-2021-28073"
+   ],
+   "category": "monitoring",
+   "services": {
+    "ntopng": {
+     "image": "vulhub/ntopng:4.2"
+    },
+    "redis": {
+     "image": "redis:6.2-alpine"
+    }
+   },
+   "ports": [
+    {
+     "service": "ntopng",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "There is a authentication bypass vulnerability in ntopng 4.2 and previous versions.",
+   "mem_mb": 200,
+   "ready_s": 40,
+   "names": [
+    "ntop",
+    "netflow",
+    "traffic"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "skywalking--8.3.0-sqli",
+   "path": "skywalking/8.3.0-sqli",
+   "product": "Apache SkyWalking UI",
+   "family": "skywalking",
+   "version": "8.3.0",
+   "cve": [],
+   "category": "monitoring",
+   "services": {
+    "oap": {
+     "image": "vulhub/skywalking:8.3.0"
+    },
+    "web": {
+     "image": "vulhub/skywalking:8.3.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 8080,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache SkyWalking 8.3.0: SQL injection in the GraphQL API against the embedded H2 database.",
+   "mem_mb": 900,
+   "ready_s": 90,
+   "names": [
+    "apm",
+    "skywalking",
+    "traces"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "hertzbeat--CVE-2024-42323",
+   "path": "hertzbeat/CVE-2024-42323",
+   "product": "Apache HertzBeat",
+   "family": "hertzbeat",
+   "version": "1.4.4",
+   "cve": [
+    "CVE-2024-42323"
+   ],
+   "category": "monitoring",
+   "services": {
+    "hertzbeat": {
+     "image": "vulhub/hertzbeat:1.4.4"
+    }
+   },
+   "ports": [
+    {
+     "service": "hertzbeat",
+     "host_port": 1157,
+     "container_port": 1157,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    },
+    {
+     "service": "hertzbeat",
+     "host_port": 5005,
+     "container_port": 5005,
+     "transport": "tcp",
+     "protocol": "jdwp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 1157,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "Apache HertzBeat 1.4.4: the YAML import is parsed with a vulnerable SnakeYAML, giving authenticated remote code execution.",
+   "mem_mb": 700,
+   "ready_s": 90,
+   "names": [
+    "hertzbeat",
+    "uptime",
+    "status"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "opentsdb--CVE-2020-35476",
+   "path": "opentsdb/CVE-2020-35476",
+   "product": "OpenTSDB",
+   "family": "opentsdb",
+   "version": "2.4.0",
+   "cve": [
+    "CVE-2020-35476"
+   ],
+   "category": "monitoring",
+   "services": {
+    "opentsdb": {
+     "image": "vulhub/opentsdb:2.4.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "opentsdb",
+     "host_port": 4242,
+     "container_port": 4242,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 4242,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "A remote code execution vulnerability occurs in OpenTSDB through 2.4.0 via command injection in the yrange parameter.",
+   "mem_mb": 450,
+   "ready_s": 60,
+   "names": [
+    "tsdb",
+    "opentsdb",
+    "series"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "opensmtpd--CVE-2020-7247",
+   "path": "opensmtpd/CVE-2020-7247",
+   "product": "OpenSMTPD",
+   "family": "opensmtpd",
+   "version": "6.6.1p1",
+   "cve": [
+    "CVE-2020-7247"
+   ],
+   "category": "mail-other",
+   "services": {
+    "smtpd": {
+     "image": "vulhub/opensmtpd:6.6.1p1"
+    }
+   },
+   "ports": [
+    {
+     "service": "smtpd",
+     "host_port": 8825,
+     "container_port": 25,
+     "transport": "tcp",
+     "protocol": "smtp",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "expect": "^220",
+    "port": 8825
+   },
+   "summary": "OpenSMTPD 6.6.1p1: an unauthenticated SMTP client can run commands through a crafted MAIL FROM.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "mail",
+    "smtp",
+    "mx2"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "dns--dns-zone-transfer",
+   "path": "dns/dns-zone-transfer",
+   "product": "BIND (zone transfer allowed)",
+   "family": "bind",
+   "version": "9.10.3",
+   "cve": [],
+   "category": "mail-other",
+   "services": {
+    "dns": {
+     "image": "vulhub/bind:9.10.3"
+    }
+   },
+   "ports": [
+    {
+     "service": "dns",
+     "host_port": 53,
+     "container_port": 53,
+     "transport": "tcp",
+     "protocol": "dns",
+     "primary": true
+    },
+    {
+     "service": "dns",
+     "host_port": 53,
+     "container_port": 53,
+     "transport": "udp",
+     "protocol": "dns",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "dns-tcp",
+    "name": "version.bind.",
+    "port": 53
+   },
+   "summary": "BIND 9.10.3 answers zone transfers (AXFR) for its zone to anyone, listing every host name.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "ns3",
+    "dns",
+    "ns-int"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "samba--CVE-2017-7494",
+   "path": "samba/CVE-2017-7494",
+   "product": "Samba",
+   "family": "samba",
+   "version": "4.6.3",
+   "cve": [
+    "CVE-2017-7494"
+   ],
+   "category": "mail-other",
+   "services": {
+    "samba": {
+     "image": "vulhub/samba:4.6.3"
+    }
+   },
+   "ports": [
+    {
+     "service": "samba",
+     "host_port": 445,
+     "container_port": 445,
+     "transport": "tcp",
+     "protocol": "smb",
+     "primary": true
+    },
+    {
+     "service": "samba",
+     "host_port": 6699,
+     "container_port": 6699,
+     "transport": "tcp",
+     "protocol": "tcp",
+     "primary": false
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 445
+   },
+   "summary": "Samba 3.x after 3.5.0 and 4.x before 4.4.14, 4.5.x before 4.5.10, and 4.6.x before 4.6.4 that is vulnerable to a remote code execution vulnerability named **SambaCry**.",
+   "mem_mb": 60,
+   "ready_s": 15,
+   "names": [
+    "files",
+    "smb",
+    "nas"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "libssh--CVE-2018-10933",
+   "path": "libssh/CVE-2018-10933",
+   "product": "libssh server",
+   "family": "libssh",
+   "version": "0.8.1",
+   "cve": [
+    "CVE-2018-10933"
+   ],
+   "category": "mail-other",
+   "services": {
+    "sshd": {
+     "image": "vulhub/libssh:0.8.1"
+    }
+   },
+   "ports": [
+    {
+     "service": "sshd",
+     "host_port": 2222,
+     "container_port": 22,
+     "transport": "tcp",
+     "protocol": "ssh",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "expect": "^SSH-",
+    "port": 2222
+   },
+   "summary": "libssh 0.8.1 server: a client that sends SSH2_MSG_USERAUTH_SUCCESS is treated as authenticated.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "sftp",
+    "bastion",
+    "jump"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "inetutils--CVE-2026-24061",
+   "path": "inetutils/CVE-2026-24061",
+   "product": "GNU inetutils telnetd",
+   "family": "inetutils",
+   "version": "2.5",
+   "cve": [
+    "CVE-2026-24061"
+   ],
+   "category": "mail-other",
+   "services": {
+    "telnetd": {
+     "image": "vulhub/inetutils:2.5"
+    }
+   },
+   "ports": [
+    {
+     "service": "telnetd",
+     "host_port": 2323,
+     "container_port": 23,
+     "transport": "tcp",
+     "protocol": "telnet",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 2323
+   },
+   "summary": "GNU InetUtils versions 1.9.3 through 2.7 are vulnerable to a remote authentication bypass in the telnetd server (CVE-2026-24061).",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "telnet",
+    "console",
+    "oob"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "openssl--CVE-2014-0160",
+   "path": "openssl/CVE-2014-0160",
+   "product": "nginx with OpenSSL 1.0.1c",
+   "family": "openssl",
+   "version": "1.0.1c",
+   "cve": [
+    "CVE-2014-0160"
+   ],
+   "category": "mail-other",
+   "services": {
+    "nginx": {
+     "image": "vulhub/openssl:1.0.1c-with-nginx"
+    }
+   },
+   "ports": [
+    {
+     "service": "nginx",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": false
+    },
+    {
+     "service": "nginx",
+     "host_port": 8443,
+     "container_port": 443,
+     "transport": "tcp",
+     "protocol": "https",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "tcp",
+    "port": 8443
+   },
+   "summary": "OpenSSL 1.0.1c: Heartbleed, a TLS heartbeat request reads up to 64 KB of server memory.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "secure",
+    "vpn-web",
+    "ssl"
+   ],
+   "proxy": false
+  },
+  {
+   "id": "php--8.1-backdoor",
+   "path": "php/8.1-backdoor",
+   "product": "PHP 8.1.0-dev",
+   "family": "php-dev",
+   "version": "8.1.0-dev",
+   "cve": [],
+   "category": "mail-other",
+   "services": {
+    "web": {
+     "image": "vulhub/php:8.1-backdoor"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 8080,
+     "container_port": 80,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 8080,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "PHP version 8.1.0-dev was implanted with a backdoor on March 28, 2021, but the backdoor was quickly discovered and removed.",
+   "mem_mb": 40,
+   "ready_s": 15,
+   "names": [
+    "beta",
+    "labs",
+    "php8"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "yapi--unacc",
+   "path": "yapi/unacc",
+   "product": "YApi",
+   "family": "yapi",
+   "version": "1.9.2",
+   "cve": [],
+   "category": "mail-other",
+   "services": {
+    "mongo": {
+     "image": "mongo:5.0.6"
+    },
+    "web": {
+     "image": "vulhub/yapi:1.9.2"
+    }
+   },
+   "ports": [
+    {
+     "service": "web",
+     "host_port": 3000,
+     "container_port": 3000,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 3000,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "YApi 1.9.2 with open registration: a user's mock script runs on the server and escapes the sandbox.",
+   "mem_mb": 400,
+   "ready_s": 60,
+   "names": [
+    "yapi",
+    "api-docs",
+    "mock"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "n8n--CVE-2025-68613",
+   "path": "n8n/CVE-2025-68613",
+   "product": "n8n",
+   "family": "n8n",
+   "version": "1.65.0",
+   "cve": [
+    "CVE-2025-68613"
+   ],
+   "category": "mail-other",
+   "services": {
+    "n8n": {
+     "image": "vulhub/n8n:1.65.0"
+    }
+   },
+   "ports": [
+    {
+     "service": "n8n",
+     "host_port": 5678,
+     "container_port": 5678,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 5678,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "n8n 1.65.0: an authenticated user's workflow expression escapes the sandbox and runs code on the server.",
+   "mem_mb": 350,
+   "ready_s": 60,
+   "names": [
+    "n8n",
+    "automation",
+    "flows"
+   ],
+   "proxy": true
+  },
+  {
+   "id": "aria2--rce",
+   "path": "aria2/rce",
+   "product": "aria2 (RPC exposed)",
+   "family": "aria2",
+   "version": "1.18.8",
+   "cve": [],
+   "category": "mail-other",
+   "services": {
+    "aria2": {
+     "image": "vulhub/aria2:1.18.8"
+    }
+   },
+   "ports": [
+    {
+     "service": "aria2",
+     "host_port": 6800,
+     "container_port": 6800,
+     "transport": "tcp",
+     "protocol": "http",
+     "primary": true
+    }
+   ],
+   "probe": {
+    "kind": "http",
+    "scheme": "http",
+    "port": 6800,
+    "path": "/",
+    "status_below": 500
+   },
+   "summary": "We can use the RPC interface to operate aria2 and download files to any directory, causing an arbitrary file write vulnerability.",
+   "mem_mb": 20,
+   "ready_s": 10,
+   "names": [
+    "dl",
+    "aria",
+    "fetch"
+   ],
+   "proxy": true
+  }
+ ]
+}
