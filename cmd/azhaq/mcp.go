@@ -45,6 +45,8 @@ type mcpServer struct {
 	outMu   sync.Mutex
 	running map[string]context.CancelFunc // request id → its command
 	dropped map[string]bool               // requests the client cancelled: no response
+	calls   sync.WaitGroup                // requests in flight
+	stopped bool                          // a stop signal came: no request starts
 }
 
 func cmdMCP(args []string) error {
@@ -90,7 +92,30 @@ func cmdMCP(args []string) error {
 	}
 	s.locked = len(allow) > 0
 	fmt.Fprintf(os.Stderr, "azhaq mcp %s: %d allow and %d deny rules, budget %s, workspaces in %s\n", version, len(allow), len(deny), budgetText(*budget), *dir)
-	return s.serve(os.Stdin, os.Stdout)
+	ctx, stop := stopContext()
+	defer stop()
+	done := make(chan error, 1)
+	go func() { done <- s.serve(os.Stdin, os.Stdout) }()
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+		// As Ctrl-C ends a run: each command in flight is interrupted, so it
+		// stops sending, seals its ledger and answers with its summary.
+		s.cancelAll()
+		s.calls.Wait()
+		return nil
+	}
+}
+
+// cancelAll interrupts every request in flight and starts no other.
+func (s *mcpServer) cancelAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.stopped = true
+	for _, cancel := range s.running {
+		cancel()
+	}
 }
 
 func budgetText(n int64) string {
@@ -121,7 +146,6 @@ func (s *mcpServer) serve(in io.Reader, out io.Writer) error {
 	s.mu.Unlock()
 	sc := bufio.NewScanner(in)
 	sc.Buffer(make([]byte, 0, 1<<20), 64<<20)
-	var wg sync.WaitGroup
 	for sc.Scan() {
 		line := bytes.TrimSpace(sc.Bytes())
 		if len(line) == 0 {
@@ -144,11 +168,16 @@ func (s *mcpServer) serve(in io.Reader, out io.Writer) error {
 		id := idKey(m.ID)
 		ctx, cancel := context.WithCancel(context.Background())
 		s.mu.Lock()
+		if s.stopped {
+			s.mu.Unlock()
+			cancel()
+			break
+		}
 		s.running[id] = cancel
+		s.calls.Add(1)
 		s.mu.Unlock()
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer s.calls.Done()
 			defer func() {
 				cancel()
 				s.mu.Lock()
@@ -165,7 +194,7 @@ func (s *mcpServer) serve(in io.Reader, out io.Writer) error {
 			s.request(ctx, m)
 		}()
 	}
-	wg.Wait()
+	s.calls.Wait()
 	return sc.Err()
 }
 

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"os/signal"
 	"regexp"
 	"slices"
 	"strconv"
@@ -390,7 +389,7 @@ func cmdFuzz(args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	ctx, cancelRun := context.WithCancelCause(ctx)
 	defer cancelRun(nil)

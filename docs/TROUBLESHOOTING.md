@@ -18,7 +18,7 @@
 
 **`crawl` says a host answered 429 or 503.** It waited (1 s doubling to 30 s, or the host's `Retry-After`) and asked again, up to three times; the summary names the host and how many requests still got it, and those are listed with that status. Lower the pace with `-rl`, `-hrl` or `-c`.
 
-**Exit 4.** A limit stopped the run with work left (`-max-requests`, `-timeout`, Ctrl-C, or the kill file). `azhaq resume -db W` continues it.
+**Exit 4.** A limit stopped the run with work left (`-max-requests`, `-timeout`, Ctrl-C or `kill` (SIGINT, SIGTERM and SIGHUP stop a run alike), or the kill file). `azhaq resume -db W` continues it.
 
 **The run stopped at once with exit 4 and a kill file.** The file `W.stop` (or the one `-kill-file` names; `roles.stop` in the `-dir` of `roles`, where it stops the runs of the roles and not the replay after them) exists, from an earlier stop too, and `stopped` says `the kill switch`. Nothing more is sent while it exists. Remove it, then `azhaq resume -db W`.
 

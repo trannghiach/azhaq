@@ -1,13 +1,11 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"sort"
 	"strings"
 	"time"
@@ -76,7 +74,7 @@ func cmdWatch(args []string) error {
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	for {
 		rep, err := runEmbeddedAs(append(append([]string(nil), runArgs...), "-db", *db, "-quiet"), *jsonOut)

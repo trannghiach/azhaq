@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -54,7 +53,7 @@ func cmdNotify(args []string) error {
 		return err
 	}
 	defer closeIn()
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	if o.verbose {
 		client.Verbose = func(s string) { fmt.Fprintf(os.Stderr, "azhaq notify: %s\n", s) }
@@ -128,7 +127,7 @@ func cmdNotify(args []string) error {
 	if err != nil {
 		if ctx.Err() != nil {
 			rep.Stopped = "interrupted"
-			rep.Notes = append(rep.Notes, "stopped by Ctrl-C: messages after "+strconv.Itoa(rep.Results)+" were not sent")
+			rep.Notes = append(rep.Notes, "stopped by a signal (Ctrl-C, kill): messages after "+strconv.Itoa(rep.Results)+" were not sent")
 			return rep.finish(o.json, o.silent)
 		}
 		return err

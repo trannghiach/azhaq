@@ -1,11 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -71,7 +69,7 @@ func cmdGallery(args []string) error {
 		}
 	}
 	fmt.Fprintf(os.Stderr, "azhaq: gallery: %d pages of %d workspace(s) at http://%s/ (reads the workspace at start; Ctrl-C stops)\n", g.Len(), len(paths), l.Addr())
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	if err := g.Run(ctx, l); err != nil {
 		return err

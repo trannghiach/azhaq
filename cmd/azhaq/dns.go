@@ -13,7 +13,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"os/signal"
 	"regexp"
 	"sort"
 	"strconv"
@@ -297,7 +296,7 @@ func cmdDNS(args []string) error {
 	if *tmpl != "" {
 		r.tmpl = parseTemplate(*tmpl)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	if *maxtime > 0 {
 		var cancel context.CancelFunc

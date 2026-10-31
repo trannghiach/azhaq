@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -818,7 +817,7 @@ func replayAll(roles []role, answers map[string]map[string]answer, found map[str
 		}
 		total += need(u)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	defer fetch.Reset()
 	sent := 0

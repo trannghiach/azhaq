@@ -14,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -231,7 +230,7 @@ func cmdWorker(args []string) error {
 // runWorker claims tasks from the run at base and runs them with cat, in
 // slots goroutines, until the run is over.
 func runWorker(cat *catalog.Catalog, base, token string, slots int) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	fmt.Fprintf(os.Stderr, "azhaq worker: joined %s, %d slots\n", base, slots)
 	var done atomic.Int64

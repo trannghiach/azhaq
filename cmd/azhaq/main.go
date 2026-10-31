@@ -18,7 +18,6 @@ import (
 	"net/netip"
 	"net/url"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -996,7 +995,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 
 	log := timing.New()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	if *timeout > 0 {
 		var cancel context.CancelFunc
@@ -1323,7 +1322,7 @@ func cmdIngest(args []string) error {
 		st.UseRun(runs[len(runs)-1].ID)
 	}
 	eng := &engine.Engine{Store: st}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	hints, err := eng.Ingest(ctx, facts)
 	if err != nil {
@@ -2041,7 +2040,7 @@ func signIn(b *browser.Browser, loginURL, user, pass string, rep *report) (strin
 		defer b.Close()
 		defer chromeRefused(rep, b)
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := stopContext()
 	defer stop()
 	s, err := b.Login(ctx, loginURL, user, pass)
 	for _, u := range s.Blocked {
