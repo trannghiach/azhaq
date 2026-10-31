@@ -361,6 +361,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	paramsStable := fs.Bool("params-stable", false, "one parameter request at a time, 3 to 9 s apart, and 30 s after a refused connection (arjun --stable)")
 	paramsTimeout := fs.Duration("params-timeout", 15*time.Second, "wait for each parameter request; one that times out is asked again with 5 s more, up to 20 s (arjun -T)")
 	paramsTargets := fs.String("params-targets", "", "file of JSON: pages that are asked otherwise ({\"URL\":{\"method\":\"POST\",\"include\":\"a=1\",\"header\":[\"Name: value\"]}}), as params -i writes it")
+	dirsCal := fs.Bool("dirs-ac", true, "calibrate on paths that cannot exist, as ffuf's -ac does, so a catch-all answer is not listed even with a filter of your own; -dirs-ac=false sends no guesses and lists what the filters leave")
 	dirsMatch := map[string]*string{}
 	for _, m := range dirsMatchers {
 		dirsMatch[m.flag] = fs.String("dirs-"+m.flag, "", m.help)
@@ -904,7 +905,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if opts.Dirs.Set, err = dirsSet(given, "-dirs-"); err != nil {
 			return err
 		}
-		opts.Dirs.NoCalibration = dirsFiltered(given)
+		opts.Dirs.NoCalibration = !*dirsCal
 	}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
@@ -2507,17 +2508,6 @@ var dirsMatchers = []struct {
 	{"fw", "word", "hide these word counts", true},
 	{"fl", "line", "hide these line counts", true},
 	{"fr", "regexp", "hide answers whose headers or body match this regular expression", true},
-}
-
-// dirsFiltered says a filter (-fc -fs -fw -fl -fr) was given: the user set
-// the filters by hand, so a sweep does not calibrate, as ffuf does not.
-func dirsFiltered(given map[string]string) bool {
-	for _, m := range dirsMatchers {
-		if m.filter && given[m.flag] != "" {
-			return true
-		}
-	}
-	return false
 }
 
 // dirsSet is the matchers and filters the flags given (by name, without

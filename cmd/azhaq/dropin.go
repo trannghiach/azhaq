@@ -729,6 +729,8 @@ func hasFlag(args []string, names ...string) bool {
 	return false
 }
 
+const dirsNoCalNote = "no calibration: -ac=false was given, so the filters are yours alone and a catch-all answer they do not remove is listed"
+
 // cmdDirs is ffuf with auto-calibration (feroxbuster with -depth): paths
 // from a wordlist that answer differently from a path that cannot exist.
 // The services given are the scope.
@@ -740,7 +742,7 @@ func cmdDirs(args []string) error {
 	fs.Var(&urls, "u", "web service, such as https://app.example.com/ (repeatable)")
 	list := fs.String("l", "", "file of services (- for stdin)")
 	words := fs.String("w", "", "wordlist (default: SecLists' common.txt, built in: "+strconv.Itoa(len(dirscol.DefaultWords()))+" words)")
-	specs := []string{"e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate",
+	specs := []string{"ac=dirs-ac", "e=dirs-ext", "depth=dirs-depth", "t=dirs-threads", "rate=dirs-rate",
 		"H=header", "cookie", "max-requests", "timeout", "v", "scope", "program", "allow", "deny", "deny-path", "ledger", "kill-file"}
 	for _, m := range dirsMatchers {
 		specs = append(specs, m.flag+"=dirs-"+m.flag)
@@ -799,8 +801,8 @@ func cmdDirs(args []string) error {
 	rep := newReport("dirs")
 	rep.what = "paths"
 	rep.Notes = append(rep.Notes, notes...)
-	if dirsFiltered(matchGiven) {
-		rep.Notes = append(rep.Notes, "no calibration: -fc, -fs, -fw, -fl or -fr was given, so the filters are yours and a catch-all answer they do not remove is listed")
+	if v := fs.Lookup("ac"); v != nil && v.Value.String() == "false" {
+		rep.Notes = append(rep.Notes, dirsNoCalNote)
 	}
 	// Paths, not technologies: probe names those (the fingerprints are 40 MB to load).
 	run := []string{"-list", path, "-depth", "1", "-no-tech", "-no-favicon", "-skip", skipAllBut("azhaq-dns", "azhaq-dirs"), "-dirs", wordsFile}
@@ -929,19 +931,18 @@ func resumeDirs(db, id string, runArgs, rest []string) error {
 			}
 		}
 	}
-	filters := map[string]string{}
-	for i, a := range runArgs {
+	noCal := false
+	for _, a := range runArgs {
 		name, val, inline := strings.Cut(strings.TrimLeft(a, "-"), "=")
 		if !strings.HasPrefix(name, "dirs-") || !strings.HasPrefix(a, "-") {
 			continue
 		}
-		if !inline && i+1 < len(runArgs) {
-			val = runArgs[i+1]
+		if name == "dirs-ac" && inline && val == "false" {
+			noCal = true
 		}
-		filters[strings.TrimPrefix(name, "dirs-")] = val
 	}
-	if dirsFiltered(filters) {
-		rep.Notes = append(rep.Notes, "no calibration: -fc, -fs, -fw, -fl or -fr was given, so the filters are yours and a catch-all answer they do not remove is listed")
+	if noCal {
+		rep.Notes = append(rep.Notes, dirsNoCalNote)
 	}
 	var args []string
 	for _, a := range rest {

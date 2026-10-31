@@ -38,7 +38,7 @@ var helpSpecs = map[string]helpSpec{
 		hidden: map[string]string{
 			"accepted": `port-cdn-full`,
 			"rare": `
-				port-exclude-cdn serve worker-token dirs-depth dirs-ext dirs-fc dirs-fl dirs-fr dirs-fs dirs-fw dirs-mc dirs-ml dirs-mr dirs-ms
+				port-exclude-cdn serve worker-token dirs-ac dirs-depth dirs-ext dirs-fc dirs-fl dirs-fr dirs-fs dirs-fw dirs-mc dirs-ml dirs-mr dirs-ms
 				dirs-mw dirs-rate dirs-threads facts obs params-chunk params-delay params-include params-method
 				params-per-host params-rate params-stable params-targets params-threads params-timeout
 				port-all-ips port-detect port-discover port-ip port-min-rate port-order port-payload port-proxy
@@ -219,7 +219,7 @@ var helpSpecs = map[string]helpSpec{
 	"dirs": {
 		groups: []helpGroup{
 			{"Targets and input", `u l scope program`},
-			{"What to ask", `w e depth`},
+			{"What to ask", `w e depth ac`},
 			{"Matchers and filters", `mc fc fs`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger`},
 			{"Pace and limits", `rate t max-requests timeout`},

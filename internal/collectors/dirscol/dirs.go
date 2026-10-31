@@ -65,8 +65,8 @@ type Options struct {
 	// -mc. A Set with filters but no matcher reports nothing: give it the
 	// default status matcher (DefaultStatus) first.
 	Set *fuzz.Set
-	// NoCalibration skips the guesses at paths that cannot exist: the user
-	// set the filters by hand (-fc -fs -fw -fl -fr), as in ffuf without -ac.
+	// NoCalibration skips the guesses at paths that cannot exist (-ac=false):
+	// the filters are the user's alone.
 	NoCalibration bool
 }
 

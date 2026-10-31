@@ -334,7 +334,7 @@ azhaq crawl -u https://app.example.com/ -fs rdn -do -f rdn,path -rl 5
 <!-- azhaq: fuzz dirs -->
 
 - **Calibration.** `dirs` calibrates by default, as ffuf does with `-ac`. `fuzz` does not calibrate unless you give `-ac`, as in ffuf, so a command line moved over returns ffuf's matches.
-- `dirs` switches calibration off when you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr` (`dirs` has no `-ft`). A command line moved from ffuf that has its own filters is filtered by hand, and sends no calibration guesses. The summary says so.
+- `dirs` keeps calibration on when you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr` (`dirs` has no `-ft`), as ffuf's `-ac -fs` does: your filters add to the calibration. `-ac=false` turns it off; then the filters are yours alone, no calibration guess is sent, and the summary says so.
 - Either command needs the keyword `FUZZ`, or the one `-ack` names. Without it a note says nothing was calibrated.
 - **Scope.** The host in `-u` is the scope, unless `-allow`, `-deny` or `-scope` say otherwise. An input that would go to another host is counted and not sent.
 - A header that names a host is held to the scope too, because a front end routes by it. These are `Host`, `X-Forwarded-Host`, `X-Host` and `X-Original-Host`. With no `-allow`, `-deny` or `-scope`, a host you name in a header joins the targets you named. With a rule, a header naming a host outside it is refused before anything is sent. See [Concepts](CONCEPTS.md).

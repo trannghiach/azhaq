@@ -231,11 +231,12 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
 
 <details>
-<summary>Flags accepted with no effect and rarely used flags (75)</summary>
+<summary>Flags accepted with no effect and rarely used flags (76)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
 | `-port-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default | accepted, no effect |
+| `-dirs-ac` | bool | `true` | calibrate on paths that cannot exist, as ffuf's -ac does, so a catch-all answer is not listed even with a filter of your own; -dirs-ac=false sends no guesses and lists what the filters leave | rarely needed |
 | `-dirs-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found | rarely needed |
 | `-dirs-ext` | string |  | also try each word with these extensions, comma-separated (php,bak) | rarely needed |
 | `-dirs-fc` | string |  | hide these statuses | rarely needed |

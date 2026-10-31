@@ -110,44 +110,55 @@ func TestDirsBlankWordAsksTheBase(t *testing.T) {
 	}
 }
 
-// A filter given by hand turns calibration off, as in ffuf: no guesses are
-// sent, and every word the filter does not remove is listed.
-func TestDirsFilterTurnsCalibrationOff(t *testing.T) {
+// A filter of the user's adds to the calibration, as ffuf's -fs does with
+// -ac: a catch-all answer the filter does not remove is still calibrated
+// away. -ac=false leaves the filters alone: no guesses, every word listed.
+func TestDirsFilterKeepsCalibration(t *testing.T) {
 	var mu sync.Mutex
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		paths = append(paths, r.URL.Path)
 		mu.Unlock()
-		if r.URL.Path == "/admin" {
+		switch r.URL.Path {
+		case "/admin":
 			fmt.Fprint(w, strings.Repeat("a", 99))
-			return
+		case "/api":
+			fmt.Fprint(w, strings.Repeat("e", 7)) // what the user's -fs hides
+		default:
+			fmt.Fprint(w, strings.Repeat("c", 50)) // every unknown path: one size
 		}
-		fmt.Fprint(w, strings.Repeat("c", 50)) // every unknown path: one size
 	}))
 	defer srv.Close()
-	words := wlist(t, "admin", "foo", "bar")
+	words := wlist(t, "admin", "api", "foo", "bar")
+	list := func(out string) string {
+		var got []string
+		for _, l := range lines(out) {
+			var m map[string]any
+			if json.Unmarshal([]byte(l), &m) == nil {
+				got = append(got, strings.TrimPrefix(m["url"].(string), srv.URL))
+			}
+		}
+		sort.Strings(got)
+		return fmt.Sprint(got)
+	}
 	out, errOut, err := captureBoth(t, func() error {
 		return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-fs", "7", "-mc", "all", "-silent", "-json"})
 	})
-	if err != nil {
-		t.Fatalf("%v\n%s", err, errOut)
+	if err != nil || list(out) != "[/admin]" || len(paths) <= 4 {
+		t.Errorf("with -fs: listed %s, %d requests, %v\n%s", list(out), len(paths), err, errOut)
 	}
+	if strings.Contains(errOut, "no calibration") {
+		t.Errorf("calibration is on, the summary should not say it is off:\n%s", errOut)
+	}
+	paths = nil
+	out, errOut, err = captureBoth(t, func() error {
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-fs", "7", "-ac=false", "-mc", "all", "-silent", "-json"})
+	})
 	asked := append([]string(nil), paths...)
 	sort.Strings(asked)
-	if fmt.Sprint(asked) != "[/admin /bar /foo]" {
-		t.Errorf("requests %v: calibration guesses were sent", paths)
-	}
-	var got []string
-	for _, l := range lines(out) {
-		var m map[string]any
-		if json.Unmarshal([]byte(l), &m) == nil {
-			got = append(got, strings.TrimPrefix(m["url"].(string), srv.URL))
-		}
-	}
-	sort.Strings(got)
-	if fmt.Sprint(got) != "[/admin /bar /foo]" {
-		t.Errorf("listed %v", got)
+	if err != nil || fmt.Sprint(asked) != "[/admin /api /bar /foo]" || list(out) != "[/admin /bar /foo]" {
+		t.Errorf("-ac=false: asked %v, listed %s, %v", asked, list(out), err)
 	}
 	if !strings.Contains(errOut, "no calibration") {
 		t.Errorf("the summary does not say so:\n%s", errOut)
@@ -157,7 +168,7 @@ func TestDirsFilterTurnsCalibrationOff(t *testing.T) {
 	out, _, err = captureBoth(t, func() error {
 		return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-silent"})
 	})
-	if err != nil || strings.TrimSpace(out) != srv.URL+"/admin" || len(paths) <= 4 {
+	if err != nil || strings.TrimSpace(out) != srv.URL+"/admin\n"+srv.URL+"/api" && strings.TrimSpace(out) != srv.URL+"/api\n"+srv.URL+"/admin" || len(paths) <= 4 {
 		t.Errorf("default: %q %v, %d requests", out, err, len(paths))
 	}
 }
@@ -262,7 +273,7 @@ func TestDirsTimeoutStopsAndResumeFinishes(t *testing.T) {
 }
 
 // A sweep sends one request for each word and nothing else: no page is
-// asked first (a redirecting front page would add its target), so -fs and
+// asked first (a redirecting front page would add its target), so -ac=false and
 // -max-requests with the words' count are enough, as with ffuf.
 func TestDirsSendsOneRequestPerWord(t *testing.T) {
 	var mu sync.Mutex
@@ -284,7 +295,7 @@ func TestDirsSendsOneRequestPerWord(t *testing.T) {
 	}
 	wl := wlist(t, words...)
 	_, errOut, err := captureBoth(t, func() error {
-		return cmdDirs([]string{"-u", srv.URL + "/", "-w", wl, "-mc", "all", "-fs", "28", "-max-requests", "20", "-json", "-ledger", "off"})
+		return cmdDirs([]string{"-u", srv.URL + "/", "-w", wl, "-mc", "all", "-fs", "28", "-ac=false", "-max-requests", "20", "-json", "-ledger", "off"})
 	})
 	if err != nil {
 		t.Fatalf("a budget of the 20 words stopped the sweep: %v\n%s", err, errOut)
@@ -359,8 +370,8 @@ func TestDirsResumePrintsAsDirs(t *testing.T) {
 		sort.Strings(got)
 		return got
 	}
-	// -fs: no calibration, so a budget counts words.
-	base := []string{"-u", srv.URL + "/", "-w", wl, "-fs", "19", "-json", "-ledger", "off"}
+	// -ac=false: no calibration, so a budget counts words.
+	base := []string{"-u", srv.URL + "/", "-w", wl, "-fs", "19", "-ac=false", "-json", "-ledger", "off"}
 	want, _, err := captureBoth(t, func() error { return cmdDirs(base) })
 	if err != nil || len(urls(want)) != 8 {
 		t.Fatalf("one run: %v, %q", err, want)
