@@ -318,7 +318,7 @@ azhaq notify -i findings.txt -p slack,smtp -id recon -mf 'recon {{date}}:\n{{dat
 ```
 
 - Both lines need a provider config. Without one `notify` stops with exit 2 and sends nothing.
-- Here `provider-config.yaml` holds `slack` and `smtp` entries with the id `recon`. [MIGRATING.md](MIGRATING.md#notify-azhaq-notify) has a sample. [commands/notify.md](commands/notify.md#output) lists the keys of each provider.
+- Here `provider-config.yaml` holds `slack` and `smtp` entries with the id `recon`. [MIGRATING.md](MIGRATING.md#notify-azhaq-notify) has a sample. [commands/notify.md](commands/notify.md#providers) lists the keys of each provider.
 - `findings.txt` is any text file.
 - The flags and the config are [notify's](https://github.com/projectdiscovery/notify), so a file written for it works.
 

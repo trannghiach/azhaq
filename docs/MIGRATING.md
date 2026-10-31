@@ -749,7 +749,7 @@ azhaq ports -host 127.0.0.1 -json | azhaq notify -p custom -rl 2 -pc provider-co
 - The first line sends to every entry of the config file, so all of them must be reachable.
 - `-p custom` narrows the third line to a receiver of yours on port 8000.
 - Put your own webhook URLs in the first two entries.
-- The keys are notify's, listed for each provider in [commands/notify.md](commands/notify.md#output).
+- The keys are notify's, listed for each provider in [commands/notify.md](commands/notify.md#providers).
 
 A sample `provider-config.yaml`:
 
