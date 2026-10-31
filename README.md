@@ -99,7 +99,7 @@ $ azhaq roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Auth
 
 Each column is one role's answer as `status:bytes`, in the order the roles were given. A `-` is a role that was never asked.
 
-Or give each account's browsing as it was saved, one file per account, with no headers to copy and no crawl: a HAR from the browser, Caido or Burp, or Burp's "Save items" XML. An anonymous role is added. The page on [`roles`](docs/commands/roles.md#history--har--burp) says how each is used.
+Or give each account's browsing as it was saved, one file per account, with no headers to copy and no crawl: a HAR from the browser, Caido or Burp, or Burp's "Save items" XML. An anonymous role is added. The page on [`roles`](docs/commands/roles.md#history-files) says how each is used.
 
 ```
 $ azhaq roles -har alice=alice.har -har bob=bob.har
