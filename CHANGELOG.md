@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `run` and `crawl -browser` no longer count, ledger or hold to the scope the requests Chrome makes to its own pages (`chrome-extension:`, `chrome:`, `data:`, `blob:`, `about:`, `file:`): a page that embeds a PDF added 19 such lines to the ledger and the request count, which no server received. The ledger and the count now equal what the server received.
+- `subs` asks crt.sh's public PostgreSQL first, with subfinder's query and no `LIMIT`, and the JSON API only when the database fails or has no names: seconds where the JSON API takes 20 to 40 s on a large domain. A SOCKS5 proxy carries the connection; with an HTTP proxy the JSON API is used and the row's note says so.
+- `fuzz` reuses the buffers that read each answer instead of allocating 37 KB per request: a 4,700-request sweep uses about 30% less client CPU.
 - `dirs` asks the base URL for an empty line of the wordlist, as ffuf does (`http://host/` with nothing appended), and counts it like any word; before, it dropped the line without a word.
 - `params` finds a field that shows only once the earlier ones are present, such as the required fields a validator reports one at a time (VAmPI's login reads `username` and `password`; `-X JSON` found only `username`). After a pass, the names not found are asked again with the found names in every request, against a reference taken the same way, up to 3 passes, for every method; such a name's `why` says what was present (`body, once username was present`).
 - `ports -host 127.0.0.1,127.0.0.1:10025` scans both: each entry stands for itself, so the bare host keeps its default ports (or `-p`) and the `host:port` entry adds its port. Before, the pinned port replaced the bare host's default scan.

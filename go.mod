@@ -12,6 +12,7 @@ require (
 	github.com/gaissmai/bart v0.30.0
 	github.com/happyhackingspace/dit v0.0.33
 	github.com/hdm/jarm-go v0.0.8
+	github.com/lib/pq v1.10.9
 	github.com/mfonda/simhash v0.0.0-20151007195837-79f94a1100d6
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/miekg/dns v1.1.73
@@ -44,7 +45,6 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/lib/pq v1.10.9 // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
