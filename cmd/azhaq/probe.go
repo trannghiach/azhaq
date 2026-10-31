@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -523,7 +524,7 @@ func cmdProbe(args []string) error {
 		return err
 	}
 	out := &probeOut{w: w, c: &c, pf: &pf, set: set, spec: spec, cdn: map[string][2]string{}, cnames: map[string][]string{},
-		seen: map[string]bool{}, shots: map[string]map[string]any{}, input: map[string]string{}, answered: map[string]bool{}, sent: map[string]int{}}
+		seen: map[string]bool{}, shots: map[string]map[string]any{}, input: map[string][]string{}, answered: map[string]bool{}, sent: map[string]int{}}
 	out.displays = pf.displayed()
 	// httpx's input field is the line as given, not the URL it became.
 	probeSeeding = true
@@ -531,7 +532,9 @@ func cmdProbe(args []string) error {
 		out.order = append(out.order, t.given)
 		for _, l := range t.lines {
 			if s, err := listSeed(l); err == nil {
-				out.input[normalize.Seed(s).Key()] = t.given
+				if k := normalize.Seed(s).Key(); !slices.Contains(out.input[k], t.given) {
+					out.input[k] = append(out.input[k], t.given)
+				}
 			}
 		}
 	}
@@ -644,8 +647,10 @@ func (o *probeOut) settle(rep *report, st *store.Store, fs *flag.FlagSet) {
 		skipped[sk.Target] = sk.Reason
 	}
 	keys := map[string][]string{}
-	for key, in := range o.input {
-		keys[in] = append(keys[in], key)
+	for key, ins := range o.input {
+		for _, in := range ins {
+			keys[in] = append(keys[in], key)
+		}
 	}
 	accounted := map[string]bool{}
 	for _, f := range rep.Failed {

@@ -666,7 +666,7 @@ func (c *Collector) probeFields(ctx context.Context, row map[string]any, raw, re
 		if res.Raw != nil {
 			ev.Request, ev.Chain = res.Raw.Request, res.Raw.Chain
 		}
-		evidence.Store(source, ev)
+		keepEvidence(source, ev)
 	}
 	return source
 }
