@@ -1,0 +1,51 @@
+# Only internal/egress opens an outbound connection (docs/ARCHITECTURE.md,
+# "Egress"). forbidigo forbids the names that open one; it cannot tell
+# http.Client{} (a client built here) from *http.Client (a type in a
+# signature), so internal/egress/rules_test.go forbids those literals too.
+version: "2"
+
+run:
+  tests: false # test files and the helpers they use may dial their own servers
+
+linters:
+  default: none
+  enable:
+    - forbidigo
+  settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^http\.(DefaultClient|DefaultTransport)$
+          pkg: ^net/http$
+          msg: "use a client from internal/egress (TargetClient, SourceClient or OwnClient)"
+        - pattern: ^http\.(Get|Post|Head|PostForm)$
+          pkg: ^net/http$
+          msg: "use a client from internal/egress"
+        - pattern: ^net\.(Dial|DialTimeout|DialTCP|DialUDP|DialIP|DialUnix|Dialer|ListenPacket|ListenUDP)$
+          pkg: ^net$
+          msg: "connect through internal/egress (DialTarget, PortDialer, DialSource)"
+        - pattern: ^tls\.(Dial|DialWithDialer|Dialer)$
+          pkg: ^crypto/tls$
+          msg: "connect through internal/egress"
+        - pattern: ^dns\.Client$
+          pkg: ^github\.com/miekg/dns$
+          msg: "ask a resolver through egress.DNSExchanger"
+        - pattern: ^http2\.Transport$
+          pkg: ^golang\.org/x/net/http2$
+          msg: "use egress.H2Client"
+        - pattern: ^chromedp\.(NewExecAllocator|NewRemoteAllocator)$
+          pkg: ^github\.com/chromedp/chromedp$
+          msg: "start Chrome with egress.LaunchChrome"
+        - pattern: ^smtp\.(Dial|SendMail)$
+          pkg: ^net/smtp$
+          msg: "connect with egress.DialSource"
+        - pattern: ^pq\.(NewConnector|Open|DialOpen)$
+          pkg: ^github\.com/lib/pq$
+          msg: "open a source database with egress.OpenSourceDB"
+        - pattern: ^sql\.OpenDB$
+          pkg: ^database/sql$
+          msg: "open a source database with egress.OpenSourceDB"
+  exclusions:
+    paths:
+      - internal/egress
+      - bench
