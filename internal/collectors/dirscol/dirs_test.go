@@ -315,3 +315,61 @@ func TestWordWithQuery(t *testing.T) {
 		t.Errorf("hits %v", got)
 	}
 }
+
+// A sweep asks as ffuf does: no Accept, so a server that picks its answer
+// by it (Express's redirect) answers with the body ffuf counts, and -fs
+// copied from ffuf filters the same hit.
+func TestSweepAsksWithoutAcceptLikeFfuf(t *testing.T) {
+	fetch.Reset()
+	const plain = "Found. Redirecting to /app/" // what a request with no Accept gets
+	var accepts atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/app" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Accept") != "" {
+			accepts.Add(1)
+		}
+		w.Header().Set("Location", "/app/")
+		w.WriteHeader(http.StatusMovedPermanently)
+		if strings.Contains(r.Header.Get("Accept"), "text/html") {
+			w.Write([]byte("<p>Found. Redirecting to <a href=\"/app/\">/app/</a></p>"))
+			return
+		}
+		w.Write([]byte(plain))
+	}))
+	defer srv.Close()
+	words := []string{"app", "nothing"}
+	var length float64
+	c := New(srv.Client(), Options{Words: words, Rate: 1000})
+	_, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {
+		var m map[string]any
+		_ = json.Unmarshal(o.Payload, &m)
+		if o.Kind == "url" {
+			length, _ = m["length"].(float64)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if length != float64(len(plain)) || accepts.Load() != 0 {
+		t.Errorf("/app is %v bytes (a request with no Accept gets %d), %d requests sent an Accept", length, len(plain), accepts.Load())
+	}
+	// A header the user gives wins.
+	fetch.Extra = http.Header{"Accept": {"text/html"}}
+	defer fetch.Reset()
+	c = New(srv.Client(), Options{Words: words, Rate: 1000})
+	_, _ = c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}, func(o types.Observation) error {
+		var m map[string]any
+		_ = json.Unmarshal(o.Payload, &m)
+		if o.Kind == "url" {
+			length, _ = m["length"].(float64)
+		}
+		return nil
+	})
+	if length == float64(len(plain)) {
+		t.Errorf("-H Accept did not reach the server: /app is %v bytes", length)
+	}
+}

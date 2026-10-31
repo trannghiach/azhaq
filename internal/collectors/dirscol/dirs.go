@@ -492,7 +492,7 @@ func (c *Collector) send(ctx context.Context, target, probe string) (response, e
 	if err != nil {
 		return response{}, err
 	}
-	fetch.ApplyHeaders(req)
+	fetch.ApplySweepHeaders(req)
 	if err := fetch.Spend(ctx); err != nil {
 		return response{}, err
 	}
