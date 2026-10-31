@@ -142,3 +142,80 @@ func TestResolveManyDoesNotRepeatAPassThatMostlyFailed(t *testing.T) {
 		t.Errorf("took %s", took)
 	}
 }
+
+// A query whose datagram is lost is not waited out for the whole timeout:
+// the next attempt is sent beside it once the first is late, and answers.
+func TestLostQueryIsAskedAgainBeforeTheTimeout(t *testing.T) {
+	p := New(Options{Resolvers: []string{"192.0.2.1:53", "192.0.2.2:53"}, Timeout: 2 * time.Second})
+	var asked atomic.Int32
+	p.Exchange = func(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {
+		if asked.Add(1) == 1 {
+			<-ctx.Done() // lost
+			return nil, ctx.Err()
+		}
+		m := new(dns.Msg)
+		m.SetReply(q)
+		rr, _ := dns.NewRR(q.Question[0].Name + " 60 IN A 192.0.2.7")
+		m.Answer = append(m.Answer, rr)
+		return m, nil
+	}
+	t0 := time.Now()
+	a := p.Resolve(context.Background(), "lost.example.org")
+	took := time.Since(t0)
+	if a.Status != StatusOK {
+		t.Fatalf("status %s (%s)", a.Status, a.Err)
+	}
+	if took > time.Second {
+		t.Errorf("the answer took %s: the lost query was waited out", took)
+	}
+	if n := asked.Load(); n != 2 {
+		t.Errorf("%d queries sent, want 2", n)
+	}
+}
+
+// A slow answer that comes after the next attempt was sent still counts, and
+// the attempt beside it is cut.
+func TestSlowFirstAnswerBeatsItsHedge(t *testing.T) {
+	p := New(Options{Resolvers: []string{"192.0.2.1:53", "192.0.2.2:53"}, Timeout: time.Second})
+	var asked atomic.Int32
+	cut := make(chan struct{})
+	p.Exchange = func(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {
+		if asked.Add(1) == 2 {
+			<-ctx.Done()
+			close(cut)
+			return nil, ctx.Err()
+		}
+		time.Sleep(400 * time.Millisecond)
+		m := new(dns.Msg)
+		m.SetReply(q)
+		rr, _ := dns.NewRR(q.Question[0].Name + " 60 IN A 192.0.2.7")
+		m.Answer = append(m.Answer, rr)
+		return m, nil
+	}
+	if a := p.Resolve(context.Background(), "slow.example.org"); a.Status != StatusOK {
+		t.Fatalf("status %s (%s)", a.Status, a.Err)
+	}
+	select {
+	case <-cut:
+	case <-time.After(time.Second):
+		t.Error("the attempt sent beside the answered one was not cut")
+	}
+}
+
+// Every attempt of a name fails: the pool tries once each (Retries+1) and says so.
+func TestHedgingKeepsTheAttemptCount(t *testing.T) {
+	p := New(Options{Resolvers: []string{"192.0.2.1:53", "192.0.2.2:53"}, Timeout: time.Second})
+	var asked atomic.Int32
+	p.Exchange = func(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {
+		asked.Add(1)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	a := p.Resolve(context.Background(), "dead.example.org")
+	if a.Status != StatusFailed {
+		t.Errorf("status %s, want failed", a.Status)
+	}
+	if n := asked.Load(); n != 3 {
+		t.Errorf("%d queries sent for one name, want 3 (2 retries)", n)
+	}
+}

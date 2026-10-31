@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -98,6 +99,7 @@ type Pool struct {
 	timeout time.Duration
 	retries int
 	x       *egress.DNSExchanger // sends the queries: the only code here that opens a connection
+	rtt     rtts                 // how long answers took, for when a query is late
 	proto   map[string]Server    // by key
 	named   bool                 // the resolvers were given, not the defaults
 	next    atomic.Uint64
@@ -526,37 +528,97 @@ func question(name string, qtype uint16) *dns.Msg {
 	return q
 }
 
+// reply is what one attempt of a query came back with.
+type reply struct {
+	attempt int
+	server  string
+	in      *dns.Msg
+	err     error
+	paced   bool // err is the pace's wait cut short, not the resolver's
+}
+
 // query is Query naming the resolver that answered; avoid, when the pool
-// has another, is one that is not asked (a second opinion).
+// has another, is one that is not asked (a second opinion). An attempt that
+// is late (see hedgeDelay) is not waited out: the next one is sent beside it
+// and the first answer wins, so a dropped datagram costs a fraction of the
+// timeout; an attempt that fails sends the next at once.
 func (p *Pool) query(ctx context.Context, q *dns.Msg, avoid string) (*dns.Msg, string, error) {
 	if len(p.servers) == 0 {
 		return nil, "", errors.New("no resolvers")
 	}
+	qctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	var last error
 	var lastServer string
 	var lastMsg *dns.Msg         // the last SERVFAIL or REFUSED, returned with the error
 	servfail := map[string]int{} // resolver → attempts it answered SERVFAIL
-	for attempt := 0; attempt <= p.retries; attempt++ {
-		server := p.pick(attempt, avoid)
-		if err := p.limit.Wait(ctx, server); err != nil {
-			return nil, "", err
+	ch := make(chan reply, p.retries+1)
+	waiting := map[int]string{} // attempts sent and not answered, by number
+	launched := 0
+	launch := func() {
+		n, server := launched, p.pick(launched, avoid)
+		launched++
+		waiting[n] = server
+		m := q
+		if n > 0 {
+			m = q.Copy() // attempts run side by side
 		}
-		in, err := p.exchange(ctx, q, server)
-		if h := p.health[server]; h != nil && ctx.Err() == nil {
-			h.note(err != nil)
-		}
-		if err != nil {
-			last, lastServer = err, server
-			continue
-		}
-		if in.Rcode == dns.RcodeServerFailure || in.Rcode == dns.RcodeRefused {
-			if in.Rcode == dns.RcodeServerFailure {
-				servfail[server]++
+		go func() {
+			r := reply{attempt: n, server: server}
+			if err := p.limit.Wait(qctx, server); err != nil {
+				r.err, r.paced = err, true
+			} else {
+				t0 := time.Now()
+				r.in, r.err = p.exchange(qctx, m, server)
+				if r.err == nil {
+					p.rtt.add(time.Since(t0))
+				}
 			}
-			last, lastMsg, lastServer = errors.New(server+": "+dns.RcodeToString[in.Rcode]), in, server
+			ch <- r
+		}()
+	}
+	hedge := time.NewTimer(p.hedgeDelay())
+	defer hedge.Stop()
+	launch()
+	for len(waiting) > 0 {
+		select {
+		case <-hedge.C:
+			if launched <= p.retries {
+				launch()
+				hedge.Reset(p.hedgeDelay() << (launched - 1)) // each later one waits longer: losses come in bursts
+			}
 			continue
+		case r := <-ch:
+			delete(waiting, r.attempt)
+			if r.paced {
+				return nil, "", r.err
+			}
+			if h := p.health[r.server]; h != nil && ctx.Err() == nil {
+				h.note(r.err != nil)
+			}
+			switch {
+			case r.err != nil:
+				last, lastServer = r.err, r.server
+			case r.in.Rcode == dns.RcodeServerFailure || r.in.Rcode == dns.RcodeRefused:
+				if r.in.Rcode == dns.RcodeServerFailure {
+					servfail[r.server]++
+				}
+				last, lastMsg, lastServer = errors.New(r.server+": "+dns.RcodeToString[r.in.Rcode]), r.in, r.server
+			default:
+				// An attempt sent before this one and still unanswered lost
+				// the race: its resolver was too slow for the one that won.
+				for n, s := range waiting {
+					if h := p.health[s]; h != nil && n < r.attempt {
+						h.note(true)
+					}
+				}
+				return r.in, r.server, nil
+			}
 		}
-		return in, server, nil
+		if len(waiting) == 0 && launched <= p.retries {
+			launch()
+			hedge.Reset(p.hedgeDelay())
+		}
 	}
 	n := 0
 	for _, c := range servfail {
@@ -647,6 +709,8 @@ func (p *Pool) wildcard(zone string) {
 
 func (p *Pool) exchange(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {
 	if p.Exchange != nil {
+		ctx, cancel := context.WithTimeout(ctx, p.timeout)
+		defer cancel()
 		return p.Exchange(ctx, q, server)
 	}
 	srv, ok := p.proto[server]
@@ -673,4 +737,44 @@ func records(m *dns.Msg, qtype uint16) (addrs, chain []string) {
 		}
 	}
 	return addrs, chain
+}
+
+// rtts keeps the round trips of the last answered queries.
+type rtts struct {
+	mu   sync.Mutex
+	ring [128]time.Duration
+	n    int
+}
+
+func (r *rtts) add(d time.Duration) {
+	r.mu.Lock()
+	r.ring[r.n%len(r.ring)] = d
+	r.n++
+	r.mu.Unlock()
+}
+
+// p95 is the round trip 19 in 20 answers beat, 0 before there are enough to say.
+func (r *rtts) p95() time.Duration {
+	r.mu.Lock()
+	n := min(r.n, len(r.ring))
+	if n < 32 {
+		r.mu.Unlock()
+		return 0
+	}
+	s := append([]time.Duration(nil), r.ring[:n]...)
+	r.mu.Unlock()
+	slices.Sort(s)
+	return s[n*95/100]
+}
+
+// hedgeDelay is how long a query waits for its answer before the next
+// attempt is sent beside it: past what nearly every answer takes (this run's
+// resolvers), within the timeout. A datagram that was lost is then not
+// waited out for the whole timeout.
+func (p *Pool) hedgeDelay() time.Duration {
+	d := p.rtt.p95() * 3 / 2
+	if d == 0 {
+		d = p.timeout / 4
+	}
+	return min(max(d, 250*time.Millisecond), p.timeout/2)
 }
