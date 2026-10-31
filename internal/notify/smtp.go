@@ -12,6 +12,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // SMTPOptions are notify's smtp entry. smtp_cc lists the recipients, as it
@@ -85,12 +87,11 @@ func sendMail(ctx context.Context, o *SMTPOptions, text string) error {
 	if err != nil {
 		host, port = o.Server, "25"
 	}
-	dialer := &net.Dialer{Timeout: 30 * time.Second}
 	var conn net.Conn
 	if port == "465" {
-		conn, err = tls.DialWithDialer(dialer, "tcp", net.JoinHostPort(host, port), &tls.Config{ServerName: host})
+		conn, err = egress.DialSourceTLS(ctx, net.JoinHostPort(host, port), &tls.Config{ServerName: host})
 	} else {
-		conn, err = dialer.DialContext(ctx, "tcp", net.JoinHostPort(host, port))
+		conn, err = egress.DialSource(ctx, "tcp", net.JoinHostPort(host, port))
 	}
 	if err != nil {
 		return fmt.Errorf("could not connect to %s: %w", net.JoinHostPort(host, port), err)

@@ -2,6 +2,7 @@ package egress
 
 import (
 	"context"
+	"crypto/tls"
 	"net"
 	"strings"
 	"sync"
@@ -48,6 +49,22 @@ func DialSource(ctx context.Context, network, addr string) (net.Conn, error) {
 	ledger.TCPAs(ctx, ledger.ClassSource, "", addr)
 	d := &net.Dialer{Timeout: 30 * time.Second}
 	return d.DialContext(ctx, network, addr)
+}
+
+// DialSourceTLS is DialSource with an implicit TLS handshake (SMTPS).
+func DialSourceTLS(ctx context.Context, addr string, cfg *tls.Config) (net.Conn, error) {
+	c, err := DialSource(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	hctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	tc := tls.Client(c, cfg)
+	if err := tc.HandshakeContext(hctx); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return tc, nil
 }
 
 func pinnedDial(ip string) func(ctx context.Context, network, addr string) (net.Conn, error) {

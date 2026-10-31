@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // Client posts every notification: one pace, one retry policy, one place
@@ -45,9 +47,7 @@ func NewClient(perSecond float64, proxy string) (*Client, error) {
 		if err != nil || pu.Host == "" {
 			return nil, fmt.Errorf("-proxy %q is not a URL", redactProxy(proxy))
 		}
-		tr := http.DefaultTransport.(*http.Transport).Clone()
-		tr.Proxy = http.ProxyURL(pu)
-		c.HTTP = &http.Client{Transport: tr, CheckRedirect: sameHost}
+		c.HTTP = notifyClient(pu)
 	}
 	return c, nil
 }
@@ -87,7 +87,15 @@ func (c *Client) http() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return &http.Client{CheckRedirect: sameHost}
+	return notifyClient(nil)
+}
+
+// notifyClient is egress's source client (a notification service is a third
+// party, not a target) that keeps a token from following a redirect to another host.
+func notifyClient(proxy *url.URL) *http.Client {
+	c := egress.SourceClient(egress.SourceOptions{Proxy: proxy})
+	c.CheckRedirect = sameHost
+	return c
 }
 
 func (c *Client) tries() int {
