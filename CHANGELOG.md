@@ -4,6 +4,11 @@
 
 ### Fixed
 
+- `show` and `query` list every port an ingested naabu line names: the address's open ports are the newest azhaq scan's joined with the imported rows' ports, with `via` naming both. A naabu file of two lines showed one port.
+- `shots -u http://host/` gives one row: the host name derived from a front-page URL is no longer also shot on both schemes (a bare name or `host:port` still is).
+- `probe -json` prints a URL input's `url` as it was given, with its slash, query and fragment, as httpx does; a bare host keeps httpx's form without the slash.
+- `urls` drops links ending in a period and links shortened to `...` from every source (OTX included), counts them in the junk note, and `-raw` keeps them.
+- The `dns` summary says `13 records of 12 names` when lines are records (`-resp`, `-resp-only`, a transfer); it said `13 names`.
 - `-fill-forms` help said "GET only"; it says one GET request per form, and that a form that posts is not sent unless `-submit-forms`. `azhaq ingest` help said it prints "the map of what was added"; it prints only its summary, and the help says so.
 - `azhaq report` was documented with four verdicts; it writes up five, and it exits 0 with a note when no row qualifies.
 - The docs said 4 requests in flight per host (it is 10, `-host-parallel`), that azhaq never clicks (`-interact` does), and that `ports` scans every address of both families (it scans the first two of each, all with `-sa`); they now match the code.
