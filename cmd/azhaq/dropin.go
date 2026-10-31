@@ -22,6 +22,7 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/collectors"
+	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/shotcol"
 	"github.com/trannghiach/azhaq/internal/collectors/urlcol"
@@ -900,15 +901,36 @@ func cmdShots(args []string) error {
 	for _, s := range splitList(*service) {
 		opt.Services = append(opt.Services, s)
 	}
-	scanPorts := 0 // ports the scan files gave, each tried over the schemes the scan left open
+	scanPorts := 0                 // ports the scan files gave, each tried over the schemes the scan left open
+	guessedHP := map[string]bool{} // host:port nobody asked for as a web target
+	askedHP := map[string]bool{}   // host:port someone did
+	for _, t := range targs {
+		askedHP[targets.HostPort(t)] = true
+	}
 	for _, f := range nmapFiles {
-		more, err := scanFile(f, func(r io.Reader) ([]string, error) { return targets.NmapXML(r, opt) })
+		var guessed map[string]bool
+		more, err := scanFile(f, func(r io.Reader) ([]string, error) {
+			var lines []string
+			var err error
+			lines, guessed, err = targets.NmapXMLGuessed(r, opt)
+			return lines, err
+		})
 		if err != nil {
 			return err
+		}
+		for _, l := range more {
+			if hp := targets.HostPort(l); guessed[l] {
+				guessedHP[hp] = true
+			} else {
+				askedHP[hp] = true
+			}
 		}
 		more = targets.Expand(more, nil, *noHTTP, *noHTTPS)
 		scanPorts += len(more)
 		targs = append(targs, more...)
+	}
+	for hp := range askedHP {
+		delete(guessedHP, hp)
 	}
 	for _, f := range nessusFiles {
 		more, err := scanFile(f, func(r io.Reader) ([]string, error) { return targets.Nessus(r, opt) })
@@ -1045,6 +1067,9 @@ func cmdShots(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
+	if len(guessedHP) > 0 && !hasFlag(given(), "fail-on-errors") {
+		guessedFanout(rep, guessedHP)
+	}
 	if scanPorts > 0 && len(urls) == 0 && *list == "" {
 		n := fmt.Sprintf("nmap files: %d ports tried, %d answered with a page", scanPorts, len(answered))
 		if len(answered) < scanPorts && *serviceHas == "" && *service == "" {
@@ -1053,6 +1078,44 @@ func cmdShots(args []string) error {
 		rep.Notes = append(rep.Notes, n)
 	}
 	return rep.finish(c.json, c.silent)
+}
+
+// guessedFanout marks the failures of ports nmap did not name a web
+// service as fan-out: they are tried because nmap's guess cannot be
+// trusted, so they stay listed but do not make the exit code 3. A failure
+// that holds both kinds of target is split.
+func guessedFanout(rep *report, guessed map[string]bool) {
+	var out []engine.Failure
+	for _, f := range rep.Failed {
+		var mine, others []string
+		for _, t := range f.Targets {
+			if guessed[targets.HostPort(t)] {
+				mine = append(mine, t)
+			} else {
+				others = append(others, t)
+			}
+		}
+		switch {
+		case len(mine) == 0 || f.Fanout || f.Partial:
+			out = append(out, f)
+		case len(others) == 0:
+			f.Fanout = true
+			out = append(out, f)
+		default:
+			g := f
+			g.Targets, g.Count, g.Fanout = mine, len(mine), true
+			f.Targets, f.Count = others, max(1, f.Count-len(mine))
+			out = append(out, f, g)
+		}
+	}
+	rep.Failed = out
+	var left []string
+	for _, u := range rep.Unreachable {
+		if !guessed[targets.HostPort(u)] {
+			left = append(left, u)
+		}
+	}
+	rep.Unreachable = left
 }
 
 // scanFile reads a scan file with read.

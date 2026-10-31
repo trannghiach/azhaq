@@ -219,8 +219,8 @@ func TestShotsNmapTriesAWebPortNamedOddly(t *testing.T) {
 	text, errOut, err := captureBoth(t, func() error {
 		return cmdShots([]string{"-nmap", xml, "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db")})
 	})
-	if exitCode(err) == exitUsage {
-		t.Fatalf("exit 2: %v", err)
+	if exitCode(err) != exitOK {
+		t.Fatalf("exit %d, want 0: a port nmap did not name a web service is fan-out\n%s", exitCode(err), errOut)
 	}
 	if !strings.Contains(text, "http://127.0.0.1:"+su.Port()+"/") {
 		t.Errorf("the port nmap called nessus was not shot:\n%s\n%s", text, errOut)
@@ -234,5 +234,44 @@ func TestShotsNmapTriesAWebPortNamedOddly(t *testing.T) {
 	})
 	if exitCode(err) != exitUsage {
 		t.Errorf("-service http names no port of this scan: exit %d, want 2", exitCode(err))
+	}
+}
+
+// A port nmap named http that does not answer is an ordinary failure:
+// exit 3. The same port named ssh is fan-out, listed in the summary.
+func TestShotsNmapDeadHTTPPortFailsButGuessedPortDoesNot(t *testing.T) {
+	if _, err := browser.Find(); err != nil {
+		t.Skip(err)
+	}
+	dead, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, dp, _ := net.SplitHostPort(dead.Addr().String())
+	dead.Close() // nothing listens: the port does not answer
+	xml := filepath.Join(t.TempDir(), "scan.xml")
+	for _, c := range []struct {
+		svc  string
+		exit int
+	}{{"http", exitPartial}, {"ssh", exitOK}} {
+		body := fmt.Sprintf(`<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="127.0.0.1" addrtype="ipv4"/><ports>
+<port protocol="tcp" portid="%s"><state state="open"/><service name="%s"/></port></ports></host></nmaprun>`, dp, c.svc)
+		if err := os.WriteFile(xml, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, errOut, err := captureBoth(t, func() error {
+			return cmdShots([]string{"-nmap", xml, "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db"), "-json"})
+		})
+		rep := lastReport(t, errOut)
+		if exitCode(err) != c.exit || rep.Exit != c.exit {
+			t.Errorf("port named %s: exit %d, want %d\n%s", c.svc, exitCode(err), c.exit, errOut)
+		}
+		fan := false
+		for _, f := range rep.Failed {
+			fan = fan || f.Fanout
+		}
+		if (c.svc == "ssh") != fan || len(rep.Failed) == 0 || len(rep.Unreachable) > 0 && c.svc == "ssh" {
+			t.Errorf("port named %s: failures %+v unreachable %v", c.svc, rep.Failed, rep.Unreachable)
+		}
 	}
 }

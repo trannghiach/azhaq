@@ -684,6 +684,7 @@ Behaviour, fields and edge cases: [`azhaq shots`](commands/shots.md).
 - **Chrome is held to the scope and the budget.** Every request of every page, frame and worker is checked first. A page's own writes are refused and mapped, every download is refused, and popups close. Each request counts against `-max-requests` and `-rate`. gowitness loads whatever a page asks for.
 - At a set `-rate`, a page's time runs from when it last moved, so a slow pace gives whole pictures. A picture taken before the page's images and scripts loaded is marked `partial`, and the run exits 3.
 - A page the budget cannot cover is not shot, and the summary says how many requests it needed.
+- `-nmap` ports that nmap did not name a web service are fan-out: when they do not answer they are listed and the exit stays 0. A dead port nmap named http exits 3.
 - `-nmap` tries only ports nmap found open; gowitness also tries the others unless `--open-only`. `-open-only=false` matches gowitness.
 - Chrome saves nothing to disk but the picture.
 - `-shot-js` runs your script on the target's page. It is yours to scope.

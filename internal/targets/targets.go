@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -195,11 +196,19 @@ type nmapRun struct {
 // has no TLS tunnel, comes as host:port, which the run tries over https and
 // then http.
 func NmapXML(r io.Reader, o Options) ([]string, error) {
+	out, _, err := NmapXMLGuessed(r, o)
+	return out, err
+}
+
+// NmapXMLGuessed is NmapXML that also says which lines are guesses: ports
+// nmap did not name a web service, tried because its guess cannot be
+// trusted. Nobody asked for them as web targets.
+func NmapXMLGuessed(r io.Reader, o Options) (out []string, guessed map[string]bool, err error) {
 	var run nmapRun
 	if err := xml.NewDecoder(r).Decode(&run); err != nil {
-		return nil, fmt.Errorf("not an nmap XML file: %w", err)
+		return nil, nil, fmt.Errorf("not an nmap XML file: %w", err)
 	}
-	var out []string
+	guessed = map[string]bool{}
 	seen := map[string]bool{}
 	for _, h := range run.Hosts {
 		if h.Status.State != "" && h.Status.State != "up" {
@@ -228,7 +237,8 @@ func NmapXML(r io.Reader, o Options) ([]string, error) {
 			}
 			tls := p.Service.Tunnel == "ssl" || strings.HasPrefix(name, "https") || strings.Contains(name, "ssl/http")
 			l := line(tls, host, p.ID)
-			if !strings.Contains(name, "http") && name != "www" && p.Service.Tunnel != "ssl" {
+			guess := !strings.Contains(name, "http") && name != "www" && p.Service.Tunnel != "ssl"
+			if guess {
 				// Not named a web service: both schemes may answer.
 				l = net.JoinHostPort(host, strconv.Itoa(p.ID))
 				if p.ID == 80 || p.ID == 443 {
@@ -238,10 +248,33 @@ func NmapXML(r io.Reader, o Options) ([]string, error) {
 			if !seen[l] {
 				seen[l] = true
 				out = append(out, l)
+				if guess {
+					guessed[l] = true
+				}
 			}
 		}
 	}
-	return out, nil
+	return out, guessed, nil
+}
+
+// HostPort is the host:port a URL line or host:port line stands for, the
+// scheme's port when the URL has none.
+func HostPort(l string) string {
+	if !strings.Contains(l, "://") {
+		return l
+	}
+	u, err := url.Parse(l)
+	if err != nil {
+		return l
+	}
+	port := u.Port()
+	if port == "" {
+		port = "80"
+		if u.Scheme == "https" {
+			port = "443"
+		}
+	}
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 type nessusFile struct {
