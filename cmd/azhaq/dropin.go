@@ -861,7 +861,7 @@ func cmdShots(args []string) error {
 	openOnly := fs.Bool("open-only", true, "with -nmap: only ports found open")
 	hostnames := fs.Bool("hostnames", false, "with -nmap or -nessus: the host's name instead of its address, when the file has one")
 	given := inherit(fs, append([]string{"tabs", "browser-writes", "cidr", "max-ips", "shot-size", "shot-fullpage", "shot-wait", "shot-timeout", "shot-format",
-		"shot-quality", "shot-js", "shot-codes", "shot-html", "chrome", "chrome-proxy", "chrome-profile", "unsafe-ports", "no-tech"}, targetFlags...)...)
+		"shot-quality", "shot-js", "shot-codes", "shot-html", "chrome", "proxy", "chrome-proxy", "chrome-profile", "unsafe-ports", "no-tech"}, targetFlags...)...)
 	if err := parse(fs, args); err != nil {
 		return err
 	}
