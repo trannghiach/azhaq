@@ -23,7 +23,6 @@ import (
 	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/fuzz"
-	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -105,20 +104,17 @@ func New(client *http.Client, o Options) *Collector {
 	if o.Set == nil {
 		o.Set = NewSet()
 	}
-	base := fetch.Client(client)
-	c := *base
+	c := *fetch.Client(client)
 	// Redirects are answers here: a directory is the path that redirects
 	// to itself with a slash.
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	// One connection kept per thread, as ffuf does: the default keeps two,
 	// and a sweep would open a connection (on https, a handshake) for
 	// about every third request.
-	if tr, ok := ledger.Unwrap(base.Transport).(*http.Transport); ok {
-		tr = tr.Clone()
+	c = *egress.Tweak(&c, func(tr *http.Transport) {
 		tr.MaxIdleConnsPerHost = max(o.Threads, 2)
 		tr.MaxIdleConns = 2 * max(o.Threads, 2)
-		c.Transport = ledger.Wrap(tr)
-	}
+	})
 	return &Collector{Client: &c, Opts: o, limiter: limit.New(o.Rate, max(1, int(o.Rate/10))), needBody: o.Set.NeedBody()}
 }
 

@@ -48,4 +48,3 @@ func TestBudgetStopsRequests(t *testing.T) {
 		t.Errorf("counted %d after 5 sent outside, want 8", egress.Sent())
 	}
 }
-

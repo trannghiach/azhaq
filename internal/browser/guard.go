@@ -20,7 +20,6 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/trannghiach/azhaq/internal/egress"
-	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
@@ -406,7 +405,7 @@ func upstream(scheme, addr string, via *url.URL) (*url.URL, error) {
 // directly when there is none, a name through the run's resolver.
 func dialOut(ctx context.Context, p *url.URL, addr string) (net.Conn, error) {
 	if p == nil {
-		return fetch.Dial(ctx, "tcp", addr)
+		return egress.DialTarget(ctx, "tcp", addr)
 	}
 	switch p.Scheme {
 	case "socks5", "socks5h":
@@ -434,7 +433,7 @@ func (g *guard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
 		at = net.JoinHostPort(p.Hostname(), "80")
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	up, err := fetch.Dial(ctx, "tcp", at)
+	up, err := egress.DialProxy(ctx, "tcp", at)
 	cancel()
 	if err != nil {
 		return
@@ -475,11 +474,11 @@ func (g *guard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
 type runDialer struct{}
 
 func (runDialer) Dial(network, addr string) (net.Conn, error) {
-	return fetch.Dial(context.Background(), network, addr)
+	return egress.DialProxy(context.Background(), network, addr)
 }
 
 func (runDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	return fetch.Dial(ctx, network, addr)
+	return egress.DialProxy(ctx, network, addr)
 }
 
 // connectVia opens a tunnel to addr through an HTTP proxy.
@@ -488,7 +487,7 @@ func connectVia(ctx context.Context, p *url.URL, addr string) (net.Conn, error) 
 	if p.Port() == "" {
 		at = net.JoinHostPort(p.Hostname(), "80")
 	}
-	c, err := fetch.Dial(ctx, "tcp", at)
+	c, err := egress.DialProxy(ctx, "tcp", at)
 	if err != nil {
 		return nil, err
 	}

@@ -23,7 +23,6 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // Sender sends one request and describes the answer. keepBody says a
@@ -74,36 +73,40 @@ func NewSender(o HTTPOptions) (Sender, error) {
 	if err != nil {
 		return nil, err
 	}
-	base := fetch.Client(nil)
-	tr := ledger.Unwrap(base.Transport).(*http.Transport).Clone()
-	tr.ResponseHeaderTimeout = o.Timeout
-	tr.TLSHandshakeTimeout = o.Timeout
-	tr.TLSClientConfig = tlsConf
-	tr.ForceAttemptHTTP2 = o.HTTP2
-	tr.MaxResponseHeaderBytes = 1 << 20
-	// One connection kept per thread: the default keeps two, and a sweep
-	// would open a connection for most requests.
-	tr.MaxIdleConnsPerHost = max(o.Threads, 2)
-	tr.MaxIdleConns = 2 * max(o.Threads, 2)
+	var proxy *url.URL
 	if o.Proxy != "" {
-		pu, err := url.Parse(o.Proxy)
-		if err != nil {
+		var err error
+		if proxy, err = url.Parse(o.Proxy); err != nil {
 			return nil, err
 		}
-		tr.Proxy = http.ProxyURL(pu)
 	}
+	// The transport is egress's: the scope, the kill file and the ledger hold
+	// it; what is set here is how it talks.
+	c := egress.Tweak(fetch.Client(nil), func(tr *http.Transport) {
+		tr.ResponseHeaderTimeout = o.Timeout
+		tr.TLSHandshakeTimeout = o.Timeout
+		tr.TLSClientConfig = tlsConf
+		tr.ForceAttemptHTTP2 = o.HTTP2
+		tr.MaxResponseHeaderBytes = 1 << 20
+		// One connection kept per thread: the default keeps two, and a sweep
+		// would open a connection for most requests.
+		tr.MaxIdleConnsPerHost = max(o.Threads, 2)
+		tr.MaxIdleConns = 2 * max(o.Threads, 2)
+		if proxy != nil {
+			tr.Proxy = http.ProxyURL(proxy)
+		}
+	})
 	s := &httpSender{opt: o}
-	s.client = &http.Client{Transport: ledger.Wrap(tr), Timeout: o.Timeout, CheckRedirect: s.redirects()}
+	cp := *c
+	cp.Timeout, cp.CheckRedirect = o.Timeout, s.redirects()
+	s.client = &cp
 	if o.ReplayProxy != "" {
 		pu, err := url.Parse(o.ReplayProxy)
 		if err != nil {
 			return nil, err
 		}
-		rt := tr.Clone()
-		rt.Proxy = http.ProxyURL(pu)
-		rt.ForceAttemptHTTP2 = false
 		// No ledger, budget or pace: the proxy is the user's, not a target.
-		s.replay = &http.Client{Transport: rt, Timeout: o.Timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		s.replay = egress.OwnClient(egress.OwnOptions{Timeout: o.Timeout, Proxy: pu, TLS: tlsConf})
 	}
 	return s, nil
 }

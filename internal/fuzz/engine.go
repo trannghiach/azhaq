@@ -801,13 +801,8 @@ func InScope(allow func(string) bool, req *Request, open map[string]bool) bool {
 		return false
 	}
 	for _, h := range req.Headers {
-		if !scope.NamesHost(h.Name) || open[strings.ToLower(h.Name)] {
-			continue
-		}
-		for _, host := range scope.HeaderHosts(h.Value) {
-			if !allow(host) {
-				return false
-			}
+		if !open[strings.ToLower(h.Name)] && scope.HeaderOutsideBy(allow, h.Name, h.Value) != "" {
+			return false
 		}
 	}
 	return true

@@ -14,7 +14,7 @@ import (
 	"github.com/lib/pq"
 	"golang.org/x/net/proxy"
 
-	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/egress"
 )
 
 // crtshStatement is subfinder's lookup; crtshLimit is its "LIMIT 10000"
@@ -170,7 +170,7 @@ func (d *pgDialer) DialContext(ctx context.Context, network, addr string) (net.C
 	if d.via != nil {
 		return d.via.DialContext(ctx, network, addr)
 	}
-	return fetch.Dial(ctx, network, addr)
+	return egress.DialProxy(ctx, network, addr)
 }
 
 func (d *pgDialer) Dial(network, addr string) (net.Conn, error) {

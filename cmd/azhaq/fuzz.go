@@ -345,6 +345,11 @@ func cmdFuzz(args []string) error {
 	fetch.Reset()
 	egress.SetRate(*rate)
 	egress.SetMaxRequests(*maxReq)
+	if !rules.Empty() {
+		// The engine counts what the scope keeps out; the policy holds the
+		// transport to the same rule, the Host header and the SNI included.
+		egress.Current().SetScope(rules.Allows, openHeaders)
+	}
 	if len(denyPath) > 0 {
 		egress.SetDenyPath(rules.DeniedPath)
 	}

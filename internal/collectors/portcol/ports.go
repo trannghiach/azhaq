@@ -57,7 +57,7 @@ type Collector struct {
 	// UDPPorts are the UDP ports to ask on each address; none, no UDP scan.
 	UDPPorts []int
 	// IPv6 says whether this machine can reach IPv6 addresses; nil is
-	// fetch.IPv6Routable.
+	// egress.IPv6Routable.
 	IPv6 func() bool
 	// ExcludeCDN limits a CDN or WAF address to its web ports; by default it
 	// is scanned in full.
@@ -101,7 +101,7 @@ func (c *Collector) routable() bool {
 	if c.IPv6 != nil {
 		return c.IPv6()
 	}
-	return fetch.IPv6Routable()
+	return egress.IPv6Routable()
 }
 
 func (c *Collector) Name() string { return Name }

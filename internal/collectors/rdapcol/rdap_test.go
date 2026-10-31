@@ -175,8 +175,8 @@ func TestSkipReservedLive(t *testing.T) {
 }
 
 // A registry asked about the domain is no request to the target: the
-// ledger lists those only.
-func TestRegistryIsNotInTheLedger(t *testing.T) {
+// ledger lists it as a source's.
+func TestRegistryIsInTheLedgerAsASource(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "l.jsonl")
 	l, err := ledger.Open(path)
 	if err != nil {
@@ -194,9 +194,16 @@ func TestRegistryIsNotInTheLedger(t *testing.T) {
 		t.Fatal(err)
 	}
 	l.Close()
-	n := 0
-	_ = ledger.Read(path, func(ledger.Entry) error { n++; return nil })
-	if n != 0 {
-		t.Errorf("%d registry requests in the ledger", n)
+	var targets, sources int
+	_ = ledger.Read(path, func(e ledger.Entry) error {
+		if e.IsTarget() {
+			targets++
+		} else if e.Class == ledger.ClassSource {
+			sources++
+		}
+		return nil
+	})
+	if targets != 0 || sources != 1 {
+		t.Errorf("%d target and %d source lines in the ledger, want 0 and 1", targets, sources)
 	}
 }

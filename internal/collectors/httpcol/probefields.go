@@ -328,7 +328,7 @@ func jarmHash(ctx context.Context, raw string) string {
 		if err := egress.Spend(ctx); err != nil {
 			return ""
 		}
-		c, err := fetch.Dial(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+		c, err := egress.DialTarget(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 		if err != nil {
 			return ""
 		}
@@ -378,7 +378,7 @@ func (c *Collector) supportsHTTP2(ctx context.Context, raw string) bool {
 	}
 	tr := &http2.Transport{
 		DialTLSContext: func(ctx context.Context, network, addr string, cfg *tls.Config) (net.Conn, error) {
-			conn, err := fetch.Dial(ctx, network, addr)
+			conn, err := egress.DialTarget(ctx, network, addr)
 			if err != nil {
 				return nil, err
 			}
@@ -431,7 +431,7 @@ func supportsPipeline(ctx context.Context, raw string) bool {
 			return false
 		}
 	}
-	conn, err := fetch.Dial(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
+	conn, err := egress.DialTarget(ctx, "tcp", net.JoinHostPort(u.Hostname(), port))
 	if err != nil {
 		return false
 	}

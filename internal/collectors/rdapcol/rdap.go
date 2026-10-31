@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/internal/fetch"
-	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
 	"github.com/trannghiach/azhaq/types"
@@ -29,9 +29,19 @@ type Collector struct {
 }
 
 func New(client *http.Client) *Collector {
-	c := fetch.Client(client)
+	return &Collector{Client: registryClient(client)}
+}
+
+// registryClient is a client for the registries: a third-party source,
+// not the target, so the target scope does not hold it and the ledger lists
+// it as a source's.
+func registryClient(client *http.Client) *http.Client {
+	if client == nil {
+		return egress.SourceClient(egress.SourceOptions{Timeout: tryTimeout})
+	}
+	c := *egress.SourceFrom(client)
 	c.Timeout = tryTimeout
-	return &Collector{Client: c}
+	return &c
 }
 
 func Register(cat *catalog.Catalog, client *http.Client) {
@@ -208,8 +218,7 @@ func (c *Collector) pull(ctx context.Context, rawURL, span string) (json.RawMess
 	defer cancel()
 	cli := c.Client
 	if cli == nil {
-		cli = fetch.Client(nil)
-		cli.Timeout = tryTimeout
+		cli = registryClient(nil)
 	}
 	cli = noFollow(cli)
 
@@ -261,11 +270,9 @@ func (c *Collector) pull(ctx context.Context, rawURL, span string) (json.RawMess
 	return nil, current, 0, fmt.Errorf("%s redirect loop", hostOf(current))
 }
 
-// noFollow is c without redirects and out of the ledger: a registry asked
-// about the domain is a third-party source, not the target.
+// noFollow is c without redirects.
 func noFollow(c *http.Client) *http.Client {
 	cp := *c
-	cp.Transport = ledger.Unwrap(cp.Transport)
 	cp.CheckRedirect = func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
 	}

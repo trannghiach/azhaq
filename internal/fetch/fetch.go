@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/egress"
-	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
@@ -380,24 +379,13 @@ func Patient(header, total time.Duration) *http.Client {
 	if RequestTimeout > 0 {
 		handshake = min(handshake, RequestTimeout)
 	}
-	return &http.Client{
-		Timeout: total,
-		Transport: ledger.Wrap(&http.Transport{
-			Proxy:                 egress.ProxyFor,
-			DialContext:           dial,
-			DisableKeepAlives:     NoReuse,
-			TLSHandshakeTimeout:   handshake,
-			ResponseHeaderTimeout: header,
-			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
-				MinVersion:         TLSMin,
-				ServerName:         SNI,
-			},
-		}),
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
-	}
+	return egress.TargetClient(egress.TargetOptions{
+		Timeout:          total,
+		HeaderTimeout:    header,
+		HandshakeTimeout: handshake,
+		NoReuse:          NoReuse,
+		TLS:              &tls.Config{InsecureSkipVerify: true, MinVersion: TLSMin, ServerName: SNI},
+	})
 }
 
 // agents are the browsers' User-Agents RandomAgent picks among.
@@ -410,136 +398,9 @@ var agents = []string{
 	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 Edg/140.0.0.0",
 }
 
-// recorded is c with its requests entered in the run's ledger: c itself when
-// it already is, else a copy.
-func recorded(c *http.Client) *http.Client {
-	if _, ok := c.Transport.(*ledger.Transport); ok {
-		return c
-	}
-	cp := *c
-	cp.Transport = ledger.Wrap(c.Transport)
-	return &cp
-}
-
-// Dial connects to addr as the run's HTTP client does: through the resolver's
-// addresses for a name.
-func Dial(ctx context.Context, network, addr string) (net.Conn, error) {
-	return dial(ctx, network, addr)
-}
-
-// dial connects through the resolver's addresses when it has an answer, the
-// way the system would: IPv6 first where the machine has a route for it,
-// IPv4 tried too after a short head start (RFC 8305). Some edges answer
-// only one family from a given network.
-func dial(ctx context.Context, network, addr string) (net.Conn, error) {
-	d := &net.Dialer{Timeout: 5 * time.Second}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil || net.ParseIP(host) != nil {
-		return d.DialContext(ctx, network, addr)
-	}
-	ips := egress.Resolve(ctx, host)
-	if len(ips) == 0 {
-		return d.DialContext(ctx, network, addr) // /etc/hosts, special-use names
-	}
-	var v4, v6 []string
-	for _, ip := range ips {
-		if strings.Contains(ip, ":") {
-			v6 = append(v6, ip)
-		} else {
-			v4 = append(v4, ip)
-		}
-	}
-	primary, fallback := v4, v6
-	if ipv6Routable() && len(v6) > 0 {
-		primary, fallback = v6, v4
-	} else if !ipv6Routable() {
-		fallback = nil
-	}
-	if len(primary) == 0 {
-		primary, fallback = fallback, nil
-	}
-	return dialEither(ctx, d, network, port, primary, fallback)
-}
-
-// fallbackDelay is the head start of the preferred address family.
-const fallbackDelay = 300 * time.Millisecond
-
-// dialEither tries primary addresses in order and, from fallbackDelay on,
-// the fallback ones alongside; the first connection wins.
-func dialEither(ctx context.Context, d *net.Dialer, network, port string, primary, fallback []string) (net.Conn, error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	type result struct {
-		c   net.Conn
-		err error
-	}
-	results := make(chan result, 2)
-	try := func(ips []string, wait time.Duration) {
-		if wait > 0 {
-			select {
-			case <-ctx.Done():
-				results <- result{err: ctx.Err()}
-				return
-			case <-time.After(wait):
-			}
-		}
-		var last error
-		for _, ip := range ips {
-			c, err := d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-			if err == nil {
-				results <- result{c: c}
-				return
-			}
-			last = err
-			if ctx.Err() != nil {
-				break
-			}
-		}
-		results <- result{err: last}
-	}
-	n := 1
-	go try(primary, 0)
-	if len(fallback) > 0 {
-		n++
-		go try(fallback, fallbackDelay)
-	}
-	var first error
-	for i := 0; i < n; i++ {
-		r := <-results
-		if r.err == nil {
-			cancel()
-			// The other attempt may still connect: close what it opens.
-			go func(left int) {
-				for j := 0; j < left; j++ {
-					if r := <-results; r.c != nil {
-						r.c.Close()
-					}
-				}
-			}(n - i - 1)
-			return r.c, nil
-		}
-		if first == nil {
-			first = r.err
-		}
-	}
-	return nil, first
-}
-
-// IPv6Routable says whether this machine can reach IPv6 addresses on the
-// internet.
-func IPv6Routable() bool { return ipv6Routable() }
-
-var ipv6Routable = sync.OnceValue(func() bool {
-	// A UDP "connection" sends nothing; it only asks the kernel for a
-	// route and a source address.
-	c, err := net.Dial("udp6", "[2001:4860:4860::8888]:53")
-	if err != nil {
-		return false
-	}
-	defer c.Close()
-	ip := c.LocalAddr().(*net.UDPAddr).IP
-	return ip.IsGlobalUnicast() && !ip.IsPrivate()
-})
+// recorded is c with its requests held to the run's controls and entered
+// in its ledger: c itself when it already is, else a copy.
+func recorded(c *http.Client) *http.Client { return egress.TargetFrom(c) }
 
 func GET(ctx context.Context, c *http.Client, raw string) (*http.Response, []byte, error) {
 	res, _, err := Do(ctx, c, raw)
@@ -847,7 +708,7 @@ func do(ctx context.Context, c *http.Client, raw string, rq *Req) (Result, error
 // viaProxy drops ip when the request went through a proxy: the address
 // is the proxy's, not the target's.
 func viaProxy(c *http.Client, raw, ip string) string {
-	rt := ledger.Unwrap(c.Transport)
+	rt := egress.Unwrap(c.Transport)
 	if rt == nil {
 		rt = http.DefaultTransport
 	}
@@ -946,25 +807,7 @@ func bodyLimit(resp *http.Response) int {
 }
 
 // pinned is c with every connection going to ip, not one pooled for the name.
-func pinned(c *http.Client, ip string) *http.Client {
-	t, ok := ledger.Unwrap(c.Transport).(*http.Transport)
-	if !ok {
-		return c
-	}
-	tc := t.Clone()
-	tc.DisableKeepAlives = true
-	d := &net.Dialer{Timeout: 5 * time.Second}
-	tc.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		_, port, err := net.SplitHostPort(addr)
-		if err != nil {
-			return nil, err
-		}
-		return d.DialContext(ctx, network, net.JoinHostPort(ip, port))
-	}
-	cp := *c
-	cp.Transport = ledger.Wrap(tc)
-	return &cp
-}
+func pinned(c *http.Client, ip string) *http.Client { return egress.Pinned(c, ip) }
 
 func noFollow(c *http.Client) *http.Client {
 	if c == nil {
