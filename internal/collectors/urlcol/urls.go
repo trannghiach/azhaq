@@ -407,8 +407,10 @@ func cleanWhy(raw, domain string, apex bool) (u, junk string, ok bool) {
 	return u, "", true
 }
 
+// hostOn: www. is the domain itself, as the Wayback Machine's index has it
+// (asked for example.com/*, it gives www.example.com's captures too).
 func hostOn(host, domain string, apex bool) bool {
-	return host == domain || (!apex && strings.HasSuffix(host, "."+domain))
+	return host == domain || host == "www."+domain || (!apex && strings.HasSuffix(host, "."+domain))
 }
 
 // onDomain is hostOn for a URL as an archive gave it.

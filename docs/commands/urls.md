@@ -24,7 +24,7 @@ azhaq urls -d example.com -mc 200 -mt text/html -from 2024 -urls-pause 0
 ## What it does
 
 1. Takes domains from `-d`, `-dL`, arguments or stdin.
-2. Asks each archive for the URLs of the domain. `-providers` chooses the archives, and `-subs` adds the subdomains.
+2. Asks each archive for the URLs of the domain. `-providers` chooses the archives, and `-subs` adds the subdomains. Without `-subs`, `www.DOMAIN` counts as the domain itself, as the Wayback Machine's index files it.
 3. Reads pages from each archive, and asks again when an archive answers 429 or 503.
 4. Applies your filters, and prints each URL once unless you give `-raw`.
 

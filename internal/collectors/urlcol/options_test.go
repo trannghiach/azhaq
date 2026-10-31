@@ -154,17 +154,13 @@ func TestApexAsksTheHostAlone(t *testing.T) {
 	if q := m.asked("/arquivo")[0]; q.Get("url") != "example.org/*" {
 		t.Errorf("arquivo url=%q", q.Get("url"))
 	}
-	// The mirror's wayback answers www. whatever it is asked: the host alone
-	// is kept from the archives asked for it. otx and urlscan answer for the
-	// domain, and their subdomain URLs are kept, as gau prints them.
-	for _, u := range got {
-		if strings.Contains(u, "www.") {
-			t.Errorf("%s is on a subdomain", u)
-		}
-	}
+	// The mirror's wayback answers www. as the real one does for the host
+	// alone (its index files www. under the domain): www. is the domain
+	// itself and kept, as gau prints it; another subdomain is not. otx and
+	// urlscan answer for the domain, and their subdomain URLs are kept.
 	slices.Sort(got)
 	want := []string{"http://api.example.org/otx", "http://example.org/a?x=1", "http://example.org/a?x=2", "http://example.org/a?x=3", "http://example.org/arq", "http://example.org/b",
-		"http://example.org/cc", "http://example.org/img/logo.PNG", "http://example.org/otx", "http://example.org/page", "http://example.org/us", "http://example.org/us-task"}
+		"http://example.org/cc", "http://example.org/img/logo.PNG", "http://example.org/otx", "http://example.org/page", "http://example.org/us", "http://example.org/us-task", "http://www.example.org/w"}
 	if !slices.Equal(got, want) {
 		t.Errorf("apex URLs %v, want %v", got, want)
 	}
@@ -682,5 +678,17 @@ func TestOTXJunkIsDroppedAndCounted(t *testing.T) {
 	got = nil
 	if _, _, _, err := run(t, Options{Bases: bases, Client: otx.Client(), Only: []string{"otx"}, Raw: true, OnURL: func(u, _ string) { got = append(got, u) }}, context.Background()); err != nil || len(got) != 3 {
 		t.Errorf("raw keeps them: %v (%v)", got, err)
+	}
+}
+
+// Without subdomains, www. is the domain itself and no other name is.
+func TestHostOnTakesWWWAsTheDomain(t *testing.T) {
+	for host, want := range map[string]bool{"example.org": true, "www.example.org": true, "api.example.org": false, "www.api.example.org": false, "wwwexample.org": false} {
+		if got := hostOn(host, "example.org", true); got != want {
+			t.Errorf("hostOn(%s) = %v, want %v", host, got, want)
+		}
+	}
+	if !hostOn("api.example.org", "example.org", false) {
+		t.Error("with subdomains api.example.org is on the domain")
 	}
 }

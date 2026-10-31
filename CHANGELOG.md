@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- `urls` without `-subs` keeps the `www.` URLs of the domain: the Wayback Machine answers `example.com/*` with `www.example.com`'s captures too, and gau prints them; azhaq dropped them as a subdomain (26 of gau's 150 for vulnweb.com).
 - `fuzz`: `azhaq resume` no longer asks again what a stopped run already asked: a run stopped by `-max-requests`, `-maxtime`, the kill file or Ctrl-C keeps the exact inputs it asked, and the resume asks only the others and counts only what it newly did. Before, answers that came back out of order were forgotten (15 requests for 10 words).
 - `shots -nmap` takes every open TCP port of the scan, as `gowitness scan nmap` does, instead of only the ports nmap named http (a web port nmap guessed wrong, `nessus` for Juice Shop, was a usage error). Ports not named a web service are tried over https then http as fan-out: one that does not answer is listed with `"fanout": true` and the exit code stays 0; a dead port nmap named http or https still exits 3. New `-service-contains` and `-skip-port`; the summary says how many ports were tried and how many answered.
 - `dns`: without a type flag, `-json` prints only names that have an A record, as dnsx does; `-rcode` prints the others. `results` equals the rows, and `asked − did not resolve = results`.
