@@ -1,130 +1,563 @@
 # Troubleshooting
 
-`azhaq docs troubleshooting` prints this page.
+Find your symptom, read why it happens, and follow the fix. `azhaq docs troubleshooting` prints this page.
 
-**Why is my URL `hint`?** Azhaq knows it (from a script, an API description, an archive or a link) but no GET proved it: it takes a path parameter, or only another method (scripts call it with POST), or a GET there answers 404 while scripts call it. Send the method its operations name. `azhaq show -db W URL` gives the call site.
+Entries are grouped by what you were doing:
 
-**Why is a live endpoint `gone`?** It answered 404 or 410 to a GET. If scripts call it with another method, it is a `hint` instead; if it is `gone`, nothing Azhaq read says it takes another method. Archived URLs are often gone.
+- [Reading a map](#reading-a-map): `hint`, `gone`, a URL not requested, a thin map.
+- [Exit codes and stopped runs](#exit-codes-and-stopped-runs): exit 3, exit 4, the kill file, the database.
+- [Chrome](#chrome)
+- [roles](#roles), [crawl](#crawl), [urls](#urls), [watch and notify](#watch-and-notify), [params](#params), [dirs](#dirs)
+- [ports](#ports), [probe](#probe), [subs](#subs), [shots and gallery](#shots-and-gallery)
+- [fuzz](#fuzz), [dns](#dns)
 
-**Why was `/exec` (or `/logout`, `/createdb`) not requested?** Its name says a GET there could change something. A directory named after a verb (`/vulnerabilities/exec/`, `/admin/user/add/`) is a section with a form and is requested; one under an API path (`/api/jobs/run/`) is not. It is listed under "left alone" with the word. `-get-words exec` requests the URLs left alone for that word only, `-all-gets` all of them, if you accept the side effect.
+## Reading a map
 
-**The map looks thin.** The app may draw its links with scripts. The summary suggests `-browser` when a page leaves its links to its scripts. Behind a login, give a session (`-cookie`, `-header`, `-login`).
+### Why is my URL `hint`?
 
-**`roles` lists nothing.** Check the notes first: a dead session (`refused wherever a session matters`) means the tokens expired; use `-role-cmd` for short-lived ones. Every endpoint answering every role alike is listed with `-all`.
+**Why:** azhaq knows the URL from a script, an API description, an archive or a link. No GET proved it. These are the cases:
 
-**Exit 3, but the results look fine.** Exit 3 means the results are usable and something failed: a source, a host that did not answer, a dead session. The summary's `failed` list and notes say what; `azhaq query -db W -failed` lists every failed target.
+- it takes a path parameter;
+- it takes only another method, which scripts call it with, such as POST;
+- a GET there answers 404 while scripts call it.
 
-**`crawl` lists fewer URLs than katana, or a path katana prints is missing.** Look in `crawl -json -rejected`: every string katana's patterns take from a script or a page is either a URL of the crawl or a rejected candidate with its reason (a media type, an expression, a file name, library code, another host, a link outside the scope). A path of katana's that is in neither is a bug. A link to another host is not followed unless `-fs rdn` (a name of the same domain) or `-ns` says so; `-do` lists what was left out.
+**Fix:**
 
-**`crawl` says a host answered 429 or 503.** It waited (1 s doubling to 30 s, or the host's `Retry-After`) and asked again, up to three times; the summary names the host and how many requests still got it, and those are listed with that status. Lower the pace with `-rl`, `-hrl` or `-c`.
+- Send the method its operations name.
+- `azhaq show -db W URL` gives the call site.
+- [Coverage](CONCEPTS.md#coverage-what-azhaq-did-with-a-url) lists every state and what to do next.
 
-**Exit 4.** A limit stopped the run with work left (`-max-requests`, `-timeout`, Ctrl-C or `kill` (SIGINT, SIGTERM and SIGHUP stop a run alike), or the kill file). `azhaq resume -db W` continues it.
+### Why is a live endpoint `gone`?
 
-**The run stopped at once with exit 4 and a kill file.** The file `W.stop` (or the one `-kill-file` names; `roles.stop` in the `-dir` of `roles`, where it stops the runs of the roles and not the replay after them) exists, from an earlier stop too, and `stopped` says `the kill switch`. Nothing more is sent while it exists. Remove it, then `azhaq resume -db W`.
+**Why:** It answered 404 or 410 to a GET. If scripts call it with another method, it is a `hint` instead. If it is `gone`, nothing azhaq read says it takes another method. Archived URLs are often gone.
 
-**Chrome does not start.** Azhaq looks for Chrome or Chromium on the usual paths; `AZHAQ_CHROME=/path/to/chrome` names it. Where Chrome cannot start its sandbox (some containers), the error says so; `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one. Do this only where you accept that the pages Chrome loads are untrusted.
+**Fix:** [Coverage](CONCEPTS.md#coverage-what-azhaq-did-with-a-url) says what to try next.
 
-**The Wayback Machine answers 429, Common Crawl refuses.** Both rate-limit or block some networks. A 429 or 503 is asked again after its `Retry-After` or 2, 5, 10, 20, then 30 s for as long as the archive's `-urls-timeout` (3 minutes) and the run's `-timeout` allow, and a refused connection 3 times; the failure then names the tries and the server's words (`wayback: failed after 7 tries, 429 Too Many Requests (waited 2m)`), the summary says what each archive gave (`URLs by archive: otx 26, wayback 0 (…)`), and the other archives still count. Run again later, or from another network. `urls -retries N` makes it a count instead, `-urls-timeout` gives the archive more time, `-urls-pause` sets the wait between an archive's requests, `-proxy` sends them through another address.
+### Why was `/exec` (or `/logout`, `/createdb`) not requested?
 
-**`urls` printed fewer URLs than I expected.** The host alone is asked unless `-subs` is given. A `note` in the summary says when an archive stopped at its page cap (`-urls-pages 0` removes the cap, `-fail-on-capped` exits 4 on it), when URLs went past `-urls-max`, and when an archive cannot apply a `-mc`, `-fc`, `-mt`, `-ft`, `-from` or `-to` filter (`otx has no status of its captures: its 13 URLs are not filtered by -mc`: they are listed, not judged by the filter). An archive that failed is listed as failed and the exit code is 3.
+**Why:** Its name says a GET there could change something. The URL is listed under "left alone" with the word. Two cases differ:
 
-**`urls -providers` says a name is not an archive.** `-providers` takes archive names (`wayback,commoncrawl,otx,urlscan,arquivo`). The API-key file is `-provider-config FILE`; a value with a `/` or naming a file that exists is still read as that file.
+- A directory named after a verb, such as `/vulnerabilities/exec/` or `/admin/user/add/`, is a section with a form. It is requested.
+- A URL under an API path, such as `/api/jobs/run/`, is not requested.
 
-**A notification did not arrive.** `azhaq watch` prints `azhaq watch: POST https://host/…: reason` for each webhook or provider that failed and exits 3; `azhaq notify` lists them in its summary (`custom failed: … (id ops)`), also exit 3. The reason names the host and the answer (`500 …`, `connection refused`), never the URL's path or token. A 429 or 5xx is tried three times first (`-v` shows each try); a 400, 401, 403 or 404 means the URL or the token is wrong. A Retry-After over a minute is reported instead of waited.
+**Fix:** You accept the side effect, or you do not ask.
 
-**`notify: provider config: … field … not found`.** The config has a key the schema does not (`slack_webhok_url`). Fix the spelling; azhaq does not skip it silently.
+- `-get-words exec` requests the URLs left alone for that word only.
+- `-all-gets` requests all of them.
 
-**`params` exits 3 with `HTTP 429 from the target: it limits requests`.** The page (or a firewall before it) limits requests, and kept doing so after Azhaq waited as its `Retry-After` or 1, 2 and 4 s said. The names found before stay in the result; the rest of the list was not tried. Lower `-rate` (`-rate 2`), use `-stable`, or run it again later. The same exit and a note say requests got no answer (a server that drops connections under a long query: try `-c 100`).
+### The map looks thin
 
-**`params` says `the page changes by itself`.** The page answers the same request with bodies of very different sizes, or with another status, so a change caused by a name could not be told from its own. Give the URL of a page that is stable (a search route, an API route).
+**Why:** The app may draw its links with scripts.
 
-**Where did my database go?** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory (or `$AZHAQ_DB`) and remembers it in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
+**Fix:**
 
-**`dirs` hid a page I know exists.** The calibration drops a guess that answers like a path that cannot exist: the same status and size (ffuf's rule), the same word and line counts where the not-found pages differ in size among themselves, or a size within the path's length where they repeat the path. A real page that is byte-for-byte the not-found page cannot be told apart by any size or count; `-fs`, `-fw` and `-fl` do not undo the calibration. Use `fuzz -mc all` to see every answer.
+- The summary suggests `-browser` when a page leaves its links to its scripts.
+- Behind a login, give a session with `-cookie`, `-header` or `-login`.
 
-**`dirs` says `N of M guesses were answered 429`.** The service is rate-limiting the sweep. A 429 is not in the default `-mc`, so those guesses were not judged and the paths may exist. The exit code is 3. Lower `-rate` or `-t` and run again.
+### `note: path checks: 28 skipped (an API description was already found)`
 
-**`dirs -u URL/path` found less than a sweep of the root.** A URL with a path is swept under that path only (`/api/WORD`); it does not also sweep `/`. Give both URLs to sweep both.
+**Why:** This is not a failure. The checks that guess where an API description sits stop once one is found on that origin. Every other check was still asked.
 
-**A UDP port is `open|filtered`.** The port stayed silent when asked every way its protocol has (a port with no known protocol is asked four ways) and no ICMP port unreachable came back: a service that ignores a request it does not understand, or a filter. On a loopback or LAN address it usually means the first; a closed port there answers with an ICMP error and is `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`; a host that rate-limits its ICMP replies leaves closed ports silent too, and the summary says when that may be the case (`udp: N silent ports on a host that refused others …`). `ports` lists them as rows (`host:port/udp open|filtered`, `"state":"open|filtered"` in `-json`) and counts them in `results`; a range leaves out an address that answered no UDP port at all, and the summary counts those.
+**Fix:** None is needed.
 
-**`probe` shows a redirect, not the page.** `probe` follows no redirect, as httpx. `-fr` follows them inside the site (`-fhr`: the same host; `-maxr N` stops at the Nth redirect, as httpx counts it, so follows N-1); `status_code`, `title` and the rest are then the last answer's.
+## Exit codes and stopped runs
 
-**`probe -timeout 5` is refused.** `-timeout` bounds the whole run and takes a duration (`5m`); httpx's per-request `-timeout` is `-req-timeout 5s` here. A run stopped by `-timeout` exits 4 and `azhaq resume` continues it.
+### Exit 3, but the results look fine
 
-**A `probe` row has `failed: true`.** The target did not answer: it does not resolve, the port is closed, the host stopped answering after `-maxhr` tries, or the scope left it out. `error` says which; the summary counts them under `without an answer`, and exit 3 follows when the failure is worth another try. `-probe` prints `[FAILED]` lines in the text output.
+**Why:** Exit 3 means the results are usable and something failed. That can be a source, a host that did not answer, or a dead session.
 
-**A name resolves only through a wildcard, and `probe` still asks it.** The names given to `probe` are the ones you want asked; the summary notes how many were wildcard answers. `subs -live`, `dns` and `run` still leave them out.
+**Fix:** The summary's `failed` list and notes say what failed. `azhaq query -db W -failed` lists every failed target.
 
-**`probe -kb` says the model is not there.** The classifier reads `~/.dit/model.json` (or `$AZHAQ_DIT_MODEL`); azhaq never downloads it. Fetch it once from the address in the message.
+### Exit 4
 
-**`probe -x POST` sent requests.** `-x`, `-body` and `-rr` send what you give to the targets in scope, and a POST, PUT or DELETE can change data there. Each request is counted, paced by `-rate` and in the ledger; the summary lists the methods sent.
+**Why:** A limit stopped the run with work left. The limits are `-max-requests`, `-timeout`, Ctrl-C or `kill`, and the kill file. SIGINT, SIGTERM and SIGHUP stop a run alike.
 
-**`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random sample of its names on each call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.
+**Fix:** `azhaq resume -db W` continues it.
 
-**`subs` lists names with `"unverified": true`.** Without `-live`, subs does not look names up in DNS. The names only subdomain.center guessed (most of its answer is made up) or only the name history held (no source gave them this run; a name a source gave again is not flagged) are listed, flagged, and counted in `unverified`; `-live` checks them and leaves out what does not resolve.
+### The run stopped at once with exit 4 and a kill file
 
-**A source says `answered 200 with an error, not names`.** The server sent its quota or error page with a success status, which a plain reader takes for an empty list. Azhaq reads it as a failure and quotes the page (`API count exceeded - Increase Quota with Membership`); the source's names are missing from the run. Wait, give the source a key in the provider file, or leave it out with `-exclude-sources`.
+**Why:** The file `W.stop` exists, from an earlier stop too. The file is the one `-kill-file` names. The `stopped` line says `the kill switch`. Nothing more is sent while the file exists.
 
-**`subs` takes half a minute and every source but one answered in seconds.** The run waits for its slowest source, and the slowest is almost always crt.sh: on a large domain (tesla.com, hackerone.com) its JSON answer takes 20 to 40 seconds, and when it is busy (several large domains asked at once from one address) nothing comes back before the 30 seconds `-source-timeout` allows. The other sources are done in two to four seconds. `-v` and the `sources` block of `-json` (`seconds`) show it, a note says `crtsh took 30 s, the next slowest source 3 s, so it held the run`, and the progress line every 10 seconds names it (`still waiting for crtsh (20s, 3 domains)`). The default stops where subfinder does (its per-request limit is 30 seconds too), so azhaq waits no longer than subfinder for crt.sh and loses nothing subfinder keeps; when crt.sh is cut off its names are missing and the source is listed as failed (`partial`). `-source-timeout 60s` or more waits for crt.sh on a large domain, when completeness matters more than time; `-exclude-sources crtsh` leaves it out, and `-db FILE -timeout 40s` stops the whole run at 40 seconds with exit 4 and the names found so far, then `azhaq resume -db FILE` asks crt.sh again without the others.
+In `roles` the file is `roles.stop` in the `-dir`. There it stops the runs of the roles, and not the replay after them.
 
-**A source answered 429.** The source is asked again after its `Retry-After`, up to three times; the summary says how long that took (`crtname answered 429; it was asked again 1 times after 2 s`). A source that asks for more than 30 s, or keeps refusing, is not waited for and its names are missing from the run: the note says so and the source's row has `gave_up_429`. Slow the sources with `-source-rate N`, or leave the source out with `-exclude-sources`.
+**Fix:** Remove the file, then run `azhaq resume -db W`.
 
-**`subs -live` lists a name with no address.** It is a CNAME whose target gives no address (or does not exist). `dnsx -a -cname` lists it too; `cname` holds the chain, and a dangling one is also in the summary's `takeover`.
+### Where did my database go?
 
-**The `subs` summary says `degraded`** (in the text summary, `DEGRADED: N of M sources failed` on its first line). A source in the default set failed (`sources failed` is above 0), so the names may be incomplete. The exit code is not changed; the failed sources are listed. `azhaq subs -v` shows what each source returned and its error.
+**Why:** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or in `$AZHAQ_DB`. It remembers the file in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
-**`shots` says `screenshot … not taken`.** The page's images, scripts and styles count against `-max-requests`, and too few were left; the note says how many the page needs and how many were left. Raise `-max-requests`.
+**Fix:** Give a drop-in `-db FILE` to keep its results.
 
-**`shots` on a port Chrome refuses (6000, 6666, 10080) says `net::ERR_UNSAFE_PORT`.** Chrome keeps a list of ports it will not open; `shots` and `run -screenshots` allow them by default. `-unsafe-ports=false` brings Chrome's refusal back.
+## Chrome
 
-**`shots -u URL` with a path takes a picture of that page.** The URLs a run finds itself are shot only when they are front pages; a URL you give is shot as given, one file per page (`http_host_port_path_hash.png`).
+### Chrome does not start
 
-**`shots` of a page that calls `alert()` on load.** The dialog is accepted and the page is shot; nothing waits for a click.
+**Why:** azhaq looks for Chrome or Chromium on the usual paths. In some containers Chrome cannot start its sandbox, and the error says so.
 
-**`shots` says `screenshot … is partial` and exits 3.** The picture was taken while some of the page's images, styles or scripts had not loaded (the row has `"partial":true`, `unloaded` and `resources`). The page was slow, or `-rate` is low for it: a page of 40 requests at `-rate 2` needs 20 seconds, and its time runs from when it last moved, so a slow pace alone does not cut it short; a server that stops answering does. Raise `-rate`, or give the page more time.
+**Fix:**
 
-**`shots` says `screenshot … is partial: 3 requests to cdn.jsdelivr.net outside the scope were blocked`.** The exit code is not changed by it (the scope is yours, so this is a mark and a note, not a failure); a picture whose own assets did not load, above, still exits 3. The page loads its styles, fonts or scripts from a host outside the scope (a CDN), and Chrome is held to the scope like every request of the run, so the picture is drawn without them (an unstyled page). The row has `"partial":true`, `blocked` and `blocked_hosts`, and the text line ends `partial (3 off-scope assets blocked: cdn.jsdelivr.net)`. Name the hosts you accept: `azhaq shots -u http://app.test:9090/ -allow app.test -allow cdn.jsdelivr.net`. Any `-allow` replaces the default scope (the page's own site), so the page's host goes in too. They are then requested, counted and in the ledger.
+- `AZHAQ_CHROME=/path/to/chrome` names the browser.
+- `AZHAQ_CHROME_NO_SANDBOX=1` runs it without a sandbox. Do this only where you accept that the pages Chrome loads are untrusted.
 
-**`gallery` says `N of M pages: the picture file is not on disk` and exits 3.** The workspace names a picture file that is no longer where the run wrote it (`file_path`) or beside the database. Keep the `shots -dir` folder with the workspace, or copy it back; the page still lists those pages, with their headers and record, and no picture.
+## roles
 
-**`gallery` finds no pictures in a workspace, or no groups.** It lists only what `shots` and `run -screenshots` took (`azhaq-shots` rows). A workspace made by an older azhaq has no perceptual hash (no look-alike groups) or no status (a status filter does not list the page); a banner says how many. Take the pages again.
+### `roles` lists nothing
 
-**`gallery`: a `body:` search finds nothing.** Page text is searched only for pages taken with `shots -shot-html`; the banner and Statistics say for how many it was kept. A free word still matches the URL and the title.
+**Why:** Check the notes first. A dead session, written `refused wherever a session matters`, means the tokens expired. Every endpoint answering every role alike is listed only with `-all`.
 
-**`gallery` does not show a page taken after it started.** It reads the workspace once at start. Stop it (Ctrl-C) and start it again.
+**Fix:**
 
+- Use `-role-cmd` for short-lived tokens.
+- `-all` lists the endpoints that answer every role alike.
 
-**`note: path checks: 28 skipped (an API description was already found)`.** Not a failure. The checks that guess where an API description sits stop once one is found on that origin; every other check was still asked.
+## crawl
 
-**An open TCP port has no `service` or `product`.** The port said nothing and none of the protocols azhaq asks (about 30, one request each, at most 24 connects per port) answered, or it answered in a protocol azhaq does not know. The row keeps the first bytes of any answer in `banner`. A port that accepts a connection and closes it without a word is `tcpwrapped`. When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports and the list was not run for the rest.
+### `crawl` lists fewer URLs than katana, or a path katana prints is missing
 
-**A port I know is open is missing.** A port that neither accepts nor refuses a connect is asked once more; if it stays silent, the summary lists it (`ports that neither accepted nor refused a connect…`, rows: `filtered_ports`). A firewall or a loaded host can do that; scan it again. `-retries 3` asks the silent ones three more times, `-connect-timeout 3s` waits longer for a far host.
+**Why:** Every string katana's patterns take from a script or a page is one of two things. It is a URL of the crawl, or it is a rejected candidate with its reason. The reasons include a media type, an expression, a file name, library code, another host, and a link outside the scope. A path of katana's that is in neither is a bug.
 
-**`fuzz` found fewer matches than ffuf (or more).** Compare the filters first: if `-ac` was given, the summary says what calibration added (`auto-calibration filtered out answers with size 1234`); without it `fuzz` does not calibrate, as ffuf does not, and `-ac` is the only difference to check. A different `Size` on a compressed page means a different `Accept-Encoding`: azhaq decodes gzip, deflate and brotli, as ffuf, so the same header gives the same size. `fuzz` and `dirs` send no `Accept` header, as ffuf sends none, so an app that negotiates by it (Express's redirect body) answers the same size. The `User-Agent` is a Chrome's, not ffuf's; send `-H 'User-Agent: Fuzz Faster U Fool v2.1.0'` where an app answers by it.
+**Fix:**
 
-**`fuzz` says `the report … was not written` or `-o … is a directory`.** `-o` names a file. A report that cannot be written is a failure in the summary (exit 3), with the reason; the place is tested before the first request, so a bad path is usually found at once.
+- Look in `crawl -json -rejected`.
+- A link to another host is not followed unless `-fs rdn` or `-ns` says so. `-fs rdn` follows a name of the same domain.
+- `-do` lists what was left out.
 
-**`fuzz` stopped with `over 95% of the first 50 or more answers were 403`.** That is `-sf` (or `-sa`) doing what it says: the target refuses or the run is blocked. The summary gives the command that goes on (`-start N`). `-sa` also stops at over 20% 429, which means the target is rate limiting: lower `-rate` or `-t`.
+### `crawl` says a host answered 429 or 503
 
-**`fuzz -x` or `-replay-proxy` shows nothing in the proxy.** Go sends traffic for loopback addresses through a proxy only when it is named with `-x`; the environment's `HTTP_PROXY` is not read. A proxy URL needs its scheme (`http://127.0.0.1:8080`). The summary counts the matches sent through `-replay-proxy` and the ones that failed.
+**Why:** `crawl` waited and asked again, up to three times. The wait is 1 s doubling to 30 s, or the host's `Retry-After`. The summary names the host and how many requests still got the status. Those requests are listed with it.
 
-**`fuzz` says `preflight/postflight failed … cannot choose where requests go`.** The value read from the answer ended up in the host, scheme or port of a request (a `Host: TOKEN` line, a `TOKEN/path`). Values come from the target and the request carries your cookies and headers, so azhaq does not allow it, and has no `-preflight-anyhost`. Put the host in the file. `… is outside the scope` means the file names a host the run may not touch: `-allow HOST` adds it.
+**Fix:** Lower the pace with `-rl`, `-hrl` or `-c`.
 
-**`dns -json` prints rows for names that do not exist.** As dnsx does, `-json` gives a row for every name a resolver answered, with its `status_code` (`NXDOMAIN`, `SERVFAIL`, ...). Ask for a type (`-a -json`) to get only the names that have such a record, or select with `jq 'select(.status_code=="NOERROR")'`.
+## urls
 
-**`dns -timeout 5s` did not stop the run after 5 seconds.** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx (3 s by default); `run` and the other commands use it as the time of the whole run. `dns -maxtime SECONDS` bounds the run: it exits 4 and says which `-start` to go on from.
+### The Wayback Machine answers 429, Common Crawl refuses
 
-**`dns -dns-rate 5` still sent more than 5 queries a second.** `-dns-rate` paces each resolver (a second's worth of queries may go out at once after a pause), so the total is the rate times the resolvers (six by default). `-rl N` paces names over all resolvers, as dnsx's `-rl`; with one resolver, or with `-rl`, the total is the rate you gave (a name asked for several types sends one query per type). `-t N` bounds the names in flight.
+**Why:** Both rate-limit or block some networks. azhaq asks again for as long as the archive's `-urls-timeout` and the run's `-timeout` allow. `-urls-timeout` is 3 minutes by default.
 
-**`dns -d 192.0.2.0/24` printed nothing.** Addresses and ranges are looked up only with `-ptr` (reverse names) and are otherwise left out; the summary says so under `left out`. An AS number (`AS13335`) expands to the prefixes RIPEstat lists for it.
+- A 429 or 503 is asked again after its `Retry-After`, or after 2, 5, 10, 20, then 30 s.
+- A refused connection is asked again 3 times.
+- The failure then names the tries and the server's words, as in `wayback: failed after 7 tries, 429 Too Many Requests (waited 2m)`.
+- The summary says what each archive gave, as in `URLs by archive: otx 26, wayback 0 (…)`. The other archives still count.
 
-**`dns -axfr` found no zone.** A name server that refuses a transfer is common. The summary's notes say, per server, whether it refused, did not answer, or was left alone because the scope does not allow it (`-allow` the server's name or address to ask it). Only the name servers of the name and the `-resolvers` you gave are asked.
+**Fix:**
 
-**`ports -timeout 500` is refused.** `-timeout` is how long the whole run may take (`90s`); the wait for one connect is `-connect-timeout` (`500` is milliseconds there).
+- Run again later, or from another network.
+- `urls -retries N` makes the asking a count instead.
+- `-urls-timeout` gives the archive more time.
+- `-urls-pause` sets the wait between an archive's requests.
+- `-proxy` sends the requests through another address.
 
-**`ports` on a CDN name scans four ports.** An address in a CDN or WAF range is asked 80, 443, 8080 and 8443 only (the row has `cdn`, the summary says so). `-cdn-full` scans it in full.
+### `urls` printed fewer URLs than I expected
 
-**`ports` on a range says addresses "answered neither a connect to 80 nor to 443".** That is `-wn`: an address is up when 80 or 443 accepts or refuses. A host that drops both reads as down; scan without `-wn` to ask every address.
+**Why:** The host alone is asked unless `-subs` is given. A `note` in the summary says when:
 
-**`ports -T4` or a high `-rate` finds fewer ports than before.** A short connect timeout and few retries lose ports on a lossy path; the summary lists the ports that stayed silent. Raise `-connect-timeout` or `-retries`.
+- an archive stopped at its page cap;
+- URLs went past `-urls-max`;
+- an archive cannot apply a `-mc`, `-fc`, `-mt`, `-ft`, `-from` or `-to` filter.
+
+For the last case the note reads like `otx has no status of its captures: its 13 URLs are not filtered by -mc`. Those URLs are listed, not judged by the filter. An archive that failed is listed as failed, and the exit code is 3.
+
+**Fix:**
+
+- Add `-subs` for the subdomains.
+- `-urls-pages 0` removes the page cap. `-fail-on-capped` exits 4 on it.
+
+### `urls -providers` says a name is not an archive
+
+**Why:** `-providers` takes archive names: `wayback,commoncrawl,otx,urlscan,arquivo`.
+
+**Fix:** The API-key file is `-provider-config FILE`. A value with a `/`, or one that names a file that exists, is still read as that file.
+
+## watch and notify
+
+### A notification did not arrive
+
+**Why:** `azhaq watch` prints `azhaq watch: POST https://host/…: reason` for each webhook or provider that failed, and exits 3. `azhaq notify` lists them in its summary, as in `custom failed: … (id ops)`, and also exits 3. The reason names the host and the answer, such as `500 …` or `connection refused`. It never shows the URL's path or token.
+
+**Fix:**
+
+- A 429 or 5xx is tried three times first. `-v` shows each try.
+- A 400, 401, 403 or 404 means the URL or the token is wrong.
+- A `Retry-After` over a minute is reported instead of waited.
+
+### `notify: provider config: … field … not found`
+
+**Why:** The config has a key the schema does not, such as `slack_webhok_url`. azhaq does not skip it silently.
+
+**Fix:** Fix the spelling.
+
+## params
+
+### `params` exits 3 with `HTTP 429 from the target: it limits requests`
+
+**Why:** The page, or a firewall before it, limits requests. It kept doing so after azhaq waited as its `Retry-After` said, or 1, 2 and 4 s. The names found before stay in the result. The rest of the list was not tried.
+
+The same exit and a note also say when requests got no answer. A server that drops connections under a long query does that.
+
+**Fix:**
+
+- Lower `-rate`, for example `-rate 2`.
+- Use `-stable`, or run it again later.
+- For dropped connections, try `-c 100`.
+
+### `params` says `the page changes by itself`
+
+**Why:** The page answers the same request with bodies of very different sizes, or with another status. A change caused by a name could not be told from its own.
+
+**Fix:** Give the URL of a page that is stable, such as a search route or an API route.
+
+## dirs
+
+### `dirs` hid a page I know exists
+
+**Why:** The calibration drops a guess that answers like a path that cannot exist. It uses three rules:
+
+- the same status and size, which is ffuf's rule;
+- the same word and line counts, where the not-found pages differ in size among themselves;
+- a size within the path's length, where the not-found pages repeat the path.
+
+A real page that is byte-for-byte the not-found page cannot be told apart by any size or count. `-fs`, `-fw` and `-fl` do not undo the calibration.
+
+**Fix:** Use `fuzz -mc all` to see every answer.
+
+### `dirs` says `N of M guesses were answered 429`
+
+**Why:** The service is rate-limiting the sweep. A 429 is not in the default `-mc`, so those guesses were not judged and the paths may exist. The exit code is 3.
+
+**Fix:** Lower `-rate` or `-t` and run again.
+
+### `dirs -u URL/path` found less than a sweep of the root
+
+**Why:** A URL with a path is swept under that path only, as `/api/WORD`. It does not also sweep `/`.
+
+**Fix:** Give both URLs to sweep both.
+
+## ports
+
+### A UDP port is `open|filtered`
+
+**Why:** The port stayed silent when asked every way its protocol has, and no ICMP port unreachable came back. A port with no known protocol is asked four ways. Two causes are possible: a service that ignores a request it does not understand, or a filter.
+
+- On a loopback or LAN address it usually means the first. A closed port there answers with an ICMP error and is `closed`.
+- Across a firewall that drops ICMP, closed ports also read `open|filtered`.
+- A host that rate-limits its ICMP replies leaves closed ports silent too. The summary says when that may be the case, as in `udp: N silent ports on a host that refused others …`.
+
+`ports` lists these ports as rows, `host:port/udp open|filtered`, and `"state":"open|filtered"` in `-json`. It counts them in `results`. A range leaves out an address that answered no UDP port at all, and the summary counts those.
+
+### An open TCP port has no `service` or `product`
+
+**Why:** One of two things happened. The port said nothing, and none of the protocols azhaq asks answered. azhaq asks about 30 protocols, one request each, and at most 24 connects per port. Or the port answered in a protocol azhaq does not know.
+
+- The row keeps the first bytes of any answer in `banner`.
+- A port that accepts a connection and closes it without a word is `tcpwrapped`.
+- When the summary says `open ports whose protocol was not probed`, a firewall or tarpit accepts connects on many ports. The protocol list was not run for the rest.
+
+**Fix:** Read `banner`.
+
+### A port I know is open is missing
+
+**Why:** A port that neither accepts nor refuses a connect is asked once more. If it stays silent, the summary lists it, as in `ports that neither accepted nor refused a connect…`. The rows are `filtered_ports`. A firewall or a loaded host can do that.
+
+**Fix:**
+
+- Scan it again.
+- `-retries 3` asks the silent ports three more times.
+- `-connect-timeout 3s` waits longer for a far host.
+
+### `ports -timeout 500` is refused
+
+**Why:** `-timeout` is how long the whole run may take, such as `90s`.
+
+**Fix:** The wait for one connect is `-connect-timeout`, and `500` is milliseconds there.
+
+### `ports` on a CDN name scans four ports
+
+**Why:** An address in a CDN or WAF range is asked 80, 443, 8080 and 8443 only. The row has `cdn`, and the summary says so.
+
+**Fix:** `-cdn-full` scans it in full.
+
+### `ports` on a range says addresses "answered neither a connect to 80 nor to 443"
+
+**Why:** That is `-wn`. An address is up when 80 or 443 accepts or refuses. A host that drops both reads as down.
+
+**Fix:** Scan without `-wn` to ask every address.
+
+### `ports -T4` or a high `-rate` finds fewer ports than before
+
+**Why:** A short connect timeout and few retries lose ports on a lossy path. The summary lists the ports that stayed silent.
+
+**Fix:** Raise `-connect-timeout` or `-retries`.
+
+## probe
+
+### `probe` shows a redirect, not the page
+
+**Why:** `probe` follows no redirect, as httpx does.
+
+**Fix:**
+
+- `-fr` follows redirects inside the site. `-fhr` follows them on the same host only.
+- `-maxr N` stops at the Nth redirect, as httpx counts it, so it follows N-1.
+- `status_code`, `title` and the other fields are then the last answer's.
+
+### `probe -timeout 5` is refused
+
+**Why:** `-timeout` bounds the whole run and takes a duration, such as `5m`. A run stopped by `-timeout` exits 4, and `azhaq resume` continues it.
+
+**Fix:** httpx's per-request `-timeout` is `-req-timeout 5s` here.
+
+### A `probe` row has `failed: true`
+
+**Why:** The target did not answer. One of these happened:
+
+- it does not resolve;
+- the port is closed;
+- the host stopped answering after `-maxhr` tries;
+- the scope left it out.
+
+**Fix:**
+
+- `error` says which.
+- The summary counts these rows under `without an answer`.
+- Exit 3 follows when the failure is worth another try.
+- `-probe` prints `[FAILED]` lines in the text output.
+
+### A name resolves only through a wildcard, and `probe` still asks it
+
+**Why:** The names given to `probe` are the ones you want asked. The summary notes how many were wildcard answers.
+
+**Fix:** None is needed. `subs -live`, `dns` and `run` still leave such names out.
+
+### `probe -kb` says the model is not there
+
+**Why:** The classifier reads `~/.dit/model.json`, or `$AZHAQ_DIT_MODEL`. azhaq never downloads it.
+
+**Fix:** Fetch the model once from the address in the message.
+
+### `probe -x POST` sent requests
+
+**Why:** `-x`, `-body` and `-rr` send what you give to the targets in scope. A POST, PUT or DELETE can change data there. Each request is counted, paced by `-rate` and in the ledger. The summary lists the methods sent.
+
+**Fix:** Use them only on targets you may write to.
+
+## subs
+
+### `subs` returns different names from run to run
+
+**Why:** Some passive sources answer differently each time. subdomain.center returns a random sample of its names on each call.
+
+azhaq keeps the names it found in `names/DOMAIN.json`. The file is under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`. azhaq asks those names again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds.
+
+**Fix:** `-no-history` turns the file off.
+
+### `subs` lists names with `"unverified": true`
+
+**Why:** Without `-live`, `subs` does not look names up in DNS. Two kinds of name are then listed, flagged, and counted in `unverified`:
+
+- names that only subdomain.center guessed, because most of its answer is made up;
+- names that only the name history held. No source gave them this run. A name a source gave again is not flagged.
+
+**Fix:** `-live` checks them and leaves out what does not resolve.
+
+### A source says `answered 200 with an error, not names`
+
+**Why:** The server sent its quota or error page with a success status, which a plain reader takes for an empty list. azhaq reads it as a failure and quotes the page, such as `API count exceeded - Increase Quota with Membership`. The source's names are missing from the run.
+
+**Fix:**
+
+- Wait.
+- Give the source a key in the provider file.
+- Leave it out with `-exclude-sources`.
+
+### `subs` takes half a minute and every source but one answered in seconds
+
+**Why:** The run waits for its slowest source, and that is almost always crt.sh.
+
+- On a large domain such as tesla.com or hackerone.com, crt.sh's JSON answer takes 20 to 40 seconds.
+- When crt.sh is busy, nothing comes back before the 30 seconds that `-source-timeout` allows. It is busy when several large domains are asked at once from one address.
+- The other sources are done in two to four seconds.
+
+`-v` and the `sources` block of `-json` show it, in `seconds`. A note says `crtsh took 30 s, the next slowest source 3 s, so it held the run`. The progress line every 10 seconds names it, as in `still waiting for crtsh (20s, 3 domains)`.
+
+The default stops where subfinder does, because its per-request limit is 30 seconds too. azhaq waits no longer than subfinder for crt.sh and loses nothing subfinder keeps. When crt.sh is cut off, its names are missing and the source is listed as failed, `partial`.
+
+**Fix:**
+
+- `-source-timeout 60s` or more waits for crt.sh on a large domain, when completeness matters more than time.
+- `-exclude-sources crtsh` leaves it out.
+- `-db FILE -timeout 40s` stops the whole run at 40 seconds with exit 4 and the names found so far. Then `azhaq resume -db FILE` asks crt.sh again without the others.
+
+### A source answered 429
+
+**Why:** The source is asked again after its `Retry-After`, up to three times. The summary says how long that took, as in `crtname answered 429; it was asked again 1 times after 2 s`. A source that asks for more than 30 s, or keeps refusing, is not waited for. Its names are missing from the run. The note says so, and the source's row has `gave_up_429`.
+
+**Fix:** Slow the sources with `-source-rate N`, or leave the source out with `-exclude-sources`.
+
+### `subs -live` lists a name with no address
+
+**Why:** It is a CNAME whose target gives no address, or does not exist. `dnsx -a -cname` lists it too. `cname` holds the chain. A dangling one is also in the summary's `takeover`.
+
+**Fix:** Read `cname`, and confirm a takeover candidate by hand.
+
+### The `subs` summary says `degraded`
+
+**Why:** The text summary says `DEGRADED: N of M sources failed` on its first line. A source in the default set failed, so `sources failed` is above 0 and the names may be incomplete. The exit code is not changed.
+
+**Fix:** The failed sources are listed. `azhaq subs -v` shows what each source returned and its error.
+
+## shots and gallery
+
+### `shots` says `screenshot … not taken`
+
+**Why:** The page's images, scripts and styles count against `-max-requests`, and too few were left. The note says how many the page needs and how many were left.
+
+**Fix:** Raise `-max-requests`.
+
+### `shots` on a port Chrome refuses says `net::ERR_UNSAFE_PORT`
+
+**Why:** Chrome keeps a list of ports it will not open, such as 6000, 6666 and 10080. `shots` and `run -screenshots` allow them by default.
+
+**Fix:** `-unsafe-ports=false` brings Chrome's refusal back.
+
+### `shots -u URL` with a path takes a picture of that page
+
+**Why:** The URLs a run finds itself are shot only when they are front pages. A URL you give is shot as given, one file for each page, named like `http_host_port_path_hash.png`.
+
+**Fix:** None is needed.
+
+### `shots` of a page that calls `alert()` on load
+
+**Why:** The dialog is accepted and the page is shot. Nothing waits for a click.
+
+**Fix:** None is needed.
+
+### `shots` says `screenshot … is partial` and exits 3
+
+**Why:** The picture was taken while some of the page's images, styles or scripts had not loaded. The row has `"partial":true`, `unloaded` and `resources`. The page was slow, or `-rate` is low for it. A page of 40 requests at `-rate 2` needs 20 seconds. The page's time runs from when it last moved, so a slow pace alone does not cut it short. A server that stops answering does.
+
+**Fix:** Raise `-rate`, or give the page more time.
+
+### `shots` says `screenshot … is partial: 3 requests to cdn.jsdelivr.net outside the scope were blocked`
+
+**Why:** The page loads its styles, fonts or scripts from a host outside the scope, such as a CDN. Chrome is held to the scope like every request of the run, so the picture is drawn without them, as an unstyled page.
+
+- The exit code is not changed. The scope is yours, so this is a mark and a note, not a failure.
+- A picture whose own assets did not load, as in the entry above, still exits 3.
+- The row has `"partial":true`, `blocked` and `blocked_hosts`.
+- The text line ends `partial (3 off-scope assets blocked: cdn.jsdelivr.net)`.
+
+**Fix:** Name the hosts you accept, and the page's own host too. Any `-allow` replaces the default scope, which is the page's own site.
+
+```
+azhaq shots -u http://app.test:9090/ -allow app.test -allow cdn.jsdelivr.net
+```
+
+The allowed hosts are then requested, counted and in the ledger.
+
+### `gallery` says `N of M pages: the picture file is not on disk` and exits 3
+
+**Why:** The workspace names a picture file that is no longer where the run wrote it, in `file_path`, or beside the database. The page still lists those pages, with their headers and record, and no picture.
+
+**Fix:** Keep the `shots -dir` folder with the workspace, or copy it back.
+
+### `gallery` finds no pictures in a workspace, or no groups
+
+**Why:** It lists only what `shots` and `run -screenshots` took, the `azhaq-shots` rows. A workspace made by an older azhaq has no perceptual hash, so no look-alike groups. It may also have no status, so a status filter does not list the page. A banner says how many.
+
+**Fix:** Take the pages again.
+
+### `gallery`: a `body:` search finds nothing
+
+**Why:** Page text is searched only for pages taken with `shots -shot-html`. The banner and Statistics say for how many it was kept. A free word still matches the URL and the title.
+
+**Fix:** Take the pages again with `-shot-html`.
+
+### `gallery` does not show a page taken after it started
+
+**Why:** It reads the workspace once, at start.
+
+**Fix:** Stop it with Ctrl-C and start it again.
+
+## fuzz
+
+### `fuzz` found fewer matches than ffuf, or more
+
+**Why:** Compare the filters first.
+
+- With `-ac`, the summary says what calibration added, as in `auto-calibration filtered out answers with size 1234`.
+- Without `-ac`, `fuzz` does not calibrate, as ffuf does not. Then `-ac` is the only difference to check.
+- A different `Size` on a compressed page means a different `Accept-Encoding`. azhaq decodes gzip, deflate and brotli, as ffuf does, so the same header gives the same size.
+- `fuzz` and `dirs` send no `Accept` header, as ffuf sends none. An app that negotiates by it, such as Express's redirect body, answers the same size.
+- The `User-Agent` is a Chrome's, not ffuf's.
+
+**Fix:** Send `-H 'User-Agent: Fuzz Faster U Fool v2.1.0'` where an app answers by the `User-Agent`.
+
+### `fuzz` says `the report … was not written` or `-o … is a directory`
+
+**Why:** `-o` names a file. A report that cannot be written is a failure in the summary, with the reason, and exit 3. The place is tested before the first request, so a bad path is usually found at once.
+
+**Fix:** Give `-o` a file path.
+
+### `fuzz` stopped with `over 95% of the first 50 or more answers were 403`
+
+**Why:** That is `-sf`, or `-sa`, doing what it says. The target refuses, or the run is blocked. `-sa` also stops at over 20% 429, which means the target is rate limiting.
+
+**Fix:**
+
+- The summary gives the command that goes on, with `-start N`.
+- For rate limiting, lower `-rate` or `-t`.
+
+### `fuzz -x` or `-replay-proxy` shows nothing in the proxy
+
+**Why:** Go sends traffic for loopback addresses through a proxy only when `-x` names it. The environment's `HTTP_PROXY` is not read.
+
+**Fix:**
+
+- Name the proxy with `-x`.
+- A proxy URL needs its scheme, such as `http://127.0.0.1:8080`.
+- The summary counts the matches sent through `-replay-proxy` and the ones that failed.
+
+### `fuzz` says `preflight/postflight failed … cannot choose where requests go`
+
+**Why:** The value read from the answer ended up in the host, scheme or port of a request, such as a `Host: TOKEN` line or a `TOKEN/path`. Values come from the target, and the request carries your cookies and headers. So azhaq does not allow it, and it has no `-preflight-anyhost`.
+
+**Fix:**
+
+- Put the host in the file.
+- `… is outside the scope` means the file names a host the run may not touch. `-allow HOST` adds it.
+
+## dns
+
+### `dns -json` prints rows for names that do not exist
+
+**Why:** As dnsx does, `-json` gives a row for every name a resolver answered. The row has its `status_code`, such as `NXDOMAIN` or `SERVFAIL`.
+
+**Fix:** Ask for a type, as in `-a -json`, to list just the names that have such a record. Or select with `jq 'select(.status_code=="NOERROR")'`.
+
+### `dns -timeout 5s` did not stop the run after 5 seconds
+
+**Why:** In `dns`, `-timeout` is how long one DNS answer is waited for, as in dnsx. It is 3 s by default. `run` and the other commands use `-timeout` as the time of the whole run.
+
+**Fix:** `dns -maxtime SECONDS` bounds the run. It exits 4 and says which `-start` to go on from.
+
+### `dns -dns-rate 5` still sent more than 5 queries a second
+
+**Why:** `-dns-rate` paces each resolver, and a second's worth of queries may go out at once after a pause. So the total is the rate times the number of resolvers. There are six by default.
+
+**Fix:**
+
+- `-rl N` paces names over all resolvers, as dnsx's `-rl`.
+- With one resolver, or with `-rl`, the total is the rate you gave. A name asked for several types sends one query per type.
+- `-t N` bounds the names in flight.
+
+### `dns -d 192.0.2.0/24` printed nothing
+
+**Why:** Addresses and ranges are looked up only with `-ptr`, which gives reverse names. Otherwise they are left out, and the summary says so under `left out`.
+
+**Fix:** Add `-ptr`. An AS number such as `AS13335` expands to the prefixes RIPEstat lists for it.
+
+### `dns -axfr` found no zone
+
+**Why:** A name server that refuses a transfer is common. The summary's notes say, for each server, one of three things: it refused, it did not answer, or it was left alone because the scope does not allow it. Only the name servers of the name, and the `-resolvers` you gave, are asked.
+
+**Fix:** `-allow` the server's name or address to ask a server the scope left out.
