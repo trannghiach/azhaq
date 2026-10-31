@@ -657,6 +657,13 @@ func (b *Browser) settle(t *tab) {
 	}
 }
 
+// capped says whether the budget refused t's page a request.
+func (b *Browser) capped(t *tab) bool {
+	b.refMu.Lock()
+	defer b.refMu.Unlock()
+	return t.capped
+}
+
 func (b *Browser) refuse(t *tab, r refusal) {
 	b.refMu.Lock()
 	defer b.refMu.Unlock()

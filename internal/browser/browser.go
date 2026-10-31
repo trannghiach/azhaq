@@ -418,7 +418,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
 	p.Partial = p.Unloaded > 0
 	if err == nil && b.Interact > 0 {
-		p.Interaction = b.interact(tab, p.URL, b.Interact)
+		p.Interaction = b.interact(tab, p.URL, b.Interact, func() bool { return b.capped(t) })
 	}
 	b.settle(t)
 	mu.Lock()

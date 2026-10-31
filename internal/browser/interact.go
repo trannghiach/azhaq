@@ -67,12 +67,14 @@ type Interaction struct {
 }
 
 // interact clicks the page's candidates, one at a time, putting the page
-// back where it was after each: by history, else by loading it again.
-func (b *Browser) interact(tab context.Context, start string, max int) Interaction {
+// back where it was after each: by history, else by loading it again. It
+// ends when spent says the budget refused the page something: the page is
+// loaded again after azhaq resume, so more clicks are time for nothing.
+func (b *Browser) interact(tab context.Context, start string, max int, spent func() bool) Interaction {
 	var in Interaction
 	tried := map[string]bool{}
 	sameURL := func(a, c string) bool { return a == c }
-	for in.Clicks < max && tab.Err() == nil {
+	for in.Clicks < max && tab.Err() == nil && !spent() {
 		if now, _ := chromedp.Run(tab, chromedp.Location()); now != start && in.Clicks > 0 {
 			nav, cancel := context.WithTimeout(tab, 10*time.Second)
 			_ = chromedp.Do(nav, chromedp.Navigate(start))
@@ -114,7 +116,9 @@ func (b *Browser) interact(tab context.Context, start string, max int) Interacti
 			}
 		}
 		if len(in.Snapshots) < 12 {
-			if html, err := chromedp.Run(tab, chromedp.OuterHTML(chromedp.CSS("html"))); err == nil {
+			// Not a selector query: it polls for the node until the tab ends,
+			// and a click that left the scope has left no page to find it in.
+			if html, err := chromedp.Run(tab, chromedp.Evaluate[string](`document.documentElement ? document.documentElement.outerHTML : ''`)); err == nil && html != "" {
 				in.Snapshots = append(in.Snapshots, html)
 			}
 		}
