@@ -222,7 +222,7 @@ func cmdWorker(args []string) error {
 		return err
 	}
 	if *server == "" || *token == "" {
-		return fmt.Errorf("usage: azhaq worker -server http://HOST:PORT -token T [-slots N]")
+		return usagef("usage: azhaq worker -server http://HOST:PORT -token T [-slots N]")
 	}
 	base := strings.TrimSuffix(*server, "/")
 	if !strings.Contains(base, "://") {

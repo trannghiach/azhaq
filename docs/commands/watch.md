@@ -104,6 +104,8 @@ The route lines also go, as text, to Slack, Discord and Telegram.
 
 ## Summary and exit codes
 
+Without `-db`, or with no run options after `--`, `watch` exits 2 and says how to call it.
+
 Without `-every`, `watch` runs once and exits with the code of its run.
 
 With `-every`, `watch` runs until a signal stops it, and that exits 0. A run that ended 3 or 4 does not end the loop: the next one starts after `-every`. A run that cannot start, or fails with an error, ends `watch` with that error.

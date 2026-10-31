@@ -17,7 +17,7 @@ azhaq new -db acme.db -since 24h
 
 ## What it does
 
-1. Opens the workspace given with `-db`, which is required.
+1. Opens the workspace given with `-db`, which is required: without it the command exits 2.
 2. Takes the hostnames, URLs and IP addresses first seen within `-since`. The default is 168 hours, one week.
 3. Leaves out what the newest run no longer saw: a page removed since is not new.
 4. Leaves out URLs that answer with the catch-all page, and scripts, assets and source maps, whether the run read them as such or their address says so.

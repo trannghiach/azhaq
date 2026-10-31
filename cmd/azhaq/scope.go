@@ -22,7 +22,7 @@ func loadScope(spec, program string) (scopefile.Scope, error) {
 	var err error
 	if _, ok := scopefile.Platforms[spec]; ok {
 		if program == "" {
-			return scopefile.Scope{}, fmt.Errorf("-scope %s needs -program", spec)
+			return scopefile.Scope{}, usagef("-scope %s needs -program", spec)
 		}
 		data, err = scopefile.Fetch(context.Background(), spec)
 	} else {

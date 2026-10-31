@@ -64,7 +64,7 @@ func cmdWatch(args []string) error {
 		runArgs = runArgs[1:]
 	}
 	if *db == "" || len(runArgs) == 0 {
-		return fmt.Errorf("usage: azhaq watch -db WORKSPACE.db [-every 24h] [-notify URL] -- RUN OPTIONS")
+		return usagef("usage: azhaq watch -db WORKSPACE.db [-every 24h] [-notify URL] -- RUN OPTIONS")
 	}
 	urls, err := hooksFrom(hooks, os.Getenv("AZHAQ_NOTIFY"))
 	if err != nil {
@@ -385,7 +385,7 @@ func cmdNew(args []string) error {
 		return err
 	}
 	if *db == "" {
-		return fmt.Errorf("give -db WORKSPACE.db")
+		return usagef("give -db WORKSPACE.db")
 	}
 	st, err := store.OpenExisting(*db)
 	if err != nil {
