@@ -61,6 +61,8 @@ func benchShots() *shotsRow {
 			return nil
 		}
 	}
+	// The lab apps it pictures are brought up first, as claims does.
+	newLabSet().start("http://127.0.0.1:3001", "http://127.0.0.1:5002", "http://127.0.0.1:5013", "http://127.0.0.1:5020", "http://127.0.0.1:5030")
 	base, stop := shotPages()
 	defer stop()
 	targets := []string{juiceURL, vampiURL, "http://127.0.0.1:5013/", "http://127.0.0.1:5020/", "http://127.0.0.1:5030/", base + "/login", base + "/nginx", base + "/admin"}

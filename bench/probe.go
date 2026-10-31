@@ -129,6 +129,7 @@ func confirmHTTP(host, scheme, status string) bool {
 func benchProbe(local []string) *probeRow {
 	dir, _ := filepath.Abs(filepath.Join(work, "probe"))
 	must(os.MkdirAll(dir, 0o755))
+	newLabSet().start("http://127.0.0.1:5013", "http://127.0.0.1:5020", "http://127.0.0.1:5030")
 	fl, stop := fleet(100)
 	defer stop()
 	hosts := map[string]bool{}
