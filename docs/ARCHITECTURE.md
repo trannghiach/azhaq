@@ -253,11 +253,7 @@ The run's policy is applied when items are planned:
 - A seen-set prevents running the same seed twice.
 - `-allow`, `-deny` and `-scope` filter hints before they are queued.
 
-A scope entry is one of:
-
-- a domain with its subdomains: `example.com` or `*.example.com`;
-- one host: `=api.example.com`;
-- an address range: `10.0.0.0/8`.
+A scope entry is a domain, a host or an address range: [Concepts](CONCEPTS.md#scope) has the syntax.
 
 When a scope is set:
 
@@ -797,7 +793,7 @@ Real hosts in a wildcard zone are kept when their addresses differ. A real host 
 - A source that answers 429 is asked again after its `Retry-After`. When it gives none, the pause is 2, 4 and 8 s. This happens at most three times and not for longer than 30 s. The row says how many requests were retried and whether the source gave up.
 - An answer that is an error with a 200 status is read as one, not as an empty list. Examples are a quota line such as hackertarget's `API count exceeded`, a JSON object holding an `error` or only a `message`, and a page titled `Just a moment...`. A source that gave no names after one failed, with the server's words in its `error`.
 - A source that needs a key is skipped, and listed as skipped, when none is configured.
-- When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero.
+- When every source that ran failed and nothing was found, the result is marked `degraded` rather than reported as zero. The `subs` summary is also `degraded` when any source in the default set failed: see [Degraded](commands/subs.md#degraded).
 
 ### Which sources
 
@@ -818,7 +814,7 @@ subdomain.center pads its answer with random names. For tesla.com each call give
 
 ### Name history
 
-Azhaq keeps the names it has kept for a domain, and asks that file as a source called `history`. The [`subs` page](commands/subs.md) describes it for users:
+Azhaq keeps the names it has kept for a domain, and asks that file as a source called `history`. The [`subs` page](commands/subs.md#name-history) describes it for users:
 
 - where the file lives, and what it holds;
 - the limit of 200,000 names per domain, and which names go first;
@@ -832,7 +828,7 @@ Two details belong to the implementation:
 
 ### Coverage estimate
 
-The payload's `coverage` has `observed`, `estimated` and `share`. It is a Chao1 estimate over how many independent sources gave each name, and it leaves out the verified sources. A sampled source's row has `population_estimate`, a Schnabel estimate. [commands/subs.md](commands/subs.md#details) gives the formulas.
+The payload's `coverage` has `observed`, `estimated` and `share`. It is a Chao1 estimate over how many independent sources gave each name, and it leaves out the verified sources. A sampled source's row has `population_estimate`, a Schnabel estimate. [commands/subs.md](commands/subs.md#coverage-estimate) gives the formulas.
 
 Tests run `subs` offline with `subcol.UseTestSources`, which replaces the source list with fakes.
 
@@ -1625,8 +1621,9 @@ Data Azhaq should not collect itself, such as paid internet indexes, comes in th
 
 **Map only.** Azhaq records what exists. It sends no payloads and does not test for vulnerabilities.
 
-Every request to a target is a GET, except these:
+Requests to a target are GETs, except these:
 
+- Chrome sends GET, HEAD and CORS preflights (OPTIONS) for what a page loads.
 - `crawl -submit-forms` sends POST forms, which change data.
 - `params -X` sends names in a body.
 - `probe -x`, `-body` and `-rr` send the methods, body or request you give.
@@ -1638,7 +1635,7 @@ Every request to a target is a GET, except these:
 
 The requests of `crawl -submit-forms`, `params -X` and `probe -x`, `-body` and `-rr` can change data on the target. They are counted, paced and in the ledger, and the summary says they were sent.
 
-Chrome sends GET, HEAD and OPTIONS only. The writes a page's scripts would send are mapped and listed, not sent. Operations read from an API description or a script call are mapped with their method and fields. Only the parameterless GETs among them are asked.
+The writes a page's scripts would send are mapped and listed, not sent. Operations read from an API description or a script call are mapped with their method and fields. Only the parameterless GETs among them are asked.
 
 **Every outcome said.**
 
@@ -1647,9 +1644,9 @@ Chrome sends GET, HEAD and OPTIONS only. The writes a page's scripts would send 
 
 ## Limitations
 
-- Requests to a target are limited by concurrency per host (4 by default) and an optional delay. Path guessing, parameter discovery and port scans also have a rate. Third-party sources and DNS resolvers have rate limits.
+- Requests to a target are limited by concurrency per host (10 by default, `-host-parallel`) and an optional delay. Path guessing, parameter discovery and port scans also have a rate. Third-party sources and DNS resolvers have rate limits.
 - Organization seeds rarely expand, because public RDAP has no search by organization name.
-- Routes built at run time from anything but constants, template literals and variables assigned once are seen only with `-browser`. Examples are user input, server responses and functions of several variables. Only the routes a page requests while it loads are seen: Azhaq does not click.
+- Routes built at run time from anything but constants, template literals and variables assigned once are seen only with `-browser`. Examples are user input, server responses and functions of several variables. Only the routes a page requests while it loads are seen, unless `-interact` clicks its buttons and menus.
 - Routes only the server knows, such as admin APIs no page mentions, are found only by the path sweep or an API description.
 - One SQLite file holds a run, written by the run's own process. Workers send their results to it rather than writing a shared store.
 
