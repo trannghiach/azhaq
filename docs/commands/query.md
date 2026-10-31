@@ -21,6 +21,8 @@ azhaq query -db h1.db -type Hostname -new
 
 The matching rows of the map, best first.
 
+`query -json` prints map rows (as `run -json`, with `found_in`), or only the `-fields` asked for; every row that matches, unless `-limit` says otherwise (the summary then says how many matched). `query -failed` prints every failed target instead: `target`, `collector`, `source`, `error`, `retryable`.
+
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).

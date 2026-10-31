@@ -20,6 +20,8 @@ azhaq urls -d example.com -mc 200 -mt text/html -from 2024 -urls-pause 0
 
 One URL per line, as the pages arrive (-sort: sorted, at the end; a terminal sorts); -json: {"url","source"}; -o appends.
 
+`url`, `source` (the archive that gave it first: wayback, commoncrawl, otx, urlscan, arquivo). One line per URL, as its page arrives when stdout is not a terminal (unsorted, each URL once), sorted at the end on a terminal or with `-sort`; `-raw` prints every row the archives gave, as they gave it. `-o` appends to the file. The summary lists, for each archive, `count`, `pages`, `seconds`, `requests` (sent, retries included), `retried` with `waited_seconds` (a 429 or 503 was asked again after its `Retry-After`, or 2, 5, 10, 20, then 30 s, for as long as the archive's `-urls-timeout` and the run's `-timeout` allow), its `error` (`failed after 4 tries, 429 Too Many Requests`, `failed after 4 tries, dial tcp …: connection refused`, or `…, Retry-After 2m0s; the 2m0s to wait is more than the 45s left (-urls-timeout or -timeout)`), `capped` when it stopped at `-urls-pages` with more to read, or `unfiltered` (what the archive keeps none of: `status`, `type`, `date`) with `unfiltered_by` (`-mc`, `-ft`, …) when a filter was given that it cannot apply: it is asked all the same and its URLs are kept, as gau keeps them, with no status on the row; the notes say the same in words (`otx has no status of its captures: its 13 URLs are not filtered by -mc`).
+
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).

@@ -22,9 +22,27 @@ azhaq fuzz -u 'https://app.example.com/api/§v1§/users/§1§' -w ids.txt -mode 
 
 Ffuf's: one line per match, the input and [Status, Size, Words, Lines, Duration] (-v adds the URL; several keywords print one block each; -s the inputs only); -json: ffuf's fields {"input","position","status","length","words","lines","content-type","redirectlocation","url","duration","host"}, input values base64. -o writes ffuf's report (json by default, -of for the other formats; a name ending .txt gets stdout's text). Auto-calibration is off unless -ac (or -acs, -acc, -ach) is given, as in ffuf. The host of -u is the scope unless -allow, -deny or -scope say otherwise.
 
+ffuf's: `input` (an object keyed by keyword, the values in base64 as ffuf prints them, and `FFUFHASH`, ffuf's name for the request), `position`, `status`, `length`, `words`, `lines`, `content-type`, `redirectlocation`, `url`, `duration` (nanoseconds to the first byte), `scraper` (always `{}`), `resultfile` (the `-od` file), `host`: `{"input":{"FFUFHASH":"YzdjOGEz","FUZZ":"YWRtaW4="},"position":12,"status":200,"length":483,"words":51,"lines":7,"content-type":"text/plain","redirectlocation":"","url":"…","duration":7596361,"scraper":{},"resultfile":"","host":"127.0.0.1:3001"}`. The request carries the headers ffuf sends (no `Accept`, `Accept-Encoding: gzip`, yours from `-H`; with no `-allow`, `-deny` or `-scope`, a host you name in a header joins the targets you named; with a rule, a header naming a host outside it is refused before anything is sent), so a size matches ffuf's for the same server; the `User-Agent` is a Chrome's unless `-H` gives one. A word is asked whatever it says, `/logout` included. Calibration is off unless `-ac` is given (`-acs`, `-acc` and `-ach` imply it), as in ffuf, so the matches are ffuf's for the same flags; with it the summary notes what it filtered (`auto-calibration filtered out answers with size 1234`), and `-rate` paces its guesses like any request (ffuf's are unpaced: at `-rate 5` a sweep takes about (guesses ÷ 5) seconds longer, and stays within your rate). The summary is one JSON line on stderr. Text: one line per match, the input and `[Status, Size, Words, Lines, Duration]`; `-v` adds the URL, `-s` prints the inputs only; with `-input-cmd` the position is shown, not the command's output. `-o FILE` writes the report, see below.
+
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+
+## Details
+
+### Reports
+
+`fuzz -o FILE -of FORMAT` writes ffuf's report files, in the order the inputs were asked, when the run ends (also when it is stopped, by `-maxtime`, the budget or Ctrl-C). A report that cannot be written is a `failed` entry in the summary (exit 3), not a silent loss; the place is tested before the first request.
+
+| `-of` | File |
+| --- | --- |
+| `json` (the default for any name but the suffixes below) | `{"commandline","time","results":[…],"config":{…}}`: results as the `-json` line above, with `input` values as plain text; `config` holds ffuf's keys for the run (`url`, `method`, `headers`, `matchers` with the filters calibration added, `inputproviders`, …) |
+| `ejson` | the same without `config`, `input` values in base64 |
+| `csv`, `ecsv` | a header of the keywords, then `url,redirectlocation,position,status_code,content_length,content_words,content_lines,content_type,duration,resultfile,Ffufhash`; `ecsv` has the input values in base64; `duration` as Go prints it (`1.2ms`) |
+| `html`, `md` | ffuf's page and table |
+| `all` | one file of each of the six, named FILE.json, FILE.ejson, FILE.html, FILE.md, FILE.csv, FILE.ecsv |
+
+A name ending `.csv`, `.ecsv`, `.html`, `.md` or `.ejson` takes that format without `-of`; a name ending `.txt` and no `-of` gets the text of stdout. `-or` writes no file for a run with no matches (the summary says so). `-od DIR` writes each match's request and answer as one file named by the md5 of its text, shown as `| RES |` in the text output and `resultfile` in the reports.
 
 ## Flags
 

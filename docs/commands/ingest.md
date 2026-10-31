@@ -20,6 +20,8 @@ httpx -l hosts.txt -json | azhaq ingest -in - -db example.db && azhaq export -db
 
 The map of what was added.
 
+`ingest` prints only its summary: `results` is the facts read (of every file given), `counts` the lines read per format. Files are arguments (`azhaq ingest a.jsonl b.jsonl`), `-` is stdin, and `-in FILE` still works.
+
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).

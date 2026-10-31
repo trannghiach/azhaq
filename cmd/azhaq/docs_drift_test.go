@@ -16,9 +16,10 @@ func TestDocsListTheCodesValues(t *testing.T) {
 		}
 		return string(b)
 	}
-	readme, concepts, output := read("../../README.md"), read("../../docs/CONCEPTS.md"), read("../../docs/OUTPUT.md")
+	readme, concepts := read("../../README.md"), read("../../docs/CONCEPTS.md")
+	runPage, rolesPage := read("../../docs/commands/run.md"), read("../../docs/commands/roles.md")
 	for _, c := range []string{"visited", "catchall", "error", "gone", "hint", "skipped", "capped"} {
-		for name, doc := range map[string]string{"README.md": readme, "CONCEPTS.md": concepts, "OUTPUT.md": output} {
+		for name, doc := range map[string]string{"README.md": readme, "CONCEPTS.md": concepts, "commands/run.md": runPage} {
 			if !strings.Contains(doc, "`"+c+"`") {
 				t.Errorf("%s does not say what coverage %q means", name, c)
 			}
@@ -28,8 +29,8 @@ func TestDocsListTheCodesValues(t *testing.T) {
 		}
 	}
 	for v := range verdictOrder {
-		if !strings.Contains(output, v) {
-			t.Errorf("OUTPUT.md does not list the roles verdict %q", v)
+		if !strings.Contains(rolesPage, v) {
+			t.Errorf("commands/roles.md does not list the roles verdict %q", v)
 		}
 	}
 }

@@ -18,6 +18,8 @@ azhaq asn -a AS13335
 
 One prefix per line; -json: {"as_number","as_name","prefix"}
 
+`as_number`, `as_name`, `prefix`.
+
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).

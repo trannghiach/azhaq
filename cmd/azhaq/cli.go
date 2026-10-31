@@ -196,8 +196,8 @@ func init() {
 			output:  "each message as it was sent, one per line (-json: {\"message\",\"sent\",\"failed\"}); the summary on stderr names every provider entry a message did not reach and the exit code is 3 then, where notify exits 0",
 			examples: []string{
 				"azhaq subs -d example.com -live | azhaq notify -bulk -pc provider-config.yaml",
-				"azhaq notify -i report.txt -p slack,discord -id recon -mf 'recon {{date}}: {{data}}'",
-				"azhaq ports -host 127.0.0.1 -json | azhaq notify -p custom -rl 2",
+				"azhaq notify -i report.txt -p slack,discord -id recon -pc provider-config.yaml -mf 'recon {{date}}: {{data}}'",
+				"azhaq ports -host 127.0.0.1 -json | azhaq notify -p custom -rl 2 -pc provider-config.yaml",
 			}},
 		{name: "query", group: groupWS, run: cmdQuery,
 			summary: "ask a database a precise question instead of reading the whole map",

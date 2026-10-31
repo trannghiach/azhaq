@@ -1,17 +1,18 @@
 # azhaq docs
 
-Print the documentation: output fields, exit codes, connectors, MCP.
+Print the documentation: a page for each command, output fields, exit codes, connectors, MCP.
 
 ## Synopsis
 
 ```
-azhaq docs [TOPIC] | -flags COMMAND | -flags-into DIR
+azhaq docs [TOPIC | COMMAND] | -flags COMMAND | -flags-into DIR
 ```
 
 ## Examples
 
 ```
 azhaq docs output
+azhaq docs ports
 azhaq docs -flags ports
 azhaq docs -flags-into docs/commands
 ```

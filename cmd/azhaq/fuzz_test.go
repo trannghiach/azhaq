@@ -438,7 +438,7 @@ func TestFuzzRatePacesCalibration(t *testing.T) {
 
 // The docs say what -rate does to calibration, and how it differs from ffuf.
 func TestDocsSayRatePacesCalibration(t *testing.T) {
-	for _, f := range []string{"../../docs/OUTPUT.md", "../../docs/MIGRATING.md"} {
+	for _, f := range []string{"../../docs/commands/dirs.md", "../../docs/MIGRATING.md"} {
 		doc := readDoc(t, f)
 		if !strings.Contains(doc, "`-rate` paces every request, the calibration guesses included; ffuf sends its calibration unpaced") ||
 			!strings.Contains(doc, "(guesses ÷ rate) seconds longer than ffuf's") && !strings.Contains(doc, "(guesses ÷ 5) seconds longer") {

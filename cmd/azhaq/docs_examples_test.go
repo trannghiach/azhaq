@@ -10,14 +10,17 @@ import (
 // A notify example in the docs names the provider config it needs: without
 // one the command stops with exit 2 and sends nothing.
 func TestDocsNotifyExamplesNameTheirConfig(t *testing.T) {
-	for _, f := range []string{"README.md", "docs/MIGRATING.md", "docs/RECIPES.md"} {
-		inFence := false
+	for _, f := range []string{"README.md", "docs/MIGRATING.md", "docs/RECIPES.md", "docs/commands/notify.md"} {
+		inFence, synopsis := false, false
 		for _, l := range strings.Split(readDoc(t, "../../"+f), "\n") {
+			if strings.HasPrefix(l, "## ") {
+				synopsis = l == "## Synopsis" // a command page's usage pattern, not an example
+			}
 			if strings.HasPrefix(strings.TrimSpace(l), "```") {
 				inFence = !inFence
 				continue
 			}
-			if !inFence || !regexp.MustCompile(`(^|\| )azhaq notify `).MatchString(strings.TrimSpace(l)) {
+			if !inFence || synopsis || !regexp.MustCompile(`(^|\| )azhaq notify `).MatchString(strings.TrimSpace(l)) {
 				continue
 			}
 			if !strings.Contains(l, " -pc ") && !strings.Contains(l, " -provider-config ") {
