@@ -43,7 +43,7 @@ Plain output is the matching rows of the map. `-json` prints one JSON object per
 | `-json -fields A,B` | Only the fields you ask for. |
 | `-failed` | Every failed target instead of map rows. See the table below. |
 
-`query -failed` rows have these fields:
+`query -failed` prints one line for each failed target: the target, the collector (with `source` and the source's name for a source), the error, and `retryable`, tab separated. With `-json` each row has these fields:
 
 | Field | Meaning |
 | --- | --- |

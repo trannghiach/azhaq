@@ -62,7 +62,7 @@ The map has one row per entity, best first: the target's own pages and APIs, the
 | Field | Meaning |
 | --- | --- |
 | `type` | `URL`, `Hostname`, `Domain`, `IPAddress`, `Organization`, … |
-| `key` | The URL, name or address. |
+| `key` | The URL, name or address. For a folded page, its `{n}` template. |
 | `scope` | `target`: what you asked about. `fanout`: found on the way (other hosts, CNAME targets). |
 | `coverage` (URLs) | What azhaq did with the URL: `visited`, `catchall`, `error`, `gone`, `hint`, `skipped` or `capped`. See [Coverage](#coverage). |
 | `evidence` (URLs) | How azhaq knows the row: the strongest level of its sources, from `answered` to `given`. See [Evidence](#evidence). |
@@ -81,6 +81,7 @@ The map has one row per entity, best first: the target's own pages and APIs, the
 | `forms` | One object per form on the page: `method`, `action`, `enctype`, `fields`, `files`. See [Forms](#forms). |
 | `found_in` | Up to three places where scripts name the route, calls first. See [found_in](#found_in). |
 | `watch` | Names worth trying first, by what each says it takes: `returnUrl (redirect)`, `url (url)`, `file (file)`, `cmd (command)`, `isAdmin (debug)`, `userId (id)`, `callback (callback)`. |
+| `folded` | On a summary row of names: how many dead, wildcard or unresolved names it holds. |
 | `template`, `count`, `not_asked` | A page that differs only by an ID is folded: its `{n}` template, how many URLs it holds, how many were not requested. See [Templates](#templates). |
 
 ## Summary and exit codes
