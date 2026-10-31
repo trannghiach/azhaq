@@ -21,6 +21,9 @@
 - `worker` without `-server` or a token, `watch` without `-db` or run options, `new` without `-db` and `-scope PLATFORM` without `-program` exit 2 (usage), not 1.
 - `dirs` keeps calibration on when you give `-fc`, `-fs`, `-fw`, `-fl` or `-fr`, as ffuf's `-ac -fs` does: the catch-all answer your filter does not remove is hidden too (25 rows became 5 on a catch-all app). `-ac=false` (`-dirs-ac=false` for `run`) turns it off, and the filters are then yours alone. `fuzz` is unchanged.
 - `fuzz -preflight-var-auto` and `-postflight-var-auto` name the source between colons: `TOKEN:form:user_token` (or `meta`, `cookie`, `header`). The older `TOKEN:[form]user_token` still works, and a name with no source still tries all four; when a name that starts with a source name finds nothing, the error says how to pin the source.
+- A DNS query that is late is no longer waited out for the whole 2 s timeout (`subs -live`, `dns` and every command that resolves): the next attempt is sent beside it once it is later than 1.5 times what 19 in 20 answers took (250 ms at least, half the timeout at most), the first answer wins, and the attempts in all stay as many as before. With 20 percent of queries lost, 1800 names took 5.9 s where they took 18.2 s.
+- The ledger note in a run's summary names what was recorded by class (`ledger: 215 recorded in FILE: 214 to targets (210 requests, 4 connections), 1 DNS query, sealed …`), where it said `215 requests`; the lines to targets are what `requests` counts, port connects included, and a note gives both numbers if they ever differ.
+- `-list`, `-in` and `-org` of `run`, and `-l` and `-dL` of the commands that read a target file, refuse a second, different value with a usage error (exit 2) instead of keeping the last.
 
 ### Added
 
@@ -65,6 +68,7 @@
 - `run -dns-brute` and `-permute` keep the DNS answer of each name they find, so at `-depth 0` those names are live rows with their addresses, not `unresolved`.
 - `-interact` stops clicking at the first request the budget refuses, so a capped browser crawl ends promptly with exit 4 and its tasks left for `azhaq resume`; before, it could run on long after the budget was spent.
 - `-interact` keeps a page's rows when a click leaves the scope (the link is listed as skipped, outside the scope); before, the page's requests, links, click routes and the `-interact:` note were dropped, so `crawl -browser -interact` mapped 9 rows where `crawl -browser` mapped 167.
+- `run -url A -url B` maps both addresses, where it mapped only the last without a word; `roles … -- -url A -url B` therefore compares the endpoints of both.
 
 ## v0.10.1
 
