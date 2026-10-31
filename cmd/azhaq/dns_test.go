@@ -194,11 +194,16 @@ func TestDNSRecordTypesAndFields(t *testing.T) {
 	if !reflect.DeepEqual(ls, []string{"api.lab.zz", "dual.lab.zz", "lab.zz", "www.lab.zz"}) || code != exitOK {
 		t.Errorf("default: %v exit %d %+v", ls, code, rep)
 	}
-	// -json: a row for every answered name, with its status; empty fields left out
+	// -json: a row for each name with an A (the default type), empty fields left out
 	ls, _, _ = dnsOut(t, "-l", l, "-r", lab.addr, "-j")
 	r := dnsRows(t, ls)
-	if len(r) != 7 || r["nope.lab.zz"]["status_code"] != "NXDOMAIN" || r["nope.lab.zz"]["status_code_raw"] != float64(3) {
-		t.Errorf("rows %d: %v", len(r), r["nope.lab.zz"])
+	if len(r) != 4 || r["nope.lab.zz"] != nil || r["v6.lab.zz"] != nil {
+		t.Errorf("rows %d: %v", len(r), r)
+	}
+	// -rcode asks for the others, with their status
+	ls, _, _ = dnsOut(t, "-l", l, "-r", lab.addr, "-j", "-rcode", "nxdomain")
+	if nx := dnsRows(t, ls)["nope.lab.zz"]; nx["status_code"] != "NXDOMAIN" || nx["status_code_raw"] != float64(3) {
+		t.Errorf("-rcode row: %v", ls)
 	}
 	if _, ok := r["www.lab.zz"]["aaaa"]; ok {
 		t.Error("an empty aaaa is in the row")
@@ -639,5 +644,27 @@ func TestDNSSummaryCountsRecordsAndNames(t *testing.T) {
 	ls, rep, _ := dnsOut(t, "-l", l, "-r", lab.addr, "-a", "-resp", "-json")
 	if len(ls) != 2 || rep.Results != 2 {
 		t.Errorf("-json: %d rows, results %d", len(ls), rep.Results)
+	}
+}
+
+// A is the default type: -w with -json prints the names that have an A and
+// nothing for the NXDOMAIN, TXT-only or AAAA-only guesses; the count note
+// reconciles: asked - did not resolve = results.
+func TestDNSWordlistJSONPrintsOnlyTheAskedRecord(t *testing.T) {
+	t.Chdir(t.TempDir())
+	lab := startLab(t)
+	w := writeList(t, "www", "api", "v6", "_dmarc", "zzz")
+	ls, rep, code := dnsOut(t, "-d", "lab.zz", "-w", w, "-r", lab.addr, "-json")
+	r := dnsRows(t, ls)
+	if code != exitOK || len(r) != 2 || r["www.lab.zz"] == nil || r["api.lab.zz"] == nil {
+		t.Fatalf("exit %d rows %v", code, ls)
+	}
+	if rep.Results != len(ls) || rep.Counts["asked"]-rep.Counts["did not resolve"] != rep.Results || rep.Counts["did not resolve"] != 3 {
+		t.Errorf("results %d, rows %d, counts %v", rep.Results, len(ls), rep.Counts)
+	}
+	// -rcode asks for the NXDOMAIN rows
+	ls, rep, _ = dnsOut(t, "-d", "lab.zz", "-w", w, "-r", lab.addr, "-json", "-rcode", "nxdomain")
+	if r := dnsRows(t, ls); len(r) != 1 || r["zzz.lab.zz"] == nil || rep.Results != 1 {
+		t.Errorf("-rcode: %v %+v", ls, rep.Counts)
 	}
 }

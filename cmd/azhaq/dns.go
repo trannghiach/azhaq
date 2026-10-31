@@ -64,7 +64,6 @@ var rcodeNames = map[string]int{
 type dnsConf struct {
 	types      []uint16        // asked, in dnsx's order
 	selected   map[string]bool // by flag name
-	explicit   bool            // a type flag was given
 	all        bool            // -all
 	axfr       bool
 	resp, ro   bool
@@ -190,7 +189,6 @@ func cmdDNS(args []string) error {
 	for i, k := range dnsKinds {
 		if *kinds[i] {
 			cf.selected[k.flag] = true
-			cf.explicit = true
 		}
 	}
 	if *axfr {
@@ -207,7 +205,6 @@ func cmdDNS(args []string) error {
 				delete(cf.selected, strings.ToLower(x))
 			}
 		}
-		cf.explicit = true
 	}
 	for _, k := range dnsKinds {
 		if cf.selected[k.flag] {
@@ -217,9 +214,6 @@ func cmdDNS(args []string) error {
 	if len(cf.types) == 0 {
 		cf.types = []uint16{dns.TypeA}
 		cf.selected["a"] = true
-		if cf.wd != "" {
-			cf.explicit = false
-		}
 	}
 	cf.ptrHosts = cf.selected["ptr"]
 	if *rcode != "" {
@@ -873,16 +867,16 @@ func (r *dnsRun) one(ctx context.Context, name string) bool {
 	row.Takeover = r.takeover(ctx, name, d)
 	r.keepRow(name, d, row)
 	selected := r.hasSelected(d)
+	printed := r.output(name, d, row, selected)
 	switch {
 	case selected:
 		r.counts.resolved.Add(1)
-	case len(d.Failures) == 0:
+	case len(d.Failures) == 0 && !printed:
 		r.counts.noAnswer.Add(1)
 		if cf.verbose {
 			fmt.Fprintf(os.Stderr, "azhaq dns: %s: %s, no %s records\n", name, d.StatusCode, strings.Join(selectedNames(cf), "/"))
 		}
 	}
-	r.output(name, d, row, selected)
 	return true
 }
 
@@ -1087,19 +1081,24 @@ func (row *dnsRow) cdn(d *dnsr.Data) {
 	}
 }
 
+// wholeRows says the output is one row for each name: -json, -raw or a template.
+func (cf *dnsConf) wholeRows() bool { return cf.json || cf.raw || cf.template != "" }
+
 // output prints the name as dnsx would, given what the flags selected.
-func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
+func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) (printed bool) {
 	cf := r.cf
 	lines := 0 // what this name printed: a name is one row, or one line for each record
 	defer func() {
 		if lines > 0 {
 			r.counts.names.Add(1)
 		}
+		printed = lines > 0
 	}()
-	// JSON, -raw and templates print a name as one row; with a type flag
-	// only names that have such a record, unless -rcode asked for others.
-	whole := cf.json || cf.raw || cf.template != ""
-	if whole && cf.explicit && !cf.all && !cf.axfr && len(cf.rcodes) == 0 && !selected && !cf.selected["any"] {
+	// JSON, -raw and templates print a name as one row, only when it has a
+	// record of a type asked (A without a flag), unless -rcode asked for others.
+	whole := cf.wholeRows()
+	// A dangling CNAME is a finding: its row goes out with the takeover on it.
+	if whole && !cf.all && !cf.axfr && len(cf.rcodes) == 0 && !selected && !cf.selected["any"] && row.Takeover == nil {
 		return
 	}
 	if len(cf.rtf) > 0 && r.hasAny(d, cf.rtf) {
@@ -1134,7 +1133,7 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 		}
 		return
 	}
-	printed := false
+	one := false
 	emit := func(typ string, items []string) {
 		for _, item := range items {
 			switch {
@@ -1145,11 +1144,11 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 				r.w.line(host + " [" + typ + "] [" + item + "]" + details)
 				lines++
 			default:
-				if !printed {
+				if !one {
 					r.w.line(host + details)
 					lines++
 				}
-				printed = true
+				one = true
 				return // the name has one: that is the line
 			}
 		}
@@ -1210,6 +1209,7 @@ func (r *dnsRun) output(host string, d *dnsr.Data, row *dnsRow, selected bool) {
 			}
 		}
 	}
+	return
 }
 
 func (r *dnsRun) hasAny(d *dnsr.Data, kinds []string) bool {

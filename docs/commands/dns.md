@@ -38,7 +38,7 @@ azhaq dns -d example.com -axfr -allow example.com
 
 ## Output
 
-Plain output is one name per line: the names that have a record of the types asked. With `-json` you get one object per name a resolver answered, with the fields below. A field with no value is left out. `-db FILE` keeps the names that have records in a workspace.
+Plain output is one name per line: the names that have a record of the types asked. With `-json` you get one object per name that has a record of the types asked, with the fields below. A field with no value is left out. `-db FILE` keeps the names that have records in a workspace.
 
 What the text forms print:
 
@@ -100,10 +100,11 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 ## Details
 
 ### Which names get a row
-- `-json` gives a row for every name a resolver answered, one that does not exist too: `status_code` is `NXDOMAIN` and there are no records.
+- Text and `-json` both give a row only to a name that has a record of the types asked. A is the type when no flag names one, as in dnsx. A name that does not exist, or has no such record, such as a TXT-only name when A is asked, gets no row and is counted as `did not resolve`. So `asked` minus `did not resolve` is the number of rows.
 - A name no resolver answered gets no row in either form. It is counted as `no answer`.
-- With a type flag (`-a`, `-mx`, …), only the names that have a record of that type get a row.
-- With `-rcode`, only the names whose answer has that code get a row.
+- With a type flag (`-mx`, `-txt`, …), the types are those flags'.
+- With `-rcode`, only the names whose answer has that code get a row, with its `status_code`. That is how to list the names that do not exist.
+- A name whose CNAME points at what is gone also gets its `-json` row, with `takeover`, whatever the types asked: it is a finding, and it is not counted as `did not resolve`.
 
 ### Types
 - `-all` asks every type but AXFR. AXFR is asked with `-axfr` only, because it connects to the name servers.

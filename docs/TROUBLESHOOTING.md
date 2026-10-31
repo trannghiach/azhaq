@@ -538,11 +538,11 @@ The allowed hosts are then requested, counted and in the ledger.
 
 ## dns
 
-### `dns -json` prints rows for names that do not exist
+### `dns -json` prints no row for a name that does not exist
 
-**Why:** As dnsx does, `-json` gives a row for every name a resolver answered. The row has its `status_code`, such as `NXDOMAIN` or `SERVFAIL`.
+**Why:** As dnsx does, `-json` gives a row for each name that has a record of the type asked, which is A when no type flag is given. A name that does not exist, or has no such record, is counted as `did not resolve` in the summary.
 
-**Fix:** Ask for a type, as in `-a -json`, to list just the names that have such a record. Or select with `jq 'select(.status_code=="NOERROR")'`.
+**Fix:** `-rcode nxdomain` (or `noerror`, `servfail`, a number) prints those names with their `status_code`. `-mx`, `-txt`, `-aaaa` and the other type flags ask for other records.
 
 ### `dns -timeout 5s` did not stop the run after 5 seconds
 
