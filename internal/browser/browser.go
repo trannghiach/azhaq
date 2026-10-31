@@ -418,6 +418,7 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	p.Unloaded, p.Resources = p.Unloaded+waiting, p.Resources+waiting // asked for, and still waiting for its turn
 	p.Partial = p.Unloaded > 0
 	if err == nil && b.Interact > 0 {
+		b.beginClicks(t)
 		p.Interaction = b.interact(tab, p.URL, b.Interact, func() bool { return b.capped(t) })
 	}
 	b.settle(t)
@@ -439,10 +440,10 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	hosts := map[string]bool{}
 	for _, r := range mine {
 		p.Capped = p.Capped || r.budget
-		if r.frame == main && r.doc && !r.budget && p.Left == "" {
+		if r.frame == main && r.doc && !r.budget && !r.click && p.Left == "" {
 			p.Left = r.url
 		}
-		if !r.budget && !r.download && r.host != "" && !(r.frame == main && r.doc) {
+		if !r.budget && !r.download && r.host != "" && !(r.frame == main && r.doc && !r.click) {
 			p.OffScope++
 			hosts[r.host] = true
 		}

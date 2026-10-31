@@ -48,6 +48,7 @@ type refusal struct {
 	doc    bool // a page's or a frame's document: a navigation
 	sends  bool // a script's request with a body (a login's call)
 	budget bool // refused for the request budget, not for where it went
+	click  bool // sent after the page began to be clicked (-interact): where a click went, not where the page did
 
 	download bool   // refused for being a download, not for where it went (downloads.go)
 	name     string // what Chrome would have saved it as
@@ -62,7 +63,8 @@ type tab struct {
 	ctx     context.Context // ends with the tab: its requests stop waiting for the pace
 	frames  []cdp.FrameID
 	rs      map[refusal]bool
-	left    *refusal // the first navigation of its main frame refused
+	left    *refusal // the first navigation of its main frame refused, before any click
+	clicks  bool     // the page is being clicked: what it is refused then is not where it was redirected
 	capped  bool
 	pending int  // requests of its frames being decided
 	read    bool // claimed: what comes later is counted only
@@ -106,7 +108,10 @@ func (t *tab) add(r refusal) {
 		t.capped = true
 		return
 	}
-	if r.doc && r.frame == t.main && t.left == nil {
+	if t.clicks {
+		r.click = true
+	}
+	if r.doc && r.frame == t.main && t.left == nil && !r.click {
 		t.left = &r
 	}
 	if len(t.rs) < maxHeld {
@@ -655,6 +660,14 @@ func (b *Browser) settle(t *tab) {
 			return
 		}
 	}
+}
+
+// beginClicks marks that t's page is being clicked: a click that leaves the
+// scope is refused like any request, and is not the page's own redirect.
+func (b *Browser) beginClicks(t *tab) {
+	b.refMu.Lock()
+	defer b.refMu.Unlock()
+	t.clicks = true
 }
 
 // capped says whether the budget refused t's page a request.
