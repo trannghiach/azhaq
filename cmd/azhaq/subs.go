@@ -240,7 +240,7 @@ func cmdSubs(args []string) error {
 	private := map[string]bool{}
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
-	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot int
+	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot, itself int
 	health := newHealthTally(false)
 	var procMu sync.Mutex
 	processed := map[string]bool{}
@@ -302,12 +302,21 @@ func cmdSubs(args []string) error {
 		if n := guessCheck(input, srcs); n != "" {
 			rep.Notes = append(rep.Notes, n)
 		}
-		for _, by := range foundBy {
+		for name, by := range foundBy {
+			if name == input {
+				continue
+			}
 			for _, s := range strs(by) {
 				bySource[s]++ // sources credited with a name Azhaq kept
 			}
 		}
 		for _, name := range strs(p["names"]) {
+			if name == input {
+				// The domain given is the target, not one of its subdomains
+				// (subfinder keeps only names below it); run's map has it.
+				itself++
+				continue
+			}
 			collected[name] = true
 			switch {
 			case seen[name]:
@@ -416,7 +425,7 @@ func cmdSubs(args []string) error {
 	if alive != nil {
 		var extra []string
 		for name := range alive {
-			if !seen[name] && apexOf(name, apexes) != "" && filt.keep(name) {
+			if !seen[name] && apexOf(name, apexes) != "" && !slices.Contains(apexes, name) && filt.keep(name) {
 				extra = append(extra, name)
 			}
 		}
@@ -459,6 +468,7 @@ func cmdSubs(args []string) error {
 			rep.Counts[k] = n
 		}
 	}
+	set("the domain itself", itself)
 	set("did not resolve", dropped+didNot)
 	if *live {
 		// Show the live/dead split: a raw subdomain count is mostly names
@@ -511,6 +521,7 @@ func nameSum(c map[string]int, results int, filtering bool) string {
 			parts = append(parts, fmt.Sprintf("− %d %s", c[k], label))
 		}
 	}
+	minus("the domain itself", "the domain itself, not a subdomain")
 	minus("did not resolve", "did not resolve")
 	minus("not checked", "not checked")
 	minus("left out by -m/-f", "left out by -m/-f")

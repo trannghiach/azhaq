@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -340,4 +341,52 @@ func TestNameSumAndRateLimitNote(t *testing.T) {
 	if got := rateLimitNote("a.com", "x", map[string]any{"gave_up_429": true, "retry_after_seconds": 120.0}); !strings.Contains(got, "asked for 120 s") {
 		t.Errorf("%q", got)
 	}
+}
+
+// subs lists subdomains: the domain given is not one, whatever a source
+// returns and whether or not DNS answers for it, in every output (rows,
+// -silent lines, the -oD files), and the counts still add up.
+func TestSubsNeverPrintsTheDomainItself(t *testing.T) {
+	t.Chdir(t.TempDir())
+	resolvers := serveZone(t, fakeZone{a: map[string]string{"example.org": "192.0.2.1", "www.example.org": "192.0.2.10", "app.example.org": "192.0.2.11"}})
+	defer subcol.UseTestSources(
+		subcol.TestSource{Name: "s", Default: true, Names: []string{"example.org", "www.example.org", "app.example.org"}},
+		subcol.TestSource{Name: "t", Default: true, Names: []string{"example.org", "www.example.org"}},
+	)()
+	for _, c := range []struct {
+		name string
+		args []string
+	}{
+		{"not live", []string{"-no-history"}},
+		{"live", []string{"-live", "-resolvers", resolvers, "-no-history"}},
+	} {
+		dir := filepath.Join(t.TempDir(), "out")
+		out, rep, code := runContract(t, append([]string{"subs", "-d", "example.org", "-oD", dir}, c.args...)...)
+		if code != exitOK {
+			t.Fatalf("%s: exit %d %+v", c.name, code, rep)
+		}
+		if want := []string{"app.example.org", "www.example.org"}; !reflect.DeepEqual(hosts(t, out), want) || rep.Results != 2 {
+			t.Errorf("%s: printed %v, results %d, want %v", c.name, hosts(t, out), rep.Results, want)
+		}
+		if raw, _ := os.ReadFile(filepath.Join(dir, "example.org.json")); strings.Contains(string(raw), `"host":"example.org"`) || strings.Count(string(raw), "\n") != 2 {
+			t.Errorf("%s: -oD file %q", c.name, raw)
+		}
+		k := rep.Counts
+		if got := k["from sources"] - k["the domain itself"] - k["did not resolve"]; k["the domain itself"] != 1 || got != rep.Results {
+			t.Errorf("%s: from sources %d - the domain itself %d - did not resolve %d = %d, printed %d: %v", c.name, k["from sources"], k["the domain itself"], k["did not resolve"], got, rep.Results, k)
+		}
+		if !strings.Contains(strings.Join(rep.Notes, "\n"), "3 from the sources − 1 the domain itself, not a subdomain") {
+			t.Errorf("%s: no count note that names the domain: %q", c.name, rep.Notes)
+		}
+		text, _, code := cli(t, append([]string{"subs", "-d", "example.org", "-silent"}, c.args...)...)
+		if want := []string{"app.example.org", "www.example.org"}; code != exitOK || !reflect.DeepEqual(sortedLines(text), want) {
+			t.Errorf("%s: -silent printed %q", c.name, text)
+		}
+	}
+}
+
+func sortedLines(s string) []string {
+	out := lines(s)
+	sort.Strings(out)
+	return out
 }

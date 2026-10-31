@@ -147,8 +147,9 @@ The counts also say what became of the names, so a reader can add them up:
 | Count | Meaning |
 | --- | --- |
 | `from sources` | The names every source gave for the domains, with the name history and subdomain.center's guesses, before any check. |
+| `the domain itself` | The domain given, when a source returned it: `subs` lists subdomains, as subfinder does, so it is not printed (`run`'s map has it as the target it is). |
 | `did not resolve` | Names dropped because DNS says they do not exist: guesses and history names that did not resolve, and with `-live` every other name that did not. |
-| `collected` | With `-live`: `from sources` less the guesses that did not resolve. |
+| `collected` | With `-live`: `from sources` less the domain itself and the guesses that did not resolve. |
 | `resolved from sources` | With `-live`: the names from sources that resolved and were printed. |
 | `CNAME only` | With `-live`: printed names that are a CNAME and have no address of their own (`dnsx -a -cname` lists those too, dangling or not). |
 | `found as CNAME targets`, `found by guessing` | Live names no source gave: another name's CNAME target in scope, and the names of `-w` and `-permute`. |
@@ -158,7 +159,7 @@ The counts also say what became of the names, so a reader can add them up:
 | `listed under another domain` | A name under two of the domains given, printed once. |
 | `cut by -max-names` | Names past `-max-names` (default 200,000), left out; the run ends with exit 3. |
 
-`from sources` less `did not resolve`, `not checked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`, plus `found as CNAME targets` and `found by guessing`, is the number of results. The run prints it as a note: `count: 2638 from the sources − 2096 did not resolve − 1 not checked + 10 found as CNAME targets = 551 printed`.
+`from sources` less `the domain itself`, `did not resolve`, `not checked`, `left out by -m/-f`, `listed under another domain` and `cut by -max-names`, plus `found as CNAME targets` and `found by guessing`, is the number of results. The run prints it as a note: `count: 2638 from the sources − 2096 did not resolve − 1 not checked + 10 found as CNAME targets = 551 printed`.
 
 Azhaq keeps every name it kept for a domain in `names/DOMAIN.json` under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`: the first and last time seen (`first_seen`, `last_seen`) and the sources that gave it (`sources`), at most 200,000 names per domain (the ones unseen the longest go first). The next run asks this file as a source called `history`: with `-live` a stored name counts only if it resolves now (not to a wildcard), so stale names drop out and a name a source missed this time comes back; without `-live` no DNS lookup is made and a stored name is listed with `"unverified": true`. `-no-history` neither reads nor writes the file. A file that cannot be written is a note, `name history not saved: …`.
 
