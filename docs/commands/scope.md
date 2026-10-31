@@ -60,7 +60,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 <!-- flags:begin scope -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-json` | bool |  | one JSON object: program, allow, deny, domains, targets, skipped |
-| `-program` | string |  | the program to take from a list |
 | `-scope` | string |  | a file or hackerone, bugcrowd, intigriti, yeswehack |
+| `-program` | string |  | the program to take from a list |
+| `-json` | bool |  | one JSON object: program, allow, deny, domains, targets, skipped |
 <!-- flags:end -->

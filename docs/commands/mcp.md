@@ -37,15 +37,27 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ## Flags
 
 <!-- flags:begin mcp -->
+**Scope and safety**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `-scope` | string |  | a program's scope every tool is held to: a file, or hackerone, bugcrowd, intigriti, yeswehack with -program |
+| `-program` | string |  | the program to take from -scope |
 | `-allow` | string, repeatable |  | a domain or host the tools may touch (repeatable); with -scope, added to it |
 | `-deny` | string, repeatable |  | a domain or host the tools must not touch |
 | `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested by any tool |
-| `-dir` | string | `azhaq-mcp` | directory for the workspaces the tools write |
-| `-max-requests` | int |  | requests to targets all tool calls together may send (0: no cap) |
-| `-program` | string |  | the program to take from -scope |
-| `-rate` | float |  | requests per second to targets in every tool call (0: no pace) |
-| `-scope` | string |  | a program's scope every tool is held to: a file, or hackerone, bugcrowd, intigriti, yeswehack with -program |
 | `-unlocked` | bool |  | serve without a scope: any target a tool is given may be touched (port scans stay refused) |
+
+**Pace and limits**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-rate` | float |  | requests per second to targets in every tool call (0: no pace) |
+| `-max-requests` | int |  | requests to targets all tool calls together may send (0: no cap) |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-dir` | string | `azhaq-mcp` | directory for the workspaces the tools write |
 <!-- flags:end -->

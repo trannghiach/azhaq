@@ -124,9 +124,9 @@ Read a redacted report once before sharing it. An identifier that no kept body n
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-dir` | string |  | the -dir of the roles run (it holds roles.db) |
-| `-format` | string | `md` | md or json |
+| `-url` | string |  | write up this one row (its URL as roles lists it); every cross-role finding by default |
 | `-method` | string |  | the method of a write row (-replay-writes); a read's row by default |
+| `-format` | string | `md` | md or json |
 | `-o` | string |  | FILE for the reports (one file, or a directory with a report per file); without -url, DIR/reports; with -url, standard output |
 | `-redact` | bool |  | also mask hosts and identifiers (a report to share outside the engagement) |
-| `-url` | string |  | write up this one row (its URL as roles lists it); every cross-role finding by default |
 <!-- flags:end -->

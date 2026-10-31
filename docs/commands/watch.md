@@ -150,17 +150,25 @@ The names are read from `fetch`, `XMLHttpRequest` (`send`), axios and jQuery cal
 <!-- flags:begin watch -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-always` | bool |  | notify after every run, the first (the baseline) included, not only when something changed |
 | `-db` | string |  | workspace database (required) |
 | `-every` | duration |  | run again after this long (default: run once, for cron) |
-| `-json` | bool |  | print the change set as JSON |
+| `-always` | bool |  | notify after every run, the first (the baseline) included, not only when something changed |
 | `-notify` | string, repeatable |  | webhook for changes: Slack, Discord, Telegram (…/sendMessage?chat_id=…) or any JSON endpoint (repeatable); @FILE reads URLs from a file, one a line, and $AZHAQ_NOTIFY holds more (comma-separated), so a token need not stand on the command line where ps shows it |
 | `-notify-cmd` | string |  | command that gets the change set as JSON on stdin |
 | `-notify-config` | string |  | notify's provider-config.yaml: send the changes to the providers it lists (Slack, Discord, Telegram, Teams, Google Chat, Pushover, Gotify, SMTP, custom) |
-| `-notify-format` | string |  | format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}} |
-| `-notify-id` | string, repeatable |  | with -notify-config, only the entries with these ids (repeatable or comma-separated) |
-| `-notify-lines` | int | `100` | lines per kind of change in a message, the rest counted (0: all); a message longer than the service takes is sent in parts |
-| `-notify-provider` | string, repeatable |  | with -notify-config, only these providers (repeatable or comma-separated) |
-| `-notify-proxy` | string |  | proxy URL for the notification requests (default: the environment's) |
-| `-notify-rate` | float | `1` | requests per second to the webhooks and providers (0: no limit) |
+| `-json` | bool |  | print the change set as JSON |
+
+<details>
+<summary>Rarely used flags (6)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-notify-format` | string |  | format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}} | rarely needed |
+| `-notify-id` | string, repeatable |  | with -notify-config, only the entries with these ids (repeatable or comma-separated) | rarely needed |
+| `-notify-lines` | int | `100` | lines per kind of change in a message, the rest counted (0: all); a message longer than the service takes is sent in parts | rarely needed |
+| `-notify-provider` | string, repeatable |  | with -notify-config, only these providers (repeatable or comma-separated) | rarely needed |
+| `-notify-proxy` | string |  | proxy URL for the notification requests (default: the environment's) | rarely needed |
+| `-notify-rate` | float | `1` | requests per second to the webhooks and providers (0: no limit) | rarely needed |
+
+</details>
 <!-- flags:end -->

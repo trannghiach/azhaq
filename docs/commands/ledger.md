@@ -104,9 +104,9 @@ ledger: N requests and connections recorded in FILE, sealed HASH (azhaq ledger -
 <!-- flags:begin ledger -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-csv` | string |  | print the ledger as CSV |
-| `-json` | bool |  | with -summary: one JSON object |
+| `-verify` | string |  | check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal |
 | `-seal` | string |  | with -verify: a seal hash kept where the run's own files are not (or a file of one per line, or the JSON lines -seal-to writes) that must be one of the chain's seals; without it, -verify cannot tell the file from one with lines removed and the rest re-chained to look intact |
 | `-summary` | string |  | count the ledger's requests and connections by kind, host and method, with the first and last time |
-| `-verify` | string |  | check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal |
+| `-json` | bool |  | with -summary: one JSON object |
+| `-csv` | string |  | print the ledger as CSV |
 <!-- flags:end -->

@@ -274,65 +274,100 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 ## Flags
 
 <!-- flags:begin ports -->
+**Targets and input**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-Pn` | bool |  | accepted: addresses are scanned without asking whether they are up, which is the default |
-| `-T` | int | `-1` | timing template, 0 (paranoid) to 5 (insane); sets -rate, -connect-timeout and -retries where they are not given; 3 is the default |
-| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
-| `-c` | int |  | same as -workers |
-| `-cdn` | bool |  | accepted: a CDN address is marked in the output, always |
-| `-cdn-full` | bool |  | scan CDN and WAF addresses in full, not only ports 80, 443, 8080 and 8443 |
-| `-connect-timeout` | string |  | wait this long for one port to accept or refuse a connect: 1500, 1500ms or 2s (default 1.5s; -timeout is the run's limit) |
-| `-cp` | string |  | send this to each open TCP port before reading what it says (\r and \n are CR and LF) |
-| `-csv` | bool |  | CSV output, a header line first |
-| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
-| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
-| `-detect` | string | `all` | what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close, as naabu without -sV) |
-| `-dns-rate` | float |  | DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx) |
-| `-ef` | string |  | file of hosts, addresses and ranges not to scan |
-| `-eh` | string |  | hosts, addresses or ranges not to scan, comma-separated (same as -deny) |
-| `-eof` | string |  | leave these fields out of -json, -csv and -oA's JSON, comma-separated |
-| `-ep` | string |  | ports not to scan: a list or a file |
 | `-host` | string, repeatable |  | hosts, addresses, CIDR ranges, AS numbers or host:port, comma-separated and repeatable |
-| `-iv` | string |  | the address families of a name to scan: 4 or 6 (default both) |
-| `-j` | bool |  | same as -json |
-| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
-| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
 | `-l` | string |  | file of targets (- for stdin) |
-| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
-| `-lof` | bool |  | list the fields of -json and -csv, and stop |
-| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
-| `-max-retries` | int | `-1` | same as -retries |
-| `-min-rate` | float |  | connects per second at least: raises -rate to this when lower |
-| `-nc` | bool |  | accepted: no colours are printed |
-| `-no-stdin` | bool |  | do not read targets from stdin when none is given |
-| `-o` | string |  | also write results to this file |
-| `-oA` | string |  | write JSON lines, XML and greppable output to BASE.json, BASE.xml and BASE.gnmap |
-| `-oG` | string |  | write nmap greppable output to this file (- for stdout) |
-| `-oX` | string |  | write nmap XML to this file (- for stdout) |
-| `-order` | string | `random` | the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc |
 | `-p` | string | `top-100` | ports: top-100, top-1000, full, - (all), none, or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888; u:53 is a UDP port |
-| `-pf` | string |  | file of ports, one spec a line (added to -p) |
-| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
-| `-proxy` | string |  | connect to TCP ports through this SOCKS5 proxy (host:port); a port is then asked its banner only, and UDP is not sent |
-| `-proxy-auth` | string |  | user:password for -proxy |
-| `-pts` | int |  | stop asking a host after this many open ports: it answers every port (default: no limit) |
-| `-pu` | string |  | UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp; without -p, -tp or -pf no TCP port is asked) |
-| `-r` | string |  | same as -resolvers |
-| `-rate` | float |  | port connection attempts per second (0: 1500, as naabu's connect scan, and 127.0.0.1 unpaced) |
-| `-resolvers` | string |  | DNS resolvers: a list such as 1.1.1.1,8.8.8.8:53 or a file, one a line (default: public resolvers) |
-| `-retries` | int | `-1` | more passes over the ports that neither accepted nor refused: n passes over all of them, 0 none (default: one, when few did not answer) |
-| `-sa` | bool |  | scan every address of a name, not the first two of each family |
 | `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
-| `-seed` | int |  | make the random port order repeat (default: a new one each run) |
-| `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
-| `-sn` | bool |  | list the addresses that are up (a connect to 80 or 443 is accepted or refused) and scan nothing |
-| `-source-ip` | string |  | connect from this local address |
-| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
-| `-tp` | string |  | the most common TCP ports: 100, 1000 or full (added to -p) |
+| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
+
+**What to ask**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
 | `-udp` | bool |  | also ask the common UDP ports (25: dns, ntp, snmp, ssdp, mdns, ...) |
+| `-detect` | string | `all` | what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close, as naabu without -sV) |
+| `-order` | string | `random` | the order a host's ports are asked in: random (the likeliest ports first, each tier shuffled) or asc |
 | `-unnamed` | int |  | after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6, a guard against hosts that accept every connect; -1: no limit) |
-| `-v` | bool |  | print a line for every finished task, not only failures |
-| `-wn` | bool |  | scan only the addresses that are up (by -sn's test); the default scans every address |
+
+**Scope and safety**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
+| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
+| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
+
+**Pace and limits**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-rate` | float |  | port connection attempts per second (0: 1500, as naabu's connect scan, and 127.0.0.1 unpaced) |
+| `-min-rate` | float |  | connects per second at least: raises -rate to this when lower |
 | `-workers` | int |  | connects in flight at once, over all hosts (default: as many as the rate allows, up to 20000) |
+| `-connect-timeout` | string |  | wait this long for one port to accept or refuse a connect: 1500, 1500ms or 2s (default 1.5s; -timeout is the run's limit) |
+| `-dns-rate` | float |  | DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx) |
+| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
+| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
+
+**Network**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-proxy` | string |  | connect to TCP ports through this SOCKS5 proxy (host:port); a port is then asked its banner only, and UDP is not sent |
+| `-resolvers` | string |  | DNS resolvers: a list such as 1.1.1.1,8.8.8.8:53 or a file, one a line (default: public resolvers) |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
+| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
+| `-o` | string |  | also write results to this file |
+| `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
+| `-v` | bool |  | print a line for every finished task, not only failures |
+
+<details>
+<summary>Flags familiar from naabu, other names, flags accepted with no effect and rarely used flags (32)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-T` | int | `-1` | timing template, 0 (paranoid) to 5 (insane); sets -rate, -connect-timeout and -retries where they are not given; 3 is the default | naabu's name |
+| `-cp` | string |  | send this to each open TCP port before reading what it says (\r and \n are CR and LF) | naabu's name |
+| `-csv` | bool |  | CSV output, a header line first | naabu's name |
+| `-ef` | string |  | file of hosts, addresses and ranges not to scan | naabu's name |
+| `-eh` | string |  | hosts, addresses or ranges not to scan, comma-separated (same as -deny) | naabu's name |
+| `-eof` | string |  | leave these fields out of -json, -csv and -oA's JSON, comma-separated | naabu's name |
+| `-ep` | string |  | ports not to scan: a list or a file | naabu's name |
+| `-iv` | string |  | the address families of a name to scan: 4 or 6 (default both) | naabu's name |
+| `-lof` | bool |  | list the fields of -json and -csv, and stop | naabu's name |
+| `-no-stdin` | bool |  | do not read targets from stdin when none is given | naabu's name |
+| `-oA` | string |  | write JSON lines, XML and greppable output to BASE.json, BASE.xml and BASE.gnmap | naabu's name |
+| `-oG` | string |  | write nmap greppable output to this file (- for stdout) | naabu's name |
+| `-oX` | string |  | write nmap XML to this file (- for stdout) | naabu's name |
+| `-pf` | string |  | file of ports, one spec a line (added to -p) | naabu's name |
+| `-proxy-auth` | string |  | user:password for -proxy | naabu's name |
+| `-pts` | int |  | stop asking a host after this many open ports: it answers every port (default: no limit) | naabu's name |
+| `-pu` | string |  | UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp; without -p, -tp or -pf no TCP port is asked) | naabu's name |
+| `-retries` | int | `-1` | more passes over the ports that neither accepted nor refused: n passes over all of them, 0 none (default: one, when few did not answer) | naabu's name |
+| `-sa` | bool |  | scan every address of a name, not the first two of each family | naabu's name |
+| `-seed` | int |  | make the random port order repeat (default: a new one each run) | naabu's name |
+| `-sn` | bool |  | list the addresses that are up (a connect to 80 or 443 is accepted or refused) and scan nothing | naabu's name |
+| `-source-ip` | string |  | connect from this local address | naabu's name |
+| `-tp` | string |  | the most common TCP ports: 100, 1000 or full (added to -p) | naabu's name |
+| `-wn` | bool |  | scan only the addresses that are up (by -sn's test); the default scans every address | naabu's name |
+| `-c` | int |  | same as -workers | other name |
+| `-j` | bool |  | same as -json | other name |
+| `-max-retries` | int | `-1` | same as -retries | other name |
+| `-r` | string |  | same as -resolvers | other name |
+| `-Pn` | bool |  | accepted: addresses are scanned without asking whether they are up, which is the default | accepted, no effect |
+| `-cdn` | bool |  | accepted: a CDN address is marked in the output, always | accepted, no effect |
+| `-nc` | bool |  | accepted: no colours are printed | accepted, no effect |
+| `-cdn-full` | bool |  | scan CDN and WAF addresses in full, not only ports 80, 443, 8080 and 8443 | rarely needed |
+
+</details>
 <!-- flags:end -->

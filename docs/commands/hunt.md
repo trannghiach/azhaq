@@ -174,8 +174,8 @@ When none is found, the row's command is `azhaq show`.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-db` | string |  | workspace database (default: the last run's) |
-| `-json` | bool |  | one JSON object per row, and the summary as JSON on stderr |
-| `-limit` | int | `25` | rows at most, best first |
 | `-roles` | string, repeatable |  | the JSONL azhaq roles -json printed: rows where one role reached another's data rank first |
+| `-limit` | int | `25` | rows at most, best first |
 | `-since` | duration | `168h0m0s` | first seen within this long is new: a bonus, never the reason a row ranks |
+| `-json` | bool |  | one JSON object per row, and the summary as JSON on stderr |
 <!-- flags:end -->

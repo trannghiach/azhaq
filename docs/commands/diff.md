@@ -68,9 +68,9 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 <!-- flags:begin diff -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `-db` | string |  | workspace: compare the last two runs recorded in this database |
 | `-a` | string |  | old sqlite |
 | `-b` | string |  | new sqlite (default: last run) |
-| `-db` | string |  | workspace: compare the last two runs recorded in this database |
 | `-jsonl` | bool |  | emit JSONL instead of a text report |
 | `-quiet` | bool |  | entities and counts only (skip observation lines) |
 <!-- flags:end -->

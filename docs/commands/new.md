@@ -46,6 +46,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-db` | string |  | workspace database (required) |
-| `-json` | bool |  | JSONL |
 | `-since` | duration | `168h0m0s` | first seen within this long |
+| `-json` | bool |  | JSONL |
 <!-- flags:end -->

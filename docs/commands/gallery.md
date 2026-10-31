@@ -184,6 +184,6 @@ The query parameters:
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-db` | string, repeatable |  | a workspace to show (repeatable; default: the last run's) |
-| `-listen` | string | `127.0.0.1:7180` | address to serve on; a loopback address answers only this machine (127.0.0.1:0 takes any free port) |
 | `-workspace` | string |  | show every workspace (*.db) of this directory and of the directories directly in it, merged in one view |
+| `-listen` | string | `127.0.0.1:7180` | address to serve on; a loopback address answers only this machine (127.0.0.1:0 takes any free port) |
 <!-- flags:end -->

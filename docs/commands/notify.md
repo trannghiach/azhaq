@@ -163,31 +163,39 @@ custom failed: POST http://host/…: 500 … (after 3 tries) ×4 (id ops)
 <!-- flags:begin notify -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-bulk` | bool |  | pack lines into messages of up to -char-limit characters instead of one message per line |
-| `-char-limit` | int | `4000` | max character limit per message: a longer line goes out in pieces that end in ... |
-| `-cl` | int | `4000` | short for -char-limit |
-| `-config` | string |  | notify configuration file: YAML of these flags, by their long names ($HOME/.config/notify/config.yaml when it exists); a flag given here wins |
-| `-d` | float |  | short for -delay |
-| `-data` | string |  | input file to send for notify (default: standard input) |
-| `-delay` | float |  | delay in seconds before each message |
-| `-disable-update-check` | bool |  | accepted and ignored: azhaq never checks for updates |
-| `-duc` | bool |  | short for -disable-update-check |
-| `-i` | string |  | short for -data |
-| `-id` | string, repeatable |  | send only to the configured entries with this id (repeatable or comma-separated) |
-| `-json` | bool |  | one JSON object per message on standard output, the summary as JSON on standard error |
-| `-mf` | string |  | short for -msg-format |
-| `-msg-format` | string |  | format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}}; wins over the provider's *_format |
-| `-nc` | bool |  | short for -no-color |
-| `-no-color` | bool |  | accepted and ignored: azhaq prints no colour |
-| `-p` | string, repeatable |  | short for -provider |
-| `-pc` | string |  | short for -provider-config |
-| `-provider` | string, repeatable |  | provider to send the notification to: slack, discord, pushover, googlechat, smtp, teams, telegram, custom, gotify (repeatable or comma-separated) |
 | `-provider-config` | string |  | provider config path (default: $HOME/.config/azhaq/notify.yaml, else notify's $HOME/.config/notify/provider-config.yaml); notify's schema, words starting with $ replaced by that variable |
 | `-proxy` | string |  | HTTP or SOCKS5 proxy URL for the notification requests (default: the environment's); certificates are verified |
+| `-delay` | float |  | delay in seconds before each message |
 | `-rate-limit` | int | `1` | maximum number of requests to send per second (0: no limit) |
-| `-rl` | int | `1` | short for -rate-limit |
+| `-json` | bool |  | one JSON object per message on standard output, the summary as JSON on standard error |
 | `-silent` | bool |  | no summary unless something failed |
-| `-v` | bool |  | short for -verbose |
-| `-verbose` | bool |  | log each delivery and each retry |
-| `-version` | bool |  | print the version |
+
+<details>
+<summary>Flags familiar from notify, other names and flags accepted with no effect (21)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-bulk` | bool |  | pack lines into messages of up to -char-limit characters instead of one message per line | notify's name |
+| `-char-limit` | int | `4000` | max character limit per message: a longer line goes out in pieces that end in ... | notify's name |
+| `-config` | string |  | notify configuration file: YAML of these flags, by their long names ($HOME/.config/notify/config.yaml when it exists); a flag given here wins | notify's name |
+| `-data` | string |  | input file to send for notify (default: standard input) | notify's name |
+| `-id` | string, repeatable |  | send only to the configured entries with this id (repeatable or comma-separated) | notify's name |
+| `-msg-format` | string |  | format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}}; wins over the provider's *_format | notify's name |
+| `-provider` | string, repeatable |  | provider to send the notification to: slack, discord, pushover, googlechat, smtp, teams, telegram, custom, gotify (repeatable or comma-separated) | notify's name |
+| `-verbose` | bool |  | log each delivery and each retry | notify's name |
+| `-version` | bool |  | print the version | notify's name |
+| `-cl` | int | `4000` | short for -char-limit | other name |
+| `-d` | float |  | short for -delay | other name |
+| `-duc` | bool |  | short for -disable-update-check | other name |
+| `-i` | string |  | short for -data | other name |
+| `-mf` | string |  | short for -msg-format | other name |
+| `-nc` | bool |  | short for -no-color | other name |
+| `-p` | string, repeatable |  | short for -provider | other name |
+| `-pc` | string |  | short for -provider-config | other name |
+| `-rl` | int | `1` | short for -rate-limit | other name |
+| `-v` | bool |  | short for -verbose | other name |
+| `-disable-update-check` | bool |  | accepted and ignored: azhaq never checks for updates | accepted, no effect |
+| `-no-color` | bool |  | accepted and ignored: azhaq prints no colour | accepted, no effect |
+
+</details>
 <!-- flags:end -->

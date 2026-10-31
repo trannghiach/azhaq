@@ -25,7 +25,7 @@ This page lists, tool by tool:
 
 ## What is the same for every command
 
-- **Flags.** A flag may have one dash or two: `-silent` or `--silent`. A flag a command does not have stops it with exit 2 before anything is sent. `azhaq help COMMAND` lists the flags a command has, and `azhaq help -json` lists them for a program.
+- **Flags.** A flag may have one dash or two: `-silent` or `--silent`. A flag a command does not have stops it with exit 2 before anything is sent, and the error names the closest flags. `azhaq help COMMAND` lists azhaq's own flags by task; `azhaq help COMMAND all` (or `-h all`) adds the names kept for the other tools' command lines, the other names of a flag and the rarely needed ones, all of which work. `azhaq help -json` lists every flag for a program, marking those `-h` leaves out.
 - **Output.** Results go to stdout, one per line, as the tool prints them. A summary goes to stderr: what failed, what was not requested, and which limit stopped the run. With `-json` the results are JSON lines and the summary is one JSON object. See [OUTPUT.md](OUTPUT.md).
 - **Exit codes.** `0` complete, `1` error, `2` usage, `3` finished with failures, `4` stopped by a limit or the kill file. They are the same for every command. The tools above exit 0 after most of these, so a script that checks `$?` sees more than it did. See [OUTPUT.md](OUTPUT.md#exit-codes).
 - **Scope and limits.** Nothing is sent to a host outside the scope. See [Concepts](CONCEPTS.md). The flags differ by command:

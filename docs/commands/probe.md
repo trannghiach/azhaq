@@ -125,212 +125,247 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ## Flags
 
 <!-- flags:begin probe -->
+**Targets and input**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-u` | string, repeatable |  | target: URL, host, host:port, IP, address range or AS number (repeatable, or comma-separated) |
+| `-l` | string |  | file of targets (- for stdin; a glob such as 'hosts-*.txt') |
+| `-p` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
+| `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
+| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
+| `-max-ips` | int | `4096` | addresses expanded from -asn and -cidr prefixes, for the whole run |
+
+**What to ask**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-no-follow` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |
+| `-no-tech` | bool |  | skip technology fingerprints (saves about 30 MB of memory) |
+
+**Scope and safety**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
+| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
+| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
+| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
+
+**Pace and limits**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-rate` | float |  | requests per second to targets, over all hosts (0: no pace) |
+| `-rl` | float |  | services asked per second, as httpx -rl: each target's first request waits its turn, its favicon, redirects and second scheme do not (-rate paces every request) |
+| `-delay` | duration |  | time between requests to targets: a pace of one request per DELAY over all hosts (as -rate 1/DELAY) |
+| `-host-parallel` | int |  | requests in flight per host (default 10, as katana) |
+| `-parallel` | int |  | work items in flight (default 16) |
+| `-dns-rate` | float |  | DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx) |
+| `-req-timeout` | duration |  | time one request may take (default 10 s to the first byte, 30 s in all); -timeout bounds the whole run |
+| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
+| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
+
+**Session and network**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-H` | string, repeatable |  | extra request header K: V |
-| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
-| `-asn` | bool |  | print and report the autonomous system of the address (RIPEstat) |
-| `-auto-referer` | bool |  | send each request's URL as its Referer |
-| `-body` | string |  | body sent with the -x methods: it can change data on the target |
-| `-body-preview` | int |  | print the first N characters of the body |
-| `-bp` | int |  | print the first N characters of the body |
-| `-cdn` | bool |  | print the CDN, WAF or cloud in front |
-| `-cff` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones |
-| `-cl` | bool |  | print the content length |
-| `-cname` | bool |  | print the first CNAME |
-| `-content-length` | bool |  | print the content length |
-| `-content-type` | bool |  | print the content type |
 | `-cookie` | string, repeatable |  | Cookie name=value (repeatable; sent as one Cookie header) |
-| `-cpe` | bool |  | report products by title, body and favicon, as CPE (add -favicon for the hash) |
-| `-csp-probe` | bool |  | probe the names of each Content-Security-Policy too |
-| `-csv` | bool |  | print CSV, as httpx |
-| `-csv-output-encoding` | string |  | CSV encoding: utf-8 writes a byte order mark first (implies -csv) |
-| `-csvo` | string |  | CSV encoding: utf-8 writes a byte order mark first (implies -csv) |
-| `-ct` | bool |  | print the content type |
-| `-custom-fingerprint-file` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones |
-| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
-| `-debug` | bool |  | print each request and response to stderr |
-| `-debug-req` | bool |  | print each request to stderr |
-| `-debug-resp` | bool |  | print each response to stderr |
-| `-delay` | duration |  | time between requests to targets: a pace of one request per DELAY over all hosts (as -rate 1/DELAY) |
-| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
-| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
-| `-dns-rate` | float |  | DNS queries per second per resolver (0: no pace but the queries in flight, as dnsx) |
-| `-e` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex |
-| `-efqdn` | bool |  | report the names a page and its policy name: csp, body_fqdn, body_domains |
-| `-eof` | string |  | leave these fields out of -json rows, comma-separated |
-| `-ep` | string |  | print what a ready regex finds: url, ipv4, mail |
-| `-er` | string, repeatable |  | print what this regex finds in the response |
-| `-exclude` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex |
-| `-exclude-output-fields` | string |  | leave these fields out of -json rows, comma-separated |
-| `-extract-fqdn` | bool |  | report the names a page and its policy name: csp, body_fqdn, body_domains |
-| `-extract-preset` | string |  | print what a ready regex finds: url, ipv4, mail |
-| `-extract-regex` | string, repeatable |  | print what this regex finds in the response |
-| `-favicon` | bool |  | also hash each front page's favicon (one or two more requests per service) |
-| `-fc` | string |  | drop rows with these status codes |
-| `-fcdn` | string |  | drop rows behind these CDN providers |
-| `-fd` | bool |  | drop rows that answer almost as one already printed (same status and a body within 3 bits of its simhash) |
-| `-fdc` | string |  | drop rows for which this condition holds |
-| `-fe` | string, repeatable |  | drop rows whose response matches one of these regexes |
-| `-fep` | bool |  | drop error pages (as -fpt error) |
-| `-ffc` | string |  | drop rows with these favicon hashes (implies the favicon request) |
-| `-fhr` | bool |  | with -fr: follow redirects to the same host only |
-| `-filter-cdn` | string |  | drop rows behind these CDN providers |
-| `-filter-code` | string |  | drop rows with these status codes |
-| `-filter-condition` | string |  | drop rows for which this condition holds |
-| `-filter-duplicates` | bool |  | drop rows that answer almost as one already printed (same status and a body within 3 bits of its simhash) |
-| `-filter-error-page` | bool |  | drop error pages (as -fpt error) |
-| `-filter-favicon` | string |  | drop rows with these favicon hashes (implies the favicon request) |
-| `-filter-length` | string |  | drop rows with these content lengths |
-| `-filter-line-count` | string |  | drop rows with these line counts |
-| `-filter-page-type` | string |  | drop rows of these page types, comma-separated (login,captcha,parked,error…); implies -kb |
-| `-filter-regex` | string, repeatable |  | drop rows whose response matches one of these regexes |
-| `-filter-response-time` | string |  | drop rows by response time: '> 1' |
-| `-filter-string` | string |  | drop rows whose response holds one of these strings |
-| `-filter-word-count` | string |  | drop rows with these word counts |
-| `-fl` | string |  | drop rows with these content lengths |
-| `-flc` | string |  | drop rows with these line counts |
-| `-follow-host-redirects` | bool |  | with -fr: follow redirects to the same host only |
-| `-follow-redirects` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) |
-| `-fpt` | string |  | drop rows of these page types, comma-separated (login,captcha,parked,error…); implies -kb |
-| `-fr` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) |
-| `-frt` | string |  | drop rows by response time: '> 1' |
-| `-fs` | string |  | drop rows whose response holds one of these strings |
-| `-fwc` | string |  | drop rows with these word counts |
-| `-hash` | string |  | report these body and header digests: md5,mmh3,simhash,sha1,sha256,sha512 |
-| `-host-parallel` | int |  | requests in flight per host (default 10, as katana) |
-| `-http-proxy` | string |  | send every request through this proxy (http://, https:// or socks5://) |
-| `-http2` | bool |  | report whether the server speaks HTTP/2 (one more request each) |
-| `-im` | string |  | input mode: burp reads the URLs of a Burp XML export given with -l |
-| `-include-chain` | bool |  | add each hop of a followed redirect to -json rows (chain) |
-| `-include-response` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) |
-| `-include-response-base64` | bool |  | like -irr, base64-encoded |
-| `-include-response-header` | bool |  | add the response headers to -json rows (header, raw_header) |
-| `-input-mode` | string |  | input mode: burp reads the URLs of a Burp XML export given with -l |
-| `-ip` | bool |  | print the address connected to |
-| `-irh` | bool |  | add the response headers to -json rows (header, raw_header) |
-| `-irr` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) |
-| `-irrb` | bool |  | like -irr, base64-encoded |
-| `-j` | bool |  | JSONL output (as -json) |
-| `-jarm` | bool |  | report the JARM fingerprint of TLS servers (ten handshakes a server) |
-| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
-| `-kb` | bool |  | report the kind of page (login, captcha, …) in knowledgebase; needs the dit model (see TROUBLESHOOTING) |
-| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
-| `-knowledge-base` | bool |  | report the kind of page (login, captcha, …) in knowledgebase; needs the dit model (see TROUBLESHOOTING) |
-| `-l` | string |  | file of targets (- for stdin; a glob such as 'hosts-*.txt') |
-| `-lc` | bool |  | print the line count |
-| `-ldp` | bool |  | print URLs with their default port (:80, :443) |
-| `-ldv` | bool |  | list the fields -json rows hold, and stop |
-| `-leave-default-ports` | bool |  | print URLs with their default port (:80, :443) |
-| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
-| `-line-count` | bool |  | print the line count |
-| `-list-dsl-variables` | bool |  | list the fields -json rows hold, and stop |
-| `-list-output-fields` | bool |  | list the fields -json rows hold, and stop |
-| `-location` | bool |  | print the redirect location (and where a followed chain ended) |
-| `-lof` | bool |  | list the fields -json rows hold, and stop |
-| `-markdown` | bool |  | print a Markdown table |
-| `-match-cdn` | string |  | keep rows behind these CDN providers |
-| `-match-code` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) |
-| `-match-condition` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' |
-| `-match-favicon` | string |  | keep rows with these favicon hashes (implies the favicon request) |
-| `-match-length` | string |  | keep rows with these content lengths |
-| `-match-line-count` | string |  | keep rows with these line counts |
-| `-match-regex` | string, repeatable |  | keep rows whose response matches every one of these regexes |
-| `-match-response-time` | string |  | keep rows by response time: '< 1', '>= 500ms' |
-| `-match-string` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case |
-| `-match-word-count` | string |  | keep rows with these word counts |
-| `-max-host-error` | int |  | as -maxhr |
-| `-max-ips` | int | `4096` | addresses expanded from -asn and -cidr prefixes, for the whole run |
-| `-max-redirects` | int | `10` | with -fr: redirects to follow |
-| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
-| `-maxhr` | int |  | connects or timeouts in a row after which a host is not asked again (default 5) |
-| `-maxr` | int | `10` | with -fr: redirects to follow |
-| `-mc` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) |
-| `-mcdn` | string |  | keep rows behind these CDN providers |
-| `-md` | bool |  | print a Markdown table |
-| `-mdc` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' |
-| `-method` | bool |  | print the request method |
-| `-mfc` | string |  | keep rows with these favicon hashes (implies the favicon request) |
-| `-ml` | string |  | keep rows with these content lengths |
-| `-mlc` | string |  | keep rows with these line counts |
-| `-mr` | string, repeatable |  | keep rows whose response matches every one of these regexes |
-| `-mrt` | string |  | keep rows by response time: '< 1', '>= 500ms' |
-| `-ms` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case |
-| `-mwc` | string |  | keep rows with these word counts |
-| `-nc` | bool |  | accepted, as httpx has it: azhaq prints no color |
-| `-nf` | bool |  | ask an input without a scheme over both http and https and report each that answers |
-| `-no-decode` | bool |  | hash and match the body as sent, not converted to UTF-8 |
-| `-no-fallback` | bool |  | ask an input without a scheme over both http and https and report each that answers |
-| `-no-follow` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |
-| `-no-stdin` | bool |  | do not read targets from stdin |
-| `-no-tech` | bool |  | skip technology fingerprints (saves about 30 MB of memory) |
-| `-o` | string |  | also write results to this file |
-| `-oa` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md |
-| `-ob` | bool |  | with -sr: leave the body out of the stored file |
-| `-omit-body` | bool |  | with -sr: leave the body out of the stored file |
-| `-output-all` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md |
-| `-p` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
-| `-pa` | bool |  | send the request to every address of a name, one row each |
-| `-parallel` | int |  | work items in flight (default 16) |
-| `-path` | string |  | path or paths to ask of every target, a list (comma-separated) or a file: joined onto the path of a URL input, as httpx does, with the URL's query kept and the path's added; a host has no path, so the path is the whole of it |
-| `-pipeline` | bool |  | report whether the server answers pipelined requests (ten requests each) |
-| `-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
-| `-probe` | bool |  | print a row for every target: [SUCCESS], or [FAILED] when nothing answered |
-| `-probe-all-ips` | bool |  | send the request to every address of a name, one row each |
-| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
 | `-proxy` | string |  | send every request through this proxy (http://, https:// or socks5://) |
-| `-random-agent` | bool |  | send a browser's User-Agent picked at random for each request |
-| `-rate` | float |  | requests per second to targets, over all hosts (0: no pace) |
-| `-rate-limit` | float |  | same as -rl |
-| `-req-timeout` | duration |  | time one request may take (default 10 s to the first byte, 30 s in all); -timeout bounds the whole run |
-| `-request` | string |  | send the request in this file (request line, headers, blank line, body) to every target: it can change data on the target |
 | `-resolvers` | string |  | DNS resolvers: a file with one per line, or a comma list; each is ADDR, ADDR:PORT or udp:, tcp:, dot:, doh:URL[:get] and then the address (default: public resolvers) |
-| `-respect-hsts` | bool |  | with -fr: go to https when a redirect's answer sent Strict-Transport-Security |
-| `-response-size-to-read` | int |  | most bytes read of a response (default 2 MiB of a page, 16 MiB of a script) |
-| `-response-size-to-save` | int |  | with -sr: most bytes of a response stored (0: all that was read) |
-| `-response-time` | bool |  | print the response time |
-| `-retries` | int |  | times to send a request again when nothing answered (each counts as a request) |
-| `-rhsts` | bool |  | with -fr: go to https when a redirect's answer sent Strict-Transport-Security |
-| `-rl` | float |  | services asked per second, as httpx -rl: each target's first request waits its turn, its favicon, redirects and second scheme do not (-rate paces every request) |
-| `-rlm` | float |  | services asked per minute (as -rl, per minute) |
-| `-rr` | string |  | send the request in this file (request line, headers, blank line, body) to every target: it can change data on the target |
-| `-rstr` | int |  | most bytes read of a response (default 2 MiB of a page, 16 MiB of a script) |
-| `-rsts` | int |  | with -sr: most bytes of a response stored (0: all that was read) |
-| `-rt` | bool |  | print the response time |
-| `-sc` | bool |  | print the status code |
-| `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
-| `-screenshot` | bool |  | save a screenshot of each web service's front page under -srd/screenshot (Chrome on the machine); rows are printed when the run ends, with screenshot_path; implies -sr |
-| `-server` | bool |  | print the Server header |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
+| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
+| `-o` | string |  | also write results to this file |
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
-| `-sni` | string |  | TLS server name to ask for, whatever the host |
-| `-sni-name` | string |  | TLS server name to ask for, whatever the host |
-| `-sr` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt |
-| `-srd` | string |  | directory of -sr (default output) |
-| `-ss` | bool |  | save a screenshot of each web service's front page under -srd/screenshot (Chrome on the machine); rows are printed when the run ends, with screenshot_path; implies -sr |
-| `-status-code` | bool |  | print the status code |
-| `-store-chain` | bool |  | like -sr, with the redirect chain in the file |
-| `-store-response` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt |
-| `-store-response-dir` | string |  | directory of -sr (default output) |
-| `-strip` | string |  | strip tags from the body preview: html or xml (the preview always has its tags stripped, as httpx) |
-| `-t` | int |  | work items in flight (default 16) |
-| `-target` | string, repeatable |  | target (as -u) |
-| `-td` | bool |  | print the technologies |
-| `-tech-detect` | bool |  | print the technologies |
-| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
-| `-title` | bool |  | print the page title |
-| `-tls-grab` | bool |  | report the certificate and the TLS version of each answer |
-| `-tls-probe` | bool |  | probe the names of each certificate too (implies -tls-grab) |
-| `-u` | string, repeatable |  | target: URL, host, host:port, IP, address range or AS number (repeatable, or comma-separated) |
 | `-v` | bool |  | print a line for every finished task, not only failures |
-| `-vhost` | bool |  | report a virtual host (one more request each) |
-| `-vhost-input` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host |
-| `-vi` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host |
-| `-wc` | bool |  | print the word count |
-| `-web-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
-| `-web-server` | bool |  | print the Server header |
-| `-websocket` | bool |  | print websocket for a server that speaks it |
-| `-word-count` | bool |  | print the word count |
-| `-wordpress` | bool |  | report WordPress plugins and themes |
-| `-wp` | bool |  | report WordPress plugins and themes |
-| `-x` | string |  | also send these methods to every target (GET, POST, HEAD, …; all for the common ones): requests that can change data on the target |
+
+<details>
+<summary>Flags familiar from httpx, other names and flags accepted with no effect (175)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-asn` | bool |  | print and report the autonomous system of the address (RIPEstat) | httpx's name |
+| `-auto-referer` | bool |  | send each request's URL as its Referer | httpx's name |
+| `-body` | string |  | body sent with the -x methods: it can change data on the target | httpx's name |
+| `-body-preview` | int |  | print the first N characters of the body | httpx's name |
+| `-cdn` | bool |  | print the CDN, WAF or cloud in front | httpx's name |
+| `-cname` | bool |  | print the first CNAME | httpx's name |
+| `-content-length` | bool |  | print the content length | httpx's name |
+| `-content-type` | bool |  | print the content type | httpx's name |
+| `-cpe` | bool |  | report products by title, body and favicon, as CPE (add -favicon for the hash) | httpx's name |
+| `-csp-probe` | bool |  | probe the names of each Content-Security-Policy too | httpx's name |
+| `-csv` | bool |  | print CSV, as httpx | httpx's name |
+| `-csv-output-encoding` | string |  | CSV encoding: utf-8 writes a byte order mark first (implies -csv) | httpx's name |
+| `-custom-fingerprint-file` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones | httpx's name |
+| `-debug` | bool |  | print each request and response to stderr | httpx's name |
+| `-debug-req` | bool |  | print each request to stderr | httpx's name |
+| `-debug-resp` | bool |  | print each response to stderr | httpx's name |
+| `-exclude` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex | httpx's name |
+| `-exclude-output-fields` | string |  | leave these fields out of -json rows, comma-separated | httpx's name |
+| `-extract-fqdn` | bool |  | report the names a page and its policy name: csp, body_fqdn, body_domains | httpx's name |
+| `-extract-preset` | string |  | print what a ready regex finds: url, ipv4, mail | httpx's name |
+| `-extract-regex` | string, repeatable |  | print what this regex finds in the response | httpx's name |
+| `-favicon` | bool |  | also hash each front page's favicon (one or two more requests per service) | httpx's name |
+| `-fc` | string |  | drop rows with these status codes | httpx's name |
+| `-filter-cdn` | string |  | drop rows behind these CDN providers | httpx's name |
+| `-filter-condition` | string |  | drop rows for which this condition holds | httpx's name |
+| `-filter-duplicates` | bool |  | drop rows that answer almost as one already printed (same status and a body within 3 bits of its simhash) | httpx's name |
+| `-filter-error-page` | bool |  | drop error pages (as -fpt error) | httpx's name |
+| `-filter-favicon` | string |  | drop rows with these favicon hashes (implies the favicon request) | httpx's name |
+| `-filter-length` | string |  | drop rows with these content lengths | httpx's name |
+| `-filter-line-count` | string |  | drop rows with these line counts | httpx's name |
+| `-filter-page-type` | string |  | drop rows of these page types, comma-separated (login,captcha,parked,error…); implies -kb | httpx's name |
+| `-filter-regex` | string, repeatable |  | drop rows whose response matches one of these regexes | httpx's name |
+| `-filter-response-time` | string |  | drop rows by response time: '> 1' | httpx's name |
+| `-filter-string` | string |  | drop rows whose response holds one of these strings | httpx's name |
+| `-filter-word-count` | string |  | drop rows with these word counts | httpx's name |
+| `-follow-host-redirects` | bool |  | with -fr: follow redirects to the same host only | httpx's name |
+| `-fr` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) | httpx's name |
+| `-hash` | string |  | report these body and header digests: md5,mmh3,simhash,sha1,sha256,sha512 | httpx's name |
+| `-http2` | bool |  | report whether the server speaks HTTP/2 (one more request each) | httpx's name |
+| `-include-chain` | bool |  | add each hop of a followed redirect to -json rows (chain) | httpx's name |
+| `-include-response-base64` | bool |  | like -irr, base64-encoded | httpx's name |
+| `-input-mode` | string |  | input mode: burp reads the URLs of a Burp XML export given with -l | httpx's name |
+| `-ip` | bool |  | print the address connected to | httpx's name |
+| `-irh` | bool |  | add the response headers to -json rows (header, raw_header) | httpx's name |
+| `-irr` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) | httpx's name |
+| `-j` | bool |  | JSONL output (as -json) | httpx's name |
+| `-jarm` | bool |  | report the JARM fingerprint of TLS servers (ten handshakes a server) | httpx's name |
+| `-knowledge-base` | bool |  | report the kind of page (login, captcha, …) in knowledgebase; needs the dit model (see TROUBLESHOOTING) | httpx's name |
+| `-leave-default-ports` | bool |  | print URLs with their default port (:80, :443) | httpx's name |
+| `-line-count` | bool |  | print the line count | httpx's name |
+| `-list-dsl-variables` | bool |  | list the fields -json rows hold, and stop | httpx's name |
+| `-location` | bool |  | print the redirect location (and where a followed chain ended) | httpx's name |
+| `-markdown` | bool |  | print a Markdown table | httpx's name |
+| `-match-cdn` | string |  | keep rows behind these CDN providers | httpx's name |
+| `-match-favicon` | string |  | keep rows with these favicon hashes (implies the favicon request) | httpx's name |
+| `-match-length` | string |  | keep rows with these content lengths | httpx's name |
+| `-match-line-count` | string |  | keep rows with these line counts | httpx's name |
+| `-match-regex` | string, repeatable |  | keep rows whose response matches every one of these regexes | httpx's name |
+| `-match-response-time` | string |  | keep rows by response time: '< 1', '>= 500ms' | httpx's name |
+| `-match-word-count` | string |  | keep rows with these word counts | httpx's name |
+| `-max-host-error` | int |  | as -maxhr | httpx's name |
+| `-max-redirects` | int | `10` | with -fr: redirects to follow | httpx's name |
+| `-maxhr` | int |  | connects or timeouts in a row after which a host is not asked again (default 5) | httpx's name |
+| `-mc` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) | httpx's name |
+| `-mdc` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' | httpx's name |
+| `-method` | bool |  | print the request method | httpx's name |
+| `-ms` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case | httpx's name |
+| `-no-decode` | bool |  | hash and match the body as sent, not converted to UTF-8 | httpx's name |
+| `-no-fallback` | bool |  | ask an input without a scheme over both http and https and report each that answers | httpx's name |
+| `-no-stdin` | bool |  | do not read targets from stdin | httpx's name |
+| `-omit-body` | bool |  | with -sr: leave the body out of the stored file | httpx's name |
+| `-output-all` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md | httpx's name |
+| `-path` | string |  | path or paths to ask of every target, a list (comma-separated) or a file: joined onto the path of a URL input, as httpx does, with the URL's query kept and the path's added; a host has no path, so the path is the whole of it | httpx's name |
+| `-pipeline` | bool |  | report whether the server answers pipelined requests (ten requests each) | httpx's name |
+| `-probe` | bool |  | print a row for every target: [SUCCESS], or [FAILED] when nothing answered | httpx's name |
+| `-probe-all-ips` | bool |  | send the request to every address of a name, one row each | httpx's name |
+| `-random-agent` | bool |  | send a browser's User-Agent picked at random for each request | httpx's name |
+| `-request` | string |  | send the request in this file (request line, headers, blank line, body) to every target: it can change data on the target | httpx's name |
+| `-respect-hsts` | bool |  | with -fr: go to https when a redirect's answer sent Strict-Transport-Security | httpx's name |
+| `-response-size-to-read` | int |  | most bytes read of a response (default 2 MiB of a page, 16 MiB of a script) | httpx's name |
+| `-response-size-to-save` | int |  | with -sr: most bytes of a response stored (0: all that was read) | httpx's name |
+| `-response-time` | bool |  | print the response time | httpx's name |
+| `-retries` | int |  | times to send a request again when nothing answered (each counts as a request) | httpx's name |
+| `-rlm` | float |  | services asked per minute (as -rl, per minute) | httpx's name |
+| `-sc` | bool |  | print the status code | httpx's name |
+| `-screenshot` | bool |  | save a screenshot of each web service's front page under -srd/screenshot (Chrome on the machine); rows are printed when the run ends, with screenshot_path; implies -sr | httpx's name |
+| `-sni-name` | string |  | TLS server name to ask for, whatever the host | httpx's name |
+| `-sr` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt | httpx's name |
+| `-srd` | string |  | directory of -sr (default output) | httpx's name |
+| `-store-chain` | bool |  | like -sr, with the redirect chain in the file | httpx's name |
+| `-strip` | string |  | strip tags from the body preview: html or xml (the preview always has its tags stripped, as httpx) | httpx's name |
+| `-target` | string, repeatable |  | target (as -u) | httpx's name |
+| `-td` | bool |  | print the technologies | httpx's name |
+| `-title` | bool |  | print the page title | httpx's name |
+| `-tls-grab` | bool |  | report the certificate and the TLS version of each answer | httpx's name |
+| `-tls-probe` | bool |  | probe the names of each certificate too (implies -tls-grab) | httpx's name |
+| `-vhost` | bool |  | report a virtual host (one more request each) | httpx's name |
+| `-vhost-input` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host | httpx's name |
+| `-web-server` | bool |  | print the Server header | httpx's name |
+| `-websocket` | bool |  | print websocket for a server that speaks it | httpx's name |
+| `-word-count` | bool |  | print the word count | httpx's name |
+| `-wordpress` | bool |  | report WordPress plugins and themes | httpx's name |
+| `-x` | string |  | also send these methods to every target (GET, POST, HEAD, …; all for the common ones): requests that can change data on the target | httpx's name |
+| `-bp` | int |  | print the first N characters of the body | other name |
+| `-cff` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones | other name |
+| `-cl` | bool |  | print the content length | other name |
+| `-csvo` | string |  | CSV encoding: utf-8 writes a byte order mark first (implies -csv) | other name |
+| `-ct` | bool |  | print the content type | other name |
+| `-e` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex | other name |
+| `-efqdn` | bool |  | report the names a page and its policy name: csp, body_fqdn, body_domains | other name |
+| `-eof` | string |  | leave these fields out of -json rows, comma-separated | other name |
+| `-ep` | string |  | print what a ready regex finds: url, ipv4, mail | other name |
+| `-er` | string, repeatable |  | print what this regex finds in the response | other name |
+| `-fcdn` | string |  | drop rows behind these CDN providers | other name |
+| `-fd` | bool |  | drop rows that answer almost as one already printed (same status and a body within 3 bits of its simhash) | other name |
+| `-fdc` | string |  | drop rows for which this condition holds | other name |
+| `-fe` | string, repeatable |  | drop rows whose response matches one of these regexes | other name |
+| `-fep` | bool |  | drop error pages (as -fpt error) | other name |
+| `-ffc` | string |  | drop rows with these favicon hashes (implies the favicon request) | other name |
+| `-fhr` | bool |  | with -fr: follow redirects to the same host only | other name |
+| `-filter-code` | string |  | drop rows with these status codes | other name |
+| `-fl` | string |  | drop rows with these content lengths | other name |
+| `-flc` | string |  | drop rows with these line counts | other name |
+| `-follow-redirects` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) | other name |
+| `-fpt` | string |  | drop rows of these page types, comma-separated (login,captcha,parked,error…); implies -kb | other name |
+| `-frt` | string |  | drop rows by response time: '> 1' | other name |
+| `-fs` | string |  | drop rows whose response holds one of these strings | other name |
+| `-fwc` | string |  | drop rows with these word counts | other name |
+| `-http-proxy` | string |  | send every request through this proxy (http://, https:// or socks5://) | other name |
+| `-im` | string |  | input mode: burp reads the URLs of a Burp XML export given with -l | other name |
+| `-include-response` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) | other name |
+| `-include-response-header` | bool |  | add the response headers to -json rows (header, raw_header) | other name |
+| `-irrb` | bool |  | like -irr, base64-encoded | other name |
+| `-kb` | bool |  | report the kind of page (login, captcha, …) in knowledgebase; needs the dit model (see TROUBLESHOOTING) | other name |
+| `-lc` | bool |  | print the line count | other name |
+| `-ldp` | bool |  | print URLs with their default port (:80, :443) | other name |
+| `-ldv` | bool |  | list the fields -json rows hold, and stop | other name |
+| `-list-output-fields` | bool |  | list the fields -json rows hold, and stop | other name |
+| `-lof` | bool |  | list the fields -json rows hold, and stop | other name |
+| `-match-code` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) | other name |
+| `-match-condition` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' | other name |
+| `-match-string` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case | other name |
+| `-maxr` | int | `10` | with -fr: redirects to follow | other name |
+| `-mcdn` | string |  | keep rows behind these CDN providers | other name |
+| `-md` | bool |  | print a Markdown table | other name |
+| `-mfc` | string |  | keep rows with these favicon hashes (implies the favicon request) | other name |
+| `-ml` | string |  | keep rows with these content lengths | other name |
+| `-mlc` | string |  | keep rows with these line counts | other name |
+| `-mr` | string, repeatable |  | keep rows whose response matches every one of these regexes | other name |
+| `-mrt` | string |  | keep rows by response time: '< 1', '>= 500ms' | other name |
+| `-mwc` | string |  | keep rows with these word counts | other name |
+| `-nf` | bool |  | ask an input without a scheme over both http and https and report each that answers | other name |
+| `-oa` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md | other name |
+| `-ob` | bool |  | with -sr: leave the body out of the stored file | other name |
+| `-pa` | bool |  | send the request to every address of a name, one row each | other name |
+| `-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own | other name |
+| `-rate-limit` | float |  | same as -rl | other name |
+| `-rhsts` | bool |  | with -fr: go to https when a redirect's answer sent Strict-Transport-Security | other name |
+| `-rr` | string |  | send the request in this file (request line, headers, blank line, body) to every target: it can change data on the target | other name |
+| `-rstr` | int |  | most bytes read of a response (default 2 MiB of a page, 16 MiB of a script) | other name |
+| `-rsts` | int |  | with -sr: most bytes of a response stored (0: all that was read) | other name |
+| `-rt` | bool |  | print the response time | other name |
+| `-server` | bool |  | print the Server header | other name |
+| `-sni` | string |  | TLS server name to ask for, whatever the host | other name |
+| `-ss` | bool |  | save a screenshot of each web service's front page under -srd/screenshot (Chrome on the machine); rows are printed when the run ends, with screenshot_path; implies -sr | other name |
+| `-status-code` | bool |  | print the status code | other name |
+| `-store-response` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt | other name |
+| `-store-response-dir` | string |  | directory of -sr (default output) | other name |
+| `-t` | int |  | work items in flight (default 16) | other name |
+| `-tech-detect` | bool |  | print the technologies | other name |
+| `-vi` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host | other name |
+| `-wc` | bool |  | print the word count | other name |
+| `-web-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own | other name |
+| `-wp` | bool |  | report WordPress plugins and themes | other name |
+| `-nc` | bool |  | accepted, as httpx has it: azhaq prints no color | accepted, no effect |
+
+</details>
 <!-- flags:end -->

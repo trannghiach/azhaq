@@ -7,8 +7,9 @@ import (
 	"testing"
 )
 
-// The table of a command has one row for each flag help -json lists, a
-// repeatable flag marked in its type, and a | in a usage text escaped.
+// The tables of a command have one row for each flag help -json lists, in
+// the shown tables or the folded one of the hidden flags, a repeatable flag
+// marked in its type, and a | in a usage text escaped.
 func TestFlagTableHasOneRowPerFlag(t *testing.T) {
 	for _, c := range buildManifest().Commands {
 		if len(c.Flags) == 0 {
@@ -18,17 +19,22 @@ func TestFlagTableHasOneRowPerFlag(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", c.Name, err)
 		}
-		lines := strings.Split(strings.TrimSuffix(table, "\n"), "\n")
-		if want := len(c.Flags) + 2; len(lines) != want {
-			t.Errorf("%s: %d lines, want %d (a header and a row for each flag)", c.Name, len(lines), want)
+		rows := map[string]string{}
+		for _, l := range strings.Split(table, "\n") {
+			if strings.HasPrefix(l, "| `-") {
+				rest := strings.TrimPrefix(l, "| `-")
+				name := rest[:strings.Index(rest, "`")]
+				if _, dup := rows[name]; dup {
+					t.Errorf("%s: two rows for -%s", c.Name, name)
+				}
+				rows[name] = l
+			}
+		}
+		if len(rows) != len(c.Flags) {
+			t.Errorf("%s: %d rows, want %d (one for each flag)", c.Name, len(rows), len(c.Flags))
 		}
 		for _, f := range c.Flags {
-			var row string
-			for _, l := range lines {
-				if strings.HasPrefix(l, "| `-"+f.Name+"` |") {
-					row = l
-				}
-			}
+			row := rows[f.Name]
 			switch {
 			case row == "":
 				t.Errorf("%s: no row for -%s", c.Name, f.Name)
@@ -38,16 +44,40 @@ func TestFlagTableHasOneRowPerFlag(t *testing.T) {
 				t.Errorf("%s: the row of -%s leaves out its default %q: %s", c.Name, f.Name, f.Default, row)
 			}
 		}
+		// Hidden flags are in the folded table, shown ones above it.
+		folded := table[max(strings.Index(table, "<details>"), 0):]
+		if strings.Contains(table, "<details>") != (hiddenCountOf(c.Flags) > 0) {
+			t.Errorf("%s: a folded table of hidden flags where none are hidden, or none where some are", c.Name)
+		}
+		for _, f := range c.Flags {
+			inFolded := strings.Contains(folded, "| `-"+f.Name+"` |") && strings.Contains(table, "<details>")
+			if inFolded != f.Hidden {
+				t.Errorf("%s: -%s hidden=%v but its row is in the folded table: %v", c.Name, f.Name, f.Hidden, inFolded)
+			}
+		}
 	}
 	table, err := flagTableMarkdown("probe")
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, l := range strings.Split(table, "\n")[2:] {
-		if l != "" && strings.Count(strings.ReplaceAll(l, `\|`, ""), "|") != 5 {
-			t.Errorf("a row with a cell split by a pipe: %s", l)
+	shown, folded, _ := strings.Cut(table, "<details>")
+	for part, pipes := range map[string]int{shown: 5, folded: 6} {
+		for _, l := range strings.Split(part, "\n") {
+			if strings.HasPrefix(l, "| `-") && strings.Count(strings.ReplaceAll(l, `\|`, ""), "|") != pipes {
+				t.Errorf("a row with a cell split by a pipe (want %d pipes): %s", pipes, l)
+			}
 		}
 	}
+}
+
+func hiddenCountOf(flags []flagInfo) int {
+	n := 0
+	for _, f := range flags {
+		if f.Hidden {
+			n++
+		}
+	}
+	return n
 }
 
 // roles show takes flags of its own that help -json lists under no

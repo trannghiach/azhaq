@@ -1,6 +1,6 @@
 # What azhaq prints
 
-Every command follows the same contract, so a script or an assistant can read any of them the same way. `azhaq help -json` lists every command and flag with its type and default. Each command's own fields are on its page: the command table in the [README](../README.md) links them, and `azhaq docs COMMAND` prints one.
+Every command follows the same contract, so a script or an assistant can read any of them the same way. `azhaq help -json` lists every command and flag with its type and default; what `azhaq help` and `-h` leave out carries `"hidden": true` and a `"why"` (`compat:TOOL`, `alias`, `accepted`, `rare`, or the reason a command is left out of the list). Each command's own fields are on its page: the command table in the [README](../README.md) links them, and `azhaq docs COMMAND` prints one.
 
 ## stdout and stderr
 

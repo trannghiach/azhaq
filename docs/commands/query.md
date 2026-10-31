@@ -64,16 +64,14 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ## Flags
 
 <!-- flags:begin query -->
+**Which rows**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-coverage` | string |  | coverage, comma-separated: visited, catchall, error, gone, hint, skipped, capped |
-| `-db` | string |  | the database (default: the last run's) |
 | `-evidence` | string |  | how the route is known, comma-separated: answered, browser, described, called, linked, archived, guessed, given |
 | `-failed` | bool |  | list every target whose work failed (timeouts, refusals, a source's errors): the list to retry |
-| `-fields` | string |  | print only these fields, comma-separated: key, type, role, coverage, status, answer, evidence, evidence_from, title, methods, params, body, scope, first_seen, found_in, watch, guard, protocol, namespace |
 | `-host` | string |  | entities on this host or under this domain |
-| `-json` | bool |  | one JSON object per row, and the summary as JSON on stderr |
-| `-limit` | int |  | rows at most, best first (default 0: all) |
 | `-match` | string |  | keys that contain this text (case-insensitive), or match it as a regular expression with -re |
 | `-method` | string |  | routes with this method: GET, POST, … |
 | `-new` | bool |  | only what the last run saw that the run before it did not (a workspace) |
@@ -83,4 +81,13 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-since` | duration |  | only what was first seen within this long |
 | `-status` | string |  | statuses, comma-separated: 200, 401, 4xx, 5xx |
 | `-type` | string |  | entity types, comma-separated: URL, Hostname, Domain, IPAddress, … |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-db` | string |  | the database (default: the last run's) |
+| `-fields` | string |  | print only these fields, comma-separated: key, type, role, coverage, status, answer, evidence, evidence_from, title, methods, params, body, scope, first_seen, found_in, watch, guard, protocol, namespace |
+| `-json` | bool |  | one JSON object per row, and the summary as JSON on stderr |
+| `-limit` | int |  | rows at most, best first (default 0: all) |
 <!-- flags:end -->

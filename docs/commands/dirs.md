@@ -80,39 +80,74 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ## Flags
 
 <!-- flags:begin dirs -->
+**Targets and input**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-u` | string, repeatable |  | web service, such as https://app.example.com/ |
+| `-l` | string |  | file of services (- for stdin) |
+| `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
+| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
+
+**What to ask**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-w` | string |  | wordlist (default: SecLists' common.txt, built in: 4750 words) |
+| `-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
+
+**Scope and safety**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
+| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
+| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
+| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
+| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
+
+**Pace and limits**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-rate` | float |  | path guesses per second per host (0: no limit but -t, as ffuf) |
+| `-t` | int | `40` | path guesses in flight per service (as ffuf) |
+| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
+| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
+
+**Session and network**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-H` | string, repeatable |  | extra request header K: V |
-| `-allow` | string, repeatable |  | a domain, host or address range the run may touch; with any -allow, nothing else is requested |
 | `-cookie` | string, repeatable |  | Cookie name=value (repeatable; sent as one Cookie header) |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
-| `-deny` | string, repeatable |  | a domain, host or address range the run must not touch, even when given as a target |
-| `-deny-path` | string, repeatable |  | a regular expression on a URL's path and query: a URL it matches is never requested, by any collector or Chrome, and is listed as not requested (repeatable; azhaq decides nothing by itself) |
-| `-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
-| `-e` | string |  | also try each word with these extensions, comma-separated (php,bak) |
-| `-fc` | string |  | hide these statuses |
-| `-fl` | string |  | hide these line counts |
-| `-fr` | string |  | hide answers whose headers or body match this regular expression |
-| `-fs` | string |  | hide these response sizes |
-| `-fw` | string |  | hide these word counts |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
-| `-kill-file` | string |  | stop all sending, at once, when this file exists, and exit 4; azhaq resume works once it is removed (default DB.stop) |
-| `-l` | string |  | file of services (- for stdin) |
-| `-ledger` | string |  | write every request and connection to a target to this file, a chain of hashes that azhaq ledger -verify checks (default DB.ledger.jsonl next to the workspace; off: none; with a temporary database, only when given) |
-| `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
-| `-mc` | string |  | report only these statuses (comma-separated, ranges, or all; default ffuf's: 200-299,301,302,307,401,403,405,500) |
-| `-ml` | string |  | report only these line counts |
-| `-mr` | string |  | report only answers whose headers or body match this regular expression |
-| `-ms` | string |  | report only these response sizes (values and ranges, 100-200) |
-| `-mw` | string |  | report only these word counts |
 | `-o` | string |  | also write results to this file |
-| `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
-| `-rate` | float |  | path guesses per second per host (0: no limit but -t, as ffuf) |
-| `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
-| `-t` | int | `40` | path guesses in flight per service (as ffuf) |
-| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
-| `-u` | string, repeatable |  | web service, such as https://app.example.com/ |
 | `-v` | bool |  | print a line for every finished task, not only failures |
-| `-w` | string |  | wordlist (default: SecLists' common.txt, built in: 4750 words) |
+
+<details>
+<summary>Flags familiar from ffuf (11)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-e` | string |  | also try each word with these extensions, comma-separated (php,bak) | ffuf's name |
+| `-fc` | string |  | hide these statuses | ffuf's name |
+| `-fl` | string |  | hide these line counts | ffuf's name |
+| `-fr` | string |  | hide answers whose headers or body match this regular expression | ffuf's name |
+| `-fs` | string |  | hide these response sizes | ffuf's name |
+| `-fw` | string |  | hide these word counts | ffuf's name |
+| `-mc` | string |  | report only these statuses (comma-separated, ranges, or all; default ffuf's: 200-299,301,302,307,401,403,405,500) | ffuf's name |
+| `-ml` | string |  | report only these line counts | ffuf's name |
+| `-mr` | string |  | report only answers whose headers or body match this regular expression | ffuf's name |
+| `-ms` | string |  | report only these response sizes (values and ranges, 100-200) | ffuf's name |
+| `-mw` | string |  | report only these word counts | ffuf's name |
+
+</details>
 <!-- flags:end -->

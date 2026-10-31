@@ -28,7 +28,7 @@ func tableFlags(name string) ([]flagInfo, error) {
 	if _, ok := lookup(name); !ok {
 		return nil, fmt.Errorf("no command %q; azhaq help lists them", name)
 	}
-	return flagInfos(flagsOf(name)), nil
+	return commandFlags(name), nil
 }
 
 // tableCell makes text safe for a cell of a Markdown table.
@@ -37,8 +37,72 @@ func tableCell(s string) string {
 	return strings.ReplaceAll(s, "|", `\|`)
 }
 
-// flagTableMarkdown is the Markdown table of one command's flags: a row for
-// each, in the order help lists them, a repeatable one marked in its type.
+// flagRows is the Markdown table of flags: a row for each, a repeatable one
+// marked in its type. kind adds a column that says why a flag is hidden.
+func flagRows(infos []flagInfo, kind func(flagInfo) string) string {
+	var b strings.Builder
+	if kind == nil {
+		b.WriteString("| Flag | Type | Default | Meaning |\n| --- | --- | --- | --- |\n")
+	} else {
+		b.WriteString("| Flag | Type | Default | Meaning | Kind |\n| --- | --- | --- | --- | --- |\n")
+	}
+	for _, f := range infos {
+		typ := f.Type
+		if f.Repeatable {
+			typ += ", repeatable"
+		}
+		def := ""
+		if f.Default != "" {
+			def = "`" + tableCell(f.Default) + "`"
+		}
+		fmt.Fprintf(&b, "| `-%s` | %s | %s | %s |", f.Name, typ, def, tableCell(f.Usage))
+		if kind != nil {
+			fmt.Fprintf(&b, " %s |", kind(f))
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// hiddenKind is how a hidden flag's reason reads in a table.
+func hiddenKind(f flagInfo) string {
+	switch why := f.Why; {
+	case strings.HasPrefix(why, "compat:"):
+		return strings.TrimPrefix(why, "compat:") + "'s name"
+	case why == whyAlias:
+		return "other name"
+	case why == whyAccepted:
+		return "accepted, no effect"
+	}
+	return "rarely needed"
+}
+
+// hiddenSummary heads the folded table of the hidden flags: what they are,
+// and how many.
+func hiddenSummary(l helpLayout) string {
+	var parts []string
+	for _, h := range l.hidden {
+		switch {
+		case strings.HasPrefix(h.why, "compat:"):
+			parts = append(parts, "flags familiar from "+strings.TrimPrefix(h.why, "compat:"))
+		case h.why == whyAlias:
+			parts = append(parts, "other names")
+		case h.why == whyAccepted:
+			parts = append(parts, "flags accepted with no effect")
+		default:
+			parts = append(parts, "rarely used flags")
+		}
+	}
+	text := strings.Join(parts, ", ")
+	if i := strings.LastIndex(text, ", "); i >= 0 {
+		text = text[:i] + " and " + text[i+2:]
+	}
+	return fmt.Sprintf("%s (%d)", strings.ToUpper(text[:1])+text[1:], l.hiddenCount())
+}
+
+// flagTableMarkdown is the Markdown of one command's flags: the shown ones
+// in a table under each task heading, in the order -h prints them, and the
+// hidden ones in a folded second table.
 func flagTableMarkdown(name string) (string, error) {
 	infos, err := tableFlags(name)
 	if err != nil {
@@ -50,18 +114,23 @@ func flagTableMarkdown(name string) (string, error) {
 		}
 		return "`" + name + "` takes no flags.\n", nil
 	}
+	l := layoutFlags(name, infos)
 	var b strings.Builder
-	b.WriteString("| Flag | Type | Default | Meaning |\n| --- | --- | --- | --- |\n")
-	for _, f := range infos {
-		typ := f.Type
-		if f.Repeatable {
-			typ += ", repeatable"
+	for i, s := range l.shown {
+		if i > 0 {
+			b.WriteString("\n")
 		}
-		def := ""
-		if f.Default != "" {
-			def = "`" + tableCell(f.Default) + "`"
+		if s.title != "" {
+			fmt.Fprintf(&b, "**%s**\n\n", s.title)
 		}
-		fmt.Fprintf(&b, "| `-%s` | %s | %s | %s |\n", f.Name, typ, def, tableCell(f.Usage))
+		b.WriteString(flagRows(s.flags, nil))
+	}
+	if len(l.hidden) > 0 {
+		var hidden []flagInfo
+		for _, h := range l.hidden {
+			hidden = append(hidden, h.flags...)
+		}
+		fmt.Fprintf(&b, "\n<details>\n<summary>%s</summary>\n\n%s\n</details>\n", hiddenSummary(l), flagRows(hidden, hiddenKind))
 	}
 	return b.String(), nil
 }

@@ -96,41 +96,71 @@ Every source's URLs go through these rules, OTX's too.
 ## Flags
 
 <!-- flags:begin urls -->
+**Targets and input**
+
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-archive` | string, repeatable |  | ask NAME's archive at this address instead of its own, as NAME=URL (a mirror or a test server; repeatable) |
-| `-blacklist` | string |  | leave out URLs whose path ends in these extensions, comma-separated (png,jpg,svg) |
-| `-config` | string |  | a gau config file (default: ~/.gau.toml when it exists): threads, retries, subdomains, parameters, providers, blacklist, proxy, [urlscan] apikey and host, otx, and the [filters] table; flags win |
 | `-d` | string, repeatable |  | domain (repeatable; domains may also be given as arguments, as gau takes them) |
 | `-dL` | string |  | file of domains (- for stdin) |
-| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
-| `-fail-on-capped` | bool |  | exit 4 when an archive stopped at its page cap with more to read |
-| `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
-| `-fc` | string |  | leave out URLs the archive recorded with these HTTP status codes, comma-separated; a URL whose status the archive did not record is kept |
-| `-fp` | bool |  | keep one URL for each host and path, dropping the variants that differ by parameters |
-| `-from` | string |  | only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is asked all the same and its URLs kept, with a note |
-| `-ft` | string |  | leave out URLs the archive recorded with these MIME types, comma-separated; OTX, which keeps no type, is asked all the same and its URLs kept, with a note |
-| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
-| `-mc` | string |  | keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); OTX and urlscan.io record a status for most URLs, and a URL with none is not kept |
-| `-mt` | string |  | keep only URLs the archive recorded with these MIME types, comma-separated (text/html); OTX, which keeps no type, is asked all the same and its URLs kept, with a note |
-| `-o` | string |  | also write results to this file, appending to it as gau does |
-| `-provider-config` | string |  | API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml) |
+
+**What to ask**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
 | `-providers` | string |  | the archives to ask, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all five). A value that names a file, or has a / in it, is the API-key file, as -providers meant before; -provider-config says that without doubt |
-| `-proxy` | string |  | send the archive requests through this proxy: http://HOST:PORT, https:// or socks5:// |
+| `-provider-config` | string |  | API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml) |
+| `-archive` | string, repeatable |  | ask NAME's archive at this address instead of its own, as NAME=URL (a mirror or a test server; repeatable) |
 | `-raw` | bool |  | print the archived URLs exactly as the archives gave them: no normalising, junk filter or deduplication |
-| `-retries` | int |  | times an archive request is asked again after a 429, 503 or network error, after its Retry-After (seconds or a date, however long) or 2, 5, 10, 20, then 30 s; 0 makes the first refusal final (default: a 429 or 503 is asked again until the archive's time, -urls-timeout, or the run's is spent, a network error 3 times; a wait longer than the time left ends the request at once, with the reason) |
-| `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
-| `-sort` | bool |  | print once every archive has answered, sorted (the default on a terminal) |
-| `-stream` | bool |  | print each URL as it arrives, unsorted (the default when stdout is not a terminal) |
-| `-subs` | bool |  | also the subdomains of each domain: the archives are asked for *.DOMAIN (default: the name given, as gau does without --subs; azhaq run keeps the broader default) |
-| `-threads` | int |  | same as -urls-threads |
-| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
-| `-to` | string |  | only captures up to this time, in the same form |
+
+**Pace and limits**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
 | `-urls-max` | int | `500000` | URLs kept for each domain (0: no cap); the summary counts the ones past it |
 | `-urls-pages` | int | `50` | pages read from each archive for a domain (0: no cap); an archive that stops at the cap says so in the summary |
 | `-urls-pause` | duration |  | pause between the requests of one archive (default: 1 s for the Wayback Machine and Common Crawl, 0.5 s for OTX, 2 s for urlscan.io; 0 for none) |
 | `-urls-threads` | int |  | domains asked at once (default 16) |
 | `-urls-timeout` | duration | `3m0s` | time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes) |
+| `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
+
+**Network**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-proxy` | string |  | send the archive requests through this proxy: http://HOST:PORT, https:// or socks5:// |
+
+**Output**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
+| `-o` | string |  | also write results to this file, appending to it as gau does |
+| `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
+| `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
 | `-v` | bool |  | print a line for every finished task, not only failures |
-| `-version` | bool |  | print the version |
+| `-sort` | bool |  | print once every archive has answered, sorted (the default on a terminal) |
+| `-stream` | bool |  | print each URL as it arrives, unsorted (the default when stdout is not a terminal) |
+| `-fail-on-capped` | bool |  | exit 4 when an archive stopped at its page cap with more to read |
+| `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
+
+<details>
+<summary>Flags familiar from gau and other names (13)</summary>
+
+| Flag | Type | Default | Meaning | Kind |
+| --- | --- | --- | --- | --- |
+| `-blacklist` | string |  | leave out URLs whose path ends in these extensions, comma-separated (png,jpg,svg) | gau's name |
+| `-config` | string |  | a gau config file (default: ~/.gau.toml when it exists): threads, retries, subdomains, parameters, providers, blacklist, proxy, [urlscan] apikey and host, otx, and the [filters] table; flags win | gau's name |
+| `-fc` | string |  | leave out URLs the archive recorded with these HTTP status codes, comma-separated; a URL whose status the archive did not record is kept | gau's name |
+| `-fp` | bool |  | keep one URL for each host and path, dropping the variants that differ by parameters | gau's name |
+| `-from` | string |  | only captures from this time on: YYYY, YYYYMM, YYYYMMDD or YYYYMMDDhhmmss; OTX, which dates no capture, is asked all the same and its URLs kept, with a note | gau's name |
+| `-ft` | string |  | leave out URLs the archive recorded with these MIME types, comma-separated; OTX, which keeps no type, is asked all the same and its URLs kept, with a note | gau's name |
+| `-mc` | string |  | keep only URLs the archive recorded with these HTTP status codes, comma-separated (200,301); OTX and urlscan.io record a status for most URLs, and a URL with none is not kept | gau's name |
+| `-mt` | string |  | keep only URLs the archive recorded with these MIME types, comma-separated (text/html); OTX, which keeps no type, is asked all the same and its URLs kept, with a note | gau's name |
+| `-retries` | int |  | times an archive request is asked again after a 429, 503 or network error, after its Retry-After (seconds or a date, however long) or 2, 5, 10, 20, then 30 s; 0 makes the first refusal final (default: a 429 or 503 is asked again until the archive's time, -urls-timeout, or the run's is spent, a network error 3 times; a wait longer than the time left ends the request at once, with the reason) | gau's name |
+| `-subs` | bool |  | also the subdomains of each domain: the archives are asked for *.DOMAIN (default: the name given, as gau does without --subs; azhaq run keeps the broader default) | gau's name |
+| `-to` | string |  | only captures up to this time, in the same form | gau's name |
+| `-version` | bool |  | print the version | gau's name |
+| `-threads` | int |  | same as -urls-threads | other name |
+
+</details>
 <!-- flags:end -->

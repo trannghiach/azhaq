@@ -42,8 +42,9 @@ Start with:
   azhaq probe -l hosts.txt -json                         web services of hosts
   azhaq ports -host HOST -p top-1000                     open ports, named
 
-More: azhaq help lists every command, azhaq help COMMAND shows its flags and
-examples, azhaq help -json lists them for a program. Coming from another tool:
+More: azhaq help all lists every command, azhaq help COMMAND shows its flags
+and examples (azhaq help COMMAND all: every flag), azhaq help -json lists them
+for a program. Coming from another tool:
 azhaq docs migrating has its flags next to Azhaq's.
 
 `

@@ -37,6 +37,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-server` | string |  | the run's address (azhaq run -serve) |
-| `-slots` | int | `8` | tasks run at once |
 | `-token` | string |  | the run's worker token (default $AZHAQ_WORKER_TOKEN) |
+| `-slots` | int | `8` | tasks run at once |
 <!-- flags:end -->

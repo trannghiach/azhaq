@@ -49,7 +49,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 <!-- flags:begin ingest -->
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `-db` | string |  | the database to add to (default: a new file) |
 | `-in` | string |  | a file of results (- for stdin): subfinder, dnsx, httpx, katana, naabu, nuclei or gau JSON lines, an ffuf JSON report or -json lines, azhaq export, connector facts, or lines of URLs, hostnames and addresses; files may also be given as arguments, several at once |
+| `-db` | string |  | the database to add to (default: a new file) |
 | `-json` | bool |  | the summary as JSON |
 <!-- flags:end -->
