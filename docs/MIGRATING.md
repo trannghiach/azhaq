@@ -57,7 +57,7 @@ What differs on purpose:
 - A name appears once, however many sources gave it; `source` is the first and `sources` all of them.
 - Sources the default set leaves out stay out; `-all-sources` runs them. A source that needs a key and has none is listed `needs a key`, not skipped without a word.
 - A run in which every source failed is `degraded` and exits 3, not 0 with an empty list. The summary names each source that failed.
-- Azhaq keeps the names it found for a domain and checks them again in the next run; with `-live` a name that no longer resolves drops out, without it a stored name is listed with `"unverified": true`, as are subdomain.center's guesses. `-no-history` turns the history off.
+- Azhaq keeps the names it found for a domain and checks them again in the next run; with `-live` a name that no longer resolves drops out, without it a stored name that no source gave this run is listed with `"unverified": true`, as are subdomain.center's guesses. `-no-history` turns the history off.
 
 Three command lines:
 

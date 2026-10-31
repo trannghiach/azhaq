@@ -315,6 +315,6 @@ azhaq subs -d example.com,example.org -json | jq 'select(.unverified | not)'
 
 The first line is `subfinder | dnsx` at a pace: `-dns-rate` is queries a second per resolver (two resolvers in `two.txt` make twice that), `-source-rate` is requests a second to each passive source. The summary's `counts` add up (`from sources` less `did not resolve`, plus what DNS found as CNAME targets, is `results`) and the `count:` note writes the sum out.
 
-Without `-live` nothing is looked up in DNS, so the names subdomain.center only guessed and the ones only the name history held carry `"unverified": true`; the last line leaves them out. A name that is only a CNAME is listed with `-live` too (`cname`, no `a`), as `dnsx -a -cname` lists it.
+Without `-live` nothing is looked up in DNS, so the names subdomain.center only guessed and the ones only the name history held (no source gave them this run) carry `"unverified": true`; the last line leaves them out. A name that is only a CNAME is listed with `-live` too (`cname`, no `a`), as `dnsx -a -cname` lists it.
 
 Catch: subdomain.center answers a random 500 names per call and its real names differ between calls, so two runs list different names. A run asks it again only while a round gives a new name that resolves; the name history brings back names an earlier run found.

@@ -19,7 +19,7 @@ import (
 
 // subsMode is what subs tells the run it starts.
 var subsMode struct {
-	NoCheck   bool // names only guessed are listed unverified, not looked up
+	NoCheck   bool // names only guessed or only remembered are listed unverified, not looked up
 	Recursive bool // only the sources that handle subdomains of subdomains
 }
 
@@ -126,7 +126,7 @@ func cmdSubs(args []string) error {
 	var domains stringsFlag
 	fs.Var(&domains, "d", "domain (repeatable; a comma list, a URL or a name with a trailing dot is cleaned, as subfinder does)")
 	list := fs.String("dL", "", "file of domains (- for stdin)")
-	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out); without it nothing is looked up and the guesses are listed unverified")
+	live := fs.Bool("live", false, "only names that resolve (wildcard answers left out); without it nothing is looked up, and the names only subdomain.center guessed or only the name history held are listed unverified")
 	nW := fs.Bool("nW", false, "same as -live (subfinder's name)")
 	words := fs.String("w", "", "also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live)")
 	permute := fs.Bool("permute", false, "also resolve variations of the names found (api → api-dev, api2, dev.api), like alterx | dnsx (active DNS)")
@@ -489,7 +489,7 @@ func cmdSubs(args []string) error {
 		rep.warned = true
 	}
 	if unverified > 0 {
-		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names are listed unverified (-json: \"unverified\": true): they came from subdomain.center's guesses or the name history and no DNS lookup was made; -live checks them", unverified))
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names are listed unverified (-json: \"unverified\": true): only subdomain.center's guesses or the name history held them and no DNS lookup was made; -live checks them", unverified))
 	}
 	if notChecked > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names could not be checked (the resolvers failed) and are left out; azhaq resume checks them", notChecked))

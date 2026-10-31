@@ -390,3 +390,61 @@ func sortedLines(s string) []string {
 	sort.Strings(out)
 	return out
 }
+
+// Without -live nothing is looked up, so a name that only the name history
+// held (no source gave it this run) or only subdomain.center guessed is
+// listed unverified; a name a source also gave is not, and shows that
+// source first, not "history".
+func TestSubsHistoryNamesAreUnverifiedUnlessASourceGaveThem(t *testing.T) {
+	t.Chdir(t.TempDir())
+	resolvers := serveZone(t, fakeZone{a: map[string]string{"www.example.org": "192.0.2.10", "old.example.org": "192.0.2.11", "new.example.org": "192.0.2.12"}})
+	use := func(names ...string) func() {
+		return subcol.UseTestSources(
+			subcol.TestSource{Name: "s", Default: true, Names: names},
+			subcol.TestSource{Name: "history", Default: true},
+		)
+	}
+	restore := use("www.example.org", "old.example.org")
+	_, _, code := runContract(t, "subs", "-d", "example.org")
+	restore()
+	if code != exitOK {
+		t.Fatalf("first run: exit %d", code)
+	}
+	defer use("www.example.org", "new.example.org")()
+	out, rep, code := runContract(t, "subs", "-d", "example.org")
+	if code != exitOK {
+		t.Fatalf("exit %d %+v", code, rep)
+	}
+	type row struct {
+		Source     string   `json:"source"`
+		Sources    []string `json:"sources"`
+		Unverified bool     `json:"unverified"`
+	}
+	got := map[string]row{}
+	for _, l := range lines(out) {
+		var r struct {
+			Host string `json:"host"`
+			row
+		}
+		if err := json.Unmarshal([]byte(l), &r); err != nil {
+			t.Fatal(err)
+		}
+		got[r.Host] = r.row
+	}
+	want := map[string]row{
+		"www.example.org": {"s", []string{"s", "history"}, false}, // a source gave it again
+		"new.example.org": {"s", []string{"s"}, false},
+		"old.example.org": {"history", []string{"history"}, true}, // only the memory holds it
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("rows %+v\nwant %+v", got, want)
+	}
+	if rep.Counts["unverified"] != 1 {
+		t.Errorf("counts %v", rep.Counts)
+	}
+	// With -live the stored name is looked up and is no longer unverified.
+	out, _, _ = runContract(t, "subs", "-d", "example.org", "-live", "-resolvers", resolvers)
+	if strings.Contains(out, "unverified") {
+		t.Errorf("-live rows are marked unverified:\n%s", out)
+	}
+}

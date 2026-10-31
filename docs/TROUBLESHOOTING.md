@@ -62,7 +62,7 @@
 
 **`subs` returns different names from run to run.** Some passive sources answer differently each time (subdomain.center returns a random sample of its names on each call). Azhaq keeps the names it found in `names/DOMAIN.json` (under `$AZHAQ_DATA_DIR`, else `$XDG_DATA_HOME/azhaq`, else `~/.local/share/azhaq`) and asks them again as the `history` source, so a name that resolves still comes back. The `coverage:` note says how much of what the sources know the run holds. `-no-history` turns the file off.
 
-**`subs` lists names with `"unverified": true`.** Without `-live`, subs does not look names up in DNS. The names only subdomain.center guessed (most of its answer is made up) or only the name history held are listed, flagged, and counted in `unverified`; `-live` checks them and leaves out what does not resolve.
+**`subs` lists names with `"unverified": true`.** Without `-live`, subs does not look names up in DNS. The names only subdomain.center guessed (most of its answer is made up) or only the name history held (no source gave them this run; a name a source gave again is not flagged) are listed, flagged, and counted in `unverified`; `-live` checks them and leaves out what does not resolve.
 
 **A source says `answered 200 with an error, not names`.** The server sent its quota or error page with a success status, which a plain reader takes for an empty list. Azhaq reads it as a failure and quotes the page (`API count exceeded - Increase Quota with Membership`); the source's names are missing from the run. Wait, give the source a key in the provider file, or leave it out with `-exclude-sources`.
 

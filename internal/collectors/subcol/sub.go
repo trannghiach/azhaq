@@ -479,6 +479,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	sort.Strings(names)
 	for _, by := range foundBy {
 		sort.Strings(by)
+		// The history is a memory, not an answer: a name a source also gave
+		// shows that source first, and "history" first means nothing else gave it.
+		sort.SliceStable(by, func(i, j int) bool { return by[i] != historyName && by[j] == historyName })
 	}
 	payload := map[string]any{"domain": domain, "names": names, "count": len(names), "sources": status, "found_by": foundBy}
 	payload["from_sources"] = union

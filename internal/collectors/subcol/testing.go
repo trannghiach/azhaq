@@ -33,6 +33,10 @@ var (
 func UseTestSources(srcs ...TestSource) (restore func()) {
 	fake := []source{}
 	for _, ts := range srcs {
+		if ts.Name == historyName {
+			fake = append(fake, historySource()) // the real one: a file in $AZHAQ_DATA_DIR
+			continue
+		}
 		s := source{name: ts.Name, deflt: ts.Default, collect: func(ctx context.Context, domain string, _ []string, _ *subscraping.Session) ([]string, error) {
 			if ts.Delay > 0 && (ts.DelayDomain == "" || ts.DelayDomain == domain) {
 				select {
