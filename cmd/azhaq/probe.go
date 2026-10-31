@@ -76,7 +76,7 @@ func (p *probeFlags) register(fs *flag.FlagSet) {
 			fs.BoolVar(v, n, false, usage)
 		}
 	}
-	str(&p.ports, "ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443)", "p", "ports", "web-ports")
+	str(&p.ports, "ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own", "p", "ports", "web-ports")
 	str(&p.paths, "path or paths to ask of every target in place of its own: a list, comma-separated, or a file", "path")
 	boolean(&p.noFallback, "ask an input without a scheme over both http and https and report each that answers", "nf", "no-fallback")
 	boolean(&p.probeAllIPs, "send the request to every address of a name, one row each", "pa", "probe-all-ips")

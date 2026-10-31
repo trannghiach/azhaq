@@ -423,3 +423,40 @@ func TestProbeURLFieldIsTheInputAsGiven(t *testing.T) {
 		}
 	}
 }
+
+// As httpx, -p replaces the port of a host:port or URL input: the row is the
+// service on the port asked, and its input is the line as given. Without -p
+// the input's own port is the one asked.
+func TestProbePortsReplaceTheInputsPort(t *testing.T) {
+	t.Chdir(t.TempDir())
+	one, other := newProbeSite(t), newProbeSite(t)
+	port := func(s *probeSite) string { return s.URL[strings.LastIndex(s.URL, ":")+1:] }
+	for _, in := range []string{"127.0.0.1:" + port(one), "http://127.0.0.1:" + port(one) + "/"} {
+		out, rep, code := runContract(t, "probe", "-u", in, "-p", port(other))
+		rows := probeRows(t, out)
+		if len(rows) != 1 || rows[0]["input"] != in || rows[0]["port"] != port(other) || rows[0]["failed"] == true || code != exitOK {
+			t.Errorf("-p %s on %s: exit %d rows %s", port(other), in, code, out)
+		}
+		if one.count() != 0 || other.count() != 1 || rep.Requests != 1 {
+			t.Errorf("%s: asked %d on its own port, %d on -p, %d requests", in, one.count(), other.count(), rep.Requests)
+		}
+		other.mu.Lock()
+		other.seen = nil
+		other.mu.Unlock()
+	}
+	// A path stays; every port of -p is asked; no -p asks the input's own port.
+	out, _, _ := runContract(t, "probe", "-u", "http://127.0.0.1:"+port(one)+"/api", "-p", "http:"+port(other)+","+port(one))
+	if rows := probeRows(t, out); len(rows) != 2 {
+		t.Errorf("two ports of -p: %s", out)
+	}
+	if other.seen[0] != "GET /api" {
+		t.Errorf("the path is not kept: %v", other.seen)
+	}
+	one.mu.Lock()
+	one.seen = nil
+	one.mu.Unlock()
+	out, _, _ = runContract(t, "probe", "-u", "127.0.0.1:"+port(one))
+	if rows := probeRows(t, out); len(rows) != 1 || rows[0]["port"] != port(one) || one.count() != 1 {
+		t.Errorf("without -p: %s", out)
+	}
+}

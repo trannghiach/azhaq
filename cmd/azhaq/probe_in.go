@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -124,7 +125,7 @@ func probeInputs(urls []string, list string, pf *probeFlags, ports []httpcol.Por
 		t = strings.TrimPrefix(strings.TrimPrefix(t, "*."), ".") // *.example.com and .example.com are example.com
 		switch {
 		case strings.Contains(t, "://") || strings.ContainsAny(t, " ?#@"):
-			add(probeTarget{given: t, lines: []string{t}})
+			add(probeTarget{given: t, lines: urlPortLines(t, ports)})
 		case strings.HasPrefix(strings.ToUpper(t), "AS") && isASN(t):
 			asn, _ := asncol.NormalizeASN(t)
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -228,17 +229,23 @@ func expandPrefix(pfx netip.Prefix, budget, cut *int) []string {
 	return out
 }
 
-// portLines is the lines an address with no port of its own becomes under
-// -p: one per port, led by the scheme when the port had one. A name stays
-// as it is: the collector asks its ports once it resolves.
+// portLines is the lines an address or host:port becomes under -p: one per
+// port, led by the scheme when the port had one. As httpx does, a port of
+// the input is replaced by the ports of -p, not added to them. A bare name
+// stays as it is: the collector asks its ports once it resolves.
 func portLines(t string, ports []httpcol.PortSpec) []string {
-	ip := net.ParseIP(strings.Trim(t, "[]"))
-	if len(ports) == 0 || ip == nil || strings.HasPrefix(t, "[") && strings.Contains(t, "]:") {
+	host := strings.Trim(t, "[]")
+	if h, _, err := net.SplitHostPort(t); err == nil {
+		host = h
+	} else if net.ParseIP(host) == nil {
+		return []string{t}
+	}
+	if len(ports) == 0 || host == "" {
 		return []string{t}
 	}
 	var out []string
 	for _, p := range ports {
-		hp := net.JoinHostPort(ip.String(), strconv.Itoa(p.Port))
+		hp := net.JoinHostPort(host, strconv.Itoa(p.Port))
 		switch p.Scheme {
 		case "http":
 			out = append(out, "http://"+hp+"/")
@@ -247,6 +254,42 @@ func portLines(t string, ports []httpcol.PortSpec) []string {
 		default:
 			out = append(out, hp)
 		}
+	}
+	return out
+}
+
+// urlPortLines is the lines a URL becomes under -p: its port is replaced by
+// each port of -p, as httpx does. A port with no scheme asks the way a bare
+// host:port is asked, both schemes; a URL with a path, query or user keeps
+// its own scheme there, so the path is kept. A port of -p that is the URL's
+// own leaves the URL as given, its scheme included.
+func urlPortLines(t string, ports []httpcol.PortSpec) []string {
+	u, err := url.Parse(t)
+	if len(ports) == 0 || err != nil || u.Hostname() == "" || u.Scheme != "http" && u.Scheme != "https" {
+		return []string{t}
+	}
+	own := u.Port()
+	if own == "" {
+		own = map[string]string{"http": "80", "https": "443"}[u.Scheme]
+	}
+	plain := (u.Path == "" || u.Path == "/") && u.RawQuery == "" && u.Fragment == "" && u.User == nil
+	var out []string
+	for _, p := range ports {
+		hp := net.JoinHostPort(u.Hostname(), strconv.Itoa(p.Port))
+		if p.Scheme == "" && strconv.Itoa(p.Port) == own {
+			out = append(out, t)
+			continue
+		}
+		if p.Scheme == "" && plain {
+			out = append(out, hp)
+			continue
+		}
+		c := *u
+		c.Host = hp
+		if p.Scheme != "" {
+			c.Scheme = p.Scheme
+		}
+		out = append(out, c.String())
 	}
 	return out
 }

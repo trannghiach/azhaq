@@ -115,6 +115,11 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - It is never one answer and a `no answer` for the others.
 - A line given twice is one row.
 
+### Ports of an input
+- Without `-p`, a URL or `host:port` is asked once, on its own port. A bare name is asked on the web ports.
+- With `-p`, the port of a `host:port` or a URL is replaced by the ports of `-p`, as in httpx. `-l 127.0.0.1:3001 -p 5002` asks `http://127.0.0.1:5002/` only, and the row's `port` is `5002`. `input` is the line as given.
+- A port of `-p` with no scheme is asked as a bare `host:port` is, plain HTTP first above 1024. A URL with a path, a query or a user keeps its path and its scheme on the new port. A port of `-p` that is the URL's own leaves the URL as given.
+
 ## Flags
 
 <!-- flags:begin probe -->
@@ -261,12 +266,12 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-ob` | bool |  | with -sr: leave the body out of the stored file |
 | `-omit-body` | bool |  | with -sr: leave the body out of the stored file |
 | `-output-all` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md |
-| `-p` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443) |
+| `-p` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
 | `-pa` | bool |  | send the request to every address of a name, one row each |
 | `-parallel` | int |  | work items in flight (default 16) |
 | `-path` | string |  | path or paths to ask of every target in place of its own: a list, comma-separated, or a file |
 | `-pipeline` | bool |  | report whether the server answers pipelined requests (ten requests each) |
-| `-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443) |
+| `-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
 | `-probe` | bool |  | print a row for every target: [SUCCESS], or [FAILED] when nothing answered |
 | `-probe-all-ips` | bool |  | send the request to every address of a name, one row each |
 | `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
@@ -318,7 +323,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-vhost-input` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host |
 | `-vi` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host |
 | `-wc` | bool |  | print the word count |
-| `-web-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443) |
+| `-web-ports` | string |  | ports to probe on each name: 80,443,8000-8100, each led by http: or https: to ask one scheme only (http:80,https:443); an input with a port of its own (host:port, a URL) is asked on these ports instead of its own |
 | `-web-server` | bool |  | print the Server header |
 | `-websocket` | bool |  | print websocket for a server that speaks it |
 | `-word-count` | bool |  | print the word count |

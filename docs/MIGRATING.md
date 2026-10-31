@@ -166,7 +166,7 @@ Behaviour, fields and edge cases: [`azhaq probe`](commands/probe.md).
 | httpx | azhaq | Note |
 | --- | --- | --- |
 | `-u TARGET`, `-l FILE` | `-u TARGET`, `-l FILE` | Or stdin. |
-| `-p 80,8000-8100` | `-p 80,8000-8100` | `http:80` or `https:443` asks one scheme. |
+| `-p 80,8000-8100` | `-p 80,8000-8100` | `http:80` or `https:443` asks one scheme. A `host:port` or a URL is asked on these ports instead of its own, as in httpx. |
 | `-path /a,/b` | `-path /a,/b` | A list or a file. |
 | `-sc -cl -ct -title -td -server -ip -cname -location -method` | the same | What a row prints. `-web-server` and `-tech-detect` are accepted. |
 | `-asn -cdn -favicon -jarm -hash md5,mmh3` | the same | |
@@ -195,6 +195,7 @@ Behaviour, fields and edge cases: [`azhaq probe`](commands/probe.md).
 - **Pace.** `-rl` counts services a second, as httpx does. A target's first request waits its turn. Its favicon, redirects and second scheme do not. `-rate N` paces every request instead. The default is no pace; httpx's is 150.
 - A target with no answer is a row with `failed: true`, and `-probe` prints `[FAILED]` for it. The summary counts them.
 - A name that resolves only because its zone has a wildcard is probed, not dropped, so a list of real hosts is not thinned.
+- `-p` replaces the port of an input, as httpx does: `-l 127.0.0.1:3001 -p 5002` asks port 5002 only, and `input` stays the line as given. A URL with a path keeps its path and its own scheme on the new port, where httpx asks both schemes. Without `-p`, an input asks its own port.
 - A bare `host:port` is asked over plain HTTP first on 8080 and on ports above 1024. It is asked over TLS when the plain request is answered 400.
 - Every request goes through the scope, the budget, the pace and the ledger. A redirect to another site is recorded and not requested, even with `-fr`.
 
