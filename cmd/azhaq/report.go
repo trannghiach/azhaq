@@ -41,6 +41,7 @@ type report struct {
 	Skipped     []engine.Skip    `json:"skipped,omitempty"`
 	Takeover    []takeoverRow    `json:"takeover,omitempty"` // names another party may take over
 	Degraded    bool             `json:"degraded,omitempty"` // a source the run depends on failed (subs); the exit code is not changed
+	Junk        map[string]int   `json:"junk,omitempty"`     // urls: URLs left out as junk, by reason (-raw keeps them)
 	Sources     *sourceHealth    `json:"sources,omitempty"`  // subs and urls: how many sources answered, which failed and why, what each gave
 	Stopped     string           `json:"stopped,omitempty"`  // the limit that stopped the work
 	Resume      string           `json:"resume,omitempty"`

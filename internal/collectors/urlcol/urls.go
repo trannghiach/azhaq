@@ -194,6 +194,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var mu sync.Mutex
 	seen := map[string]bool{}
 	from := map[string]string{} // URL → the source that gave it first
+	junked := map[string]bool{} // URLs on the domain left out as junk
+	byReason := map[string]int{}
 	var all []string
 	dropped := 0 // URLs past the cap
 	results := make([]outcome, len(c.sources))
@@ -236,7 +238,11 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 					if c.opts.Raw && c.opts.OnURL != nil && onDomain(raw, domain, apex) && !out.blocked(raw) && !out.repeat(raw) {
 						c.opts.OnURL(raw, s.name)
 					}
-					u, ok := clean(raw, domain, apex)
+					u, junk, ok := cleanWhy(raw, domain, apex)
+					if junk != "" && !junked[raw] {
+						junked[raw] = true
+						byReason[junk]++
+					}
 					if !ok || out.blocked(u) {
 						continue
 					}
@@ -327,6 +333,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	if dropped > 0 {
 		payload["truncated"] = dropped
 	}
+	if len(byReason) > 0 {
+		payload["junk"] = byReason
+	}
 	if c.opts.Out != "" {
 		payload["file"] = c.opts.Out
 	}
@@ -374,18 +383,28 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 // clean keeps http(s) URLs on domain (and its subdomains, unless apex),
 // normalized.
 func clean(raw, domain string, apex bool) (string, bool) {
+	u, _, ok := cleanWhy(raw, domain, apex)
+	return u, ok
+}
+
+// cleanWhy is clean that also says, for a URL on the domain that was left
+// out as junk, why (webextract.Junk*).
+func cleanWhy(raw, domain string, apex bool) (u, junk string, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if l := strings.ToLower(raw[:min(len(raw), 8)]); !strings.HasPrefix(l, "http://") && !strings.HasPrefix(l, "https://") {
-		return "", false
+		return "", "", false
 	}
 	u, err := normalize.URL(raw)
-	if err != nil || webextract.JunkURL(u) {
-		return "", false
+	if err != nil {
+		return "", "", false
 	}
 	if !hostOn(normalize.HostFromURL(u), domain, apex) {
-		return "", false
+		return "", "", false
 	}
-	return u, true
+	if why := webextract.JunkReason(u); why != "" {
+		return "", why, false
+	}
+	return u, "", true
 }
 
 func hostOn(host, domain string, apex bool) bool {

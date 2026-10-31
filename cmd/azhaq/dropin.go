@@ -635,6 +635,9 @@ func cmdURLs(args []string) error {
 	}
 	defer done()
 	urlsNotes(rep, payloads(st, "azhaq-urls"), *failCapped)
+	if !raw {
+		urlsJunk(rep, payloads(st, "azhaq-urls"))
+	}
 	rep.Sources = archiveHealth(payloads(st, "azhaq-urls"))
 	if n := rep.Sources.archivesNote(); n != "" {
 		rep.Notes = append(rep.Notes, n)

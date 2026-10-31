@@ -170,3 +170,28 @@ func TestJunkURLScannerArtifacts(t *testing.T) {
 		}
 	}
 }
+
+// JunkReason says which kind of junk a URL is, and agrees with JunkURL.
+func TestJunkReason(t *testing.T) {
+	for raw, want := range map[string]string{
+		"http://example.org/page?x=<script>alert(1)</script>": JunkPayload,
+		"http://example.org/?q=../../../../etc/passwd":        JunkPayload,
+		"http://example.org/acunetix_xsl_inclusion_test.xsl":  JunkScanner,
+		"http://example.org/7zSo1DIz.exe":                     JunkScanner,
+		"http://example.org/files/?C=N;O=D":                   JunkListing,
+		"http://example.org/rest/basket/NaN":                  JunkPlaceholder,
+		"http://example.org/a/../b":                           JunkDot,
+		"http://example.org/1234567890*~1*/x":                 JunkMalformed,
+		"http://example.org/login.php).":                      JunkSentence,
+		"http://example.org/login.php":                        "",
+		"http://example.org/products/nessus":                  "",
+	} {
+		got := JunkReason(raw)
+		if got != want {
+			t.Errorf("%s: %q, want %q", raw, got, want)
+		}
+		if JunkURL(raw) != (want != "") {
+			t.Errorf("%s: JunkURL disagrees", raw)
+		}
+	}
+}

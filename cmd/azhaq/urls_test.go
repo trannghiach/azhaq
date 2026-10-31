@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -256,5 +257,39 @@ func TestURLsPageCapIsSaid(t *testing.T) {
 	var ee exitErr
 	if !errors.As(err, &ee) || ee.code != exitLimit {
 		t.Errorf("-fail-on-capped: %v", err)
+	}
+}
+
+// URLs left out as junk are counted, by reason, in the summary; -raw keeps
+// them and says nothing was dropped.
+func TestURLsSaysHowManyWereDroppedAsJunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"has_next":false,"url_list":[`+
+			`{"url":"http://example.org/ok?id=1"},`+
+			`{"url":"http://example.org/x?q=<script>alert(1)</script>"},`+
+			`{"url":"http://example.org/y?q=../../../../etc/passwd"},`+
+			`{"url":"http://example.org/acunetix_xsl_inclusion_test.xsl"},`+
+			`{"url":"http://example.org/rest/basket/NaN"},`+
+			`{"url":"http://example.org/rest/basket/NaN"},`+
+			`{"url":"http://other.test/<script>alert(1)</script>"}]}`)
+	}))
+	defer srv.Close()
+	args := []string{"-d", "example.org", "-providers", "otx", "-urls-pause", "0", "-archive", "otx=" + srv.URL}
+	lines, errOut, err := urlsRun(t, append(args, "-json")...)
+	if err != nil || len(lines) != 1 {
+		t.Fatalf("%v %v", lines, err)
+	}
+	rep := lastReport(t, errOut)
+	want := map[string]int{"scanner payload": 2, "scanner probe": 1, "script placeholder (NaN, undefined, null)": 1}
+	if !reflect.DeepEqual(rep.Junk, want) || rep.Counts["dropped as junk"] != 4 {
+		t.Errorf("junk %v counts %v", rep.Junk, rep.Counts)
+	}
+	_, errOut, err = urlsRun(t, args...)
+	if err != nil || !strings.Contains(errOut, "4 URLs dropped as junk (2 scanner payload, 1 scanner probe, 1 script placeholder (NaN, undefined, null); -raw keeps them)") {
+		t.Errorf("%v\n%s", err, errOut)
+	}
+	lines, errOut, err = urlsRun(t, append(args, "-raw")...)
+	if err != nil || len(lines) != 6 || strings.Contains(errOut, "dropped as junk") {
+		t.Errorf("-raw: %d lines %v\n%s", len(lines), err, errOut)
 	}
 }

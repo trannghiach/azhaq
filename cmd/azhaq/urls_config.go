@@ -285,3 +285,35 @@ func urlsNotes(rep *report, ps []map[string]any, failCapped bool) {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%s was not asked: it %s", n, skipped[n]))
 	}
 }
+
+// urlsJunk says how many URLs on the domains were left out as junk and
+// why: scanner payloads and probes, placeholders, links cut short. They
+// are in the summary, not on stdout; -raw prints them.
+func urlsJunk(rep *report, ps []map[string]any) {
+	by := map[string]int{}
+	total := 0
+	for _, p := range ps {
+		junk, _ := p["junk"].(map[string]any)
+		for reason, n := range junk {
+			by[reason] += intOf(n)
+			total += intOf(n)
+		}
+	}
+	if total == 0 {
+		return
+	}
+	rep.Junk = by
+	if rep.Counts == nil {
+		rep.Counts = map[string]int{}
+	}
+	rep.Counts["dropped as junk"] = total
+	reasons := make([]string, 0, len(by))
+	for _, k := range sortedCountKeys(by) {
+		reasons = append(reasons, fmt.Sprintf("%d %s", by[k], k))
+	}
+	word := "URLs"
+	if total == 1 {
+		word = "URL"
+	}
+	rep.Notes = append(rep.Notes, fmt.Sprintf("%d %s dropped as junk (%s; -raw keeps them)", total, word, strings.Join(reasons, ", ")))
+}

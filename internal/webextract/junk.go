@@ -43,10 +43,13 @@ var randomExe = lazyRE(`^/([A-Za-z0-9]{6,10})\.(?:exe|dll|scr)$`)
 // Payload reports a URL that carries a scanner's payload in its path or
 // query (see payloadMarks), or a scanner's own name or random file
 // (scannerMarks, randomExe).
-func Payload(raw string) bool {
+func Payload(raw string) bool { return payloadKind(raw) != "" }
+
+// payloadKind is JunkPayload, JunkScanner or "".
+func payloadKind(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return false
+		return ""
 	}
 	low := u.EscapedPath()
 	if u.RawQuery != "" {
@@ -57,13 +60,16 @@ func Payload(raw string) bool {
 			low = d
 		}
 	}
-	if payloadMarks.MatchString(low) || scannerMarks.MatchString(low) {
-		return true
+	if payloadMarks.MatchString(low) {
+		return JunkPayload
 	}
-	if m := randomExe.FindStringSubmatch(u.Path); m != nil {
-		return randomToken(m[1])
+	if scannerMarks.MatchString(low) {
+		return JunkScanner
 	}
-	return false
+	if m := randomExe.FindStringSubmatch(u.Path); m != nil && randomToken(m[1]) {
+		return JunkScanner
+	}
+	return ""
 }
 
 // randomToken: a digit among the letters, and the case changing at least
@@ -91,41 +97,60 @@ func randomToken(s string) bool {
 // login.php).), a scanner's payload kept by an archive
 // (/1234567890*~1*/, <script>, ;curl …oast.live, /etc/passwd), or a
 // directory listing sorted another way (see ListingSort).
-func JunkURL(raw string) bool {
+func JunkURL(raw string) bool { return JunkReason(raw) != "" }
+
+// The reasons JunkReason gives.
+const (
+	JunkPayload     = "scanner payload"
+	JunkScanner     = "scanner probe"
+	JunkListing     = "directory listing sort link"
+	JunkPlaceholder = "script placeholder (NaN, undefined, null)"
+	JunkDot         = "dot segment"
+	JunkMalformed   = "malformed link (wildcard, quote, bracket, ellipsis)"
+	JunkSentence    = "link cut at the end of its sentence"
+	JunkNotURL      = "not a URL"
+)
+
+// JunkReason says why JunkURL takes raw for junk, one of the Junk
+// constants; "" when it is not.
+func JunkReason(raw string) string {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return true
+		return JunkNotURL
 	}
-	if Payload(raw) || ListingSort(raw) {
-		return true
+	if k := payloadKind(raw); k != "" {
+		return k
+	}
+	if ListingSort(raw) {
+		return JunkListing
 	}
 	p := u.EscapedPath()
 	lp := strings.ToLower(p)
 	for _, seg := range strings.Split(lp, "/") {
 		switch seg {
 		case "nan", "undefined", "null", "[object%20object]", "%5bobject%20object%5d":
-			return true
+			return JunkPlaceholder
 		case ".", "..", "%2e", "%2e%2e", ".%2e", "%2e.":
 			// http://site/.. in an archive: no browser asks for a dot
 			// segment, it resolves it first.
-			return true
+			return JunkDot
 		}
 	}
 	for _, bad := range []string{"%e2%80%a6", "\u2026", "*", "%2a", "%3c", "%3e", "<", ">", "\\", "%5c", "%22", "%27"} {
 		if strings.Contains(lp, bad) {
-			return true
+			return JunkMalformed
 		}
 	}
 	last := strings.NewReplacer("%28", "(", "%29", ")", "%5b", "[", "%5d", "]").Replace(lp[strings.LastIndex(lp, "/")+1:])
 	if strings.Count(last, ")") > strings.Count(last, "(") || strings.Count(last, "]") > strings.Count(last, "[") {
-		return true // the end of the sentence the link sat in
+		return JunkSentence // the end of the sentence the link sat in
 	}
 	for _, tail := range []string{").", "),", ".[", "[", "'", ",", ";"} {
 		if strings.HasSuffix(last, tail) {
-			return true
+			return JunkSentence
 		}
 	}
-	return false
+	return ""
 }
 
 // ListingSort reports the sort links of an Apache or nginx directory
