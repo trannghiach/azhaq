@@ -38,6 +38,7 @@ azhaq shots -nmap scan.xml -shot-format jpeg -shot-fullpage
 What shapes it:
 
 - Which services: `-u 192.0.2.0/28`, `-p small|medium|large|8000-8010,3000`, `-no-http`, `-no-https`, `-nmap FILE` (an `nmap -oX` file) and `-nessus FILE`.
+- `-nmap` takes every open TCP port of the file, as `gowitness scan nmap` does, because nmap names a web port by guesses (Juice Shop on 3001 is `nessus`). A port that nmap named a web service is tried over its scheme; any other over https, then http. `-service NAMES` and `-service-contains http` take only those services, `-p` only those ports, `-skip-port` leaves ports out, and `-open-only=false` also tries ports nmap did not find open. The summary says how many ports were tried and how many answered with a page. A port that speaks no HTTP counts as one that did not answer, and the run exits 3.
 - How they are shot: `-shot-size`, `-shot-fullpage`, `-shot-wait`, `-shot-timeout`, `-shot-format jpeg`, `-shot-quality`, `-shot-js`, `-shot-codes`, `-chrome`, `-chrome-proxy`, `-chrome-profile` and `-H`.
 
 ## Output
@@ -164,7 +165,8 @@ note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 re
 | `-random` | bool |  | take the targets in random order |
 | `-rate` | float |  | requests per second to targets, over all hosts (0: no pace) |
 | `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
-| `-service` | string |  | with -nmap or -nessus: the service names to take, comma-separated, or all (default: http ones; www, http and https for Nessus) |
+| `-service` | string |  | with -nmap or -nessus: only the service names to take, comma-separated (default: every open port for nmap, as gowitness does; www, http and https for Nessus) |
+| `-service-contains` | string |  | with -nmap: only ports whose service name has this in it, such as http |
 | `-shot-codes` | string |  | take only pages that answer with these statuses, comma-separated (default: any); the others are listed as skipped |
 | `-shot-format` | string | `png` | screenshot format: png or jpeg |
 | `-shot-fullpage` | bool |  | screenshot the whole page, not only the first screen (up to 16384 pixels tall) |
@@ -175,6 +177,7 @@ note: screenshot of http://127.0.0.1:3001/ not taken: the page needs about 26 re
 | `-shot-timeout` | duration | `30s` | time a page gets: with -rate, how long it may go without a request let go or an answer, not in all |
 | `-shot-wait` | duration | `1.5s` | wait after a page's load event for scripts that draw after it, before the screenshot (0: none) |
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
+| `-skip-port` | string |  | with -nmap: never these ports, comma-separated numbers or ranges |
 | `-tabs` | int | `6` | Chrome tabs open at once for screenshots and -browser (gowitness -t) |
 | `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
 | `-u` | string, repeatable |  | target: URL (its path and query are kept), host, host:port, IP or address range such as 192.0.2.0/24 |

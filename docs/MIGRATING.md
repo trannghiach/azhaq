@@ -654,7 +654,7 @@ Behaviour, fields and edge cases: [`azhaq shots`](commands/shots.md).
 | `scan single -u URL` | `shots -u URL` | The path and query are kept. |
 | `scan file -f FILE` | `shots -l FILE` | Or stdin. |
 | `scan cidr -c 192.0.2.0/24` | `shots -u 192.0.2.0/24` (or `-cidr`) | |
-| `scan nmap -f scan.xml` | `shots -nmap scan.xml` | With `-open-only`, `-service` and `-hostnames`. |
+| `scan nmap -f scan.xml` | `shots -nmap scan.xml` | Every open port is tried, as in gowitness. `-open-only`, `-service`, `-service-contains`, `-p`, `-skip-port` and `-hostnames` narrow it. |
 | `scan nessus -f scan.nessus` | `shots -nessus scan.nessus` | |
 | `--port 8000`, `--ports-small` | `-p 8000`, `-p small` | `medium` and `large` too. |
 | `--no-http`, `--no-https` | `-no-http`, `-no-https` | |
@@ -684,6 +684,7 @@ Behaviour, fields and edge cases: [`azhaq shots`](commands/shots.md).
 - **Chrome is held to the scope and the budget.** Every request of every page, frame and worker is checked first. A page's own writes are refused and mapped, every download is refused, and popups close. Each request counts against `-max-requests` and `-rate`. gowitness loads whatever a page asks for.
 - At a set `-rate`, a page's time runs from when it last moved, so a slow pace gives whole pictures. A picture taken before the page's images and scripts loaded is marked `partial`, and the run exits 3.
 - A page the budget cannot cover is not shot, and the summary says how many requests it needed.
+- `-nmap` tries only ports nmap found open; gowitness also tries the others unless `--open-only`. `-open-only=false` matches gowitness.
 - Chrome saves nothing to disk but the picture.
 - `-shot-js` runs your script on the target's page. It is yours to scope.
 - There is one row for each name. Failures list a retry hint: `azhaq query -failed`.

@@ -863,7 +863,9 @@ func cmdShots(args []string) error {
 	random := fs.Bool("random", false, "take the targets in random order")
 	fs.Var(&nmapFiles, "nmap", "an nmap XML file (-oX): the web services it found (repeatable)")
 	fs.Var(&nessusFiles, "nessus", "a Nessus file (.nessus): the web services it found (repeatable)")
-	service := fs.String("service", "", "with -nmap or -nessus: the service names to take, comma-separated, or all (default: http ones; www, http and https for Nessus)")
+	service := fs.String("service", "", "with -nmap or -nessus: only the service names to take, comma-separated (default: every open port for nmap, as gowitness does; www, http and https for Nessus)")
+	serviceHas := fs.String("service-contains", "", "with -nmap: only ports whose service name has this in it, such as http")
+	skipPorts := fs.String("skip-port", "", "with -nmap: never these ports, comma-separated numbers or ranges")
 	openOnly := fs.Bool("open-only", true, "with -nmap: only ports found open")
 	hostnames := fs.Bool("hostnames", false, "with -nmap or -nessus: the host's name instead of its address, when the file has one")
 	given := inherit(fs, append([]string{"tabs", "browser-writes", "cidr", "max-ips", "shot-size", "shot-fullpage", "shot-wait", "shot-timeout", "shot-format",
@@ -884,15 +886,22 @@ func cmdShots(args []string) error {
 			return err
 		}
 	}
-	opt := targets.Options{Ports: portList, Hostnames: *hostnames, OpenOnly: *openOnly}
+	skipList, err := targets.Ports(*skipPorts)
+	if err != nil {
+		return usagef("-skip-port: %v", err)
+	}
+	opt := targets.Options{Ports: portList, Hostnames: *hostnames, OpenOnly: *openOnly, Contains: *serviceHas, SkipPorts: skipList}
 	for _, s := range splitList(*service) {
 		opt.Services = append(opt.Services, s)
 	}
+	scanPorts := 0 // ports the scan files gave, each tried over the schemes the scan left open
 	for _, f := range nmapFiles {
 		more, err := scanFile(f, func(r io.Reader) ([]string, error) { return targets.NmapXML(r, opt) })
 		if err != nil {
 			return err
 		}
+		more = targets.Expand(more, nil, *noHTTP, *noHTTPS)
+		scanPorts += len(more)
 		targs = append(targs, more...)
 	}
 	for _, f := range nessusFiles {
@@ -908,6 +917,9 @@ func cmdShots(args []string) error {
 	}
 	if len(targs) == 0 && len(prefixes) == 0 && len(*fs.Lookup("cidr").Value.(*stringsFlag)) == 0 {
 		if len(nmapFiles)+len(nessusFiles) > 0 {
+			if len(nmapFiles) > 0 {
+				return usagef("the nmap files give no port to try: check -p, -service, -service-contains and -skip-port, and that -open-only fits the scan")
+			}
 			return usagef("the scan files name no web service (-service all takes every open port)")
 		}
 		return usagef("give -u TARGET, -l FILE, -nmap FILE, -nessus FILE or targets on stdin")
@@ -938,11 +950,18 @@ func cmdShots(args []string) error {
 		csvw = csv.NewWriter(csvf)
 		_ = csvw.Write([]string{"url", "final_url", "response_code", "title", "technologies", "file", "format", "bytes", "phash", "partial"})
 	}
+	answered := map[string]bool{} // host:port of each page shot
+	var answeredMu sync.Mutex
 	see := func(_ types.Entity, o types.Observation) {
 		if o.Collector != "azhaq-shots" || o.Kind != "screenshot" {
 			return // what Chrome refused, and the writes it mapped, are the summary's
 		}
 		p := payloadOf(o)
+		if u, err := url.Parse(fmt.Sprint(p["url"])); err == nil {
+			answeredMu.Lock()
+			answered[u.Host] = true
+			answeredMu.Unlock()
+		}
 		if csvw != nil {
 			var tech []string
 			if ts, ok := p["technologies"].([]any); ok {
@@ -1020,6 +1039,13 @@ func cmdShots(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
+	if scanPorts > 0 && len(urls) == 0 && *list == "" {
+		n := fmt.Sprintf("nmap files: %d ports tried, %d answered with a page", scanPorts, len(answered))
+		if len(answered) < scanPorts && *serviceHas == "" && *service == "" {
+			n += " (every open port is tried, as gowitness does; -service-contains http leaves out the ports nmap did not name a web service)"
+		}
+		rep.Notes = append(rep.Notes, n)
+	}
 	return rep.finish(c.json, c.silent)
 }
 

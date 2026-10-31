@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -177,5 +178,61 @@ func TestShotsOfAnExplicitURLIsOneRow(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0] != "http://localhost:"+port+"/" {
 		t.Errorf("rows %v, want only the URL given", rows)
+	}
+}
+
+// nmap names a web port by guesses: Juice Shop's is "nessus". shots tries
+// every open port of the scan, as gowitness does, and says how many it tried.
+func TestShotsNmapTriesAWebPortNamedOddly(t *testing.T) {
+	if _, err := browser.Find(); err != nil {
+		t.Skip(err)
+	}
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><head><title>shop</title></head><body><h1>juice</h1></body></html>`)
+	}))
+	defer site.Close()
+	su, _ := url.Parse(site.URL)
+	dead, err := net.Listen("tcp", "127.0.0.1:0") // an open port that speaks nothing
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dead.Close()
+	go func() {
+		for {
+			c, err := dead.Accept()
+			if err != nil {
+				return
+			}
+			c.Close()
+		}
+	}()
+	_, dp, _ := net.SplitHostPort(dead.Addr().String())
+	xml := filepath.Join(t.TempDir(), "scan.xml")
+	body := fmt.Sprintf(`<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="127.0.0.1" addrtype="ipv4"/><ports>
+<port protocol="tcp" portid="%s"><state state="open"/><service name="nessus"/></port>
+<port protocol="tcp" portid="%s"><state state="open"/><service name="ssh"/></port>
+</ports></host></nmaprun>`, su.Port(), dp)
+	if err := os.WriteFile(xml, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text, errOut, err := captureBoth(t, func() error {
+		return cmdShots([]string{"-nmap", xml, "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db")})
+	})
+	if exitCode(err) == exitUsage {
+		t.Fatalf("exit 2: %v", err)
+	}
+	if !strings.Contains(text, "http://127.0.0.1:"+su.Port()+"/") {
+		t.Errorf("the port nmap called nessus was not shot:\n%s\n%s", text, errOut)
+	}
+	if !strings.Contains(errOut, "nmap files: 2 ports tried, 1 answered with a page") {
+		t.Errorf("the summary does not count the ports:\n%s", errOut)
+	}
+	// -service narrows to what the user names.
+	_, _, err = captureBoth(t, func() error {
+		return cmdShots([]string{"-nmap", xml, "-service", "http", "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db")})
+	})
+	if exitCode(err) != exitUsage {
+		t.Errorf("-service http names no port of this scan: exit %d, want 2", exitCode(err))
 	}
 }

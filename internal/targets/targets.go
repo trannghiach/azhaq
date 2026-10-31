@@ -82,7 +82,9 @@ func SplitPrefixes(lines []string) (rest, prefixes []string) {
 
 // Options narrow what a scan file gives.
 type Options struct {
-	Services  []string // service names to take; nil: the web ones; "all": every open port
+	Services  []string // service names to take; nil or "all": every port (as gowitness does); nessus: nil is the web ones
+	Contains  string   // nmap: only services whose name has this in it
+	SkipPorts []int    // nmap: never these ports
 	Ports     []int    // only these ports; nil: any
 	Hostnames bool     // the host's name rather than its address, when the scan has one
 	OpenOnly  bool     // nmap: only ports found open
@@ -100,6 +102,15 @@ func (o Options) port(p int) bool {
 	return false
 }
 
+func (o Options) skips(p int) bool {
+	for _, x := range o.SkipPorts {
+		if x == p {
+			return true
+		}
+	}
+	return false
+}
+
 func (o Options) all() bool {
 	for _, s := range o.Services {
 		if strings.EqualFold(s, "all") {
@@ -107,6 +118,15 @@ func (o Options) all() bool {
 		}
 	}
 	return false
+}
+
+// wantsNmapService is wantsService for an nmap port: with no service asked
+// for, every port is taken.
+func (o Options) wantsNmapService(name string) bool {
+	if o.Contains != "" && !strings.Contains(name, strings.ToLower(o.Contains)) {
+		return false
+	}
+	return len(o.Services) == 0 || o.wantsService(name)
 }
 
 // wantsService says whether a service name is taken: one of those asked for,
@@ -168,7 +188,12 @@ type nmapRun struct {
 	} `xml:"host"`
 }
 
-// NmapXML reads the web services of an nmap -oX file as URL lines.
+// NmapXML reads the ports of an nmap -oX file as URL lines. Every open TCP
+// port is taken, as gowitness does, since nmap names a web port by guesses
+// (Juice Shop on 3001 is "nessus"); -service, -service-contains, -p and
+// -skip-port narrow it. A port whose name is not a web service's, or that
+// has no TLS tunnel, comes as host:port, which the run tries over https and
+// then http.
 func NmapXML(r io.Reader, o Options) ([]string, error) {
 	var run nmapRun
 	if err := xml.NewDecoder(r).Decode(&run); err != nil {
@@ -194,18 +219,22 @@ func NmapXML(r io.Reader, o Options) ([]string, error) {
 			continue
 		}
 		for _, p := range h.Ports {
-			if p.Protocol != "tcp" || !o.port(p.ID) || (o.OpenOnly && p.State.State != "open") {
-				continue
-			}
-			if !o.wantsService(p.Service.Name) {
+			if p.Protocol != "tcp" || !o.port(p.ID) || o.skips(p.ID) || (o.OpenOnly && p.State.State != "open") {
 				continue
 			}
 			name := strings.ToLower(p.Service.Name)
-			tls := p.Service.Tunnel == "ssl" || strings.HasPrefix(name, "https") || strings.Contains(name, "ssl/http")
-			if o.all() && !strings.Contains(name, "http") && p.Service.Tunnel != "ssl" {
-				tls = p.ID == 443 // a port of no web service: its usual scheme
+			if !o.wantsNmapService(name) {
+				continue
 			}
+			tls := p.Service.Tunnel == "ssl" || strings.HasPrefix(name, "https") || strings.Contains(name, "ssl/http")
 			l := line(tls, host, p.ID)
+			if !strings.Contains(name, "http") && name != "www" && p.Service.Tunnel != "ssl" {
+				// Not named a web service: both schemes may answer.
+				l = net.JoinHostPort(host, strconv.Itoa(p.ID))
+				if p.ID == 80 || p.ID == 443 {
+					l = line(p.ID == 443, host, p.ID)
+				}
+			}
 			if !seen[l] {
 				seen[l] = true
 				out = append(out, l)

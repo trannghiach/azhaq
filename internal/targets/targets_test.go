@@ -44,6 +44,7 @@ const nmapXML = `<?xml version="1.0"?>
 <ports>
 <port protocol="tcp" portid="22"><state state="open"/><service name="ssh"/></port>
 <port protocol="tcp" portid="3001"><state state="open"/><service name="http" product="Express"/></port>
+<port protocol="tcp" portid="3002"><state state="open"/><service name="nessus"/></port>
 <port protocol="tcp" portid="8443"><state state="open"/><service name="http" tunnel="ssl"/></port>
 <port protocol="tcp" portid="443"><state state="open"/><service name="https"/></port>
 <port protocol="tcp" portid="8080"><state state="closed"/><service name="http-proxy"/></port>
@@ -55,17 +56,27 @@ const nmapXML = `<?xml version="1.0"?>
 </nmaprun>`
 
 func TestNmapXML(t *testing.T) {
+	// Every open TCP port, as gowitness takes them: nmap names Juice Shop
+	// on 3001 "nessus", and ssh may be on a web port.
 	got, err := NmapXML(strings.NewReader(nmapXML), Options{OpenOnly: true})
-	want := []string{"http://127.0.0.1:3001/", "https://127.0.0.1:8443/", "https://127.0.0.1/", "http://[2001:db8::1]/"}
+	want := []string{"127.0.0.1:22", "http://127.0.0.1:3001/", "127.0.0.1:3002", "https://127.0.0.1:8443/", "https://127.0.0.1/", "http://[2001:db8::1]/"}
 	if err != nil || !slices.Equal(got, want) {
 		t.Errorf("got %v, %v", got, err)
+	}
+	got, _ = NmapXML(strings.NewReader(nmapXML), Options{OpenOnly: true, Contains: "http", SkipPorts: []int{8443}})
+	if !slices.Equal(got, []string{"http://127.0.0.1:3001/", "https://127.0.0.1/", "http://[2001:db8::1]/"}) {
+		t.Errorf("-service-contains and -skip-port: %v", got)
+	}
+	got, _ = NmapXML(strings.NewReader(nmapXML), Options{OpenOnly: true, Services: []string{"nessus", "ssh"}})
+	if !slices.Equal(got, []string{"127.0.0.1:22", "127.0.0.1:3002"}) {
+		t.Errorf("-service: %v", got)
 	}
 	got, _ = NmapXML(strings.NewReader(nmapXML), Options{OpenOnly: false, Hostnames: true, Ports: []int{8080, 3001}})
 	if !slices.Equal(got, []string{"http://localhost:3001/", "http://localhost:8080/"}) {
 		t.Errorf("ports and names: %v", got)
 	}
 	got, _ = NmapXML(strings.NewReader(nmapXML), Options{OpenOnly: true, Services: []string{"all"}, Ports: []int{22}})
-	if !slices.Equal(got, []string{"http://127.0.0.1:22/"}) {
+	if !slices.Equal(got, []string{"127.0.0.1:22"}) {
 		t.Errorf("all services: %v", got)
 	}
 	if _, err := NmapXML(strings.NewReader("not xml"), Options{}); err == nil {
