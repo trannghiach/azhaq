@@ -338,11 +338,26 @@ func Notes(obs []types.StoredObservation) []string {
 	var stopped []string // addresses the open-port threshold stopped
 	var edges []string
 	var down, outside, filtAddrs, addrs, ranges int
-	for _, o := range obs {
+	// A row of a scan a limit stopped is read only while nothing came
+	// after it: the row that finishes the scan says it all.
+	newest := map[string]int{}
+	for i, o := range obs {
+		if o.Collector == Name {
+			var id struct {
+				Host string `json:"host"`
+				IP   string `json:"ip"`
+			}
+			if json.Unmarshal(o.Payload, &id) == nil {
+				newest[id.Host+"\x00"+id.IP] = i
+			}
+		}
+	}
+	for i, o := range obs {
 		if o.Collector != Name {
 			continue
 		}
 		var p struct {
+			Partial    bool     `json:"partial"`
 			Host       string   `json:"host"`
 			IP         string   `json:"ip"`
 			Unrouted   []string `json:"ipv6_not_scanned"`
@@ -367,7 +382,7 @@ func Notes(obs []types.StoredObservation) []string {
 			UDPLimit   int      `json:"udp_limited"`
 			Unprobed   int      `json:"unprobed"`
 		}
-		if json.Unmarshal(o.Payload, &p) != nil {
+		if json.Unmarshal(o.Payload, &p) != nil || p.Partial && newest[p.Host+"\x00"+p.IP] != i {
 			continue
 		}
 		if p.Range {

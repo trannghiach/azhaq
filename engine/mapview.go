@@ -453,7 +453,9 @@ func gate(obs []types.StoredObservation) int {
 }
 
 // proofOf summarizes a row's facts: the first value of each key, so a page
-// fetched by two collectors shows status=403 once.
+// fetched by two collectors shows status=403 once; the open ports are the
+// newest scan's, as a scan a limit stopped is followed by the one that
+// finishes it.
 func proofOf(e types.Entity, obs []types.StoredObservation) string {
 	keys := []string{"status", "title", "role", "ips", "cname", "open", "count", "error", "skipped", "word", "warning", "note", "auth", "via"}
 	vals := map[string]string{}
@@ -461,6 +463,9 @@ func proofOf(e types.Entity, obs []types.StoredObservation) string {
 		var m map[string]any
 		if json.Unmarshal(o.Payload, &m) != nil {
 			continue
+		}
+		if v, ok := m["open"]; ok && v != nil && o.Kind == "ports" && m["range"] != true {
+			vals["open"] = fmt.Sprint(v)
 		}
 		for _, k := range keys {
 			if _, done := vals[k]; done {

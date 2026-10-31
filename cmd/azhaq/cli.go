@@ -278,7 +278,7 @@ func init() {
 		{name: "resume", group: groupWS, run: cmdResume,
 			summary:  "continue a run that was interrupted or stopped by a limit",
 			usage:    "-db FILE [run flags to add, such as -cookie or -max-requests]",
-			output:   "as run",
+			output:   "as run; a run that ports started prints the open ports it finds, as ports does (-json: objects; -quiet: the summary only), not the ones an earlier run printed",
 			examples: []string{"azhaq resume -db app.db -max-requests 2000"}},
 		{name: "mcp", group: groupOther, run: cmdMCP,
 			summary: "serve Azhaq to MCP clients over stdio, the scope and request budget fixed at start",

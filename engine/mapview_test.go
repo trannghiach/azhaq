@@ -125,3 +125,23 @@ func TestMapOpsOnce(t *testing.T) {
 		t.Errorf("rows %+v", rows)
 	}
 }
+
+// A scan a limit stopped is followed by the one that finishes it: the map
+// shows the open ports of the newest row, and not the range's summary row,
+// which lists none.
+func TestMapShowsTheNewestScansOpenPorts(t *testing.T) {
+	ents := []types.Entity{{ID: "p", Type: types.TypePrefix, Key: "127.0.0.1/32"}}
+	row := func(payload string) types.StoredObservation {
+		return types.StoredObservation{EntityID: "p", Observation: types.Observation{Collector: "azhaq-ports", Kind: "ports", Payload: json.RawMessage(payload)}}
+	}
+	obs := []types.StoredObservation{
+		row(`{"ip":"127.0.0.1","open":[22],"partial":true,"asked_ports":"22,80"}`),
+		row(`{"ip":"127.0.0.1","open":[22,443],"partial":true,"asked_ports":"22,80,443,8080"}`),
+		row(`{"ip":"127.0.0.1","open":[22,443,9000]}`),
+		row(`{"range":true,"prefix":"127.0.0.1/32","open":[]}`),
+	}
+	got := engine.BuildMap(ents, nil, obs, nil, false)
+	if len(got) != 1 || !strings.Contains(got[0].Proof, "open=[22 443 9000]") {
+		t.Errorf("proof %q", got[0].Proof)
+	}
+}

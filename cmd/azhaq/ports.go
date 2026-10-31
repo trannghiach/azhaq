@@ -16,6 +16,7 @@ import (
 
 	"github.com/trannghiach/azhaq/internal/collectors/asncol"
 	"github.com/trannghiach/azhaq/internal/portscan"
+	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -399,83 +400,12 @@ func cmdPorts(args []string) error {
 		return err
 	}
 	out.w = w
-	var mu sync.Mutex
-	seen := map[string]bool{}
-	var scanned float64 // addresses asked
-	var unresolved int
-	var silentUDP bool // a row is open|filtered: the rows are not all open ports
+	sink := newPortsSink(out)
 	start := time.Now()
-	see := func(_ types.Entity, o types.Observation) {
-		if o.Collector != "azhaq-ports" {
-			return
-		}
-		p := payloadOf(o)
-		host, _ := p["host"].(string)
-		ip, _ := p["ip"].(string)
-		cdn, _ := p["cdn"].(string)
-		mu.Lock()
-		switch {
-		case p["range"] == true:
-			scanned += float64(intOf(p["addresses"]))
-		case p["unresolved"] != nil:
-			unresolved++
-		case p["prefix"] == nil:
-			scanned++
-		}
-		mu.Unlock()
-		if p["up"] == true && p["scanned"] == float64(0) && ip != "" {
-			if once(&mu, seen, "up "+ip) {
-				out.add(portRow{Host: host, IP: ip, State: "up", At: time.Now()})
-			}
-			return
-		}
-		services, _ := p["services"].([]any)
-		for _, s := range services {
-			svc, _ := s.(map[string]any)
-			port := fmt.Sprint(svc["port"])
-			key := host + ":" + port
-			if w.json || out.csv || out.keep {
-				key = ip + " " + key // a row per address, as naabu prints
-			}
-			if !once(&mu, seen, key) {
-				continue
-			}
-			n, _ := strconv.Atoi(port)
-			row := portRow{Host: host, IP: ip, Port: n, Proto: "tcp", State: "open", TLS: svc["tls"] == true, CDN: cdn, At: time.Now(), Fields: map[string]any{}}
-			for _, k := range []string{"service", "product", "version", "title", "banner", "subject_cn", "subject_an"} {
-				if v, ok := svc[k]; ok {
-					row.Fields[k] = v
-				}
-			}
-			out.add(row)
-		}
-		udpServices, _ := p["udp_services"].([]any)
-		for _, s := range udpServices {
-			svc, _ := s.(map[string]any)
-			port := fmt.Sprint(svc["port"])
-			if !once(&mu, seen, ip+" "+host+":"+port+"/udp") {
-				continue
-			}
-			n, _ := strconv.Atoi(port)
-			state, _ := svc["state"].(string)
-			if state != "open" {
-				mu.Lock()
-				silentUDP = true
-				mu.Unlock()
-			}
-			row := portRow{Host: host, IP: ip, Port: n, Proto: "udp", State: state, At: time.Now(), Fields: map[string]any{}}
-			for _, k := range []string{"service", "product", "version", "banner"} {
-				if v, ok := svc[k]; ok {
-					row.Fields[k] = v
-				}
-			}
-			out.add(row)
-		}
-	}
 	if *wn && *sn {
 		return usagef("-sn lists the addresses that are up, -wn scans them: give one")
 	}
-	_, done, err := runPreset(&c, append(run, extra...), rep, see)
+	_, done, err := runPreset(&c, append(run, extra...), rep, sink.see)
 	if err != nil {
 		return err
 	}
@@ -486,18 +416,181 @@ func cmdPorts(args []string) error {
 	if err := w.close(); err != nil {
 		return err
 	}
-	rep.Results = w.count()
-	rep.Counts = map[string]int{"addresses": int(scanned)}
-	if unresolved > 0 {
-		rep.Counts["did not resolve"] = unresolved
+	sink.settle(rep, *sn)
+	return rep.finish(c.json, c.silent)
+}
+
+// portsSink prints the rows of a ports run as its tasks report them, each
+// port once, and keeps the counts its summary needs.
+type portsSink struct {
+	out        *portOut
+	mu         sync.Mutex
+	seen       map[string]bool
+	scanned    float64 // addresses asked
+	unresolved int
+	silentUDP  bool // a row is open|filtered: the rows are not all open ports
+}
+
+func newPortsSink(out *portOut) *portsSink {
+	return &portsSink{out: out, seen: map[string]bool{}}
+}
+
+func (k *portsSink) see(_ types.Entity, o types.Observation) { k.visit(o, true) }
+
+// replay marks the ports an earlier run of the scan found as printed, so a
+// resumed run prints only what it finds itself.
+func (k *portsSink) replay(obs []types.StoredObservation) {
+	for _, o := range obs {
+		k.visit(o.Observation, false)
 	}
-	if silentUDP {
+}
+
+// settle puts the sink's counts in the summary, after the rows are written.
+func (k *portsSink) settle(rep *report, sn bool) {
+	rep.Results = k.out.w.count()
+	rep.Counts = map[string]int{"addresses": int(k.scanned)}
+	if k.unresolved > 0 {
+		rep.Counts["did not resolve"] = k.unresolved
+	}
+	if k.silentUDP {
 		rep.what = "ports"
 	}
-	if *sn {
+	if sn {
 		rep.what = "addresses up"
 	}
-	return rep.finish(c.json, c.silent)
+}
+
+// visit is see; with print false it only notes what the observation holds.
+func (k *portsSink) visit(o types.Observation, print bool) {
+	if o.Collector != "azhaq-ports" {
+		return
+	}
+	out, w := k.out, k.out.w
+	add := func(r portRow) {
+		if print {
+			out.add(r)
+		}
+	}
+	p := payloadOf(o)
+	host, _ := p["host"].(string)
+	ip, _ := p["ip"].(string)
+	cdn, _ := p["cdn"].(string)
+	if print {
+		k.mu.Lock()
+		switch {
+		case p["range"] == true:
+			k.scanned += float64(intOf(p["addresses"]))
+		case p["unresolved"] != nil:
+			k.unresolved++
+		case p["prefix"] == nil:
+			k.scanned++
+		}
+		k.mu.Unlock()
+	}
+	if p["up"] == true && p["scanned"] == float64(0) && ip != "" {
+		if once(&k.mu, k.seen, "up "+ip) {
+			add(portRow{Host: host, IP: ip, State: "up", At: time.Now()})
+		}
+		return
+	}
+	services, _ := p["services"].([]any)
+	for _, s := range services {
+		svc, _ := s.(map[string]any)
+		port := fmt.Sprint(svc["port"])
+		key := host + ":" + port
+		if w.json || out.csv || out.keep {
+			key = ip + " " + key // a row per address, as naabu prints
+		}
+		if !once(&k.mu, k.seen, key) {
+			continue
+		}
+		n, _ := strconv.Atoi(port)
+		row := portRow{Host: host, IP: ip, Port: n, Proto: "tcp", State: "open", TLS: svc["tls"] == true, CDN: cdn, At: time.Now(), Fields: map[string]any{}}
+		for _, f := range []string{"service", "product", "version", "title", "banner", "subject_cn", "subject_an"} {
+			if v, ok := svc[f]; ok {
+				row.Fields[f] = v
+			}
+		}
+		add(row)
+	}
+	udpServices, _ := p["udp_services"].([]any)
+	for _, s := range udpServices {
+		svc, _ := s.(map[string]any)
+		port := fmt.Sprint(svc["port"])
+		if !once(&k.mu, k.seen, ip+" "+host+":"+port+"/udp") {
+			continue
+		}
+		n, _ := strconv.Atoi(port)
+		state, _ := svc["state"].(string)
+		if state != "open" && print {
+			k.mu.Lock()
+			k.silentUDP = true
+			k.mu.Unlock()
+		}
+		row := portRow{Host: host, IP: ip, Port: n, Proto: "udp", State: state, At: time.Now(), Fields: map[string]any{}}
+		for _, f := range []string{"service", "product", "version", "banner"} {
+			if v, ok := svc[f]; ok {
+				row.Fields[f] = v
+			}
+		}
+		add(row)
+	}
+}
+
+// resumePorts continues a ports run a limit stopped, as azhaq resume does
+// every run, and prints what ports prints: the open ports this run finds
+// (-json for rows as objects, -quiet for the summary only), with the
+// summary of a ports run. The ports the earlier runs found are in the
+// workspace and are not printed again.
+func resumePorts(db, id string, runArgs, rest []string) error {
+	c := common{json: wantsJSON(rest), db: db}
+	rep := newReport("ports")
+	rep.what = "open ports"
+	w, err := newWriter(&c)
+	if err != nil {
+		return err
+	}
+	out := &portOut{w: w, exclude: map[string]bool{}, quiet: hasFlag(rest, "quiet")}
+	sink := newPortsSink(out)
+	st, err := store.OpenExisting(db)
+	if err != nil {
+		return err
+	}
+	st.UseRun(id)
+	obs, err := st.Observations()
+	st.Close()
+	if err != nil {
+		return err
+	}
+	sink.replay(obs)
+	var args []string
+	for _, a := range rest {
+		if k, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); !strings.HasPrefix(a, "-") || (k != "json" && k != "jsonl") {
+			args = append(args, a)
+		}
+	}
+	args = append(append(slices.Clone(runArgs), args...), "-resume-run", id)
+	_, done, err := runPreset(&c, args, rep, sink.see)
+	if err != nil {
+		return err
+	}
+	defer done()
+	if err := w.close(); err != nil {
+		return err
+	}
+	sink.settle(rep, discoversOnly(runArgs))
+	return rep.finish(c.json, false)
+}
+
+// discoversOnly says whether a stored ports run was -sn: it lists the
+// addresses that are up and scans nothing.
+func discoversOnly(runArgs []string) bool {
+	for i, a := range runArgs {
+		if a == "-port-discover" && i+1 < len(runArgs) {
+			return runArgs[i+1] == "only"
+		}
+	}
+	return false
 }
 
 // once says whether key is new, and notes it.

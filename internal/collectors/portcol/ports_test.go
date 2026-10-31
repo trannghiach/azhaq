@@ -235,3 +235,24 @@ func TestStoppedScanResumes(t *testing.T) {
 }
 
 var neterrBudget = neterr.ErrBudget
+
+// The row of a scan a limit stopped is in the summary only until the row
+// that finishes the scan arrives: its silent ports are not counted twice.
+func TestNotesReadAStoppedScanOnlyUntilItIsFinished(t *testing.T) {
+	row := func(partial bool) types.StoredObservation {
+		p, _ := json.Marshal(map[string]any{"host": "h.example", "ip": "10.0.0.5", "filtered_ports": []int{81}, "partial": partial})
+		return types.StoredObservation{Observation: types.Observation{Collector: Name, Payload: p}}
+	}
+	for _, c := range []struct {
+		obs  []types.StoredObservation
+		want int
+	}{
+		{[]types.StoredObservation{row(true), row(true), row(false)}, 1},
+		{[]types.StoredObservation{row(true), row(true)}, 1},
+	} {
+		n := Notes(c.obs)
+		if len(n) != 1 || strings.Count(n[0], "h.example (10.0.0.5) port 81") != c.want {
+			t.Errorf("notes %q", n)
+		}
+	}
+}

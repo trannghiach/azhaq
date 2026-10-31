@@ -52,6 +52,7 @@ func cmdResume(args []string) error {
 		}
 	}
 	id, runArgs, left, ok, err := st.Resumable()
+	ports := ok && st.GetMeta("command:"+id) == "ports"
 	st.Close()
 	if err != nil {
 		return err
@@ -66,6 +67,9 @@ func cmdResume(args []string) error {
 		if runArgs, err = listFromWorkspace(db, id, runArgs); err != nil {
 			return err
 		}
+	}
+	if ports {
+		return resumePorts(db, id, runArgs, rest)
 	}
 	// Later options win: what is given now overrides what was stored.
 	all := append(append(append([]string(nil), runArgs...), rest...), "-db", db, "-resume-run", id)

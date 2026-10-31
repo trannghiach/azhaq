@@ -8,10 +8,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/trannghiach/azhaq/store"
 )
 
 func TestParseTargetsSpellings(t *testing.T) {
@@ -207,5 +211,131 @@ func TestPortsAllTargetsOutsideTheScope(t *testing.T) {
 	_, _, code := cli(t, "ports", "-host", "127.0.0.2,127.0.0.1", "-allow", "127.0.0.1", "-p", port, "-json")
 	if code != exitOK {
 		t.Errorf("a target in scope: exit %d", code)
+	}
+}
+
+// listenOpen is n accepting TCP listeners on 127.0.0.1, then the ports
+// numbered in gone closed again so that a connect to them is refused, in
+// ascending order.
+func listenOpen(t *testing.T, n int, gone ...int) []int {
+	t.Helper()
+	type l struct {
+		ln   net.Listener
+		port int
+	}
+	var ls []l
+	for i := 0; i < n; i++ {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Skip(err)
+		}
+		ls = append(ls, l{ln, ln.Addr().(*net.TCPAddr).Port})
+	}
+	sort.Slice(ls, func(i, j int) bool { return ls[i].port < ls[j].port })
+	var ports []int
+	for i, x := range ls {
+		ports = append(ports, x.port)
+		if slices.Contains(gone, i) {
+			x.ln.Close()
+			continue
+		}
+		t.Cleanup(func() { x.ln.Close() })
+		go func() {
+			for {
+				c, err := x.ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+	}
+	return ports
+}
+
+// A scan the request budget stops, resumed under the same budget and then
+// without one: each run prints the open ports it found and its summary
+// counts those rows; the workspace's last row holds every open port, and
+// the map shows that row, not the first stopped one.
+func TestPortsResumeKeepsEveryOpenPort(t *testing.T) {
+	t.Chdir(t.TempDir())
+	ports := listenOpen(t, 5, 1, 3) // the second and the fourth refuse
+	spec := fmt.Sprintf("%d,%d,%d,%d,%d", ports[0], ports[1], ports[2], ports[3], ports[4])
+	portsOf := func(out string) (got []int) {
+		for _, l := range lines(out) {
+			var row struct {
+				Port int `json:"port"`
+			}
+			if json.Unmarshal([]byte(l), &row) != nil || row.Port == 0 {
+				t.Fatalf("row %q", l)
+			}
+			got = append(got, row.Port)
+		}
+		return got
+	}
+	var all []int
+	step := func(code int, want []int, args ...string) report {
+		t.Helper()
+		out, rep, got := runContract(t, args...)
+		if got != code {
+			t.Fatalf("%v: exit %d, want %d\n%+v", args, got, code, rep)
+		}
+		if p := portsOf(out); !slices.Equal(p, want) || rep.Results != len(want) {
+			t.Errorf("%v printed ports %v with results %d, want %v", args, p, rep.Results, want)
+		}
+		all = append(all, portsOf(out)...)
+		return rep
+	}
+	step(exitLimit, ports[:1], "ports", "-host", "127.0.0.1", "-p", spec, "-order", "asc", "-detect", "none", "-max-requests", "2", "-db", "b.db")
+	step(exitLimit, ports[2:3], "resume", "-db", "b.db")
+	rep := step(exitOK, ports[4:], "resume", "-db", "b.db", "-max-requests", "0")
+	if rep.Command != "ports" {
+		t.Errorf("a resumed ports run reports itself as %q", rep.Command)
+	}
+	if want := []int{ports[0], ports[2], ports[4]}; !slices.Equal(all, want) {
+		t.Errorf("the runs printed %v in all, want %v", all, want)
+	}
+
+	st, err := store.OpenExisting("b.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	obs, _ := st.Observations()
+	type portsRow struct {
+		Open    []int  `json:"open"`
+		Partial bool   `json:"partial"`
+		Asked   string `json:"asked_ports"`
+		Scanned int    `json:"scanned"`
+		IP      string `json:"ip"`
+	}
+	var asked []string
+	var last portsRow
+	for _, o := range obs {
+		var row portsRow
+		if o.Collector != "azhaq-ports" || json.Unmarshal(o.Payload, &row) != nil || row.IP == "" {
+			continue
+		}
+		asked = append(asked, row.Asked)
+		last = row
+	}
+	if last.Partial || !slices.Equal(last.Open, []int{ports[0], ports[2], ports[4]}) || last.Scanned != 5 {
+		t.Errorf("the last row is %+v, want all three open ports and 5 asked", last)
+	}
+	want := []string{fmt.Sprintf("%d,%d", ports[0], ports[1]), fmt.Sprintf("%d,%d,%d,%d", ports[0], ports[1], ports[2], ports[3]), ""}
+	if !slices.Equal(asked, want) {
+		t.Errorf("asked_ports over the runs %q, want %q", asked, want)
+	}
+
+	rows, err := mapRows("b.db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shown string
+	for _, r := range rows {
+		shown += r.Line()
+	}
+	if want := fmt.Sprintf("open=[%d %d %d]", ports[0], ports[2], ports[4]); !strings.Contains(shown, want) {
+		t.Errorf("the map says %q, want %s", shown, want)
 	}
 }

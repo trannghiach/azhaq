@@ -700,6 +700,10 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		if err := st.SetRunArgs(keptArgs(args)); err != nil {
 			return err
 		}
+		if rep.Command != "run" {
+			// The command that started the run: azhaq resume prints as it does.
+			_ = st.SetMeta("command:"+st.RunID(), rep.Command)
+		}
 		if listLines != nil {
 			if err := st.SetMeta("list:"+st.RunID(), strings.Join(listLines, "\n")); err != nil {
 				return err
