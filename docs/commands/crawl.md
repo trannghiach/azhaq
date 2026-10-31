@@ -178,7 +178,7 @@ These filters limit what is printed, not what is crawled.
 | `-sweep` | bool |  | also ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, admin, …) and for the source map next to each script, as run does; crawl asks only what a crawler does |
 | `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
 | `-no-form-fill` | bool |  | do not ask the action of GET forms with neutral values |
-| `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default 3) |
+| `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default: all) |
 | `-no-follow` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |
 | `-no-map-guess` | bool |  | do not ask for main.js.map next to a script that names no source map (a map a script or a header names is still read) |
 | `-browser` | bool |  | also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome) |

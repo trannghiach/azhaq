@@ -232,7 +232,7 @@ A client route is a view that a single-page app's router draws.
 - `count` is the number of URLs folded. `not_asked` is how many of them were found and not requested.
 - Pages of one route that differ in which ID-like names they carry are one row: `/product?id={n}` and `/product?id={n}&store={n}`. Its `params` lists every name.
 - A query value that names a page, such as `index.jsp?content=about.htm` or `view=grid`, is not an ID. Each is a page of its own.
-- Three URLs of a template are requested. `-per-template N` changes that.
+- Every URL of a template is requested, as `crawl` and katana do. `-per-template N` limits it to N; the others are listed with `coverage: hint`.
 - The others are listed with `coverage: hint`, as rows of their own in `crawl`, in text and `-json`.
 
 ### Strings that are not routes
@@ -308,7 +308,7 @@ Examples of what `notes` holds for a run:
 | `-no-paths` | bool |  | do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning |
 | `-path-climb` | bool |  | also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/) |
 | `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
-| `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default 3) |
+| `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default: all) |
 | `-web-ports` | string |  | ports to probe on each hostname, comma-separated (default: 443, falling back to 80) |
 | `-web-scheme` | string |  | try a name or an address over this scheme only, http or https (default: https, then http) |
 | `-no-favicon` | bool |  | do not hash the favicon of front pages (one or two requests less per web service) |

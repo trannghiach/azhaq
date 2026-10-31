@@ -281,7 +281,7 @@ Other rules that shape the queue:
 - Collectors that read a page run after `azhaq-http` has answered for the same URL. These are crawl, scripts, API descriptions, paths and GraphQL. A URL that does not answer is dropped, and so is every task waiting behind it.
 - A target given as `host:port` or an IP address goes on as the scheme that answered.
 - A directory listing's sort links are the same listing, and are neither requested nor listed. Apache's and nginx's are `?C=N;O=D` and `?C=M&O=A`.
-- URLs that differ only by an ID or a query value share a template, such as `/catalog/product?productId={n}`. At most 3 URLs per template are fetched, and the rest stay in the graph as found.
+- URLs that differ only by an ID or a query value share a template, such as `/catalog/product?productId={n}`. Every URL of a template is fetched; `-per-template N` limits it, and the rest stay in the graph as found.
 
 #### A site named over http and https
 

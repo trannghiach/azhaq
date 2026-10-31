@@ -277,7 +277,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	passive := fs.Bool("passive", false, "skip HTTP/crawl/JS/paths/TLS (no handshake to the target)")
 	depth := fs.Int("depth", 4, "max fan-out waves (0 = seed wave only, not unlimited)")
 	maxItems := fs.Int("max-items", 0, "max collector invocations (default 2048)")
-	perTmpl := fs.Int("per-template", 0, "URLs of one template (/product?id={n}) to request; the rest are listed (default 3)")
+	perTmpl := fs.Int("per-template", 0, "URLs of one template (/product?id={n}) to request; the rest are listed (default: all)")
 	maxRequests := fs.Int64("max-requests", 0, "requests to targets this run may send (0: no cap); the work left over is for azhaq resume")
 	rateFlag := fs.Float64("rate", 0, "requests per second to targets, over all hosts (0: no pace)")
 	ledgerFlag := fs.String("ledger", "", ledgerHelp)

@@ -159,11 +159,66 @@ func TestRunListsEveryLinkedQueryURL(t *testing.T) {
 		}
 	}
 	tmpl := rows[srv.URL+"/item?id={n}"]
-	if tmpl == nil || tmpl["count"] != float64(30) || tmpl["not_asked"] != float64(27) {
-		t.Errorf("the /item template row does not say 30 urls, 27 not asked: %v", tmpl)
+	if tmpl == nil || tmpl["count"] != float64(30) || tmpl["not_asked"] != nil {
+		t.Errorf("the /item template row does not say 30 urls, all asked: %v", tmpl)
 	}
-	if n := hits("/item"); n != 3 {
-		t.Errorf("%d /item asked, want run's bound of 3", n)
+	if n := hits("/item"); n != 30 {
+		t.Errorf("%d /item asked, want all 30", n)
+	}
+}
+
+func itemsSite(t *testing.T, n int) (*httptest.Server, func() int) {
+	var mu sync.Mutex
+	asked := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		switch r.URL.Path {
+		case "/":
+			var a []string
+			for i := 1; i <= n; i++ {
+				a = append(a, fmt.Sprintf(`<a href="/item?id=%d">i%d</a>`, i, i))
+			}
+			fmt.Fprintf(w, `<html><body>%s</body></html>`, strings.Join(a, ""))
+		case "/item":
+			mu.Lock()
+			asked++
+			mu.Unlock()
+			fmt.Fprintf(w, `<html><body>item %s</body></html>`, r.URL.Query().Get("id"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() int { mu.Lock(); defer mu.Unlock(); return asked }
+}
+
+// run asks every URL of a template by default; -per-template N asks N and
+// lists the rest.
+func TestRunPerTemplateDefaultAsksAll(t *testing.T) {
+	for _, tc := range []struct {
+		args        []string
+		asked, hint int
+	}{{nil, 20, 0}, {[]string{"-per-template", "2"}, 2, 18}} {
+		srv, asked := itemsSite(t, 20)
+		args := append([]string{"-url", srv.URL + "/", "-allow", "127.0.0.1", "-depth", "3", "-no-tech", "-json", "-db", filepath.Join(t.TempDir(), "w.db")}, tc.args...)
+		out, _, err := captureBoth(t, func() error { return cmdRun(args) })
+		if err != nil && exitCode(err) != exitPartial {
+			t.Fatal(err)
+		}
+		if n := asked(); n != tc.asked {
+			t.Errorf("%v: %d asked, want %d", tc.args, n, tc.asked)
+		}
+		tmpl := urlRows(t, out)[srv.URL+"/item?id={n}"]
+		if tmpl == nil || tmpl["count"] != float64(20) {
+			t.Fatalf("%v: template row: %v", tc.args, tmpl)
+		}
+		got := 0
+		if v, ok := tmpl["not_asked"].(float64); ok {
+			got = int(v)
+		}
+		if got != tc.hint {
+			t.Errorf("%v: %d not asked, want %d", tc.args, got, tc.hint)
+		}
 	}
 }
 

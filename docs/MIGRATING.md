@@ -260,7 +260,7 @@ Behaviour, fields and edge cases: [`azhaq crawl`](commands/crawl.md).
 - **Every URL found is asked.** Like katana and Burp's crawler, `crawl` requests every GET URL it finds in scope, `/logout` and `/delete?id=1` included: azhaq cannot know what a GET does on the server, so no name keeps a URL out. Writes go only with their flags. `-deny-path REGEX` keeps paths out of every request. With a session, a request that ends it is noticed and the session is renewed or the run stops: [Sessions](CONCEPTS.md#sessions).
 - A URL with a scanner's payload in it never enters the map.
 - Chrome sends only GET, HEAD and OPTIONS unless you give `-browser-writes`.
-- A page with many query variants, such as `/item?id=N`, is asked 3 times, as `-per-template` sets. The rest are listed.
+- A page with many query variants, such as `/item?id=N`, is asked for every URL, as katana does. `-per-template N` limits it, and the rest are listed.
 - `crawl` asks only what a crawler asks. `-sweep` adds the 32 built-in path checks and the source map next to each script, as `run` does. The checks cover `robots.txt`, sitemaps, API descriptions, `.git/HEAD`, `admin` and more.
 - **Time at a low `-rate`.** The number of requests sets the time. On Juice Shop at `-rate 5`, azhaq sends 91 requests in 21 s. katana `-jc -jsl -d 3 -rl 5` sends about 80 in 17 s.
 - The extra azhaq requests are the API routes katana does not find, such as `/rest/…` and `/api/…`: about 60 more endpoints. They also include one check per directory that tells a real answer from the page the app gives every unknown path.

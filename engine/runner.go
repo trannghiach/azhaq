@@ -32,7 +32,7 @@ type Budgets struct {
 	// instead of starting from the seeds.
 	Resume bool
 	// PerTemplate is how many URLs of one template (/product?id={n}) are
-	// requested; the rest are listed. Zero is the default, 3.
+	// requested; the rest are listed. Zero is the default: all.
 	PerTemplate int
 }
 

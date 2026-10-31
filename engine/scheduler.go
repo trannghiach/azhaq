@@ -19,8 +19,9 @@ import (
 const batchesInFlight = 4
 
 // perTemplate is how many URLs of one template (/product?id={n}) are
-// fetched by default; the rest stay in the graph as found, not visited.
-const perTemplate = 3
+// fetched by default: all. -per-template N bounds it; the rest stay in the
+// graph as found, not visited.
+const perTemplate = 1 << 30
 
 // RunLocal is the built-in scheduler. Work flows: a seed's items start as
 // soon as a worker is free, and the hints they return are queued at once,
