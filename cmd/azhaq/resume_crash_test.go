@@ -82,6 +82,7 @@ func TestResumeAfterSIGKILLNeverSendsAWriteTwice(t *testing.T) {
 		t.Fatalf("the killed run's ledger is sealed or has no POST:\n%s", raw)
 	}
 
+	dataDirs.Store(t.Name(), dir) // the resume reads what the killed run kept there
 	_, rep, code := runContract(t, "resume", "-db", db)
 	if code != exitOK {
 		t.Fatalf("resume: exit %d\n%+v", code, rep)
@@ -94,7 +95,8 @@ func TestResumeAfterSIGKILLNeverSendsAWriteTwice(t *testing.T) {
 	}
 	notes := strings.Join(rep.Notes, "\n")
 	if !strings.Contains(notes, "1 write was sent before the run was killed") || !regexp.MustCompile(`\d+ requests sent before the run was killed had no stored answer and were asked again`).MatchString(notes) {
-		t.Errorf("the notes do not say what the resume did:\n%s", notes)
+		after, _ := os.ReadFile(db + ".ledger.jsonl")
+		t.Errorf("the notes do not say what the resume did:\n%s\nsummary: %+v\nledger after the resume:\n%s", notes, rep, after)
 	}
 	if strings.Contains(notes, "POST forms were submitted") {
 		t.Errorf("a POST that was held back is counted as submitted:\n%s", notes)
