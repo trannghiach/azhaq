@@ -163,3 +163,16 @@ func TestWaitingNamesTheSlowSource(t *testing.T) {
 		t.Errorf("still waiting %v after the run", w)
 	}
 }
+
+// A key a source sends in its URL is not printed in the source's error.
+func TestSourceErrorsDoNotCarryKeys(t *testing.T) {
+	for in, want := range map[string]string{
+		"unexpected status code 403 received from https://api.shodan.io/dns/domain/example.org?key=SECRET123": "https://api.shodan.io/dns/domain/example.org?key=…",
+		"Get \"https://api.hackertarget.com/hostsearch/?q=example.org&apikey=SECRET123\": EOF":                "https://api.hackertarget.com/hostsearch/?q=example.org&apikey=…\": EOF",
+		"received from https://x.test/?domain=example.org&engine=cuttlefish":                                  "received from https://x.test/?domain=example.org&engine=cuttlefish",
+	} {
+		if got := shorten(in); !strings.Contains(got, want) || strings.Contains(got, "SECRET123") {
+			t.Errorf("%q: %q", in, got)
+		}
+	}
+}

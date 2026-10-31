@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -726,8 +727,14 @@ func contextEnded(err error) bool {
 }
 
 func shorten(s string) string {
+	s = keyParam.ReplaceAllString(s, "${1}…")
 	if len(s) > 200 {
 		return s[:200] + "…"
 	}
 	return s
 }
+
+// keyParam is a credential in a URL's query: sources that take their key
+// there (Shodan's ?key=, hackertarget's &apikey=) name the URL in an error,
+// and the error goes to the summary and the workspace.
+var keyParam = regexp.MustCompile(`(?i)([?&](?:api[_-]?key|apikey|key|token|access_token|auth|password|secret)=)[^&\s"')]+`)
