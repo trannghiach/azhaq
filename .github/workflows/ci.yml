@@ -25,6 +25,11 @@ jobs:
           git fetch -q --depth=50 origin "${{ github.event.before }}" || git fetch -q --unshallow origin
           npm i -g --silent @commitlint/cli@19.8.1
           commitlint --from "${{ github.event.before }}" --to HEAD
+      - name: range scripts
+        # The workflow trials' estate builder, grader and isolation script.
+        run: |
+          python3 -m unittest discover -s .github/ci/range
+          bash -n .github/ci/range/isolate.sh .github/ci/run.sh .github/ci/fetch.sh
       - name: gofmt
         run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
       - name: vet

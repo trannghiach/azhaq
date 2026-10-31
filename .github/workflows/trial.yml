@@ -6,6 +6,16 @@ name: trial
 # runner first. REPORT.md and the notes are encrypted to the maintainer's
 # age key and go to the ci-results branch under trial/NAME/. Push a tag
 # trial-NAME.
+#
+# The first line of the tag's message picks the kind (.github/ci/run.sh):
+#   switch    the review above (the default)
+#   research  two phases of an engagement on two generated estates of Vulhub
+#             environments: usual tools on estate 1, azhaq on estate 2
+#   hunter    the same estates as two bug-bounty sessions: azhaq first, the
+#             usual stack second
+# The estates are built, started and isolated from the agent by the `work`
+# job (.github/ci/range, .github/ci/trial/README.md). "seed=WORDS" in the
+# message fixes the draw; without it the draw is secret.
 on:
   push:
     tags: ["trial-*"]
@@ -17,7 +27,28 @@ env:
   AGE_RECIPIENT: age10llepsf6tflh3wjlfu8awk203049vfsn5vxw9uc3y23qlq9dhy7sm20pex
 
 jobs:
+  kind:
+    runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.k.outputs.kind }}
+      seed: ${{ steps.k.outputs.seed }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: k
+        run: |
+          git fetch -q --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          msg=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
+          case "${msg%% *}" in
+            research) kind=research ;;
+            hunter) kind=hunter ;;
+            *) kind=switch ;;
+          esac
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+          echo "seed=$(echo "$msg" | sed -n 's/.*seed=\([A-Za-z0-9._-]*\).*/\1/p')" >> "$GITHUB_OUTPUT"
+          echo "trial kind: $kind"
   codex:
+    needs: kind
+    if: needs.kind.outputs.kind == 'switch'
     runs-on: ubuntu-latest
     timeout-minutes: 300
     steps:
@@ -63,6 +94,97 @@ jobs:
           age -r "$AGE_RECIPIENT" -o "$HOME/ci/trial.tgz.age" "$HOME/ci/trial.tgz"
           files=("$HOME/ci/trial.tgz.age")
           # A session Codex refreshed here goes back, or the author's is revoked.
+          if [ -s "$HOME/.codex/auth.json" ] && [ "$(sha256sum "$HOME/.codex/auth.json" | cut -d' ' -f1)" != "$(cat "$RUNNER_TEMP/auth.sum" 2>/dev/null)" ]; then
+            age -r "$AGE_RECIPIENT" -o "$HOME/ci/codex-auth.json.age" "$HOME/.codex/auth.json"
+            files+=("$HOME/ci/codex-auth.json.age")
+          fi
+          "$HOME/ci/publish.sh" "trial/$GITHUB_REF_NAME" "${files[@]}"
+          [ -s REPORT.md ] && echo "::notice title=trial::REPORT.md written" || echo "::warning title=trial::no REPORT.md"
+  work:
+    needs: kind
+    if: needs.kind.outputs.kind != 'switch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      KIND: ${{ needs.kind.outputs.kind }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: packages
+        # nmap needs root: the agent gets it here, not through sudo.
+        run: sudo apt-get update -q && sudo apt-get install -y -q dnsutils age nmap jq
+      - name: free disk
+        run: .github/ci/range/free-disk.sh
+      - name: codex
+        env:
+          CODEX_AUTH_KEY: ${{ secrets.CODEX_AUTH_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: .github/ci/codex.sh
+      - name: estates
+        # Built, started and graded-against from files nobody prints: the log
+        # of a public repository is public. The draw is a keyed hash of the tag
+        # (the secret is the CODEX_AUTH_KEY), so the public catalog and the
+        # public tag name do not give the estates away.
+        env:
+          CODEX_AUTH_KEY: ${{ secrets.CODEX_AUTH_KEY }}
+          SEED_FROM_TAG: ${{ needs.kind.outputs.seed }}
+        run: |
+          seed=${SEED_FROM_TAG:-$(printf '%s' "$GITHUB_REF_NAME" | openssl dgst -sha256 -hmac "${CODEX_AUTH_KEY:-none}" | sed 's/.* //')}
+          echo "::add-mask::$seed"
+          range="$RUNNER_TEMP/range"
+          mkdir -p "$range" "$HOME/ci"
+          sudo sysctl -q -w vm.max_map_count=262144 # Elasticsearch
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/dnsd" ./bench/labdns
+          sudo install -m 755 "$RUNNER_TEMP/dnsd" /usr/local/sbin/dnsd
+          .github/ci/range/fetch-vulhub.sh "$RUNNER_TEMP/vulhub" > /dev/null 2>&1
+          python3 .github/ci/range/build.py "$seed" --out "$range"
+          python3 .github/ci/range/up.py "$range" --vulhub "$RUNNER_TEMP/vulhub" --labdns /usr/local/sbin/dnsd --run-as nobody
+          # The answer key goes to the maintainer; nothing readable stays.
+          age -r "$AGE_RECIPIENT" -o "$HOME/ci/key.json.age" "$range/key.json"
+          cp "$range/vars.json" "$HOME/ci/vars.json"
+          shred -u "$range/key.json" 2>/dev/null || rm -f "$range/key.json"
+          rm -rf "$range" "$RUNNER_TEMP/vulhub" "$RUNNER_TEMP/dnsd"
+      - name: isolate
+        # The agent must not see the containers or the key: hidepid on /proc,
+        # no docker, no sudo; the job fails when any of it is still possible.
+        run: .github/ci/range/isolate.sh
+      - name: remove the source
+        run: |
+          mkdir -p "$HOME/ci" "$HOME/trial"
+          cp .github/ci/publish.sh .github/ci/trial/RESEARCH.md .github/ci/trial/HUNTER.md .github/ci/range/render_brief.py "$HOME/ci/"
+          find "$GITHUB_WORKSPACE" -mindepth 1 -delete
+      - name: review
+        run: |
+          v=$(curl -s "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          echo "release under review: $v"
+          python3 -I "$HOME/ci/render_brief.py" "$KIND" "$v" "$HOME/ci/vars.json" "$HOME/ci" > "$HOME/ci/brief.md"
+          cd "$HOME/trial"
+          # Every line of the event stream gets the second it arrived, so the
+          # time to a finding is measured, not reported by the agent.
+          timeout 4h codex exec --dangerously-bypass-approvals-and-sandbox --skip-git-repo-check -C "$HOME/trial" \
+            -m gpt-6-luna -c model_reasoning_effort=xhigh --json "$(cat "$HOME/ci/brief.md")" < /dev/null 2> "$HOME/ci/stderr.txt" |
+            while IFS= read -r line; do printf '%(%s)T %s\n' -1 "$line"; done > "$HOME/ci/stream.ts.jsonl"
+          echo "codex ended with ${PIPESTATUS[0]}"
+      - name: publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd "$HOME/trial"
+          { for f in REPORT.md leads.jsonl phases.log surface-*.txt; do [ -f "$f" ] && echo "$f"; done
+            find notes -type f \( -name '*.md' -o -name '*.txt' -o -name '*.log' -o -name '*.tsv' -o -name '*.jsonl' \) -size -2M 2>/dev/null; } > "$HOME/ci/list"
+          tail -n 300 "$HOME/ci/stream.ts.jsonl" > "$HOME/ci/stream-tail.jsonl" 2>/dev/null || true
+          gzip -9 -c "$HOME/ci/stream.ts.jsonl" > "$HOME/ci/stream.ts.jsonl.gz" 2>/dev/null || true
+          [ "$(stat -c %s "$HOME/ci/stream.ts.jsonl.gz" 2>/dev/null || echo 0)" -gt 41943040 ] && rm -f "$HOME/ci/stream.ts.jsonl.gz"
+          extra=""
+          [ -f "$HOME/ci/stream.ts.jsonl.gz" ] && extra="stream.ts.jsonl.gz"
+          tar czf "$HOME/ci/trial.tgz" -T "$HOME/ci/list" -C "$HOME/ci" stream-tail.jsonl stderr.txt $extra
+          age -r "$AGE_RECIPIENT" -o "$HOME/ci/trial.tgz.age" "$HOME/ci/trial.tgz"
+          files=("$HOME/ci/trial.tgz.age")
+          [ -s "$HOME/ci/key.json.age" ] && files+=("$HOME/ci/key.json.age")
           if [ -s "$HOME/.codex/auth.json" ] && [ "$(sha256sum "$HOME/.codex/auth.json" | cut -d' ' -f1)" != "$(cat "$RUNNER_TEMP/auth.sum" 2>/dev/null)" ]; then
             age -r "$AGE_RECIPIENT" -o "$HOME/ci/codex-auth.json.age" "$HOME/.codex/auth.json"
             files+=("$HOME/ci/codex-auth.json.age")

@@ -1,15 +1,17 @@
 #!/bin/bash
-# fetch.sh bench|hunt|trial NAME DIR: copies what the CI run KIND-NAME put
-# on the ci-results branch into DIR, decrypts and unpacks it, and puts back
-# a Codex session the run refreshed, when it is newer than this machine's.
+# fetch.sh bench|hunt|trial|range-smoke NAME DIR: copies what the CI run
+# KIND-NAME put on the ci-results branch into DIR, decrypts and unpacks it,
+# and puts back a Codex session the run refreshed, when it is newer than
+# this machine's. A research or hunter trial's answer key comes back as
+# DIR/key.json (grade it: python3 .github/ci/range/grade.py DIR/key.json DIR).
 # Then usage.py counts which commands and flags the run used and writes
 # DIR/usage.json (skipped without python3 or azhaq); to count every run
 # fetched into one folder: usage.py FOLDER <(azhaq help -json).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
-kind=${1:?usage: fetch.sh bench|hunt|trial NAME DIR}
-name=${2:?usage: fetch.sh bench|hunt|trial NAME DIR}
-dir=${3:?usage: fetch.sh bench|hunt|trial NAME DIR}
+kind=${1:?usage: fetch.sh bench|hunt|trial|range-smoke NAME DIR}
+name=${2:?usage: fetch.sh bench|hunt|trial|range-smoke NAME DIR}
+dir=${3:?usage: fetch.sh bench|hunt|trial|range-smoke NAME DIR}
 key=${AZHAQ_AGE_KEY:-$HOME/.config/azhaq/age.key}
 age=$(command -v age || echo "$HOME/go/bin/age")
 repo=trannghiach/azhaq
@@ -24,6 +26,7 @@ for f in *.age; do
   [ -e "$f" ] || continue
   case $f in
   *codex-auth.json.age) ;;
+  key.json.age) "$age" -d -i "$key" -o key.json "$f" ;;
   *) "$age" -d -i "$key" -o "${f%.age}" "$f" && tar -xzf "${f%.age}" ;;
   esac
 done
