@@ -283,7 +283,7 @@ func TestRegressOUT10CLIPapercuts(t *testing.T) {
 		t.Errorf("--version: exit %d, %q", code, out)
 	}
 	var buf strings.Builder
-	printOverview(&buf)
+	printOverview(&buf, true)
 	usage := buf.String()
 	raw, _ := json.Marshal(buildManifest()) // what help -json prints (too large for the capture pipe)
 	var m manifestForTest

@@ -123,7 +123,7 @@ func wantsJSON(args []string) bool {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		printOverview(os.Stderr)
+		printOverview(os.Stderr, false)
 		return usagef("need a command")
 	}
 	switch args[0] {

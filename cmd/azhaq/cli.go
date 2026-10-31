@@ -24,6 +24,7 @@ type command struct {
 	like     string // the tool it stands in for
 	output   string // what stdout carries
 	examples []string
+	hidden   string // why the command is left out of the command list; it still runs
 	run      func([]string) error
 }
 
@@ -236,7 +237,7 @@ func init() {
 			usage:    "-db WORKSPACE.db [-every 24h] [-notify WEBHOOK|@FILE] [-notify-config PROVIDER-CONFIG.yaml] [-notify-cmd CMD] [-json] -- RUN FLAGS",
 			output:   "the change set after each run (-json: one JSON object); a notification that did not arrive is named on stderr and the exit code is 3",
 			examples: []string{"azhaq watch -db acme.db -every 24h -notify https://hooks.slack.com/… -- -scope hackerone -program acme"}},
-		{name: "new", group: groupWS, run: cmdNew,
+		{name: "new", group: groupWS, run: cmdNew, hidden: "the same as query -since",
 			summary:  "what a workspace first saw lately",
 			usage:    "-db WORKSPACE.db [-since 168h] [-json]",
 			output:   "one entity per line with when it was first seen",
@@ -288,7 +289,7 @@ func init() {
 				"azhaq mcp -scope hackerone -program security -max-requests 20000 -rate 5",
 				"claude mcp add azhaq -- azhaq mcp -allow example.com -max-requests 5000",
 			}},
-		{name: "worker", group: groupOther, run: cmdWorker,
+		{name: "worker", group: groupOther, run: cmdWorker, hidden: "started for a run with -serve, not by hand",
 			summary:  "take work from a run started with -serve",
 			usage:    "-server URL [-token T]",
 			output:   "progress on stderr",
@@ -313,7 +314,7 @@ func init() {
 			usage:   "[COMMAND] [-json]",
 			output:  "text, or JSON with -json",
 		},
-		{name: "bench", group: groupOther, run: cmdBench,
+		{name: "bench", group: groupOther, run: cmdBench, hidden: "a self-test for azhaq's own builds",
 			summary: "a quick self-test against a built-in site",
 			usage:   "",
 			output:  "time and memory",
@@ -412,11 +413,11 @@ func parse(fs *flag.FlagSet, args []string) error {
 				if describing {
 					described = fs
 				} else {
-					printHelp(os.Stdout, fs.Name(), fs)
+					printHelp(os.Stdout, fs.Name(), fs, helpAll(args))
 				}
 				return err
 			}
-			return usageErr{err}
+			return usageErr{withFlagHint(err, flagNames(fs))}
 		}
 		rest := fs.Args()
 		if len(rest) == 0 {
@@ -464,6 +465,19 @@ type flagInfo struct {
 	Repeatable bool   `json:"repeatable,omitempty"`
 	Default    string `json:"default,omitempty"`
 	Usage      string `json:"usage"`
+	Hidden     bool   `json:"hidden,omitempty"` // left out of -h; azhaq CMD -h all lists it
+	Why        string `json:"why,omitempty"`    // compat:TOOL, alias, accepted or rare
+}
+
+// flagNames are the names of every flag of a set, hidden ones too.
+func flagNames(fs *flag.FlagSet) []string {
+	var out []string
+	fs.VisitAll(func(f *flag.Flag) {
+		if !strings.HasPrefix(f.Usage, "internal:") {
+			out = append(out, f.Name)
+		}
+	})
+	return out
 }
 
 func flagInfos(fs *flag.FlagSet) []flagInfo {
@@ -500,8 +514,8 @@ func flagInfos(fs *flag.FlagSet) []flagInfo {
 	return out
 }
 
-// printHelp is azhaq NAME -h.
-func printHelp(w io.Writer, name string, fs *flag.FlagSet) {
+// printHelp is azhaq NAME -h; all adds the flags -h leaves out (-h all).
+func printHelp(w io.Writer, name string, fs *flag.FlagSet, all bool) {
 	c, ok := lookup(name)
 	if !ok {
 		return
@@ -514,47 +528,26 @@ func printHelp(w io.Writer, name string, fs *flag.FlagSet) {
 	if c.output != "" {
 		fmt.Fprintf(w, "output: %s\n", c.output)
 	}
+	// The exit codes come before the flags, so -h ends with its "-h all" line.
+	fmt.Fprintf(w, "exit: 0 complete, 1 error, 2 usage, 3 finished with failures (see the summary), 4 stopped by a limit (resumable)\n")
 	if len(c.examples) > 0 {
 		fmt.Fprintf(w, "\nexamples:\n")
 		for _, e := range c.examples {
 			fmt.Fprintf(w, "  %s\n", e)
 		}
 	}
-	infos := flagInfos(fs)
-	if len(infos) > 0 {
-		fmt.Fprintf(w, "\nflags:\n")
-		width := 0
-		cols := make([]string, len(infos))
-		for i, f := range infos {
-			col := "-" + f.Name
-			if f.Type != "bool" {
-				col += " " + strings.ToUpper(f.Type)
-			}
-			cols[i] = col
-			width = max(width, len(col))
-		}
-		for i, f := range infos {
-			line := f.Usage
-			if f.Repeatable && !strings.Contains(line, "repeatable") {
-				line += " (repeatable)"
-			}
-			if f.Default != "" {
-				line += fmt.Sprintf(" (default %s)", f.Default)
-			}
-			fmt.Fprintf(w, "  %-*s  %s\n", width, cols[i], line)
-		}
-	}
-	fmt.Fprintf(w, "\nexit: 0 complete, 1 error, 2 usage, 3 finished with failures (see the summary), 4 stopped by a limit (resumable)\n")
+	printFlags(w, name, flagInfos(fs), all)
 }
 
 // printOverview is azhaq help.
-func printOverview(w io.Writer) {
+// all lists the commands left out of the list too (azhaq help all).
+func printOverview(w io.Writer, all bool) {
 	fmt.Fprintf(w, "azhaq %s: one recon engine for names, services, applications and APIs, in one graph\n\n", version)
 	fmt.Fprintf(w, "usage: azhaq COMMAND [flags]    azhaq help COMMAND    azhaq help -json    azhaq docs\n")
 	for _, g := range groups {
 		fmt.Fprintf(w, "\n%s:\n", g)
 		for _, c := range commands {
-			if c.group != g {
+			if c.group != g || (c.hidden != "" && !all) {
 				continue
 			}
 			line := c.summary
@@ -575,6 +568,9 @@ Active techniques (-dirs, -params, -ports, -dns-brute, -permute, -graphql)
 reach only the targets given, or the scope -allow or -scope names. azhaq
 plan shows what a run would send.
 `)
+	if !all {
+		fmt.Fprintf(w, "\nmore commands: azhaq help all\n")
+	}
 }
 
 type manifest struct {
@@ -593,6 +589,8 @@ type commandInfo struct {
 	Like     string     `json:"like,omitempty"`
 	Output   string     `json:"output,omitempty"`
 	Examples []string   `json:"examples,omitempty"`
+	Hidden   bool       `json:"hidden,omitempty"` // left out of the command list (azhaq help all lists it)
+	Why      string     `json:"why,omitempty"`
 	Flags    []flagInfo `json:"flags,omitempty"`
 }
 
@@ -601,7 +599,8 @@ func buildManifest() manifest {
 		Output: "results on stdout (-json: JSONL); progress and a final summary on stderr (-json: one JSON object with \"type\":\"summary\"); azhaq docs COMMAND describes the fields of one command, azhaq docs output the shared contract"}
 	for _, c := range commands {
 		ci := commandInfo{Name: c.name, Group: c.group, Summary: c.summary, Usage: "azhaq " + strings.TrimSpace(c.name+" "+c.usage), Like: c.like, Output: c.output, Examples: c.examples}
-		ci.Flags = flagInfos(flagsOf(c.name))
+		ci.Hidden, ci.Why = c.hidden != "", c.hidden
+		ci.Flags = commandFlags(c.name)
 		m.Commands = append(m.Commands, ci)
 	}
 	return m
@@ -618,6 +617,10 @@ func cmdHelp(args []string) error {
 		default:
 			names = append(names, a)
 		}
+	}
+	all := len(names) > 0 && names[0] == "all" // azhaq help all, azhaq help all CMD
+	if all {
+		names = names[1:]
 	}
 	if asJSON {
 		m := buildManifest()
@@ -640,7 +643,7 @@ func cmdHelp(args []string) error {
 		return enc.Encode(m)
 	}
 	if len(names) == 0 {
-		printOverview(os.Stdout)
+		printOverview(os.Stdout, all)
 		return nil
 	}
 	if _, ok := lookup(names[0]); !ok {
@@ -651,7 +654,7 @@ func cmdHelp(args []string) error {
 		fmt.Printf("azhaq resume: %s\n\nusage: azhaq resume %s\n\nThe run's flags are read back from the database; flags given here are added and win.\n", c.summary, c.usage)
 		return nil
 	}
-	printHelp(os.Stdout, names[0], flagsOf(names[0]))
+	printHelp(os.Stdout, names[0], flagsOf(names[0]), all || (len(names) > 1 && names[1] == "all"))
 	return nil
 }
 
