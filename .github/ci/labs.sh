@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 sudo sysctl -q -w vm.max_map_count=262144 # Elasticsearch in the services lab
-docker run -d --name azq-juice -p 127.0.0.1:3001:3000 bkimminich/juice-shop
+docker run -d --name azq-juice -p 127.0.0.1:3001:3000 -e NODE_OPTIONS=--max-old-space-size=4096 bkimminich/juice-shop
 docker run -d --name azq-vampi -p 127.0.0.1:5002:5000 -e vulnerable=1 -e tokentimetolive=3600 erev0s/vampi
 docker run -d --name azq-dvga -p 127.0.0.1:5013:5013 -e WEB_HOST=0.0.0.0 dolevf/dvga:latest
 docker run -d --name azq-dvna -p 127.0.0.1:5020:9090 appsecco/dvna:sqlite

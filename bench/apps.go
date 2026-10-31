@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
@@ -95,9 +96,12 @@ func startApps() error {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("docker compose up: %v\n%s", err, out)
 	}
+	// An app that does not come up fails a check; the sections still run
+	// (ensureApps tries again before each) instead of losing the whole run.
 	for _, u := range []string{juiceURL, vampiURL} {
 		if err := waitUp(u, 3*time.Minute); err != nil {
-			return err
+			addCheck("apps: the docker apps are up", false, "%v", err)
+			logf("%v", err)
 		}
 	}
 	return nil
@@ -166,19 +170,131 @@ func freshApp(app string) {
 	}
 }
 
+// waitEvery is how often waitUp asks (a variable for the tests).
+var waitEvery = 2 * time.Second
+
 func waitUp(u string, max time.Duration) error {
 	deadline := time.Now().Add(max)
+	cli := &http.Client{Timeout: 10 * time.Second} // a hung app must not hold the wait
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(u)
+		resp, err := cli.Get(u)
 		if err == nil {
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
 				return nil
 			}
 		}
-		time.Sleep(2 * time.Second)
+		time.Sleep(waitEvery)
 	}
 	return fmt.Errorf("%s not up after %s", u, max)
+}
+
+// labApp is one training app of the shared labs, as .github/ci/labs.sh
+// starts it. The bench's own containers (compose.yaml) are not these.
+type labApp struct {
+	name  string // container
+	url   string // without the trailing slash
+	flags []string
+	image string
+}
+
+// labApps mirrors labs.sh; TestLabAppsMatchLabsScript keeps them equal.
+var labApps = []labApp{
+	{"azq-juice", "http://127.0.0.1:3001", []string{"-p", "127.0.0.1:3001:3000", "-e", "NODE_OPTIONS=--max-old-space-size=4096"}, "bkimminich/juice-shop"},
+	{"azq-vampi", "http://127.0.0.1:5002", []string{"-p", "127.0.0.1:5002:5000", "-e", "vulnerable=1", "-e", "tokentimetolive=3600"}, "erev0s/vampi"},
+	{"azq-dvga", "http://127.0.0.1:5013", []string{"-p", "127.0.0.1:5013:5013", "-e", "WEB_HOST=0.0.0.0"}, "dolevf/dvga:latest"},
+	{"azq-dvna", "http://127.0.0.1:5020", []string{"-p", "127.0.0.1:5020:9090"}, "appsecco/dvna:sqlite"},
+	{"azq-dvwa", "http://127.0.0.1:5030", []string{"-p", "127.0.0.1:5030:80"}, "vulnerables/web-dvwa"},
+}
+
+// labStartWait covers Juice Shop's cold start (a minute or two).
+const labStartWait = 3 * time.Minute
+
+// docker runs the docker CLI (a variable for the tests).
+var docker = func(args ...string) (string, error) {
+	out, err := exec.Command("docker", args...).CombinedOutput()
+	return strings.TrimSpace(string(out)), err
+}
+
+// ensureLabApp brings a lab app up when it does not answer: it starts the
+// container, creates it as labs.sh does when there is none, and when a
+// running one stays silent restarts it once. Nothing is done to an app that
+// answers, so the shared containers other work uses are left alone.
+func ensureLabApp(a labApp, wait time.Duration) error {
+	if appUp(a.url + "/") {
+		return nil
+	}
+	logf("%s does not answer", a.url)
+	running, err := docker("inspect", "-f", "{{.State.Running}}", a.name)
+	switch {
+	case err != nil: // no such container
+		if out, err := docker(append(append([]string{"run", "-d", "--name", a.name}, a.flags...), a.image)...); err != nil {
+			return fmt.Errorf("%s is not up: docker run %s: %v %s", a.url, a.name, err, out)
+		}
+	case running != "true":
+		if out, err := docker("start", a.name); err != nil {
+			return fmt.Errorf("%s is not up: docker start %s: %v %s", a.url, a.name, err, out)
+		}
+	}
+	if waitUp(a.url+"/", wait) == nil {
+		return nil
+	}
+	logf("%s is running but silent: docker restart %s", a.url, a.name)
+	if out, err := docker("restart", a.name); err != nil {
+		return fmt.Errorf("%s is not up: docker restart %s: %v %s", a.url, a.name, err, out)
+	}
+	return waitUp(a.url+"/", wait)
+}
+
+// labSet is the lab apps a section uses, each brought up when it is used;
+// one that cannot be brought up is remembered, so a case that needs it fails
+// at once and the section goes on.
+type labSet struct {
+	apps []labApp
+	wait time.Duration
+	mu   sync.Mutex
+	dead map[string]error
+}
+
+func newLabSet() *labSet {
+	return &labSet{apps: labApps, wait: labStartWait, dead: map[string]error{}}
+}
+
+// up is nil when the app at base (an origin without a trailing slash) answers.
+func (s *labSet) up(base string) error {
+	s.mu.Lock()
+	err, dead := s.dead[base]
+	s.mu.Unlock()
+	if dead {
+		return err
+	}
+	for _, a := range s.apps {
+		if a.url == base {
+			if err := ensureLabApp(a, s.wait); err != nil {
+				s.mu.Lock()
+				s.dead[base] = err
+				s.mu.Unlock()
+				return err
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("%s is not a lab app", base)
+}
+
+// start brings the apps up together: their cold starts overlap.
+func (s *labSet) start(bases ...string) {
+	var wg sync.WaitGroup
+	for _, b := range bases {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := s.up(b); err != nil {
+				logf("%v", err)
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func benchApps() []appResult {

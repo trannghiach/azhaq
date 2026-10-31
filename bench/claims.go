@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -266,6 +267,27 @@ type claims struct {
 	row    *claimsRow
 	chrome bool
 	only   map[string]bool
+	labs   *labSet
+}
+
+// checkName is the name of the check a case records at a pace.
+func checkName(name, pace string) string {
+	return fmt.Sprintf("claims: %s %s: summary = ledger = what arrived", name, pace)
+}
+
+// needs says whether the app a case runs against answers, bringing it up
+// first when it does not (a crashed Juice Shop is started again). When it
+// cannot be, the case's check fails with the reason and only that case is
+// skipped.
+func (c *claims) needs(app, name, pace string) bool {
+	err := c.labs.up(app)
+	if err == nil {
+		return true
+	}
+	addCheck(checkName(name, pace), false, "not run, the app it needs is down: %v", err)
+	c.row.Rows = append(c.row.Rows, claimRow{Case: name, Pace: pace, Detail: "not run: " + err.Error()})
+	logf("claims: %s %s: not run: %v", name, pace, err)
+	return false
 }
 
 func (c *claims) want(name string) bool { return len(c.only) == 0 || c.only[name] }
@@ -298,7 +320,7 @@ func (c *claims) finish(name, pace string, parts ...tally) {
 		detail += " | " + strings.Join(probs, " | ")
 	}
 	c.row.Rows[first].Detail = detail
-	addCheck(fmt.Sprintf("claims: %s %s: summary = ledger = what arrived", name, pace), len(probs) == 0, "%s", detail)
+	addCheck(checkName(name, pace), len(probs) == 0, "%s", detail)
 	logf("claims: %s %s: %v", name, pace, len(probs) == 0)
 }
 
@@ -434,7 +456,7 @@ func ledgerCount(path string) int { return len(readLedger(path)) }
 
 func benchClaims() *claimsRow {
 	row := &claimsRow{}
-	c := &claims{row: row, only: map[string]bool{}}
+	c := &claims{row: row, only: map[string]bool{}, labs: newLabSet()}
 	for _, s := range strings.Split(os.Getenv("CLAIMS_ONLY"), ",") { // while developing: CLAIMS_ONLY=3,4
 		if s = strings.TrimSpace(s); s != "" {
 			c.only[s] = true
@@ -447,21 +469,29 @@ func benchClaims() *claimsRow {
 	} else if _, err := exec.LookPath("chromium"); err == nil {
 		c.chrome = true
 	}
-	for _, u := range []string{claimJuice, claimVampi, claimDVWA} {
-		if err := waitUp(u+"/", 20*time.Second); err != nil && !strings.Contains(u, "5030") {
-			addCheck("claims: the local apps are up", false, "%v", err)
-			return row
+	steps := []struct {
+		id   string
+		apps []string // started together before anything runs
+		fn   func()
+	}{
+		{"1", []string{claimJuice}, c.caseRun}, {"2", []string{claimJuice}, c.caseBrowser}, {"3", []string{claimJuice}, c.caseShots},
+		{"4", []string{claimDVWA}, c.caseDVWA}, {"5", []string{claimVampi}, c.caseRoles}, {"6", []string{claimJuice, claimVampi}, c.caseSweeps},
+		{"7", nil, c.casePorts}, {"8", []string{claimJuice}, c.caseMCP}, {"9", []string{claimJuice}, c.caseBudget},
+		{"10", []string{claimJuice}, c.caseKill}, {"11", []string{claimJuice}, c.caseKillShots},
+	}
+	var need []string
+	for _, s := range steps {
+		if c.want(s.id) {
+			for _, a := range s.apps {
+				if !slices.Contains(need, a) {
+					need = append(need, a)
+				}
+			}
 		}
 	}
+	c.labs.start(need...)
 	t0 := time.Now()
 	c.selfCheck()
-	steps := []struct {
-		id string
-		fn func()
-	}{
-		{"1", c.caseRun}, {"2", c.caseBrowser}, {"3", c.caseShots}, {"4", c.caseDVWA}, {"5", c.caseRoles},
-		{"6", c.caseSweeps}, {"7", c.casePorts}, {"8", c.caseMCP}, {"9", c.caseBudget}, {"10", c.caseKill}, {"11", c.caseKillShots},
-	}
 	for _, s := range steps {
 		if c.want(s.id) {
 			s0 := time.Now()
@@ -476,6 +506,11 @@ func benchClaims() *claimsRow {
 // selfCheck: the counter forwards a WebSocket upgrade (Juice Shop's
 // socket.io) and logs it as one, before anything is measured with it.
 func (c *claims) selfCheck() {
+	const name = "claims: the counter forwards and logs a WebSocket upgrade (Juice Shop socket.io)"
+	if err := c.labs.up(claimJuice); err != nil {
+		addCheck(name, false, "not run, the app it needs is down: %v", err)
+		return
+	}
 	px, err := newCountProxy(claimJuice)
 	must(err)
 	defer px.close()
@@ -491,7 +526,7 @@ func (c *claims) selfCheck() {
 	}
 	seen := px.since(0)
 	ok := strings.Contains(status, " 101 ") && len(seen) == 1 && seen[0].Upgrade
-	addCheck("claims: the counter forwards and logs a WebSocket upgrade (Juice Shop socket.io)", ok, "answer %q, logged %d requests, upgrade flag %v %s", strings.TrimSpace(status), len(seen), len(seen) == 1 && seen[0].Upgrade, detail)
+	addCheck(name, ok, "answer %q, logged %d requests, upgrade flag %v %s", strings.TrimSpace(status), len(seen), len(seen) == 1 && seen[0].Upgrade, detail)
 }
 
 // caseFile is a fresh path in the claims directory.
@@ -503,6 +538,9 @@ func (c *claims) caseFile(name string) string {
 // counter; args builds its arguments from the proxy's origin and the db.
 func (c *claims) httpCase(name string, up string, ps []claimPace, args func(origin, db string, p claimPace) []string, extra func(t *tally, p *countProxy)) {
 	for _, p := range ps {
+		if !c.needs(up, name, p.name) {
+			continue
+		}
 		px, err := newCountProxy(up)
 		must(err)
 		db := c.caseFile(name + "-" + p.name + ".db")
@@ -635,9 +673,12 @@ func (c *claims) caseRoles() {
 			name = "roles -replay-writes put"
 		}
 		for _, p := range paces3 {
+			if !c.needs(claimVampi, name, p.name) {
+				continue
+			}
 			t1, t2, err := vampiUsers()
 			if err != nil {
-				addCheck(fmt.Sprintf("claims: %s %s: summary = ledger = what arrived", name, p.name), false, "could not register users on VAmPI: %v", err)
+				addCheck(checkName(name, p.name), false, "could not register users on VAmPI: %v", err)
 				continue
 			}
 			px, err := newCountProxy(claimVampi)
@@ -685,15 +726,24 @@ func (c *claims) firstLines(src wordlist, n int, name string) string {
 
 // 6. dirs, fuzz and params.
 func (c *claims) caseSweeps() {
-	words := c.firstLines(webWords, 500, "words.txt")
-	params := c.firstLines(paramWords, 200, "params.txt")
+	// The lists are fetched when a case that is not skipped needs them.
+	var words, params string
 	c.httpCase("dirs", claimJuice, paces3, func(o, db string, p claimPace) []string {
+		if words == "" {
+			words = c.firstLines(webWords, 500, "words.txt")
+		}
 		return append([]string{"dirs", "-u", o + "/", "-w", words, "-db", db, "-json"}, p.flags...)
 	}, nil)
 	c.httpCase("fuzz", claimVampi, paces3, func(o, db string, p claimPace) []string {
+		if words == "" {
+			words = c.firstLines(webWords, 500, "words.txt")
+		}
 		return append([]string{"fuzz", "-u", o + "/FUZZ", "-w", words, "-ac", "-db", db, "-json"}, p.flags...)
 	}, nil)
 	c.httpCase("params", claimJuice, paces3, func(o, db string, p claimPace) []string {
+		if params == "" {
+			params = c.firstLines(paramWords, 200, "params.txt")
+		}
 		return append([]string{"params", "-u", o + "/rest/products/search", "-w", params, "-db", db, "-json"}, p.flags...)
 	}, nil)
 }
@@ -702,6 +752,9 @@ func (c *claims) caseSweeps() {
 
 // 9. A request budget, then one resume.
 func (c *claims) caseBudget() {
+	if !c.needs(claimJuice, "budget -max-requests 40", "unpaced") {
+		return
+	}
 	px, err := newCountProxy(claimJuice)
 	must(err)
 	defer px.close()
@@ -744,10 +797,13 @@ func (c *claims) killRun(px *countProxy, db string, args ...string) (azResult, t
 // killCase is cases 10 and 11: the file stops every request within 0.6 s,
 // the process exits 4, and the three counts agree, before and after resume.
 func (c *claims) killCase(name string, upFlags func(origin, db string) []string, resumeFlags []string) {
+	rate := rateOf(upFlags("", ""))
+	if !c.needs(claimJuice, name, "rate "+rate) {
+		return
+	}
 	px, err := newCountProxy(claimJuice)
 	must(err)
 	defer px.close()
-	rate := rateOf(upFlags("", ""))
 	db := c.caseFile(name + "-" + rate + ".db")
 	led := db + ".ledger.jsonl"
 	r, late, after := c.killRun(px, db, upFlags(px.origin, db)...)
@@ -1141,6 +1197,10 @@ func mcpSummary(raw json.RawMessage) (int, string) {
 
 // 8. azhaq mcp: the budget holds over calls, and over calls made at once.
 func (c *claims) caseMCP() {
+	if !c.needs(claimJuice, "mcp budget 60", "unpaced") {
+		c.needs(claimJuice, "mcp budget 2", "unpaced") // fails too
+		return
+	}
 	// One budget of 60 over two calls.
 	px, err := newCountProxy(claimJuice)
 	must(err)
@@ -1196,6 +1256,9 @@ func (c *claims) caseMCP() {
 	c.finish("mcp budget 60", "unpaced", t, t2, t3)
 
 	// A budget of 2, two calls at once.
+	if !c.needs(claimJuice, "mcp budget 2", "unpaced") {
+		return
+	}
 	px, err = newCountProxy(claimJuice)
 	must(err)
 	dir = c.caseFile("mcp-2.d")
