@@ -68,7 +68,7 @@ Wordlists come from SecLists (MIT) at a pinned commit and are checked against th
 - **katana ∪ jsluice**: known routes that either tool found, katana crawling and jsluice reading the scripts katana listed.
 - **bundle grep**: known routes among the quoted strings that start with a path (`"/rest/user/login"`) in the same scripts: what reading the bundles by hand gives, without methods, bodies or the routes built from parts.
 - **probe agreement**: for hosts both Azhaq and httpx answered, the final status, the title (whitespace collapsed) and the technology list (names and versions) must all match.
-- **historical URLs**: distinct URLs on the domain or its subdomains, normalized the way Azhaq stores them, static assets left out; the share of gau's list that Azhaq's `-urls` file also holds.
+- **historical URLs**: distinct URLs on the domain or its subdomains, normalized the way Azhaq stores them, static assets left out; the share of gau's list that Azhaq's `-urls` file also holds (kept in the record). Azhaq drops scanner junk on purpose, so the bench runs it once more with `-raw` and counts as junk what Azhaq's own junk test drops, with its reason.
 - **time** and **RSS**: wall time and peak resident memory of each run. Azhaq's app runs include its default domain fan-out (subdomain sources, archives, RDAP), which waits on third-party services, and technology fingerprints (about 30 MB; `-no-tech` leaves them out).
 
 ## Checks
@@ -87,7 +87,7 @@ The command fails when one of these does not hold. Rows marked "both" are measur
 - Screenshots (both): image files that decode and are not one colour, against gowitness, on the five local apps and three pages the bench serves.
 - Probing (both): the hosts that answer (the local apps, the services lab's web ports and 100 local servers), confirmed by a GET to the host; status, title and technologies agree on at least 95% of shared hosts; three public test sites at 5 requests per second; and every input is a row, a failure or a skip.
 - Domains (both): `subs -live` against `subfinder | dnsx`, on live names a third resolver confirms, in the time of the two together; every confirmed name only the reference finds is in azhaq's list or its source is named as failed; no empty subdomain or archive result without an error or `degraded` flag.
-- URLs (both): `urls` against gau on vulnweb.com, and every URL gau lists is in azhaq's list.
+- URLs (both): `urls` against gau on vulnweb.com, and every URL gau lists is in azhaq's list or was dropped as junk with a reason (nothing is lost silently); azhaq's list and its junk together are at least gau's. The row reads `azhaq N listed, J dropped as junk (reasons), gau M, missing K`. After a change, rerun `-only urls`.
 - DNS (both): record types (A, AAAA, CNAME, MX, NS, TXT, SRV, CAA, SOA) and `-ptr` against dnsx on a zone the bench serves, counted at the server (answers right, queries received, queries in the busiest second); brute force on the DNS lab with the same words and resolver; in the wildcard zone, the three real names and nothing else.
 - DNS lab, no docker (`lab`): `ports -pu` finds the lab's UDP port, `subs -w -live` gives the names the lab answers, a wildcard subzone gives only its real name, the dangling CNAMEs are named takeover candidates.
 - Notify (both): `azhaq notify` against notify, with the same input and provider config, against a stub whose log is the evidence; the same requests; no webhook token in any output when the webhook cannot be reached.
