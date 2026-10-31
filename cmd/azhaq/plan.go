@@ -156,7 +156,11 @@ func planSends(b engine.Budgets, send sendLimits) (gets, others []string) {
 		*out = append(*out, fmt.Sprintf("Chrome signs in at %s as %s (-login): the sign-in's POST goes to the target, and the session it gets goes with every request", send.login, send.loginUser))
 	}
 	if send.chrome && send.interact {
-		*out = append(*out, "Chrome clicks the buttons, links and menus of each page (-interact): a click that would send a write is mapped, not made, and none is made on log out or delete")
+		line := "Chrome clicks the buttons, links and menus of each page (-interact): every click is made, a log out link included, and the GETs it sends are requested like any other"
+		if !send.chromeWrites {
+			line += "; the writes it would send are refused by their method and mapped, not sent"
+		}
+		*out = append(*out, line)
 	}
 	if b.Active["dns-brute"] || b.Active["permute"] {
 		var what []string

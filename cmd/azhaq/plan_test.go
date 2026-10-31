@@ -167,6 +167,14 @@ func TestPlanSendsNameWhatIsPlanned(t *testing.T) {
 	if s := joined("-params", "small"); !strings.HasPrefix(s, "GET requests only") {
 		t.Errorf("-params by GET:\n%s", s)
 	}
+	// A click is made whatever it says: no word keeps one back.
+	s = joined("-browser", "-interact")
+	if !strings.Contains(s, "every click is made, a log out link included") || !strings.Contains(s, "refused by their method") || strings.Contains(s, "none is made") {
+		t.Errorf("-interact:\n%s", s)
+	}
+	if s := joined("-browser", "-interact", "-browser-writes"); strings.Contains(s, "refused by their method") {
+		t.Errorf("-interact with -browser-writes refuses nothing:\n%s", s)
+	}
 	if s := joined("-login", "http://127.0.0.1:3001/login", "-login-user", "bob", "-login-pass", "x"); !strings.Contains(s, "Chrome signs in at http://127.0.0.1:3001/login as bob") {
 		t.Errorf("-login:\n%s", s)
 	}
