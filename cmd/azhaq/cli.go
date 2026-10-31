@@ -260,7 +260,7 @@ func init() {
 		{name: "ingest", group: groupWS, run: cmdIngest,
 			summary: "add other tools' results to a database (subfinder, dnsx, httpx, katana, naabu, nuclei, gau and ffuf output, or connector facts)",
 			usage:   "FILE… | -in FILE | - [-db FILE]",
-			output:  "the map of what was added",
+			output:  "only its summary: the facts read, the lines per format and what was skipped; what was added is in the database (azhaq query, azhaq export)",
 			examples: []string{
 				"azhaq ingest httpx.jsonl katana.jsonl -db example.db",
 				"subfinder -d example.com -json | azhaq ingest - -db example.db",

@@ -15,7 +15,7 @@ var topics = []struct{ name, file, about string }{
 	{"readme", "", "what Azhaq does, install, examples, benchmarks"},
 	{"migrating", "MIGRATING.md", "coming from subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowitness, asnmap or notify: their flags next to Azhaq's"},
 	{"recipes", "RECIPES.md", "how do I…: map an app, log in, find IDOR, test writes, map a program, resume, watch, export, GraphQL, MCP, live subdomains"},
-	{"concepts", "CONCEPTS.md", "what the words mean: a map row, coverage, kinds, exit codes, roles verdicts, what Azhaq sends"},
+	{"concepts", "CONCEPTS.md", "what the words mean: a map row, coverage, evidence, kinds, scope, budget, the ledger, roles verdicts, what Azhaq sends"},
 	{"troubleshooting", "TROUBLESHOOTING.md", "why is my URL hint, the map looks thin, exit 3, exit 4, Chrome, where is my database"},
 	{"output", "OUTPUT.md", "what every command prints: the summary, exit codes, the ledger; each command's fields are on its page"},
 	{"mcp", "MCP.md", "serving Azhaq to MCP clients: tools, scope lock, budget"},

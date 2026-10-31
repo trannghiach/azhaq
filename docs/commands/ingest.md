@@ -27,7 +27,7 @@ httpx -l hosts.txt -json | azhaq ingest -in - -db example.db && azhaq export -db
 2. Turns the lines into facts and adds them to the database `-db`. Without `-db` it makes a new file.
 3. Prints its summary.
 
-Files are arguments (`azhaq ingest a.jsonl b.jsonl`). `-` is stdin, and `-in FILE` still works. The formats it reads are listed under `-in` in Flags.
+Files are arguments (`azhaq ingest a.jsonl b.jsonl`). `-` is stdin, and `-in FILE` still works. The formats it reads are listed under `-in` in Flags. How an httpx, katana or ffuf answer is recorded is in the [connector protocol](../CONNECTOR.md#loading-other-tools-output-with-azhaq-ingest).
 
 ## Output
 
@@ -37,6 +37,8 @@ Files are arguments (`azhaq ingest a.jsonl b.jsonl`). `-` is stdin, and `-in FIL
 | --- | --- |
 | `results` | The facts read, of every file given. |
 | `counts` | The lines read, per format. |
+| `notes` | The first 5 lines it could not read and skipped, when there were any. |
+| `next` | Commands to look at the result: `azhaq query`, and `azhaq dns` for names taken in without addresses. |
 
 ## Summary and exit codes
 
