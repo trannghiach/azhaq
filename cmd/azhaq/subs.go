@@ -240,7 +240,8 @@ func cmdSubs(args []string) error {
 	private := map[string]bool{}
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
-	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot, itself int
+	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot, itself, notAsked int
+	var answers map[string]map[string]any // every name DNS was asked: a name missing was not
 	health := newHealthTally(false)
 	var procMu sync.Mutex
 	processed := map[string]bool{}
@@ -329,9 +330,12 @@ func cmdSubs(args []string) error {
 				danglingN++
 				continue
 			case alive != nil && alive[name] == nil:
-				if unver[name] {
+				switch ans := answers[name]; {
+				case unver[name]:
 					notChecked++
-				} else {
+				case ans == nil:
+					notAsked++ // the run stopped before its answer came
+				default:
 					didNot++
 				}
 				continue
@@ -389,6 +393,7 @@ func cmdSubs(args []string) error {
 		// A live name has an address, directly or through its CNAME chain.
 		// A chain that ends without one is a takeover candidate, not live.
 		alive = liveNames(st)
+		answers = dnsAnswers(st)
 		dangling = cnameNames(st)
 	}
 	for _, p := range payloads(st, "azhaq-subdomains") {
@@ -500,6 +505,7 @@ func cmdSubs(args []string) error {
 	}
 	set("CNAME without an address", danglingN)
 	set("not checked", notChecked)
+	set("not asked", notAsked)
 	set("unverified", unverified)
 	set("left out by -m/-f", filtered+guessFiltered)
 	set("listed under another domain", dup)
@@ -514,6 +520,9 @@ func cmdSubs(args []string) error {
 	if notChecked > 0 {
 		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names could not be checked (the resolvers failed) and are left out; azhaq resume checks them", notChecked))
 		rep.warned = true
+	}
+	if notAsked > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%d names were not asked in DNS before the run stopped: azhaq resume asks them", notAsked))
 	}
 	if s := topSources(bySource, 8); s != "" {
 		rep.Notes = append(rep.Notes, "sources: "+s)
@@ -548,6 +557,7 @@ func nameSum(c map[string]int, results int, filtering bool) string {
 	minus("did not resolve", "did not resolve")
 	minus("CNAME without an address", "CNAME without an address")
 	minus("not checked", "not checked")
+	minus("not asked", "not asked before the run stopped")
 	minus("left out by -m/-f", "left out by -m/-f")
 	minus("listed under another domain", "listed under another domain")
 	minus("cut by -max-names", "cut by -max-names")

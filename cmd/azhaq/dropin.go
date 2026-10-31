@@ -400,6 +400,26 @@ func liveNames(st *store.Store) map[string]map[string]any {
 	return out
 }
 
+// dnsAnswers maps each name azhaq-dns was asked about, live or not, to its
+// last payload: a name missing from it was never asked.
+func dnsAnswers(st *store.Store) map[string]map[string]any {
+	out := map[string]map[string]any{}
+	obs, _ := st.Observations()
+	for _, o := range obs {
+		if o.Collector != "azhaq-dns" {
+			continue
+		}
+		var p map[string]any
+		if json.Unmarshal(o.Payload, &p) != nil {
+			continue
+		}
+		if name, _ := p["fqdn"].(string); name != "" {
+			out[name] = p
+		}
+	}
+	return out
+}
+
 // dnsFields puts a live name's answer on its row with dnsx's names: the
 // IPv4 addresses in a, the IPv6 ones in aaaa, the CNAME chain in cname,
 // and the CDN or WAF in front.

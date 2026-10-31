@@ -712,7 +712,12 @@ func (s *scheduler) startBatch(ctx context.Context) bool {
 					// Already ran in an earlier run on this database, or the
 					// batch failed: release whatever waits on it.
 					m = types.RunMeta{Status: types.StatusOK}
-					if err != nil {
+					switch {
+					case ctx.Err() != nil:
+						// Stopped while the names waited for their answers:
+						// not done, azhaq resume asks them again.
+						m.Status = types.StatusCancelled
+					case err != nil:
 						m.Status = types.StatusError
 					}
 				}
