@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"time"
 
 	cdpbrowser "github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/cdp/jsonv2"
@@ -89,4 +90,20 @@ func (b *Browser) downloads(rs []refusal) []string {
 // a sign-in's, a capped page's, one begun as its tab closed.
 func (b *Browser) LeftoverDownloads() []string {
 	return b.downloads(b.takeHeld(true))
+}
+
+// awaitDownload waits, up to d, for Chrome to tell of the download a
+// navigation became: the event comes a moment after the navigation fails.
+func (b *Browser) awaitDownload(t *tab, d time.Duration) {
+	for end := time.Now().Add(d); time.Now().Before(end); time.Sleep(25 * time.Millisecond) {
+		b.refMu.Lock()
+		got := false
+		for r := range t.rs {
+			got = got || r.download
+		}
+		b.refMu.Unlock()
+		if got {
+			return
+		}
+	}
 }

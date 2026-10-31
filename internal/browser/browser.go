@@ -437,6 +437,9 @@ func (b *Browser) Load(ctx context.Context, rawURL string, shot bool) (Page, err
 	if tab.Err() != nil && errors.Is(context.Cause(tab), context.DeadlineExceeded) && errors.Is(err, context.Canceled) {
 		err = context.DeadlineExceeded // the page stopped moving: a timeout
 	}
+	if err != nil && strings.Contains(err.Error(), "net::ERR_ABORTED") {
+		b.awaitDownload(t, 3*time.Second) // the navigation may be a download, told of after it ends
+	}
 	mine := b.claim(t)
 	writes := b.writesOf(t)
 	hosts := map[string]bool{}
