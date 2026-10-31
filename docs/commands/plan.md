@@ -220,13 +220,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-login-pass` | string |  | password for -login (default $AZHAQ_LOGIN_PASS) |
 | `-proxy` | string |  | send requests to targets through this proxy (http://, https:// or socks5://); Chrome too (default: $HTTP_PROXY, $HTTPS_PROXY) |
 
-**Distributed run**
-
-| Flag | Type | Default | Meaning |
-| --- | --- | --- | --- |
-| `-serve` | string |  | let azhaq worker processes take this run's work, at this address (127.0.0.1:7777) |
-| `-worker-token` | string |  | the token workers give (default $AZHAQ_WORKER_TOKEN, else a new one) |
-
 **Output**
 
 | Flag | Type | Default | Meaning |
@@ -240,7 +233,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
 
 <details>
-<summary>Rarely used flags (71)</summary>
+<summary>Rarely used flags (73)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
@@ -287,6 +280,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-port-timeout` | duration |  | wait this long for one port to accept or refuse a connect (0: 1.5s) | rarely needed |
 | `-port-unnamed` | int |  | after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6; -1: no limit; each probe is a connect) | rarely needed |
 | `-port-workers` | int |  | port connects in flight at once, over all hosts (0: as many as the rate allows, up to 20000) | rarely needed |
+| `-serve` | string |  | let azhaq worker processes take this run's work, at this address (127.0.0.1:7777) | rarely needed |
 | `-shot-codes` | string |  | take only pages that answer with these statuses, comma-separated (default: any); the others are listed as skipped | rarely needed |
 | `-shot-format` | string | `png` | screenshot format: png or jpeg | rarely needed |
 | `-shot-fullpage` | bool |  | screenshot the whole page, not only the first screen (up to 16384 pixels tall) | rarely needed |
@@ -315,6 +309,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-urls-sources` | string |  | ask only these archives, comma-separated: wayback, commoncrawl, otx, urlscan, arquivo (default: all) | rarely needed |
 | `-urls-subs` | bool | `true` | ask the archives for the subdomains of each domain too (false: only the name itself, as gau does without --subs) | rarely needed |
 | `-urls-to` | string |  | only captures up to this time, in the same form | rarely needed |
+| `-worker-token` | string |  | the token workers give (default $AZHAQ_WORKER_TOKEN, else a new one) | rarely needed |
 
 </details>
 <!-- flags:end -->

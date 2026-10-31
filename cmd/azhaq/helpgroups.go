@@ -33,11 +33,10 @@ var helpSpecs = map[string]helpSpec{
 			{"Scope and safety", `allow deny deny-path kill-file ledger seal-to submit-forms browser-writes params-writes`},
 			{"Pace and limits", `rate host-rate host-parallel parallel delay backoff retry request-timeout timeout max-requests max-host-requests daily-requests max-items max-names max-ips max-response-size depth`},
 			{"Session", `cookie cookie-jar header login login-user login-pass proxy`},
-			{"Distributed run", `serve worker-token`},
 			{"Output", `db json quiet v stream fail-on-errors fail-on-capped`},
 		},
 		hidden: map[string]string{
-			"rare": `
+			"rare": `serve worker-token 
 				dirs-depth dirs-ext dirs-fc dirs-fl dirs-fr dirs-fs dirs-fw dirs-mc dirs-ml dirs-mr dirs-ms
 				dirs-mw dirs-rate dirs-threads facts obs params-chunk params-delay params-include params-method
 				params-per-host params-rate params-stable params-targets params-threads params-timeout
@@ -158,7 +157,7 @@ var helpSpecs = map[string]helpSpec{
 	"crawl": {
 		groups: []helpGroup{
 			{"Targets and input", `u l scope program`},
-			{"What to ask", `d paths sweep fill-forms no-form-fill per-template no-follow no-map-guess browser interact interact-clicks fs kf jsl`},
+			{"What to ask", `d paths sweep fill-forms no-form-fill per-template no-follow no-map-guess browser interact interact-clicks fs kf`},
 			{"What to list", `assets no-catchall rejected em ndef do`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger submit-forms browser-writes`},
 			{"Pace and limits", `rl delay backoff retry host-rate hrl host-parallel parallel request-timeout ct max-requests max-host-requests max-items max-response-size`},
@@ -172,7 +171,7 @@ var helpSpecs = map[string]helpSpec{
 			"alias": `
 				c dr j p pc r rate timeout
 			`,
-			"accepted": `
+			"accepted": `jsl 
 				duc fx jc kb nc s td
 			`,
 		},
@@ -245,7 +244,7 @@ var helpSpecs = map[string]helpSpec{
 			{"Scope and safety", `allow deny deny-path kill-file ledger seal-to`},
 			{"Pace and limits", `rate t p timeout maxtime max-requests se-after control`},
 			{"Session and network", `x replay-proxy`},
-			{"Output", `db json o of silent s v c`},
+			{"Output", `db json o of silent v c`},
 		},
 		hidden: map[string]string{
 			"compat:ffuf": `
@@ -253,7 +252,7 @@ var helpSpecs = map[string]helpSpec{
 				input-cmd input-num input-shell maxtime-job ml mmode ms mt mw od or raw recursion-strategy sa se
 				sf sni
 			`,
-			"alias": `
+			"alias": `s 
 				cookie data data-ascii
 			`,
 			"accepted": `

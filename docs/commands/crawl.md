@@ -186,7 +186,6 @@ These filters limit what is printed, not what is crawled.
 | `-interact-clicks` | int | `12` | clicks -interact makes on each page |
 | `-fs` | string |  | the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address) |
 | `-kf` | string |  | ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths |
-| `-jsl` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies |
 
 **What to list**
 
@@ -257,7 +256,7 @@ These filters limit what is printed, not what is crawled.
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
 <details>
-<summary>Flags familiar from katana, other names and flags accepted with no effect (36)</summary>
+<summary>Flags familiar from katana, other names and flags accepted with no effect (37)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
@@ -293,6 +292,7 @@ These filters limit what is printed, not what is crawled.
 | `-duc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-fx` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-jc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
+| `-jsl` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-kb` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-nc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-s` | string |  | accepted for katana's command lines; azhaq orders its work by worth within a host, not by -s depth-first or breadth-first | accepted, no effect |
