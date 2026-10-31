@@ -84,3 +84,21 @@ func TestDirsFiltersAndRateLimit(t *testing.T) {
 		t.Errorf("a 429 sweep: exit %d, %q", exitCode(err), errOut)
 	}
 }
+
+// An empty line of the wordlist is a word: it asks for the base URL itself,
+// as in ffuf, and counts like any other.
+func TestDirsBlankWordAsksTheBase(t *testing.T) {
+	srv := dirsServer(t, map[string]int{"/admin": 403})
+	words := wlist(t, "", "admin", "nothing")
+	out, errOut, err := captureBoth(t, func() error { return cmdDirs([]string{"-u", srv.URL + "/", "-w", words, "-json"}) })
+	if err != nil {
+		t.Fatalf("%v\n%s", err, errOut)
+	}
+	if !strings.Contains(out, `"url":"`+srv.URL+`/"`) || !strings.Contains(out, srv.URL+"/admin") {
+		t.Errorf("the blank word's answer is missing: %q", out)
+	}
+	rep := lastReport(t, errOut)
+	if rep.Requests < 3 || rep.Results != 2 {
+		t.Errorf("summary %+v, want the blank word counted", rep)
+	}
+}

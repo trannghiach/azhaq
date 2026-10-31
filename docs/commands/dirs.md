@@ -24,7 +24,7 @@ azhaq dirs -l services.txt -json
 ## What it does
 
 1. Takes each service from `-u`, `-l` or stdin. A URL with a path is swept from that path.
-2. Asks every word of the wordlist, with each `-e` extension if you give any.
+2. Asks every word of the wordlist, with each `-e` extension if you give any. An empty line is a word too: it asks the base URL itself, as in ffuf, and is counted like the rest.
 3. Calibrates on paths that cannot exist. The calibration is always on: it is ffuf's `-ac`.
 4. Applies the matchers and filters to the answers and prints the paths that pass.
 

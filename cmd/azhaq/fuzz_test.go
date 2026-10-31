@@ -446,3 +446,16 @@ func TestDocsSayRatePacesCalibration(t *testing.T) {
 		}
 	}
 }
+
+// An empty line of the wordlist is a word: FUZZ is replaced by nothing.
+func TestFuzzBlankWordIsAsked(t *testing.T) {
+	srv := fuzzServer(t)
+	words := wlist(t, "", "admin")
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", words)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rep.Requests != 2 || !strings.Contains(strings.Join(rows, "\n"), srv.URL+"/ ") {
+		t.Errorf("rows %q, summary %+v", rows, rep)
+	}
+}

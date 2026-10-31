@@ -141,6 +141,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 
 ### Matching and wordlists
 - The default matcher is `-mc 200-299,301,302,307,401,403,405,500`, unless `-ms`, `-mw`, `-ml`, `-mr` or `-mt` is given alone, as in ffuf.
+- An empty line of a wordlist is a word: `FUZZ` is replaced by nothing, so a wordlist that starts with a blank line asks the base URL (as in ffuf).
 - With several wordlists, `-mode pitchfork` runs as long as the longest list. The shorter ones start over. 4 users and 3 passwords make 4 requests, as in ffuf 2.3.
 
 ### What goes out

@@ -320,8 +320,10 @@ func (c *Collector) sweep(ctx context.Context, dir string, found func([]hit) err
 	careful := fetch.HasSession() && !c.Opts.AllGets
 	var targets []string
 	for _, w := range c.Opts.Words {
+		// An empty word asks for the base URL itself, as in ffuf.
+		blank := w == ""
 		w = strings.TrimPrefix(strings.TrimSpace(w), "/")
-		if w == "" || strings.HasPrefix(w, "#") {
+		if (w == "" && !blank) || strings.HasPrefix(w, "#") {
 			continue
 		}
 		words := []string{w}

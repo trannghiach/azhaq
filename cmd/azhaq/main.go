@@ -865,7 +865,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		words := dirscol.DefaultWords()
 		if *dirsFile != dirscol.Builtin {
 			var err error
-			if words, err = loadLines(*dirsFile); err != nil {
+			if words, err = loadWordlist(*dirsFile); err != nil {
 				return err
 			}
 		}
@@ -2020,6 +2020,23 @@ func loadLines(path string) ([]string, error) {
 	}
 	defer f.Close()
 	return readLines(f)
+}
+
+// loadWordlist is loadLines for a wordlist: an empty line stays, as in
+// ffuf, where the empty word asks for the base URL itself.
+func loadWordlist(path string) ([]string, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil || len(raw) == 0 {
+		return nil, err
+	}
+	var out []string
+	for _, line := range strings.Split(strings.TrimSuffix(string(raw), "\n"), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if t := strings.TrimSpace(line); line == "" || (t != "" && !strings.HasPrefix(t, "#")) {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // readLines returns non-empty lines that are not # comments.
