@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/time/rate"
 
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
@@ -198,6 +199,8 @@ func Refund() {
 		}
 	}
 }
+
+func init() { ledger.Unsent = Refund }
 
 // Count accounts for requests already sent without asking (a worker
 // process's): they count against the budget, which may then be spent.

@@ -19,6 +19,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/trannghiach/azhaq/internal/fetch"
+	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/webextract"
 )
 
@@ -292,8 +293,9 @@ func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t
 		b.done(t)
 		b.fail(root, ev.RequestID)
 		return
-	case write && !b.Writes:
-		// Not sent, nor counted: what it would have sent is mapped.
+	case write && (!b.Writes || ledger.Held(ev.Request.Method, raw)):
+		// Not sent, nor counted: what it would have sent is mapped. A write
+		// the run that was killed sent is not sent again.
 		b.wrote(t, ev.FrameID, writeOf(ev.Request))
 		b.done(t)
 		if r.doc {

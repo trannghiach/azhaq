@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -30,6 +32,7 @@ type Entry struct {
 	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
 	Host      string    `json:"host,omitempty"`
 	VHost     string    `json:"vhost,omitempty"` // the Host header sent, when it is not the URL's
+	Body      string    `json:"body,omitempty"`  // the start of the sha256 of the request body, when it has one
 	Rule      string    `json:"rule,omitempty"`  // the scope rule that allowed it
 	Collector string    `json:"collector,omitempty"`
 	Prev      string    `json:"prev,omitempty"`
@@ -61,6 +64,12 @@ type Ledger struct {
 	prev     string
 	lastSeal bool // the last line is a seal: nothing to seal again
 	err      error
+
+	tail    []Entry         // what follows the last seal when the file was opened
+	held    map[string]bool // writes of the run that was killed: method, target and body
+	heldAny map[string]bool // the same without the body (Chrome's)
+	pending map[string]bool // reads of that run, until one is asked again
+	again   int             // reads asked again
 }
 
 // Open appends to the file at path, creating it, and continues the chain
@@ -82,7 +91,107 @@ func Open(path string) (*Ledger, error) {
 		f.Close()
 		return nil, fmt.Errorf("ledger %s: the last line is not an entry (%v): azhaq ledger -verify %s", path, err, path)
 	}
+	if l.seq > 0 && !l.lastSeal {
+		l.tail = unsealed(path)
+	}
 	return l, nil
+}
+
+// unsealed is the entries after the last seal of the file at path.
+func unsealed(path string) []Entry {
+	var out []Entry
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	r := bufio.NewReaderSize(f, 1<<16)
+	for {
+		raw, err := r.ReadBytes('\n')
+		var e Entry
+		if len(bytes.TrimSpace(raw)) > 0 && json.Unmarshal(raw, &e) == nil {
+			if e.Kind == KindSeal {
+				out = out[:0]
+			} else {
+				out = append(out, e)
+			}
+		}
+		if err != nil {
+			return out
+		}
+	}
+}
+
+// Unsealed is what the file held after its last seal when it was opened:
+// the requests of a run that was killed before it could end.
+func (l *Ledger) Unsealed() []Entry { return l.tail }
+
+// Safe says a method only reads: asking again does no harm.
+func Safe(method string) bool {
+	switch method {
+	case "", http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	return false
+}
+
+func key(method, target, body string) string { return method + "\x00" + target + "\x00" + body }
+
+// Guard holds back the writes of the run that was killed (Unsealed, and
+// those in more) from here on, and returns them without repeats. Its
+// reads stay allowed: Again counts the ones that are asked again.
+func (l *Ledger) Guard(more []Entry) []Entry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.held, l.heldAny, l.pending = map[string]bool{}, map[string]bool{}, map[string]bool{}
+	var writes []Entry
+	for _, e := range append(append([]Entry(nil), more...), l.tail...) {
+		if e.Kind != "http" && e.Kind != "chrome" {
+			continue
+		}
+		if Safe(e.Method) {
+			l.pending[key(e.Method, e.Target, "")] = true
+			continue
+		}
+		k := key(e.Method, e.Target, e.Body)
+		if !l.held[k] {
+			writes = append(writes, e)
+		}
+		l.held[k] = true
+		l.heldAny[key(e.Method, e.Target, "")] = true
+	}
+	return writes
+}
+
+// Again is how many reads of the killed run, which had no stored answer,
+// this run asked again.
+func (l *Ledger) Again() int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.again
+}
+
+func (l *Ledger) refused(method, target, body string, loose bool) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if loose {
+		return l.heldAny[key(method, target, "")]
+	}
+	return l.held[key(method, target, body)]
+}
+
+// Held says the active ledger holds back this write: the run that was
+// killed sent it. Chrome's requests are asked by method and URL, since
+// their body is not in the ledger.
+func Held(method, raw string) bool {
+	l := Active()
+	if l == nil || Safe(method) {
+		return false
+	}
+	if u, err := url.Parse(raw); err == nil {
+		raw = u.Redacted()
+	}
+	return l.refused(method, raw, "", true)
 }
 
 // lastLine is the final line of f, without its newline; none for an empty file.
@@ -135,6 +244,10 @@ func (l *Ledger) Record(e Entry) {
 	}
 	l.note(err)
 	l.prev, l.lastSeal = e.Hash, e.Kind == KindSeal
+	if k := key(e.Method, e.Target, ""); l.pending[k] && (e.Kind == "http" || e.Kind == "chrome") {
+		delete(l.pending, k)
+		l.again++
+	}
 }
 
 func (l *Ledger) note(err error) {

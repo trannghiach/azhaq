@@ -169,6 +169,8 @@ A line has:
 | `method` | The HTTP method. Not on `tcp` and `udp` lines. |
 | `target` | The URL as sent, query string included, for `http` and `chrome`. `ip:port` for `tcp` and `udp`. |
 | `host` | The host the request was for. |
+| `vhost` | The `Host` header sent, when it is not the URL's. |
+| `body` | The first 16 hex digits of the sha256 of the request body, on an `http` line that has one: [resume](CONCEPTS.md#workspaces-runs-and-resuming) uses it to tell two writes to one URL apart. |
 | `rule` | The scope rule that allowed it (`-allow`, `-scope`). Empty when the run has no rules. |
 | `collector` | What sent it, for the lines that say. |
 | `prev`, `hash` | The previous line's hash, and the hex sha256 of `prev` and this line's JSON without `hash`. |

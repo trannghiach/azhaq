@@ -3,14 +3,19 @@ package ledger
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+
+	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
 func open(t *testing.T) (*Ledger, string) {
@@ -215,4 +220,85 @@ func TestWrapOnce(t *testing.T) {
 	if Wrap(rt) != rt || Unwrap(rt) != http.DefaultTransport {
 		t.Fatal("Wrap wraps twice or Unwrap does not unwrap")
 	}
+}
+
+// A file with no seal at its end is a run that was killed: its writes are
+// held back, its reads may be asked again (and are counted), another body
+// to the same URL is a new request.
+func TestGuardHoldsTheWritesOfAKilledRun(t *testing.T) {
+	var hits sync.Map
+	srv := newCountingServer(&hits)
+	defer srv.Close()
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, _ := Open(path)
+	Use(l)
+	c := &http.Client{Transport: Wrap(nil)}
+	post := func(body string) error {
+		resp, err := c.Post(srv.URL+"/pay", "text/plain", strings.NewReader(body))
+		if err == nil {
+			resp.Body.Close()
+		}
+		return err
+	}
+	if err := post("a"); err != nil {
+		t.Fatal(err)
+	}
+	if resp, err := c.Get(srv.URL + "/page"); err == nil {
+		resp.Body.Close()
+	}
+	// Killed: the file is left without its seal.
+	Use(nil)
+	l.mu.Lock()
+	l.f.Close()
+	l.f = nil
+	l.mu.Unlock()
+	hits = sync.Map{}
+
+	l, err := Open(path)
+	if err != nil || len(l.Unsealed()) != 2 {
+		t.Fatalf("open: %v, %d unsealed", err, len(l.Unsealed()))
+	}
+	if w := l.Guard(nil); len(w) != 1 || w[0].Method != "POST" {
+		t.Fatalf("writes held: %+v", w)
+	}
+	Use(l)
+	defer Use(nil)
+	var unsent int
+	Unsent = func() { unsent++ }
+	defer func() { Unsent = nil }()
+	if err := post("a"); !errors.Is(err, neterr.ErrNotRepeated) {
+		t.Errorf("the same POST: %v", err)
+	}
+	if err := post("b"); err != nil {
+		t.Errorf("a POST with another body: %v", err)
+	}
+	if resp, err := c.Get(srv.URL + "/page"); err != nil {
+		t.Errorf("GET: %v", err)
+	} else {
+		resp.Body.Close()
+	}
+	if n := countOf(&hits, "POST /pay"); n != 1 {
+		t.Errorf("the server saw %d POSTs, want only the one with a new body", n)
+	}
+	if countOf(&hits, "GET /page") != 1 || l.Again() != 1 || unsent != 1 {
+		t.Errorf("GET /page %d, asked again %d, given back %d", countOf(&hits, "GET /page"), l.Again(), unsent)
+	}
+	if !Held("POST", srv.URL+"/pay") || Held("GET", srv.URL+"/page") || Held("POST", srv.URL+"/other") {
+		t.Error("Held (Chrome's check) is wrong")
+	}
+}
+
+func newCountingServer(hits *sync.Map) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		k := r.Method + " " + r.URL.Path
+		n, _ := hits.LoadOrStore(k, new(int32))
+		atomic.AddInt32(n.(*int32), 1)
+	}))
+}
+
+func countOf(hits *sync.Map, k string) int {
+	if n, ok := hits.Load(k); ok {
+		return int(atomic.LoadInt32(n.(*int32)))
+	}
+	return 0
 }

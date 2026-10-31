@@ -170,7 +170,8 @@ The summary's `next` lists commands worth running after a run: see [OUTPUT](OUTP
 
 - A **workspace** is one SQLite file, set with `-db`. Every run into it adds to it. `query`, `show`, `export`, `diff` and `watch` read it.
 - A **run** is one pass into a workspace. `azhaq resume` continues a run that a limit stopped.
-- A run keeps the answers it got in its workspace until nothing is left to resume. `azhaq resume` does not ask again what the run already asked.
+- A run keeps the answers it got in its workspace until nothing is left to resume. A run stopped by a limit, Ctrl-C or a signal that it handles (SIGTERM, SIGHUP) is resumed without asking again what it already asked.
+- A run that was **killed** (SIGKILL, a crash, a power cut) is different: the [ledger](#the-ledger-and-its-seal) has a request before it is sent, so the last ones may have gone out with no answer stored. `azhaq resume` reads the ledger lines after its last seal. A read (GET, HEAD, OPTIONS) whose answer was lost is asked again, and the summary counts them: `N requests sent before the run was killed had no stored answer and were asked again`. A write (any other method, a GraphQL POST included) is never sent again: it is held back by its method, URL and body, listed under `skipped` (`sent before the run was killed, its answer was not stored: not sent again (POST URL)`) and counted in a note, and what it belonged to continues without it. Chrome's writes (`-browser-writes`) are held by method and URL. The hold stays for every later resume of that run. It needs the ledger: with `-ledger off`, nothing says what was in flight.
 - The requests of a run that was stopped and resumed add up to a few more than those of one uninterrupted run, not twice as many.
 
 File names and the runs that have no `-db` are in [OUTPUT](OUTPUT.md#the-workspace).

@@ -2,10 +2,15 @@ package ledger
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/neterr"
 )
 
 type collectorKey struct{}
@@ -40,8 +45,30 @@ func HTTP(req *http.Request) {
 		vhost = ""
 	}
 	l.Record(Entry{Kind: "http", Method: method, Target: req.URL.Redacted(), Host: host, VHost: vhost,
-		Rule: l.rule(host), Collector: collectorOf(req.Context())})
+		Body: bodySum(req), Rule: l.rule(host), Collector: collectorOf(req.Context())})
 }
+
+// bodySum is the start of the sha256 of req's body, "" for none; it reads
+// a copy (GetBody), never the body being sent.
+func bodySum(req *http.Request) string {
+	if req.Body == nil || req.Body == http.NoBody || req.GetBody == nil {
+		return ""
+	}
+	rc, err := req.GetBody()
+	if err != nil {
+		return ""
+	}
+	defer rc.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, rc); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// Unsent is called for a request Transport held back after it was counted
+// (fetch gives it back to the budget).
+var Unsent func()
 
 // Chrome records a request Chrome sent. ctx may be nil.
 func Chrome(ctx context.Context, method, raw string) { ChromeAt(ctx, method, raw, time.Time{}) }
@@ -91,6 +118,15 @@ func TCP(ctx context.Context, host, addr string) {
 type Transport struct{ Base http.RoundTripper }
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if l := Active(); l != nil && req.URL != nil && !Safe(req.Method) && l.refused(req.Method, req.URL.Redacted(), bodySum(req), false) {
+		if req.Body != nil {
+			req.Body.Close()
+		}
+		if Unsent != nil {
+			Unsent()
+		}
+		return nil, neterr.ErrNotRepeated
+	}
 	HTTP(req)
 	return t.base().RoundTrip(req)
 }

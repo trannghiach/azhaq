@@ -242,7 +242,7 @@ azhaq run -scope hackerone -program acme -max-requests 5000 -rate 5 -db acme.db
 azhaq resume -db acme.db
 ```
 
-A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a crash continues where it stopped. It does not ask again what it already asked.
+A run stopped by `-max-requests`, `-timeout`, Ctrl-C or a signal continues where it stopped and does not ask again what it already asked. After a crash or SIGKILL, a read whose answer was lost is asked again and a write is never sent twice: see [Workspaces, runs and resuming](CONCEPTS.md#workspaces-runs-and-resuming).
 
 - A run's session is never stored, so give a run behind a sign-in its credentials again. Use `azhaq resume -db app.db -login-user me -login-pass …`, or the cookie or header it carried.
 - The `stopped:` line of a login run prints the exact command.

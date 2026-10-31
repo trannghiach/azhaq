@@ -3,6 +3,7 @@ package fetch
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -55,6 +56,9 @@ func SubmitForm(ctx context.Context, c *http.Client, raw, query string) (Result,
 	posts.Add(1)
 	resp, err := noFollow(c).Do(req)
 	noteOrigin(ctx, raw, err)
+	if errors.Is(err, neterr.ErrNotRepeated) {
+		posts.Add(-1) // held back: nothing was sent
+	}
 	if err != nil {
 		return Result{}, err
 	}

@@ -18,6 +18,11 @@ var ErrEndsSession = errors.New("not requested: it would end the session")
 // (-allow, -deny, -scope) excludes.
 var ErrOutOfScope = errors.New("not requested: outside the scope")
 
+// ErrNotRepeated is returned instead of sending a write again that a run
+// sent before it was killed: the ledger holds the request, nothing holds
+// its answer, and sending it twice could do its work twice.
+var ErrNotRepeated = errors.New("not sent again: sent before the run was killed, its answer was not stored")
+
 // ErrBudget is returned instead of sending a request once the run's
 // request budget (-max-requests, a program's daily budget) is spent. The
 // work is left for azhaq resume.
@@ -58,7 +63,7 @@ func (e *OriginDown) Is(target error) bool { return target == ErrOriginDown }
 // Quiet errors are not failures of the run: a name that does not exist,
 // or a request Azhaq chose not to send.
 func Quiet(err error) bool {
-	return UnknownHost(err) || errors.Is(err, ErrEndsSession) || errors.Is(err, ErrOutOfScope) || errors.Is(err, ErrOriginDown)
+	return UnknownHost(err) || errors.Is(err, ErrEndsSession) || errors.Is(err, ErrOutOfScope) || errors.Is(err, ErrOriginDown) || errors.Is(err, ErrNotRepeated)
 }
 
 func UnknownHost(err error) bool {

@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/ledger"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/scope"
+	"github.com/trannghiach/azhaq/store"
 )
 
 const (
@@ -31,6 +33,60 @@ type runLedger struct {
 	owned    bool // the run opened it, so the run closes it
 	stopKill func()
 	sealTo   string
+	writes   []ledger.Entry // writes of a killed run that a resume does not send again
+}
+
+// unsentKey holds, in a workspace, the writes a killed run sent whose
+// answers it never stored, until the run has nothing left to resume: a
+// second resume, after the first stopped, must not send them either.
+func unsentKey(run string) string { return "sent-unanswered:" + run }
+
+// holdWrites is the resume's half of a crash: the ledger has a request
+// before it is sent, so the requests after its last seal were sent, or
+// were about to be, when the run was killed. A read whose answer was lost
+// is asked again; a write is never sent a second time.
+func (r *runLedger) holdWrites(st *store.Store, run string) {
+	if r == nil || r.l == nil || !r.owned {
+		return
+	}
+	var kept []ledger.Entry
+	if raw := st.GetMeta(unsentKey(run)); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &kept)
+	}
+	r.writes = r.l.Guard(kept)
+	if len(r.writes) > len(kept) {
+		if raw, err := json.Marshal(r.writes); err == nil {
+			_ = st.SetMeta(unsentKey(run), string(raw))
+		}
+	}
+}
+
+// maxUnsentListed is how many held writes the summary names one by one.
+const maxUnsentListed = 20
+
+// noteResume says in rep what the resume did about the killed run's
+// requests.
+func (r *runLedger) noteResume(rep *report) {
+	if n := len(r.writes); n > 0 {
+		for i, e := range r.writes {
+			if i == maxUnsentListed {
+				rep.Skipped = append(rep.Skipped, engine.Skip{Target: fmt.Sprintf("%d more writes", n-i), Reason: "sent before the run was killed, their answers were not stored: not sent again"})
+				break
+			}
+			rep.Skipped = append(rep.Skipped, engine.Skip{Target: e.Target, Reason: fmt.Sprintf("sent before the run was killed, its answer was not stored: not sent again (%s %s)", e.Method, e.Target)})
+		}
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%s sent before the run was killed, with no answer stored: not sent again (the work they belonged to continues without them)", nOf(n, "write was", "writes were")))
+	}
+	if n := r.l.Again(); n > 0 {
+		rep.Notes = append(rep.Notes, fmt.Sprintf("%s sent before the run was killed had no stored answer and %s asked again", nOf(n, "request", "requests"), map[bool]string{true: "was", false: "were"}[n == 1]))
+	}
+}
+
+func nOf(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 // startLedger opens the run's ledger and starts watching for its kill file.
@@ -103,6 +159,7 @@ func (r *runLedger) close(rep *report) {
 	if r.l == nil || !r.owned {
 		return
 	}
+	r.noteResume(rep)
 	ledger.Use(nil)
 	path := r.l.Path()
 	if err := r.l.Close(); err != nil {

@@ -775,6 +775,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 			return err
 		}
 		defer led.close(rep)
+		if *resumeRun != "" {
+			led.holdWrites(st, *resumeRun)
+		}
 	}
 	if (*shots != "" || *render) && !out.plan {
 		if *chromePath != "" {
@@ -1217,6 +1220,9 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	} else {
 		// Nothing left to resume: the kept answers have served.
 		_ = st.DropResponses("")
+		if *resumeRun != "" {
+			_ = st.SetMeta(unsentKey(*resumeRun), "")
+		}
 		if *failCapped && stats.Capped {
 			rep.Stopped = fmt.Sprintf("-depth %d reached with hints left", stats.Depth)
 		}
