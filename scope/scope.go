@@ -358,11 +358,20 @@ func HeaderHosts(value string) []string {
 // leave out, "" when every one is in. A header that is not host-naming
 // names none.
 func (r Rules) HeaderOutside(name, value string) string {
-	if r.Empty() || !NamesHost(name) {
+	if r.Empty() {
+		return ""
+	}
+	return HeaderOutsideBy(r.Allows, name, value)
+}
+
+// HeaderOutsideBy is HeaderOutside for any test of a host: the one place a
+// header that names a host is held to a scope.
+func HeaderOutsideBy(allows func(host string) bool, name, value string) string {
+	if allows == nil || !NamesHost(name) {
 		return ""
 	}
 	for _, h := range HeaderHosts(value) {
-		if !r.Allows(h) {
+		if !allows(h) {
 			return h
 		}
 	}
