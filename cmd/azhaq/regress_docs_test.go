@@ -49,12 +49,14 @@ func TestRegressSAF14DocsNameThePortsHEAD(t *testing.T) {
 // state.
 func TestRegressROL15DocsSayHeaderRolesLackCookies(t *testing.T) {
 	recipes := readDoc(t, "../../docs/RECIPES.md")
-	i := strings.Index(recipes, "## 3. Find IDOR and BOLA")
-	j := strings.Index(recipes, "## 4. ")
-	if i < 0 || j < i {
-		t.Fatal("recipe 3 not found")
+	i := strings.Index(recipes, "## Find IDOR and BOLA")
+	if i < 0 {
+		t.Fatal("the IDOR and BOLA recipe not found")
 	}
-	section := recipes[i:j]
+	section := recipes[i+3:]
+	if j := strings.Index(section, "\n## "); j >= 0 {
+		section = section[:j]
+	}
 	if !strings.Contains(section, "whoami") || !strings.Contains(section, "cookie") || !strings.Contains(section, "-role-login") {
 		t.Error("recipe 3 does not say that a role of headers shows no behaviour that needs a cookie")
 	}
