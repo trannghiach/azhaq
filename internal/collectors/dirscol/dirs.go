@@ -133,10 +133,26 @@ func (c *Collector) Name() string { return Name }
 // it is reported, so a run the budget stops keeps the hits it found.
 func (c *Collector) Standing() bool { return true }
 
+// Forget lets the sweeps at and under raw run again, after a session that
+// ended made their answers wrong (catalog.Forgetter).
+func (c *Collector) Forget(raw string) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return
+	}
+	base := u.Scheme + "://" + u.Host + dirPath(u.Path)
+	c.swept.Range(func(k, _ any) bool {
+		if strings.HasPrefix(k.(string), base) {
+			c.swept.Delete(k)
+		}
+		return true
+	})
+}
+
 // Info: many requests to the target; needs -dirs and -allow, and waits for
 // the HTTP collector so it starts from a service that answered.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Active, Flag: "dirs", After: "azhaq-http"}
+	return catalog.Info{Kind: catalog.Active, Flag: "dirs", After: "azhaq-http", Redo: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }

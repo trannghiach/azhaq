@@ -426,3 +426,25 @@ func TestDeadlineInThePaceIsAStop(t *testing.T) {
 		t.Fatalf("status %q, err %v, ctx %v: the run ended before its deadline as if done", meta.Status, err, ctx.Err())
 	}
 }
+
+// A page searched once is not searched again, unless the collector is told
+// the answers it was searched with were a lost session's.
+func TestForgetLetsAPageBeSearchedAgain(t *testing.T) {
+	fetch.Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "<html><body>results"+strings.Repeat(" <li>row</li>", len(r.URL.Query())*9)+"</body></html>")
+	}))
+	defer srv.Close()
+	c := New(srv.Client(), Options{Words: []string{"a", "b", "c"}, Rate: 10000, PerHost: 1})
+	page := srv.URL + "/list"
+	if runOn(t, c, page) == nil {
+		t.Fatal("no first search")
+	}
+	if got := runOn(t, c, page); got != nil {
+		t.Errorf("searched twice: %v", got)
+	}
+	c.Forget(page)
+	if runOn(t, c, page) == nil {
+		t.Error("not searched again after Forget, though -params-per-host 1 was not used up by the forgotten page")
+	}
+}

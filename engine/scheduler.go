@@ -140,6 +140,13 @@ type scheduler struct {
 	held    []task // work that contacts targets, kept back once the budget is spent
 	retry   []task // work the budget stopped before, cheapest first: one at a time
 
+	// Tasks of collectors that ask with the session but not through the URLs
+	// asked again (Info.Redo), by work id, until a later good check proves
+	// their requests were made with a live session.
+	stretch map[string]*stretchEnt
+	again   map[string]bool // of those, the running ones to run again when they end
+	reruns  map[string]int  // how often each was run again
+
 	// Tasks lent to remote workers (Engine.Workers).
 	leases  map[string]lease
 	remote  int // of inflight, the leased ones
@@ -151,6 +158,13 @@ type scheduler struct {
 	schemes map[string]bool       // host → its http URLs are the https site's
 	asked   map[string]bool       // hosts whose http://host/ was asked
 	waiting map[string][]heldHint // hints held for that answer
+}
+
+// stretchEnt is a task of the stretch the session check has not vouched for:
+// the count fetch.GoodChecks had when it began and when it ended (-1: it runs).
+type stretchEnt struct {
+	t          task
+	begin, end int64
 }
 
 type lease struct {
@@ -476,13 +490,14 @@ func (s *scheduler) loop(ctx context.Context) {
 // without it (fetch.TakeRedo): what the collectors reported of them is
 // dropped, and their tasks run again.
 func (s *scheduler) redoSession() {
+	s.redoStretch()
 	urls := fetch.TakeRedo()
 	if len(urls) == 0 || s.e.Store == nil {
 		return
 	}
 	var touch []catalog.Collector
 	for _, col := range s.e.Cat.Where(types.TypeURL) {
-		if catalog.InfoOf(col).Kind == catalog.Touch {
+		if in := catalog.InfoOf(col); in.Kind == catalog.Touch && !in.Redo {
 			touch = append(touch, col)
 		}
 	}
@@ -511,6 +526,99 @@ func (s *scheduler) redoSession() {
 		delete(s.seen, seedKey(seed))
 		s.add(seed, 0, true)
 	}
+}
+
+// noteStretch keeps a task that asks with the session by means the URL list
+// cannot ask again.
+func (s *scheduler) noteStretch(t task) {
+	col, ok := s.e.Cat.Get(t.col)
+	if !ok || !catalog.InfoOf(col).Redo {
+		return
+	}
+	if s.stretch == nil {
+		s.stretch = map[string]*stretchEnt{}
+	}
+	s.stretch[workID(t.col, t.seed)] = &stretchEnt{t: t, begin: fetch.GoodChecks(), end: -1}
+}
+
+// endStretch notes when a task ended; one that did not finish is run by
+// azhaq resume, and one that was running when its session ended runs again.
+func (s *scheduler) endStretch(t task, meta types.RunMeta) {
+	id := workID(t.col, t.seed)
+	ent := s.stretch[id]
+	if ent == nil {
+		return
+	}
+	if meta.Status == types.StatusCapped || meta.Status == types.StatusCancelled {
+		delete(s.stretch, id)
+		delete(s.again, id)
+		return
+	}
+	ent.end = fetch.GoodChecks()
+	if s.again[id] {
+		delete(s.again, id)
+		s.rerun(t)
+	}
+}
+
+// redoStretch runs again the tasks that asked with a session that ended,
+// and forgets those a later good check vouched for.
+func (s *scheduler) redoStretch() {
+	if len(s.stretch) == 0 || s.e.Store == nil {
+		return
+	}
+	if from, ok := fetch.TakeStretch(); ok {
+		for id, ent := range s.stretch {
+			switch {
+			case ent.begin > from:
+				// began with the new session
+			case ent.end < 0:
+				if s.again == nil {
+					s.again = map[string]bool{}
+				}
+				s.again[id] = true
+			default:
+				s.rerun(ent.t)
+			}
+		}
+	}
+	// A check that held vouches for what ended before it.
+	now := fetch.GoodChecks()
+	for id, ent := range s.stretch {
+		if ent.end >= 0 && ent.end < now {
+			delete(s.stretch, id)
+		}
+	}
+}
+
+// rerun asks a task's work again: what it reported is dropped and the
+// collector forgets it did the work.
+func (s *scheduler) rerun(t task) {
+	col, ok := s.e.Cat.Get(t.col)
+	if !ok || s.e.Store == nil {
+		return
+	}
+	id := workID(t.col, t.seed)
+	if s.reruns[id] >= 1 {
+		// It ended the new session as well, or the sign-in did not hold.
+		fetch.Note(fmt.Sprintf("%s on %s ran with a session that ended again after it was run again; it is not run a third time: azhaq resume runs it", t.col, t.seed.Key()))
+		delete(s.stretch, id)
+		return
+	}
+	if s.reruns == nil {
+		s.reruns = map[string]int{}
+	}
+	s.reruns[id]++
+	if f, ok := col.(catalog.Forgetter); ok {
+		f.Forget(t.seed.Key())
+	}
+	_ = s.e.Store.Unsee([]string{workID(t.col, t.seed)})
+	if ent, err := s.e.Store.UpsertEntity(t.seed.Type, t.seed.Key(), time.Now().UTC()); err == nil {
+		_ = s.e.Store.DropObservations(ent.ID, []string{t.col})
+	}
+	delete(s.stretch, workID(t.col, t.seed))
+	s.record(t)
+	s.enqueue(t)
 }
 
 // lend hands a worker the next task it may run: one that contacts
@@ -544,6 +652,7 @@ func (s *scheduler) lend(ctx context.Context, c claim) {
 				s.originRan++
 			}
 			s.inflight++
+			s.noteStretch(t)
 			s.remote++
 			s.leaseNo++
 			id := fmt.Sprintf("%s-%d", workID(t.col, t.seed), s.leaseNo)
@@ -672,6 +781,7 @@ func (s *scheduler) next() (task, bool) {
 
 func (s *scheduler) start(ctx context.Context, t task) {
 	s.inflight++
+	s.noteStretch(t)
 	item := types.WorkItem{ID: workID(t.col, t.seed), Collector: t.col, Seed: t.seed}
 	go func() {
 		t0 := time.Now()
@@ -778,6 +888,7 @@ func (s *scheduler) handle(f finished) {
 			s.finish(t)
 			s.unpark(t)
 		}
+		s.endStretch(t, meta)
 		if err != nil && meta.Status != types.StatusCancelled {
 			continue
 		}

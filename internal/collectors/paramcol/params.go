@@ -127,10 +127,26 @@ func New(client *http.Client, o Options) *Collector {
 
 func (c *Collector) Name() string { return Name }
 
+// Forget lets a page be searched again, after a session that ended made its
+// answers wrong (catalog.Forgetter).
+func (c *Collector) Forget(raw string) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return
+	}
+	page := u.Scheme + "://" + u.Host + u.Path
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done[page] {
+		delete(c.done, page)
+		c.perHost[u.Host]--
+	}
+}
+
 // Info: tens of requests per page; needs -params and -allow, and waits for
 // the HTTP collector so only pages that answered are searched.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Active, Flag: "params", After: "azhaq-http"}
+	return catalog.Info{Kind: catalog.Active, Flag: "params", After: "azhaq-http", Redo: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }

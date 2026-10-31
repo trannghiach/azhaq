@@ -13,9 +13,11 @@ import (
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/crawlcol"
+	"github.com/trannghiach/azhaq/internal/collectors/dirscol"
 	"github.com/trannghiach/azhaq/internal/collectors/httpcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/neterr"
+	"github.com/trannghiach/azhaq/scope"
 	"github.com/trannghiach/azhaq/store"
 	"github.com/trannghiach/azhaq/types"
 )
@@ -269,5 +271,79 @@ func TestMapSurvivesASilentLogout(t *testing.T) {
 	}
 	if fetch.SessionLost() != nil {
 		t.Errorf("lost: %v", fetch.SessionLost())
+	}
+}
+
+// A session that ends while a -dirs sweep runs: the sweep's guesses were
+// answered as a visitor's, so it runs again signed in, and what it reported
+// under the old session is dropped.
+func TestSessionRenewalRunsTheSweepAgain(t *testing.T) {
+	var mu sync.Mutex
+	live := map[string]bool{"s1": true}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		c, _ := r.Cookie("sid")
+		mu.Lock()
+		ok := c != nil && live[c.Value]
+		if r.URL.Path == "/g-one" && ok && c.Value == "s1" {
+			delete(live, "s1") // a guess that ends the first session, as a logout path would
+		}
+		mu.Unlock()
+		w.Header().Set("Content-Type", "text/html")
+		switch {
+		case r.URL.Path == "/login":
+			_, _ = w.Write([]byte(`<title>Sign in</title>`))
+		case !ok:
+			http.Redirect(w, r, "/login", http.StatusFound)
+		case r.URL.Path == "/":
+			_, _ = w.Write([]byte(`<title>Home</title>`))
+		case r.URL.Path == "/admin":
+			_, _ = w.Write([]byte(`<title>Admin</title><p>the admin page</p>`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+	fetch.Reset()
+	t.Cleanup(fetch.Reset)
+	fetch.SetExtra(http.Header{"Cookie": {"sid=s1"}})
+	renewed := 0
+	fetch.WatchSession(fetch.Session{Check: srv.URL + "/", Want: fetch.Print{Status: 200}, Every: 1000, SignIn: srv.URL + "/login",
+		Renew: func(context.Context) error {
+			mu.Lock()
+			renewed++
+			live["s2"] = true
+			mu.Unlock()
+			fetch.SetExtra(http.Header{"Cookie": {"sid=s2"}})
+			return nil
+		}})
+	st, err := store.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	cat := catalog.New()
+	httpcol.Register(cat, srv.Client())
+	cat.MustRegister(dirscol.New(srv.Client(), dirscol.Options{Words: []string{"g-one", "admin", "g-two"}, Threads: 1}))
+	eng := &engine.Engine{Cat: cat, Store: st}
+	seed := types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/"}}
+	rules := scope.Rules{Allow: []string{"127.0.0.1"}}.Compile()
+	if err := eng.RunLocal(context.Background(), []types.Seed{seed}, engine.Budgets{MaxDepth: 2, MaxItems: 64, Parallel: 1, Scope: rules, Active: map[string]bool{"dirs": true}}); err != nil {
+		t.Fatal(err)
+	}
+	if renewed != 1 {
+		t.Fatalf("signed in again %d times, want 1", renewed)
+	}
+	var urls []string
+	obs, _ := st.Observations()
+	for _, o := range obs {
+		if o.Collector == "azhaq-dirs" && o.Kind == "url" {
+			urls = append(urls, string(o.Payload))
+		}
+	}
+	if len(urls) != 1 || !strings.Contains(urls[0], `/admin"`) || !strings.Contains(urls[0], `"status":200`) {
+		t.Errorf("the sweep reported %q, want /admin answering 200 and nothing from the old session", urls)
+	}
+	if n := strings.Join(fetch.Notes(), "\n"); !strings.Contains(n, "sweeps and page tasks: those run again") {
+		t.Errorf("notes %q", fetch.Notes())
 	}
 }

@@ -71,7 +71,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 ### Which words are asked
 - A sweep asks every word, `/logout` and `/delete` included, as ffuf does.
 - No word is held back, with a session or without one: what a GET does on the server cannot be known from its name. A word whose URL a `-deny-path` rule matches is not sent and is listed under `skipped` with the rule.
-- With a session, the run checks it as it goes. A word that ended the session is noticed: a `-login` run signs in again, a `-cookie` or `-H` run stops with a failure and exit 3. The words sent since the last good check are counted in the note, not repeated: [Sessions](../CONCEPTS.md#sessions).
+- With a session, the run checks it as it goes. A word that ended the session is noticed: a `-login` run signs in again, a `-cookie` or `-H` run stops with a failure and exit 3. The sweeps that ran since the last good check run again with the new session, and the note counts the words they sent: [Sessions](../CONCEPTS.md#sessions).
 - `-u https://h/api/` asks `https://h/api/WORD`. A query or fragment on the URL is dropped, and a note says so.
 
 ### Pace

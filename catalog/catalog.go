@@ -50,6 +50,10 @@ type Info struct {
 	// (it writes files there, or drives its browser): remote workers never
 	// run it.
 	Local bool
+	// Redo marks a collector whose requests carry the run's session but are
+	// not among the URLs asked again when the session ended (sweeps, Chrome):
+	// its tasks that ran since the last good check run again.
+	Redo bool
 }
 
 // Claim, when set, records owner as the one collector run that does a

@@ -66,8 +66,9 @@ type sessionGuard struct {
 	since    atomic.Int64 // requests since the last good check
 	due      atomic.Bool  // an answer looked like the end of the session
 
-	renewing atomic.Bool // signing in again: its own requests pass
-	probing  atomic.Bool // a candidate for the check page is being measured
+	renewing atomic.Bool  // signing in again: its own requests pass
+	probing  atomic.Bool  // a candidate for the check page is being measured
+	good     atomic.Int64 // checks that held, and renewals: the stretch a request belongs to
 
 	// remote: a worker's guard. It measures nothing and renews nothing: it
 	// keeps what its requests were answered and tells the run (TakeReport).
@@ -87,6 +88,8 @@ type sessionGuard struct {
 	proven   map[string]bool // suspects that answered alike once signed in again
 	verifies int
 	enders   map[string]bool // requests that end the session whenever they are sent
+	stretch  int64           // the oldest stretch a renewal made worth asking again, not taken yet
+	stretchN bool
 }
 
 // suspect is a URL answered as if the session were over (a 401, a redirect to
@@ -255,6 +258,31 @@ func SessionLost() error {
 	return nil
 }
 
+// GoodChecks counts the checks that held and the sessions renewed: a task
+// that began and ended within one count asked nothing in a stretch that was
+// lost.
+func GoodChecks() int64 {
+	if g := guardP.Load(); g != nil {
+		return g.good.Load()
+	}
+	return 0
+}
+
+// TakeStretch is the count GoodChecks had while the stretch ran that a
+// renewal made worth asking again, once: a task that was running at that
+// count, or ended at it or after, sent requests with the session that ended.
+func TakeStretch() (int64, bool) {
+	g := guardP.Load()
+	if g == nil {
+		return 0, false
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	from, ok := g.stretch, g.stretchN
+	g.stretchN = false
+	return from, ok
+}
+
 // TakeRedo is the URLs a new session makes worth asking again: the GETs sent
 // since the last good check, now evicted from the cache. The scheduler asks
 // their pages again.
@@ -376,6 +404,7 @@ func (g *sessionGuard) check(ctx context.Context) error {
 			g.mu.Lock()
 			g.asked, g.endedBy = nil, ""
 			g.mu.Unlock()
+			g.good.Add(1)
 			return nil
 		}
 		got = p
@@ -455,6 +484,9 @@ func (g *sessionGuard) resume(ctx context.Context, what, endedBy string, unrecor
 	redo := slices.DeleteFunc(g.asked, func(u string) bool { return u == endedBy || g.enders[u] })
 	g.asked, g.endedBy = nil, ""
 	g.redo = append(g.redo, redo...)
+	if from := g.good.Add(1) - 1; !g.stretchN || from < g.stretch {
+		g.stretch, g.stretchN = from, true
+	}
 	g.mu.Unlock()
 	for _, u := range redo {
 		evict(u)
@@ -469,7 +501,7 @@ func (g *sessionGuard) resume(ctx context.Context, what, endedBy string, unrecor
 		msg += "; " + strings.Join(paths, ", ") + " ended the new session when asked again and is not asked again"
 	}
 	if unrecorded > 0 {
-		msg += fmt.Sprintf(" (%s sent in the same stretch, path or parameter guesses, are not)", plural(unrecorded, "request"))
+		msg += fmt.Sprintf(" (%s sent in the same stretch by sweeps and page tasks: those run again)", plural(unrecorded, "request"))
 	}
 	Note(msg)
 }

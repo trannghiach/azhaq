@@ -61,9 +61,27 @@ type Collector struct {
 
 func (c *Collector) Name() string { return Name }
 
+// Forget lets a page, or the front pages of a name, be taken again, after a
+// session that ended made the picture wrong (catalog.Forgetter).
+func (c *Collector) Forget(key string) {
+	if strings.Contains(key, "://") {
+		c.shot.Delete(key)
+		return
+	}
+	h := normalize.Hostname(key)
+	if ip := net.ParseIP(h); ip != nil && ip.To4() == nil {
+		h = "[" + h + "]"
+	}
+	for _, tries := range c.guesses(h) {
+		for _, t := range tries {
+			c.shot.Delete(t)
+		}
+	}
+}
+
 // Info: loads the page with its scripts and images, as a browser does.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true}
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true, Redo: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType {

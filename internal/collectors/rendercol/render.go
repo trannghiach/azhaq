@@ -38,10 +38,26 @@ type Collector struct {
 
 func (c *Collector) Name() string { return Name }
 
+// Forget lets a page be rendered again, after a session that ended made its
+// requests wrong (catalog.Forgetter).
+func (c *Collector) Forget(raw string) {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return
+	}
+	key := webextract.Template(raw)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.done[key] {
+		delete(c.done, key)
+		c.count[u.Host]--
+	}
+}
+
 // Info: loads pages with their scripts, as a browser does; waits for the
 // HTTP answer so dead URLs are not rendered.
 func (c *Collector) Info() catalog.Info {
-	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true}
+	return catalog.Info{Kind: catalog.Touch, After: "azhaq-http", Local: true, Redo: true}
 }
 
 func (c *Collector) Inputs() []types.SeedType { return []types.SeedType{types.TypeURL} }
