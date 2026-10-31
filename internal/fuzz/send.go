@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/andybalholm/brotli"
@@ -223,7 +224,9 @@ func (s *httpSender) Send(ctx context.Context, req *Request, keepBody bool) (*Re
 		raw, _ := httputil.DumpResponse(resp, true)
 		r.RawRequest, r.RawResponse = string(rawReq), string(raw)
 	}
-	body, length, words, lines, ok, err := readCounting(decoded(resp), keepBody)
+	dec, release := decoded(resp)
+	body, length, words, lines, ok, err := readCounting(dec, keepBody)
+	release()
 	if err != nil {
 		// Cut off: its size is no answer's, and would pass a size filter.
 		return nil, fmt.Errorf("answer cut off after %d bytes: %w", length, err)
@@ -273,8 +276,13 @@ func (s *httpSender) Replay(ctx context.Context, req *Request) error {
 // itself, but a request that names its own Accept-Encoding (a browser's, or
 // "copy as cURL") gets the body as the server compressed it, and ffuf counts
 // the decoded bytes.
-func decoded(resp *http.Response) io.Reader {
-	br := bufio.NewReader(resp.Body)
+func decoded(resp *http.Response) (io.Reader, func()) {
+	br := readers.Get().(*bufio.Reader)
+	br.Reset(resp.Body)
+	release := func() {
+		br.Reset(nil)
+		readers.Put(br)
+	}
 	var d io.Reader
 	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))) {
 	case "gzip", "x-gzip":
@@ -296,17 +304,26 @@ func decoded(resp *http.Response) io.Reader {
 		}
 	}
 	if d == nil {
-		return br
+		return br, release
 	}
-	return io.LimitReader(d, MaxBody+1)
+	return io.LimitReader(d, MaxBody+1), release
 }
+
+// A sweep reads thousands of small answers: its buffers are reused, or the
+// collector's work on them costs more than the requests.
+var (
+	readers = sync.Pool{New: func() any { return bufio.NewReader(nil) }}
+	chunks  = sync.Pool{New: func() any { b := make([]byte, 32<<10); return &b }}
+)
 
 // readCounting reads up to MaxBody, counting as it goes, and keeps the
 // bytes only when asked: words are spaces plus one, lines newlines plus one.
 // ok is false when the body was longer than the most read; err says the
 // body ended early.
 func readCounting(r io.Reader, keep bool) (body []byte, length, words, lines int64, ok bool, err error) {
-	buf := make([]byte, 32<<10)
+	bp := chunks.Get().(*[]byte)
+	defer chunks.Put(bp)
+	buf := *bp
 	var spaces, newlines int64
 	for {
 		n, rerr := r.Read(buf)

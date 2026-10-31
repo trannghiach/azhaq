@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // servicesRow compares service and version detection with nmap -sV on the
@@ -104,10 +106,37 @@ var (
 		10445: {},
 		// Elasticsearch answers 503 or 401 while it starts.
 		19200: {httpGet, httpOK("200")},
-		// A DNS query for "a." over TCP, with its length: any answer to id 0x1234.
-		10053: {[]byte{0, 21, 0x12, 0x34, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 'a', 0, 0, 1, 0, 1}, func(b []byte) bool { return len(b) >= 4 && b[2] == 0x12 && b[3] == 0x34 }},
+		// A DNS query for "a." over TCP, length-prefixed: any answer to it
+		// (REFUSED for a zone it does not hold) shows the daemon is up.
+		10053: dnsTCPReady("a."),
 	}
 )
+
+// dnsTCPReady asks for name's A record over TCP: the message after a 2-byte
+// length, and an answer, after its length, that is a response to that query.
+func dnsTCPReady(name string) serviceReady {
+	q := new(dns.Msg)
+	q.SetQuestion(name, dns.TypeA)
+	q.Id = 0x1234
+	wire, err := q.Pack()
+	if err != nil {
+		panic(err)
+	}
+	return serviceReady{
+		send: append([]byte{byte(len(wire) >> 8), byte(len(wire))}, wire...),
+		ok: func(b []byte) bool {
+			if len(b) < 2 {
+				return false
+			}
+			n := int(b[0])<<8 | int(b[1])
+			if n == 0 || len(b) < 2+n {
+				return false
+			}
+			var r dns.Msg
+			return r.Unpack(b[2:2+n]) == nil && r.Response && r.Id == q.Id
+		},
+	}
+}
 
 // serving says whether the lab port answers as its daemon does.
 func serving(port int) bool { return servingAs(port, readyBy[port]) }
@@ -136,6 +165,12 @@ func servingAs(port int, r serviceReady) bool {
 		// Waits to be asked: serving unless something closes the connection.
 		ne, isNet := err.(net.Error)
 		return n > 0 || isNet && ne.Timeout()
+	}
+	// An answer may arrive in pieces (a DNS length, then the message).
+	for n > 0 && !r.ok(buf[:n]) && err == nil && n < len(buf) {
+		var m int
+		m, err = c.Read(buf[n:])
+		n += m
 	}
 	return n > 0 && r.ok(buf[:n])
 }

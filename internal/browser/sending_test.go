@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -294,5 +295,79 @@ for (let i = 0; i < 6; i++) fetch('/data' + i).then(r => r.json()).then(d => { c
 	}
 	if n != 6 || p.Partial {
 		t.Errorf("%d of 6 images loaded when the picture was taken, partial %v (%d of %d unloaded)", n, p.Partial, p.Unloaded, p.Resources)
+	}
+}
+
+func TestLocalSchemes(t *testing.T) {
+	for raw, want := range map[string]bool{
+		"chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/main.js": true,
+		"chrome://resources/js/assert.js":                             true,
+		"chrome-untrusted://x/y":                                      true,
+		"data:text/plain,hi":                                          true,
+		"blob:http://127.0.0.1/abc":                                   true,
+		"about:blank":                                                 true,
+		"devtools://devtools/bundled/x.js":                            true,
+		"file:///etc/hosts":                                           true,
+		"http://127.0.0.1/":                                           false,
+		"HTTPS://example.com/":                                        false,
+		"ws://127.0.0.1/sock":                                         false,
+		"wss://example.com/":                                          false,
+		"/relative":                                                   false,
+	} {
+		if got := local(raw); got != want {
+			t.Errorf("local(%q) = %v, want %v", raw, got, want)
+		}
+	}
+}
+
+// Chrome's PDF viewer loads its own chrome-extension: and chrome: files:
+// they reach no server, so the ledger and the count hold only what the
+// server got, and none of them is refused.
+func TestBuiltInPagesAreNotCounted(t *testing.T) {
+	b := startChrome(t)
+	const pdf = "%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF\n"
+	own := newRecorder(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/x.pdf" {
+			w.Header().Set("Content-Type", "application/pdf")
+			_, _ = io.WriteString(w, pdf)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><iframe src="/x.pdf" width=300 height=300></iframe><embed src="/x.pdf" type="application/pdf"></body></html>`)
+	})
+	defer own.Close()
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	fetch.Reset()
+	fetch.Allow = func(h string) bool { return h == "127.0.0.1" }
+	_ = fetch.Spend(ctx) // the page, which Load's caller counts
+	if _, err := b.Load(ctx, own.URL+"/", false); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(2 * time.Second)
+	b.Close()
+	l.Close()
+	var listed []string
+	_ = ledger.Read(path, func(e ledger.Entry) error {
+		listed = append(listed, e.Target)
+		return nil
+	})
+	for _, u := range listed {
+		if !strings.HasPrefix(u, "http://127.0.0.1") {
+			t.Errorf("ledger lists %s, which is no request to a server", u)
+		}
+	}
+	if len(listed) != len(own.got()) {
+		t.Errorf("ledger %d lines, server got %d: %v", len(listed), len(own.got()), listed)
+	}
+	if n := fetch.Sent(); n != int64(len(own.got())) {
+		t.Errorf("counted %d requests, the server got %d", n, len(own.got()))
 	}
 }

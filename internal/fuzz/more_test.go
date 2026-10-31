@@ -7,11 +7,13 @@ import (
 	"compress/zlib"
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -346,5 +348,34 @@ func TestCommandListRunsPerInput(t *testing.T) {
 	bad.Word(0)
 	if bad.Failed.Load() != 1 {
 		t.Error("failure not counted")
+	}
+}
+
+// A sweep reads thousands of small answers: the buffers that read them are
+// reused, not made for each. Each answer used to cost a 32 KiB read buffer
+// and a 4 KiB reader, and the collector's work on them slowed the sweep
+// (and the server it shares a machine with) against ffuf's.
+func TestReadingAnAnswerReusesItsBuffers(t *testing.T) {
+	body := strings.Repeat("word ", 41) // 205 bytes
+	resp := &http.Response{Header: http.Header{}}
+	const n = 500
+	read := func() {
+		resp.Body = io.NopCloser(strings.NewReader(body))
+		dec, release := decoded(resp)
+		_, length, words, _, ok, err := readCounting(dec, false)
+		release()
+		if err != nil || !ok || length != 205 || words != 42 {
+			t.Fatalf("read %d bytes, %d words, ok %v, err %v", length, words, ok, err)
+		}
+	}
+	read() // fills the pools
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	for i := 0; i < n; i++ {
+		read()
+	}
+	runtime.ReadMemStats(&after)
+	if per := (after.TotalAlloc - before.TotalAlloc) / n; per > 2048 {
+		t.Errorf("each answer allocates %d bytes to be read; its buffers are not reused", per)
 	}
 }

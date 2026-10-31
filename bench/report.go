@@ -25,7 +25,7 @@ func printReport() {
 	}
 	if d := rec.Dropin; d != nil {
 		fmt.Fprintf(w, "\ndrop-in and exports\tresult\n")
-		fmt.Fprintf(w, "azhaq crawl, Juice Shop known routes\t%d/%d\n", d.CrawlKnown, d.CrawlOf)
+		fmt.Fprintf(w, "azhaq crawl, Juice Shop routes its pages and scripts name\t%d/%d (+%d of %d only the full map reaches)\n", d.CrawlKnown, d.CrawlOf, d.CrawlMapFound, d.CrawlMapOnly)
 		fmt.Fprintf(w, "azhaq probe -json on stdin\t%d of 2, httpx fields %v\n", d.ProbeRows, d.ProbeFields)
 		fmt.Fprintf(w, "OpenAPI export, VAmPI / crAPI paths\t%d/12, %d/40\n", d.OpenAPIVampi, d.OpenAPICrapi)
 		fmt.Fprintf(w, "targets, HTML report\t%d, %d bytes\n", d.Targets, d.HTMLBytes)

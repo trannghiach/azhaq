@@ -375,10 +375,10 @@ func keyed(s source) source {
 	return s
 }
 
-// crtshSource asks crt.sh's JSON endpoint. subfinder's version tries the
-// public Postgres server first (usually full) and then a URL crt.sh no
-// longer serves; /json answers, though with the odd 502, so it is asked
-// again a few times.
+// crtshSource asks crt.sh as subfinder does: its public PostgreSQL first,
+// and the JSON API only when the database fails or has nothing. The
+// database answers in seconds where the JSON API takes 20 to 40 s on a
+// large domain and now and then gives a 502.
 func crtshSource() source {
 	return source{
 		name:    "crtsh",
@@ -386,39 +386,53 @@ func crtshSource() source {
 		deflt:   true,
 		recurse: true,
 		collect: func(ctx context.Context, domain string, _ []string, sess *subscraping.Session) ([]string, error) {
-			u := "https://crt.sh/json?q=" + url.QueryEscape(domain)
-			var rows []struct {
-				CommonName string `json:"common_name"`
-				NameValue  string `json:"name_value"`
-			}
-			var err error
-			start := time.Now()
-			for attempt, wait := 0, time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
-				if err = getJSON(ctx, sess, "crtsh", u, nil, &rows); err == nil || !retry(err) {
-					break
-				}
-				// crt.sh is often down for a while: a few quick retries, not a
-				// minute of them, since every other source waits for this one.
-				if time.Since(start)+wait > crtshRetryBudget {
-					break
-				}
-				select {
-				case <-ctx.Done():
-					return nil, err
-				case <-time.After(wait):
-				}
+			names, err := crtshDatabase(ctx, domain, sess.Client)
+			if len(names) > 0 {
+				return names, nil
 			}
 			if err != nil {
-				return nil, err
+				addNote(ctx, "crt.sh database: "+err.Error()+"; asked the JSON API")
+			} else {
+				addNote(ctx, "crt.sh database had no names; asked the JSON API")
 			}
-			var names []string
-			for _, r := range rows {
-				names = append(names, r.CommonName)
-				names = append(names, strings.Split(r.NameValue, "\n")...)
-			}
-			return names, nil
+			return crtshJSON(ctx, domain, sess)
 		},
 	}
+}
+
+// crtshJSON asks crt.sh's JSON endpoint, again a few times on a 5xx.
+func crtshJSON(ctx context.Context, domain string, sess *subscraping.Session) ([]string, error) {
+	u := "https://crt.sh/json?q=" + url.QueryEscape(domain)
+	var rows []struct {
+		CommonName string `json:"common_name"`
+		NameValue  string `json:"name_value"`
+	}
+	var err error
+	start := time.Now()
+	for attempt, wait := 0, time.Second; attempt < 4; attempt, wait = attempt+1, wait*2 {
+		if err = getJSON(ctx, sess, "crtsh", u, nil, &rows); err == nil || !retry(err) {
+			break
+		}
+		// crt.sh is often down for a while: a few quick retries, not a
+		// minute of them, since every other source waits for this one.
+		if time.Since(start)+wait > crtshRetryBudget {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(wait):
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, r := range rows {
+		names = append(names, r.CommonName)
+		names = append(names, strings.Split(r.NameValue, "\n")...)
+	}
+	return names, nil
 }
 
 // crtshRetryBudget is how long crt.sh may take, retries included, before

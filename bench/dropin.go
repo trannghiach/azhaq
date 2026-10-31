@@ -14,8 +14,10 @@ import (
 // dropinRow checks the drop-in commands and export formats: the same
 // answers as a full run, through the plumbing a recon script uses.
 type dropinRow struct {
-	CrawlKnown    int  `json:"crawl_known"`    // Juice Shop known routes from azhaq crawl
-	CrawlOf       int  `json:"crawl_of"`       // of the known routes
+	CrawlKnown    int  `json:"crawl_known"`    // Juice Shop routes its pages and scripts name, from azhaq crawl
+	CrawlOf       int  `json:"crawl_of"`       // of those (the known routes less CrawlMapOnly)
+	CrawlMapOnly  int  `json:"crawl_map_only"` // known routes only the full map reaches (see the truth file)
+	CrawlMapFound int  `json:"crawl_map_only_found"`
 	ProbeRows     int  `json:"probe_rows"`     // local apps answered by azhaq probe -json
 	ProbeFields   bool `json:"probe_fields"`   // httpx's field names present
 	OpenAPIVampi  int  `json:"openapi_vampi"`  // VAmPI spec paths in the OpenAPI export
@@ -41,6 +43,11 @@ func benchDropin(crapi bool) *dropinRow {
 	// the plain list holds only URLs that can be requested.
 	out, _ := run("dropin", 10*time.Minute, dir, azhaq, "crawl", "-json", "-silent", "-u", juiceURL)
 	truth := readTruth("bench/truth/juice-shop-v20.3.0-routes.txt")
+	// A crawler asks what pages and scripts name; the truth also holds routes
+	// that only the full map reaches (the id form of a collection the frontend
+	// never asks for, a prefix constant, /ftp from robots.txt).
+	mapOnly := readTruth("bench/truth/juice-shop-v20.3.0-full-map-only.txt")
+	truth, mapOnly = splitTruth(truth, mapOnly)
 	var crawled []string
 	for _, l := range lines(out) {
 		var r struct {
@@ -50,9 +57,11 @@ func benchDropin(crapi bool) *dropinRow {
 			crawled = append(crawled, r.URL)
 		}
 	}
-	row.CrawlKnown, row.CrawlOf = matched(routes(crawled, origin), truth), len(truth)
-	addCheck("drop-in: azhaq crawl finds Juice Shop's known routes", row.CrawlKnown*10 >= len(truth)*9,
-		"%d/%d", row.CrawlKnown, len(truth))
+	found := routes(crawled, origin)
+	row.CrawlKnown, row.CrawlOf = matched(found, truth), len(truth)
+	row.CrawlMapOnly, row.CrawlMapFound = len(mapOnly), matched(found, mapOnly)
+	addCheck("drop-in: azhaq crawl finds every Juice Shop route its pages and scripts name", row.CrawlKnown == row.CrawlOf,
+		"%d/%d (%d more known routes only the full map reaches; crawl found %d of them)", row.CrawlKnown, row.CrawlOf, row.CrawlMapOnly, row.CrawlMapFound)
 
 	// probe, like httpx -json, on stdin.
 	out = runStdin(dir, "127.0.0.1:3101\n127.0.0.1:5102\n", azhaq, "probe", "-json", "-silent")
@@ -101,6 +110,20 @@ func benchDropin(crapi bool) *dropinRow {
 	addCheck("export: targets and HTML report", row.Targets == 2 && row.HTMLOK,
 		"targets %d of 2, HTML %d bytes with its sections %v", row.Targets, row.HTMLBytes, row.HTMLOK)
 	return row
+}
+
+// splitTruth takes mapOnly out of truth; it returns the rest, and mapOnly
+// narrowed to what truth holds.
+func splitTruth(truth, mapOnly map[string]bool) (rest, only map[string]bool) {
+	rest, only = map[string]bool{}, map[string]bool{}
+	for t := range truth {
+		if mapOnly[t] {
+			only[t] = true
+		} else {
+			rest[t] = true
+		}
+	}
+	return rest, only
 }
 
 // openAPIPaths exports db as OpenAPI and counts the truth paths it holds.

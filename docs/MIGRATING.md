@@ -69,6 +69,7 @@ Behaviour, fields and edge cases: [`azhaq subs`](commands/subs.md).
 <!-- azhaq: subs -->
 
 - A name appears once, however many sources gave it. `source` is the first source and `sources` lists all of them.
+- crt.sh is asked as subfinder asks it: its public PostgreSQL (`host=crt.sh user=guest dbname=certwatch`, port 5432) first, then the JSON API when the database fails or has no names. azhaq adds no `LIMIT` to the query; subfinder adds `LIMIT 10000` unless its all-sources option is set. A SOCKS5 `-proxy` carries the database connection too. An HTTP proxy cannot, so crt.sh is then asked in the JSON API only, and a note says so.
 - Sources outside the default set stay out. `-all-sources` runs them.
 - A source that needs a key and has none is listed as `needs a key`, not skipped without a word.
 - A run in which every source failed is `degraded` and exits 3, not 0 with an empty list. The summary names each source that failed.
