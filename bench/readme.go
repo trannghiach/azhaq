@@ -74,8 +74,13 @@ func tableRows(ps *profileSet) []tableRow {
 			fmt.Sprintf("%d answered, %d confirmed; %s", p.HttpxAnswered, p.HttpxOK, secs(p.HttpxSeconds))})
 	}
 	for _, a := range ps.Apps {
+		// Two measures that must not be read as one: the whole map, and the crawler alone.
+		if a.Azhaq.TruthOf > 0 && a.Katana.TruthOf > 0 {
+			rows = append(rows, tableRow{"Known routes of " + a.Name + ", the whole map (`azhaq run`)", "katana `-jc -jsl`", fmt.Sprintf("%d/%d in %s", a.Azhaq.Truth, a.Azhaq.TruthOf, secs(a.Azhaq.Seconds)),
+				fmt.Sprintf("%d/%d in %s", a.Katana.Truth, a.Katana.TruthOf, secs(a.Katana.Seconds))})
+		}
 		if a.Crawl != nil && a.CrawlKatana != nil {
-			rows = append(rows, tableRow{"Known routes of " + a.Name, "katana `-jc -jsl`", fmt.Sprintf("%d/%d in %s", a.Crawl.Truth, a.Crawl.TruthOf, secs(a.Crawl.Seconds)),
+			rows = append(rows, tableRow{"Known routes of " + a.Name + ", the crawler alone (`azhaq crawl`, katana's depth)", "katana `-jc -jsl`", fmt.Sprintf("%d/%d in %s", a.Crawl.Truth, a.Crawl.TruthOf, secs(a.Crawl.Seconds)),
 				fmt.Sprintf("%d/%d in %s", a.CrawlKatana.Truth, a.CrawlKatana.TruthOf, secs(a.CrawlKatana.Seconds))})
 		}
 	}
