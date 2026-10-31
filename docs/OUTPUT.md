@@ -14,7 +14,7 @@ Every command follows the same contract, so a script or an assistant can read an
 | --- | --- | --- |
 | 0 | Complete. | Use the results. |
 | 1 | Error: the command could not do its job (a database it cannot open, Chrome missing for `-browser`). | Read the message. |
-| 2 | Usage: bad flags or input, such as targets that are all outside the scope given (`every target is outside the scope`). Nothing was sent. | `azhaq help COMMAND`; for a scope refusal, the target or `-allow`/`-scope`. |
+| 2 | Usage: bad flags or input, such as targets that are all outside the scope given (`every target is outside the scope (2 left out): 127.0.0.2, 127.0.0.3`: the message names them; a range no allow rule touches counts, and `ports` and `dns` say it too). Nothing was sent. | `azhaq help COMMAND`; for a scope refusal, the target or `-allow`/`-scope`. |
 | 3 | Finished, but some sources or requests failed. The results are usable. | The summary lists each failure, whether it is worth retrying, and its targets. |
 | 4 | Stopped by a limit (`-max-requests`, `-timeout`, `-daily-requests`, `-max-items`) or by the kill file (`-kill-file`, default `DB.stop`) with work left. | `azhaq resume -db FILE` continues where it stopped; with a kill file, remove it first. |
 

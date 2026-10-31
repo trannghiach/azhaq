@@ -537,16 +537,25 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		// What the scope excludes is never touched, even when it was given
 		// as a target: it is listed in the summary instead.
 		kept := seeds[:0]
+		var outside []string // the targets no address of can pass, as given
+		reachable := 0
 		for _, s := range seeds {
-			if rules.AllowsSeed(s) {
-				kept = append(kept, s)
-			} else {
+			switch {
+			case !rules.AllowsSeed(s):
 				rep.Skipped = append(rep.Skipped, engine.Skip{Target: s.Key(), Reason: "outside the scope"})
+				outside = append(outside, s.Key())
+			case seedOutsideRange(rules, s):
+				// Kept: its addresses are each refused and counted in the summary.
+				kept = append(kept, s)
+				outside = append(outside, s.Key())
+			default:
+				kept = append(kept, s)
+				reachable++
 			}
 		}
 		seeds = kept
-		if len(seeds) == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
-			return usagef("every target is outside the scope (%d left out)", len(rep.Skipped))
+		if reachable == 0 && *factsPath == "" && *execCmd == "" && *workerOf == "" && !*demo {
+			return outsideScope(outside)
 		}
 	}
 	if fi, err := os.Stat(*shots); *shots != "" && err == nil && !fi.IsDir() {

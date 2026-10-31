@@ -534,3 +534,12 @@ func TestDNSSpecialUseNamesGoToTheSystemOnlyWithTheDefaultResolvers(t *testing.T
 		t.Error("Reserved is not about the default resolvers")
 	}
 }
+
+// Names that are all outside the scope are a usage error naming them,
+// not an empty success.
+func TestDNSAllNamesOutsideTheScope(t *testing.T) {
+	_, errOut, code := cli(t, "dns", "-d", "a.test,b.test", "-allow", "127.0.0.1", "-resolvers", "127.0.0.1:9", "-json")
+	if code != exitUsage || !strings.Contains(errOut, "every target is outside the scope (2 left out): a.test, b.test") {
+		t.Errorf("exit %d\n%s", code, errOut)
+	}
+}

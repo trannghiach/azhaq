@@ -3,6 +3,7 @@ package scope
 
 import (
 	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/trannghiach/azhaq/internal/normalize"
@@ -91,6 +92,54 @@ func (r Rules) AllowsSeed(s types.Seed) bool {
 	default:
 		return true
 	}
+}
+
+// AllowsPrefix says whether any address of pf can pass the rules. A range
+// no allow rule touches (a domain never matches an address) or one a deny
+// range holds whole has no address to ask, and is not a target.
+func (r Rules) AllowsPrefix(pf netip.Prefix) bool {
+	pf = pf.Masked()
+	if r.Empty() {
+		return true
+	}
+	if pf.IsSingleIP() {
+		return r.Allows(pf.Addr().String())
+	}
+	idx := r.idx
+	if idx == nil {
+		idx = &index{allow: compileSet(r.Allow), deny: compileSet(r.Deny)}
+	}
+	for _, n := range idx.deny.nets {
+		if o, _ := n.Mask.Size(); n.Contains(pf.Addr().AsSlice()) && o <= pf.Bits() && len(n.IP) == pf.Addr().BitLen()/8 {
+			return false
+		}
+	}
+	if len(r.Allow) == 0 {
+		return true
+	}
+	for _, n := range idx.allow.nets {
+		if n.Contains(pf.Addr().AsSlice()) {
+			return true
+		}
+		if a, ok := netip.AddrFromSlice(n.IP); ok && pf.Contains(a.Unmap()) {
+			return true
+		}
+	}
+	// Addresses written out: the smaller of the range and the rules is walked.
+	if size := uint64(1) << min(32, pf.Addr().BitLen()-pf.Bits()); size <= uint64(len(idx.allow.exact)) {
+		for a := pf.Addr(); pf.Contains(a); a = a.Next() {
+			if idx.allow.exact[a.String()] {
+				return true
+			}
+		}
+		return false
+	}
+	for host := range idx.allow.exact {
+		if a, err := netip.ParseAddr(host); err == nil && pf.Contains(a) {
+			return true
+		}
+	}
+	return false
 }
 
 func hostMatch(host, rule string) bool {

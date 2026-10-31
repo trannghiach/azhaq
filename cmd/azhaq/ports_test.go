@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -164,5 +165,47 @@ func TestPortsListsSilentUDPPort(t *testing.T) {
 	out, _, _ = cli(t, "ports", "-host", "127.0.0.1", "-p", "none", "-pu", pu, "-connect-timeout", "200ms", "-silent")
 	if want := fmt.Sprintf("127.0.0.1:%d/udp open|filtered", port); strings.TrimSpace(out) != want {
 		t.Errorf("plain output %q, want %q", out, want)
+	}
+}
+
+// Targets that are all outside the scope end the command with exit 2 and
+// a message naming them, before anything is sent; one in scope runs, and
+// the summary counts the other.
+func TestPortsAllTargetsOutsideTheScope(t *testing.T) {
+	t.Chdir(t.TempDir())
+	l, err := net.Listen("tcp", "127.0.0.2:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	defer l.Close()
+	var dialed atomic.Int32
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				return
+			}
+			dialed.Add(1)
+			c.Close()
+		}
+	}()
+	port := fmt.Sprint(l.Addr().(*net.TCPAddr).Port)
+	for _, args := range [][]string{
+		{"ports", "-host", "127.0.0.2", "-allow", "127.0.0.1", "-p", port},
+		{"ports", "-host", "127.0.0.2", "-deny", "127.0.0.2", "-p", port},
+		{"ports", "-host", "127.0.0.2/30", "-allow", "example.test", "-p", port},
+	} {
+		_, errOut, code := cli(t, args...)
+		if code != exitUsage || !strings.Contains(errOut, "every target is outside the scope (1 left out): 127.0.0.") {
+			t.Errorf("%v: exit %d\n%s", args, code, errOut)
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
+	if n := dialed.Load(); n != 0 {
+		t.Errorf("%d connects to a target outside the scope", n)
+	}
+	_, _, code := cli(t, "ports", "-host", "127.0.0.2,127.0.0.1", "-allow", "127.0.0.1", "-p", port, "-json")
+	if code != exitOK {
+		t.Errorf("a target in scope: exit %d", code)
 	}
 }
