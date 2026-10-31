@@ -17,7 +17,7 @@ azhaq ledger -verify app.db.ledger.jsonl
 # Check it against a seal kept somewhere else
 azhaq ledger -verify app.db.ledger.jsonl -seal HASH
 
-# Count the requests by kind, method, host and scope rule
+# Count the requests by class, kind, method, host and scope rule
 azhaq ledger -summary app.db.ledger.jsonl
 
 # One row per request, for a spreadsheet
@@ -27,7 +27,7 @@ azhaq ledger -csv app.db.ledger.jsonl > sent.csv
 ## What it does
 
 1. `-verify` recomputes the chain of hashes. It prints the number of entries and runs, whether the chain is intact, and the hash of the last seal.
-2. `-summary` counts the lines by kind, method, host and scope rule, with the first and last time.
+2. `-summary` counts the lines by class, kind, method, host and scope rule, with the first and last time.
 3. `-csv` prints one row per line.
 
 `-summary` and `-csv` leave the seals out. The ledger file itself is described in [OUTPUT.md](../OUTPUT.md).
@@ -40,18 +40,18 @@ It prints the number of entries and runs, whether the chain is intact, and the h
 
 ### -summary
 
-The text lists the counts by `kind`, `method`, `host` and `rule`, with the first and last time. With `-json` it is one object:
+The text lists the counts by `class`, `kind`, `method`, `host` and `rule`, with the first and last time. A line without a class, from a ledger written before classes, counts as a `target`. With `-json` it is one object:
 
 | Field | Meaning |
 | --- | --- |
 | `entries` | How many lines the ledger holds. |
 | `file` | The ledger file. |
 | `first`, `last` | The first and last time. |
-| `kinds`, `methods`, `hosts`, `rules` | The counts by each. |
+| `classes`, `kinds`, `methods`, `hosts`, `rules` | The counts by each. |
 
 ### -csv
 
-One row per line, with the columns `seq`, `time`, `kind`, `method`, `target`, `host`, `rule`, `collector` and `hash`.
+One row per line, with the columns `seq`, `time`, `class`, `kind`, `method`, `target`, `host`, `rule`, `collector` and `hash`.
 
 ## Summary and exit codes
 
@@ -106,7 +106,7 @@ ledger: N requests and connections recorded in FILE, sealed HASH (azhaq ledger -
 | --- | --- | --- | --- |
 | `-verify` | string |  | check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal |
 | `-seal` | string |  | with -verify: a seal hash kept where the run's own files are not (or a file of one per line, or the JSON lines -seal-to writes) that must be one of the chain's seals; without it, -verify cannot tell the file from one with lines removed and the rest re-chained to look intact |
-| `-summary` | string |  | count the ledger's requests and connections by kind, host and method, with the first and last time |
+| `-summary` | string |  | count the ledger's requests and connections by class, kind, host and method, with the first and last time |
 | `-json` | bool |  | with -summary: one JSON object |
 | `-csv` | string |  | print the ledger as CSV |
 <!-- flags:end -->

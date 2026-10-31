@@ -19,7 +19,7 @@ func cmdLedger(args []string) error {
 	fs := newFlags("ledger")
 	verify := fs.String("verify", "", "check the ledger's chain of hashes and its seal: exit 0 when intact and sealed, 3 naming the first line that is not intact, or the lines after the last seal")
 	seal := fs.String("seal", "", "with -verify: a seal hash kept where the run's own files are not (or a file of one per line, or the JSON lines -seal-to writes) that must be one of the chain's seals; without it, -verify cannot tell the file from one with lines removed and the rest re-chained to look intact")
-	summary := fs.String("summary", "", "count the ledger's requests and connections by kind, host and method, with the first and last time")
+	summary := fs.String("summary", "", "count the ledger's requests and connections by class, kind, host and method, with the first and last time")
 	csvOut := fs.String("csv", "", "print the ledger as CSV")
 	asJSON := fs.Bool("json", false, "with -summary: one JSON object")
 	if err := parse(fs, args); err != nil {
@@ -110,12 +110,13 @@ func readSealWant(spec string) ([]string, error) {
 }
 
 func ledgerSummary(path string, asJSON bool) error {
-	byKind, byHost, byMethod := map[string]int{}, map[string]int{}, map[string]int{}
+	byClass, byKind, byHost, byMethod := map[string]int{}, map[string]int{}, map[string]int{}, map[string]int{}
 	byRule := map[string]int{}
 	var first, last time.Time
 	n := 0
 	err := ledger.Read(path, func(e ledger.Entry) error {
 		n++
+		byClass[entryClass(e)]++
 		byKind[e.Kind]++
 		byHost[e.Host]++
 		if e.Method != "" {
@@ -135,7 +136,7 @@ func ledgerSummary(path string, asJSON bool) error {
 	}
 	if asJSON {
 		raw, _ := json.Marshal(map[string]any{"file": path, "entries": n, "first": first, "last": last,
-			"kinds": byKind, "hosts": byHost, "methods": byMethod, "rules": byRule})
+			"classes": byClass, "kinds": byKind, "hosts": byHost, "methods": byMethod, "rules": byRule})
 		fmt.Println(string(raw))
 		return nil
 	}
@@ -147,7 +148,7 @@ func ledgerSummary(path string, asJSON bool) error {
 	for _, g := range []struct {
 		title string
 		m     map[string]int
-	}{{"by kind", byKind}, {"by method", byMethod}, {"by host", byHost}, {"by scope rule", byRule}} {
+	}{{"by class", byClass}, {"by kind", byKind}, {"by method", byMethod}, {"by host", byHost}, {"by scope rule", byRule}} {
 		fmt.Println("  " + g.title)
 		for _, k := range sortedByCount(g.m) {
 			name := k
@@ -158,6 +159,15 @@ func ledgerSummary(path string, asJSON bool) error {
 		}
 	}
 	return nil
+}
+
+// entryClass is what an entry was sent to; a ledger from before classes
+// holds targets only.
+func entryClass(e ledger.Entry) string {
+	if e.Class == "" {
+		return ledger.ClassTarget
+	}
+	return e.Class
 }
 
 // sortedByCount lists the keys of m, most frequent first.
@@ -177,9 +187,9 @@ func sortedByCount(m map[string]int) []string {
 
 func ledgerCSV(path string) error {
 	w := csv.NewWriter(os.Stdout)
-	_ = w.Write([]string{"seq", "time", "kind", "method", "target", "host", "rule", "collector", "hash"})
+	_ = w.Write([]string{"seq", "time", "class", "kind", "method", "target", "host", "rule", "collector", "hash"})
 	err := ledger.Read(path, func(e ledger.Entry) error {
-		return w.Write([]string{strconv.FormatInt(e.Seq, 10), e.Time.Format(time.RFC3339Nano), e.Kind, e.Method, e.Target, e.Host, e.Rule, e.Collector, e.Hash})
+		return w.Write([]string{strconv.FormatInt(e.Seq, 10), e.Time.Format(time.RFC3339Nano), entryClass(e), e.Kind, e.Method, e.Target, e.Host, e.Rule, e.Collector, e.Hash})
 	})
 	w.Flush()
 	if err != nil {

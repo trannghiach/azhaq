@@ -177,7 +177,8 @@ A line has:
 | --- | --- |
 | `seq` | The line's number, from 1. |
 | `time` | When it was sent, UTC. |
-| `kind` | `http`, `tcp`, `udp`, `chrome` or `seal`. See below. |
+| `class` | What it was sent to: `target`, `source`, `dns` or `own`. A line without one, from a ledger written before classes, is a `target`. |
+| `kind` | `http`, `tcp`, `udp`, `dns`, `chrome` or `seal`. See below. |
 | `method` | The HTTP method. Not on `tcp` and `udp` lines. |
 | `target` | The URL as sent, query string included, for `http` and `chrome`. `ip:port` for `tcp` and `udp`. |
 | `host` | The host the request was for. |

@@ -24,5 +24,5 @@ func UDP(ctx context.Context, host, addr string) {
 	if rule == "" && name != ip {
 		rule = l.rule(ip)
 	}
-	l.Record(Entry{Kind: "udp", Target: addr, Host: host, Rule: rule, Collector: collectorOf(ctx)})
+	l.Record(Entry{Kind: "udp", Class: ClassTarget, Target: addr, Host: host, Rule: rule, Collector: collectorOf(ctx)})
 }

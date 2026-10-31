@@ -10,10 +10,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/trannghiach/azhaq/internal/neterr"
 )
@@ -301,4 +303,90 @@ func countOf(hits *sync.Map, k string) int {
 		return int(atomic.LoadInt32(n.(*int32)))
 	}
 	return 0
+}
+
+func TestEntriesCarryTheirClass(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	Use(l)
+	defer Use(nil)
+	req, _ := http.NewRequest("GET", "http://a.test/x", nil)
+	HTTP(req)
+	HTTPAs(ClassSource, req)
+	TCPAs(context.Background(), ClassSource, "smtp.test", "127.0.0.1:25")
+	DNS(context.Background(), "a.test", "A", "127.0.0.1:53")
+	l.Record(Entry{Kind: "tcp", Target: "127.0.0.1:1"}) // no class given: a target
+	l.Close()
+	var got []string
+	if err := Read(path, func(e Entry) error { got = append(got, e.Kind+"/"+e.Class); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"http/target", "http/source", "tcp/source", "dns/dns", "tcp/target"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	if c, err := Verify(path); err != nil || c.Entries != 5 || c.Unsealed != 0 {
+		t.Fatalf("%+v %v", c, err)
+	}
+}
+
+// A ledger written before classes has no class on its lines: it still
+// verifies, and its entries are targets.
+func TestALedgerFromBeforeClassesStillVerifies(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.jsonl")
+	var lines []string
+	prev := ""
+	for i, kind := range []string{"http", "tcp", KindSeal} {
+		e := Entry{Seq: int64(i + 1), Time: time.Unix(1700000000, 0).UTC(), Kind: kind, Target: "a.test", Prev: prev}
+		e.Hash = e.sum()
+		prev = e.Hash
+		raw, _ := json.Marshal(e)
+		if strings.Contains(string(raw), "class") {
+			t.Fatalf("an entry without a class writes none: %s", raw)
+		}
+		lines = append(lines, string(raw))
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Verify(path)
+	if err != nil || c.Entries != 2 || c.Seals != 1 || c.Unsealed != 0 {
+		t.Fatalf("%+v %v", c, err)
+	}
+	if err := Read(path, func(e Entry) error {
+		if !e.IsTarget() {
+			t.Errorf("%+v is not a target", e)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Only what was sent to a target is held back after a kill: a source's
+// write (a notification) is not a target's, and a resume never sees it.
+func TestGuardLeavesOtherClassesAlone(t *testing.T) {
+	l, err := Open(filepath.Join(t.TempDir(), "l.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Record(Entry{Kind: "http", Class: ClassSource, Method: "POST", Target: "https://hooks.test/x"})
+	l.Record(Entry{Kind: "http", Method: "POST", Target: "http://a.test/x"})
+	// Not closed: the run was killed.
+	l2, err := Open(l.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	Use(l2)
+	defer Use(nil)
+	w := l2.Guard(nil)
+	if len(w) != 1 || w[0].Target != "http://a.test/x" {
+		t.Fatalf("held %v, want only the target's write", w)
+	}
+	if !Held("POST", "http://a.test/x") || Held("POST", "https://hooks.test/x") {
+		t.Fatal("only the target's write is held")
+	}
 }

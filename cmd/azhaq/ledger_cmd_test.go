@@ -167,3 +167,28 @@ func TestSealToWritesAFileAndPostsToAURL(t *testing.T) {
 		t.Errorf("the URL did not receive the seal: %q", posted)
 	}
 }
+
+func TestLedgerSummaryCountsByClass(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l.Record(ledger.Entry{Kind: "http", Method: "GET", Target: "http://a.test/", Host: "a.test"})
+	l.Record(ledger.Entry{Kind: "http", Class: ledger.ClassSource, Method: "GET", Target: "https://web.archive.org/x", Host: "web.archive.org"})
+	l.Record(ledger.Entry{Kind: "dns", Class: ledger.ClassDNS, Method: "A", Target: "127.0.0.1:53", Host: "a.test"})
+	l.Close()
+	out, err := captureStdout(t, func() error { return ledgerSummary(path, true) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got struct {
+		Classes map[string]int `json:"classes"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if got.Classes["target"] != 1 || got.Classes["source"] != 1 || got.Classes["dns"] != 1 {
+		t.Fatalf("classes %v", got.Classes)
+	}
+}

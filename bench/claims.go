@@ -205,10 +205,16 @@ func sortedKeysInt(m map[string]int) []string {
 	return ks
 }
 
-// readLedger is the requests and connections of a ledger file, seals left out.
+// readLedger is the requests and connections to targets of a ledger file, seals left out.
 func readLedger(path string) []ledger.Entry {
 	var out []ledger.Entry
-	if err := ledger.Read(path, func(e ledger.Entry) error { out = append(out, e); return nil }); err != nil {
+	// The claims compare what went to the origin: DNS and source lines are not its.
+	if err := ledger.Read(path, func(e ledger.Entry) error {
+		if e.IsTarget() {
+			out = append(out, e)
+		}
+		return nil
+	}); err != nil {
 		logf("claims: ledger %s: %v", path, err)
 	}
 	return out

@@ -29,8 +29,12 @@ func collectorOf(ctx context.Context) string {
 	return s
 }
 
-// HTTP records req, about to be sent. It is a no-op without a ledger.
-func HTTP(req *http.Request) {
+// HTTP records req, about to be sent to a target. It is a no-op without a
+// ledger.
+func HTTP(req *http.Request) { HTTPAs(ClassTarget, req) }
+
+// HTTPAs is HTTP for a request of another class.
+func HTTPAs(class string, req *http.Request) {
 	l := Active()
 	if l == nil || req == nil || req.URL == nil {
 		return
@@ -44,8 +48,12 @@ func HTTP(req *http.Request) {
 	if vhost == req.URL.Host || vhost == host {
 		vhost = ""
 	}
-	l.Record(Entry{Kind: "http", Method: method, Target: req.URL.Redacted(), Host: host, VHost: vhost,
-		Body: bodySum(req), Rule: l.rule(host), Collector: collectorOf(req.Context())})
+	e := Entry{Kind: "http", Class: class, Method: method, Target: req.URL.Redacted(), Host: host, VHost: vhost,
+		Body: bodySum(req), Collector: collectorOf(req.Context())}
+	if class == ClassTarget {
+		e.Rule = l.rule(host)
+	}
+	l.Record(e)
 }
 
 // bodySum is the start of the sha256 of req's body, "" for none; it reads
@@ -92,13 +100,16 @@ func ChromeAt(ctx context.Context, method, raw string, at time.Time) {
 	if method == "" {
 		method = http.MethodGet
 	}
-	l.Record(Entry{Time: at, Kind: "chrome", Method: method, Target: raw, Host: host,
+	l.Record(Entry{Time: at, Kind: "chrome", Class: ClassTarget, Method: method, Target: raw, Host: host,
 		Rule: l.rule(host), Collector: collectorOf(ctx)})
 }
 
-// TCP records a connection about to be made to addr (ip:port). host is the
-// name it was found under, "" when only the address is known.
-func TCP(ctx context.Context, host, addr string) {
+// TCP records a connection about to be made to a target at addr (ip:port).
+// host is the name it was found under, "" when only the address is known.
+func TCP(ctx context.Context, host, addr string) { TCPAs(ctx, ClassTarget, host, addr) }
+
+// TCPAs is TCP for a connection of another class.
+func TCPAs(ctx context.Context, class, host, addr string) {
 	l := Active()
 	if l == nil {
 		return
@@ -111,19 +122,40 @@ func TCP(ctx context.Context, host, addr string) {
 	if name == "" {
 		name = ip
 	}
-	rule := l.rule(name)
-	if rule == "" && name != ip {
-		rule = l.rule(ip)
+	var rule string
+	if class == ClassTarget {
+		if rule = l.rule(name); rule == "" && name != ip {
+			rule = l.rule(ip)
+		}
 	}
-	l.Record(Entry{Kind: "tcp", Target: addr, Host: host, Rule: rule, Collector: collectorOf(ctx)})
+	l.Record(Entry{Kind: "tcp", Class: class, Target: addr, Host: host, Rule: rule, Collector: collectorOf(ctx)})
+}
+
+// DNS records a query about to be sent to a resolver: the name, its type
+// ("A") and the resolver's address or URL.
+func DNS(ctx context.Context, name, qtype, server string) {
+	l := Active()
+	if l == nil {
+		return
+	}
+	l.Record(Entry{Kind: "dns", Class: ClassDNS, Method: qtype, Target: server, Host: name, Rule: l.rule(name), Collector: collectorOf(ctx)})
 }
 
 // Transport records each request before it goes to Base, so a request
-// that fails still appears.
-type Transport struct{ Base http.RoundTripper }
+// that fails still appears. Class is what the requests are sent to
+// (ClassTarget when empty); only a target's are held by -deny-path and by
+// the writes a killed run sent.
+type Transport struct {
+	Base  http.RoundTripper
+	Class string
+}
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if f := Deny; f != nil && req.URL != nil {
+	class := t.Class
+	if class == "" {
+		class = ClassTarget
+	}
+	if f := Deny; f != nil && req.URL != nil && class == ClassTarget {
 		if err := f(req.URL.String()); err != nil {
 			if req.Body != nil {
 				req.Body.Close()
@@ -134,7 +166,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 			return nil, err
 		}
 	}
-	if l := Active(); l != nil && req.URL != nil && !Safe(req.Method) && l.refused(req.Method, req.URL.Redacted(), bodySum(req), false) {
+	if l := Active(); l != nil && class == ClassTarget && req.URL != nil && !Safe(req.Method) && l.refused(req.Method, req.URL.Redacted(), bodySum(req), false) {
 		if req.Body != nil {
 			req.Body.Close()
 		}
@@ -143,7 +175,7 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		return nil, neterr.ErrNotRepeated
 	}
-	HTTP(req)
+	HTTPAs(class, req)
 	return t.base().RoundTrip(req)
 }
 
@@ -163,11 +195,14 @@ func (t *Transport) CloseIdleConnections() {
 
 // Wrap is rt (nil: the default transport) with its requests recorded; a
 // transport already wrapped is returned as it is.
-func Wrap(rt http.RoundTripper) http.RoundTripper {
+func Wrap(rt http.RoundTripper) http.RoundTripper { return WrapAs(ClassTarget, rt) }
+
+// WrapAs is Wrap for requests of another class.
+func WrapAs(class string, rt http.RoundTripper) http.RoundTripper {
 	if t, ok := rt.(*Transport); ok {
 		return t
 	}
-	return &Transport{Base: rt}
+	return &Transport{Base: rt, Class: class}
 }
 
 // Unwrap is the transport under Wrap's, or rt itself.

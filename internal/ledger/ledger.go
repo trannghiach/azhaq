@@ -1,6 +1,6 @@
 // Package ledger keeps a tamper-evident record of every request and
-// connection a run sends to a target: when, to what, and under which scope
-// rule. Each line of the file holds the hash of the one before it, so an
+// connection a run sends: when, to what, under which scope rule, and in
+// which class (to a target, to a third-party source, to a DNS resolver). Each line of the file holds the hash of the one before it, so an
 // edited, removed or reordered line breaks the chain from there on. A run
 // that ends closes the file with a seal line, so lines cut from the end
 // show too.
@@ -27,10 +27,11 @@ import (
 type Entry struct {
 	Seq       int64     `json:"seq"`
 	Time      time.Time `json:"time"`
-	Kind      string    `json:"kind"` // http, tcp, udp, chrome, or seal: the end of a run
+	Kind      string    `json:"kind"`            // http, tcp, udp, dns, chrome, or seal: the end of a run
+	Class     string    `json:"class,omitempty"` // target, source, dns or own; empty in a ledger from before classes: a target
 	Method    string    `json:"method,omitempty"`
-	Target    string    `json:"target"` // the URL (http, chrome) or ip:port (tcp)
-	Host      string    `json:"host,omitempty"`
+	Target    string    `json:"target"`          // the URL (http, chrome), ip:port (tcp, udp) or the resolver (dns)
+	Host      string    `json:"host,omitempty"`  // for dns, the name asked
 	VHost     string    `json:"vhost,omitempty"` // the Host header sent, when it is not the URL's
 	Body      string    `json:"body,omitempty"`  // the start of the sha256 of the request body, when it has one
 	Rule      string    `json:"rule,omitempty"`  // the scope rule that allowed it
@@ -38,6 +39,18 @@ type Entry struct {
 	Prev      string    `json:"prev,omitempty"`
 	Hash      string    `json:"hash,omitempty"`
 }
+
+// What a request or connection is sent to. A ledger written before classes
+// has none on its lines: they were all sent to targets.
+const (
+	ClassTarget = "target" // a host the run was pointed at
+	ClassSource = "source" // a third party asked about the targets: archives, RDAP, search, a notification
+	ClassDNS    = "dns"    // a resolver
+	ClassOwn    = "own"    // an endpoint of the user's own: a replay proxy, a worker's link to its run
+)
+
+// IsTarget says the entry was sent to a target.
+func (e Entry) IsTarget() bool { return e.Class == "" || e.Class == ClassTarget }
 
 // sum is the entry's hash: sha256 over Prev and the JSON of the entry
 // without its Hash.
@@ -146,7 +159,7 @@ func (l *Ledger) Guard(more []Entry) []Entry {
 	l.held, l.heldAny, l.pending = map[string]bool{}, map[string]bool{}, map[string]bool{}
 	var writes []Entry
 	for _, e := range append(append([]Entry(nil), more...), l.tail...) {
-		if e.Kind != "http" && e.Kind != "chrome" {
+		if (e.Kind != "http" && e.Kind != "chrome") || !e.IsTarget() {
 			continue
 		}
 		if Safe(e.Method) {
@@ -233,6 +246,9 @@ func (l *Ledger) Record(e Entry) {
 		e.Time = time.Now()
 	}
 	e.Time = e.Time.UTC()
+	if e.Class == "" && e.Kind != KindSeal {
+		e.Class = ClassTarget
+	}
 	l.seq++
 	e.Seq, e.Prev = l.seq, l.prev
 	e.Hash = e.sum()
@@ -244,7 +260,7 @@ func (l *Ledger) Record(e Entry) {
 	}
 	l.note(err)
 	l.prev, l.lastSeal = e.Hash, e.Kind == KindSeal
-	if k := key(e.Method, e.Target, ""); l.pending[k] && (e.Kind == "http" || e.Kind == "chrome") {
+	if k := key(e.Method, e.Target, ""); l.pending[k] && (e.Kind == "http" || e.Kind == "chrome") && e.IsTarget() {
 		delete(l.pending, k)
 		l.again++
 	}
