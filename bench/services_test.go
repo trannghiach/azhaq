@@ -1,9 +1,12 @@
 package main
 
 import (
+	"io"
 	"net"
 	"testing"
 	"time"
+
+	"github.com/miekg/dns"
 )
 
 // lab starts a listener that runs fn on each connection; it returns the port.
@@ -43,12 +46,34 @@ var serviceSays = map[int]func(c net.Conn){
 	10389: asked("\x30\x0c\x02\x01\x01\x61\x07\x0a\x01\x00\x04\x00\x04\x00"),
 	10445: quiet,
 	19200: asked("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"),
-	10053: func(c net.Conn) {
-		b := make([]byte, 64)
-		if n, _ := c.Read(b); n >= 4 {
-			c.Write([]byte{0, 12, b[2], b[3], 0x81, 0x05, 0, 1, 0, 0, 0, 0}) // REFUSED
-		}
-	},
+	10053: dnsTCP,
+}
+
+// dnsTCP is a DNS server over TCP that frames as the protocol does: it
+// reads the 2-byte length and then exactly that many bytes (a query that
+// is not that long gets no answer), and refuses the name, as a server
+// does for a zone it does not hold.
+func dnsTCP(c net.Conn) {
+	_ = c.SetReadDeadline(time.Now().Add(3 * time.Second))
+	var l [2]byte
+	if _, err := io.ReadFull(c, l[:]); err != nil {
+		return
+	}
+	body := make([]byte, int(l[0])<<8|int(l[1]))
+	if _, err := io.ReadFull(c, body); err != nil {
+		return
+	}
+	var q dns.Msg
+	if q.Unpack(body) != nil {
+		return
+	}
+	r := new(dns.Msg)
+	r.SetRcode(&q, dns.RcodeRefused)
+	wire, _ := r.Pack()
+	// Written in two pieces, as a server may: the probe reads on.
+	c.Write([]byte{byte(len(wire) >> 8), byte(len(wire))})
+	time.Sleep(50 * time.Millisecond)
+	c.Write(wire)
 }
 
 func says(s string) func(net.Conn) {
