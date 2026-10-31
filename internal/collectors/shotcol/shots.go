@@ -72,13 +72,19 @@ func (c *Collector) Inputs() []types.SeedType {
 func (c *Collector) Outputs() []string { return []string{"screenshot"} }
 
 // Skip: only with -screenshots, and only front pages, and the pages the
-// user named (types.GivenKey), whatever their path.
+// user named (types.GivenKey), whatever their path. A name taken from a
+// front-page URL is that URL's own shot, not a guess on both schemes.
 func (c *Collector) Skip(seed types.Seed) bool {
 	if c.Dir == "" || c.Browser == nil {
 		return true
 	}
 	switch seed.Type {
 	case types.TypeHostname:
+		if from := seed.Keys[types.FromURLKey]; from != "" {
+			if u, err := url.Parse(from); err == nil && (u.Path == "" || u.Path == "/") && u.RawQuery == "" {
+				return true
+			}
+		}
 		return false
 	case types.TypeIPAddress:
 		return seed.Keys["from"] != "prefix"

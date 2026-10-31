@@ -172,3 +172,21 @@ func TestClusterIsTheFirstNearGroup(t *testing.T) {
 		t.Errorf("a hash of an earlier run read")
 	}
 }
+
+// The name inside a front-page URL is that URL's shot: it is not also tried
+// on both schemes. A name from a path URL still gets its front page.
+func TestSkipLeavesTheNameOfAFrontPageURL(t *testing.T) {
+	c := &Collector{Dir: "d", Browser: &browser.Browser{}}
+	name := func(from string) types.Seed {
+		return types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": "h.test", types.FromURLKey: from}}
+	}
+	if !c.Skip(name("http://h.test/")) {
+		t.Error("the name of http://h.test/ was shot again on both schemes")
+	}
+	if c.Skip(name("http://h.test/a/b")) {
+		t.Error("the front page of a name met in a path URL was skipped")
+	}
+	if c.Skip(types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": "h.test"}}) {
+		t.Error("a name the user gave was skipped")
+	}
+}

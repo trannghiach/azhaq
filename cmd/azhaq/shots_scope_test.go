@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -76,5 +79,103 @@ func TestPartialShotsExitRule(t *testing.T) {
 		if got := partialShots(shot(payload)); got != want {
 			t.Errorf("%s: %v, want %v", payload, got, want)
 		}
+	}
+}
+
+// bothSchemes serves one port over plain HTTP and TLS: a connection that
+// opens with a TLS handshake goes to the TLS side.
+func bothSchemes(t *testing.T, h http.Handler) string {
+	t.Helper()
+	ts := httptest.NewTLSServer(h)
+	cfg := ts.TLS.Clone()
+	ts.Close()
+	raw, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, secure := make(chan net.Conn), make(chan net.Conn)
+	done := make(chan struct{})
+	go func() {
+		for {
+			c, err := raw.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				br := bufio.NewReader(c)
+				b, err := br.Peek(1)
+				if err != nil {
+					c.Close()
+					return
+				}
+				pc := &peeked{Conn: c, r: br}
+				ch := plain
+				if b[0] == 0x16 {
+					ch = secure
+				}
+				select {
+				case ch <- pc:
+				case <-done:
+					c.Close()
+				}
+			}()
+		}
+	}()
+	go (&http.Server{Handler: h}).Serve(&chanListener{ch: plain, addr: raw.Addr(), done: done})
+	go (&http.Server{Handler: h}).Serve(tls.NewListener(&chanListener{ch: secure, addr: raw.Addr(), done: done}, cfg))
+	t.Cleanup(func() { close(done); raw.Close() })
+	return raw.Addr().String()
+}
+
+type peeked struct {
+	net.Conn
+	r *bufio.Reader
+}
+
+func (p *peeked) Read(b []byte) (int, error) { return p.r.Read(b) }
+
+type chanListener struct {
+	ch   chan net.Conn
+	addr net.Addr
+	done chan struct{}
+}
+
+func (l *chanListener) Accept() (net.Conn, error) {
+	select {
+	case c := <-l.ch:
+		return c, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
+}
+func (l *chanListener) Close() error   { return nil }
+func (l *chanListener) Addr() net.Addr { return l.addr }
+
+// A URL with a scheme is one screenshot target: the name in it is not also
+// tried on the other scheme, which gave a second row for the same page.
+func TestShotsOfAnExplicitURLIsOneRow(t *testing.T) {
+	if _, err := browser.Find(); err != nil {
+		t.Skip(err)
+	}
+	addr := bothSchemes(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><head><title>both</title></head><body><h1>hi</h1></body></html>`)
+	}))
+	_, port, _ := net.SplitHostPort(addr)
+	js, errOut, err := captureBoth(t, func() error {
+		return cmdShots([]string{"-u", "http://localhost:" + port + "/", "-p", port, "-dir", filepath.Join(t.TempDir(), "s"), "-db", filepath.Join(t.TempDir(), "w.db"), "-json"})
+	})
+	if err != nil {
+		t.Fatalf("exit %d (%v)\n%s", exitCode(err), err, errOut)
+	}
+	var rows []string
+	for _, l := range strings.Split(strings.TrimSpace(js), "\n") {
+		var r struct{ URL, Type string }
+		if json.Unmarshal([]byte(l), &r) == nil && r.Type == "" && r.URL != "" {
+			rows = append(rows, r.URL)
+		}
+	}
+	if len(rows) != 1 || rows[0] != "http://localhost:"+port+"/" {
+		t.Errorf("rows %v, want only the URL given", rows)
 	}
 }

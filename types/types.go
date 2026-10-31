@@ -40,6 +40,11 @@ const DerivedKey = "derived"
 // -depth.
 const SameTargetKey = "same"
 
+// FromURLKey on a hostname the engine derived from a URL holds that URL:
+// a collector that tries a name on both schemes can leave it out when the
+// URL is the service the user named.
+const FromURLKey = "from_url"
+
 // StartKey marks a URL seed the user gave, as against one a collector
 // found: a path sweep starts from the path of the first, not the second.
 const StartKey = "start"
