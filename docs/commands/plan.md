@@ -8,22 +8,76 @@ Show what a run would do and send, without sending anything.
 azhaq plan (-url URL | -domain D | -list FILE | -scope … -program P) [run flags]
 ```
 
+`plan` takes the flags of [`run`](run.md#flags).
+
 ## Examples
 
 ```
+# What a run of one app would do and send
 azhaq plan -url https://app.example.com/
+
+# The same for a program's scope, with a path wordlist
 azhaq plan -scope bugcrowd -program tesla -dirs words.txt
 ```
 
+## What it does
+
+`plan` reads the seeds and flags as `run` does, and stops before anything is sent. It prints:
+
+1. The collectors that would run on each seed.
+2. The seeds left out of scope.
+3. The active techniques you asked for.
+4. What is sent to the targets: the GET requests for pages, and besides them each port scan, UDP probe, POST body and sign-in that is planned.
+5. The third-party source queries, counted.
+6. A bound on the requests to the targets: what each web service costs, and the cap.
+
 ## Output
 
-The collectors that would run on each seed, the seeds left out of scope, the active techniques asked for, what is sent to the targets (GET requests only, or each port scan, UDP probe, POST body and sign-in that is planned), the third-party source queries (counted) and a bound on the requests to the targets: per web service, and the cap.
+Plain text prints the same parts, one block each. `-json` prints one object.
 
-`plan -json` prints one object: `targets` (each with the collectors that would run on it), `skipped`, `collectors` (what each does to whom), `active`, `builtin_paths`, `limits`, `sends`, and `requests`: what is known of the requests before any is sent. `source_queries` counts, per collector, the queries to third-party sources about the targets listed (one per source asked; a source may page through its answer), `source_queries_total` adds them up, and `source_queries_not_counted` names the collectors that do not say before they run which sources they ask (none of the built-in ones; a connector may not). `found_domains_asked` is true when domains found on the way would be asked about too (inside the scope; without one, within `-depth` and `-max-items`). The requests to the targets are a bound, not a count: how many names resolve and answer is known only by asking (`max_names` of them at most are looked up). `per_web_service` is about what each web service costs before its links, scripts and archived URLs are followed (its page, the favicon, the built-in paths), and `cap` the requests to the targets at most, set by `cap_by` (`-max-requests`, or `-daily-requests`, of which a plan does not take off what the day's runs spent); 0 is no cap. `passive` is true when nothing goes to the targets.
+| Field | Meaning |
+| --- | --- |
+| `targets` | Each seed, with the collectors that would run on it. |
+| `skipped` | The seeds left out of scope. |
+| `collectors` | What each collector does, and to whom. |
+| `active` | The active techniques asked for. |
+| `builtin_paths` | The built-in path checks on each web service. |
+| `limits` | The options that bound the run. |
+| `sends` | What goes to the targets, one line for each kind. |
+| `requests` | What is known of the requests before any is sent. See below. |
+
+`requests` has these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `source_queries` | Per collector, the queries to third-party sources about the targets listed. See [Details](#source-queries). |
+| `source_queries_total` | The sum of `source_queries`. |
+| `source_queries_not_counted` | The collectors that do not say which sources they ask before they run. |
+| `found_domains_asked` | `true` when domains found on the way would be asked about too. |
+| `max_names` | The most names that are looked up. |
+| `per_web_service` | What each web service costs before its links, scripts and archived URLs are followed. |
+| `cap` | The most requests to the targets. 0 is no cap. |
+| `cap_by` | The option that set `cap`: `-max-requests` or `-daily-requests`. |
+| `passive` | `true` when nothing goes to the targets. |
 
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+
+## Details
+
+### Source queries
+
+- `source_queries` counts one query for each source asked. A source may page through its answer, so a query can take more than one request.
+- None of the built-in collectors is in `source_queries_not_counted`. A connector may be.
+- `found_domains_asked` is about domains found on the way. They are asked about inside the scope. Without a scope, they are asked about within `-depth` and `-max-items`.
+
+### The requests to the targets are a bound
+
+- The plan gives a bound, not a count. How many names resolve and answer is known only by asking.
+- At most `max_names` names are looked up.
+- `per_web_service` covers a web service's page, the favicon and the built-in paths. It does not cover what its links, scripts and archived URLs lead to.
+- `cap` is set by `cap_by`. With `-daily-requests`, a plan does not take off what the day's runs already spent.
 
 ## Flags
 
