@@ -21,7 +21,7 @@ jobs:
       - name: golangci-lint
         # forbidigo: only internal/egress opens an outbound connection (.golangci.yml).
         # Built with the Go of the job: a release built with an older one refuses the module.
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0 run ./...
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0 run ./...
 
   test:
     runs-on: ubuntu-latest
