@@ -2,6 +2,8 @@
 
 `go run ./bench/labdns -addr 127.0.0.1:5354` answers the zone azqlab.lan and forwards every other name to 1.1.1.1. It follows CNAMEs the way a recursive resolver does: when a CNAME points outside the zone and the target does not exist, the answer is NXDOMAIN and carries the CNAME chain.
 
+`-zone FILE` serves the zones, reverse zones and wildcards of a JSON file instead of azqlab.lan (the format is documented on `zoneFile` in `bench/labdns/main.go`; each zone needs an SOA, and `"axfr": true` allows transfers). Names outside the file's zones are still forwarded. The table below describes the default azqlab.lan only.
+
 | Name | Answer | What a correct tool reports |
 | --- | --- | --- |
 | azqlab.lan, www, app, mail, dev, vpn | A 127.0.0.1 | live |
