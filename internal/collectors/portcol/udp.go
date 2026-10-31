@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strconv"
+	"sync"
 
 	"github.com/trannghiach/azhaq/internal/portscan"
 )
@@ -40,8 +41,67 @@ func (c *Collector) scanUDPOnce(ctx context.Context, host, ip string) (portscan.
 		}
 	}
 	s.rep, s.err = c.Scanner.ScanUDP(ctx, host, ip, c.UDPPorts)
+	if s.err != nil {
+		recordStops(ip, s.rep.Stopped)
+	}
 	close(s.done)
 	return s.rep, s.err
+}
+
+var stops struct {
+	sync.Mutex
+	byIP map[string][]portscan.UDPStop
+}
+
+// recordStops keeps the UDP ports a stopped scan left unfinished: the
+// stopped run cannot write a row, so the summary reads them from here.
+func recordStops(ip string, list []portscan.UDPStop) {
+	if len(list) == 0 {
+		return
+	}
+	stops.Lock()
+	defer stops.Unlock()
+	if stops.byIP == nil {
+		stops.byIP = map[string][]portscan.UDPStop{}
+	}
+	stops.byIP[ip] = list
+}
+
+// StoppedNotes says, for each address whose UDP scan a limit, a signal or
+// -timeout stopped, how many of its payloads were asked of each port that
+// has not answered. It clears what it read.
+func StoppedNotes() []string {
+	stops.Lock()
+	by := stops.byIP
+	stops.byIP = nil
+	stops.Unlock()
+	ips := make([]string, 0, len(by))
+	for ip := range by {
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	var out []string
+	for _, ip := range ips {
+		var named []string
+		untouched := 0
+		for _, st := range by[ip] {
+			if st.Asked == 0 {
+				untouched++
+				continue
+			}
+			named = append(named, fmt.Sprintf("%s/udp: %d of %d payloads asked before the run stopped; no answer yet", net.JoinHostPort(ip, strconv.Itoa(st.Port)), st.Asked, st.Of))
+		}
+		if len(named) > 3 {
+			out = append(out, named[:3]...)
+			out = append(out, fmt.Sprintf("%s: %d more UDP ports asked only part of their payloads", ip, len(named)-3))
+		} else {
+			out = append(out, named...)
+		}
+		if untouched > 0 {
+			out = append(out, fmt.Sprintf("%s: %d UDP %s not asked before the run stopped", ip, untouched, plural(untouched, "port")))
+		}
+	}
+	return out
 }
 
 // maxClosedListed: a row names this many of an address's closed UDP ports,

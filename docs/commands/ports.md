@@ -161,7 +161,8 @@ A service that speaks first (`ssh`, `ftp`, `smtp`, `telnet`, `irc`, …) is name
 #### UDP ports
 - `ports -udp` asks the 25 common UDP ports. `-pu top` asks the same: 53, 67, 69, 111, 123, 137, 161, 500, 514, 520, 623, 1194, 1434, 1900, 3478, 4500, 5060, 5351, 5353, 5683, 10001, 11211, 27015, 47808 and 51820.
 - `-pu LIST` asks a list instead, such as `-pu 1-1024` or `-pu top,5354`. List names and numbers combine, in `-p` too.
-- `-p none` leaves the TCP ports out. In `run` it is `-ports-udp SPEC`, with `top`, `full` or a list.
+- `-p none` leaves the TCP ports out. `-pu LIST` without `-p`, `-tp` or `-pf` does the same: only those UDP ports are asked, as `nmap -sU` does, so that a low `-rate` under `-timeout` is not spent on the default TCP top-100 first. `-udp` alone still asks TCP too. In `run` it is `-ports-udp SPEC`, with `top`, `full` or a list.
+- A port that does not run its own protocol is asked a DNS query first, then an SNMP get, memcached's version and an empty datagram, and the scan stops asking a port at its first answer.
 - No privileges are needed. Each port gets one datagram on a connected socket, and the kernel tells an ICMP port unreachable from silence.
 - Every datagram counts against `-max-requests`, is paced by `-rate` and goes in the request ledger as kind `udp`.
 - A CDN or WAF address is not asked.
@@ -217,6 +218,7 @@ In a workspace, the `ports` row has these UDP fields:
 | `udp_silent_ports`, `udp_silent_addresses` | On a range row, the silent ports and addresses that answered nothing on UDP. |
 
 #### What the summary says about UDP
+- A scan that a limit, `-timeout` or a signal stopped says how far it got: `127.0.0.1:5354/udp: 3 of 4 payloads asked before the run stopped; no answer yet`. Ports not asked at all are counted. `azhaq resume` asks them again.
 - It says what the state means: `1 UDP port open|filtered: no reply and no ICMP port unreachable after every request its protocol has (a silent service or a firewall); …`.
 - It names the closed ports, so that a scan that found nothing says what it saw: `1 UDP port closed (ICMP port unreachable): 127.0.0.1:9`. Up to three are shown as `address:port`, then `and N more`. In a range, the addresses that refused ports and showed nothing else are counted.
 - An address asked on its own, or a name, lists every silent port up to 64. Past that the rows would be noise: the summary counts them, and the workspace row's `udp_open_filtered` keeps them.
@@ -315,7 +317,7 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-proxy` | string |  | connect to TCP ports through this SOCKS5 proxy (host:port); a port is then asked its banner only, and UDP is not sent |
 | `-proxy-auth` | string |  | user:password for -proxy |
 | `-pts` | int |  | stop asking a host after this many open ports: it answers every port (default: no limit) |
-| `-pu` | string |  | UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp) |
+| `-pu` | string |  | UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp; without -p, -tp or -pf no TCP port is asked) |
 | `-r` | string |  | same as -resolvers |
 | `-rate` | float |  | port connection attempts per second (0: 1500, as naabu's connect scan, and 127.0.0.1 unpaced) |
 | `-resolvers` | string |  | DNS resolvers: a list such as 1.1.1.1,8.8.8.8:53 or a file, one a line (default: public resolvers) |

@@ -90,7 +90,7 @@ func cmdPorts(args []string) error {
 	portsFile := fs.String("pf", "", "file of ports, one spec a line (added to -p)")
 	exclPorts := fs.String("ep", "", "ports not to scan: a list or a file")
 	udp := fs.Bool("udp", false, "also ask the common UDP ports (25: dns, ntp, snmp, ssdp, mdns, ...)")
-	udpSpec := fs.String("pu", "", "UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp)")
+	udpSpec := fs.String("pu", "", "UDP ports to ask: top, full or a list of ports, ranges and these names, such as 53,123,1-1024 or top,5354 (implies -udp; without -p, -tp or -pf no TCP port is asked)")
 	exclHosts := fs.String("eh", "", "hosts, addresses or ranges not to scan, comma-separated (same as -deny)")
 	exclFile := fs.String("ef", "", "file of hosts, addresses and ranges not to scan")
 	resolvers := fs.String("resolvers", "", "DNS resolvers: a list such as 1.1.1.1,8.8.8.8:53 or a file, one a line (default: public resolvers)")
@@ -188,8 +188,15 @@ func cmdPorts(args []string) error {
 			}
 		}
 	}
+	// -pu without a TCP list asks only those UDP ports, as nmap -sU does: the
+	// default top-100 would be paced ahead of them and, at a low -rate under
+	// -timeout, use up the run before the first datagram.
 	if visited["p"] || !(visited["tp"] || visited["pf"]) {
-		add(*spec)
+		if visited["p"] || *udpSpec == "" {
+			add(*spec)
+		} else {
+			add("none")
+		}
 	}
 	switch strings.ToLower(*topPorts) {
 	case "":

@@ -65,6 +65,28 @@ type UDPReport struct {
 	// pace of an ICMP rate limit, though other ports of the host were
 	// refused: some of them may be closed.
 	Limited int
+	// Stopped lists, when the scan was stopped (the budget, the kill file,
+	// a signal, -timeout), the ports that had not answered or been refused
+	// and had payloads left to ask.
+	Stopped []UDPStop
+}
+
+// UDPStop is a port a stopped scan left with payloads unasked: Asked of the
+// Of requests its protocol list has were sent.
+type UDPStop struct {
+	Port, Asked, Of int
+}
+
+// udpPayloads is how many requests a port has in all.
+func udpPayloads(port int) int {
+	n := 0
+	for pass := 0; pass < 8; pass++ {
+		if _, ok := udpAsk(port, pass); !ok {
+			break
+		}
+		n++
+	}
+	return n
 }
 
 // ScanUDP sends each port of ip a request of its protocol (where none is
@@ -85,7 +107,8 @@ type UDPReport struct {
 func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UDPReport, error) {
 	s.init()
 	var r UDPReport
-	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports, 0, 0)
+	asked := map[int]int{}
+	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports, 0, 0, asked)
 	r.Open, r.ClosedPorts = answered, closed
 	var spent []int // asked every way their protocol has
 	for pass := 1; err == nil && len(silent) > 0 && pass <= 3; pass++ {
@@ -111,9 +134,12 @@ func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UD
 		}
 		var again []UDPPort
 		var more []int
-		again, silent, more, err = s.udpPass(ctx, host, ip, silent, pass, gap)
+		again, silent, more, err = s.udpPass(ctx, host, ip, silent, pass, gap, asked)
 		r.Open = append(r.Open, again...)
 		r.ClosedPorts = append(r.ClosedPorts, more...)
+	}
+	if err != nil {
+		r.Stopped = stoppedPorts(ports, r, silent, asked)
 	}
 	sort.Ints(r.ClosedPorts)
 	r.Closed = len(r.ClosedPorts)
@@ -140,7 +166,29 @@ var (
 	}
 )
 
-func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int, gap time.Duration) (open []UDPPort, silent, closed []int, err error) {
+// stoppedPorts are the ports of a stopped scan that neither answered nor
+// were refused and still had requests to ask, with what was asked of each.
+func stoppedPorts(all []int, r UDPReport, silent []int, asked map[int]int) []UDPStop {
+	done := map[int]bool{}
+	for _, u := range r.Open {
+		done[u.Port] = true
+	}
+	for _, p := range r.ClosedPorts {
+		done[p] = true
+	}
+	var out []UDPStop
+	for _, p := range all {
+		if done[p] {
+			continue
+		}
+		if of := udpPayloads(p); asked[p] < of {
+			out = append(out, UDPStop{Port: p, Asked: asked[p], Of: of})
+		}
+	}
+	return out
+}
+
+func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int, gap time.Duration, asked map[int]int) (open []UDPPort, silent, closed []int, err error) {
 	var mu sync.Mutex
 	sem := make(chan struct{}, s.udpWorkers)
 	var wg sync.WaitGroup
@@ -171,6 +219,9 @@ func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pas
 			break
 		}
 		wg.Add(1)
+		mu.Lock()
+		asked[p]++
+		mu.Unlock()
 		go func(p int) {
 			defer wg.Done()
 			defer func() { <-sem }()

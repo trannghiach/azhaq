@@ -203,6 +203,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			if len(c.UDPPorts) > 0 && !edge && s.up && c.Discover != DiscoverOnly {
 				udp, uerr = c.Scanner.ScanUDP(ctx, ip, ip, c.UDPPorts)
 				if uerr != nil {
+					recordStops(ip, udp.Stopped)
 					record(result{err: uerr})
 					return
 				}
