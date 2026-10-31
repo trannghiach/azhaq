@@ -152,7 +152,7 @@ Coverage is one of seven states:
 
 A row that no request answered ends with how it is known, such as `[called]`. [Concepts](docs/CONCEPTS.md#evidence-how-azhaq-knows-a-url) lists the levels.
 
-Every command prints results on stdout and a summary on stderr: what failed, what was left alone and which limit stopped it. `-json` makes both JSON. Exit codes: `0` complete, `1` error, `2` usage (nothing sent), `3` finished with failures, `4` stopped by a limit or the kill file. See [Concepts](docs/CONCEPTS.md) and [Output](docs/OUTPUT.md).
+Every command prints results on stdout and a summary on stderr: what failed, what was left alone and which limit stopped it. `-json` makes both JSON. Exit codes: `0` complete, `1` error, `2` usage (nothing sent), `3` finished with failures, `4` stopped by a limit or the kill file. See [Output](docs/OUTPUT.md#exit-codes) and [Concepts](docs/CONCEPTS.md).
 
 ## Drop-in commands
 

@@ -166,6 +166,8 @@ Ctrl-C, `kill` and a hangup (SIGINT, SIGTERM and SIGHUP) all stop a command the 
 
 ## Workspaces, runs and resuming
 
+The summary's `next` lists commands worth running after a run: see [OUTPUT](OUTPUT.md#next).
+
 - A **workspace** is one SQLite file, set with `-db`. Every run into it adds to it. `query`, `show`, `export`, `diff` and `watch` read it.
 - A **run** is one pass into a workspace. `azhaq resume` continues a run that a limit stopped.
 - A run keeps the answers it got in its workspace until nothing is left to resume. `azhaq resume` does not ask again what the run already asked.
@@ -194,8 +196,8 @@ The ledger is the record of what a run sent. It has one JSON line for each reque
 Each line has its time, the URL or `ip:port`, the host, the scope rule that allowed it and the collector. [OUTPUT](OUTPUT.md#the-ledger) lists the fields.
 
 - **Chain.** Each line carries the hash of the one before, so an edited, removed or reordered line is caught.
-- **Seal.** A run that ends writes a `seal` line, so lines cut from the end are caught too. The summary names the seal (`sealed 3f9c…`), and `ledger -verify` prints the last one: see [what `-verify` proves](commands/ledger.md#what--verify-proves).
-- **Limit.** The chain alone cannot tell a ledger from one with lines removed and the rest re-chained. A seal kept apart from the file can: see [Checking against a kept seal](commands/ledger.md#checking-against-a-kept-seal) and [Keeping the seal elsewhere](commands/ledger.md#keeping-the-seal-elsewhere).
+- **Seal.** A run that ends writes a `seal` line, so lines cut from the end are caught too. The summary names the seal (`sealed 3f9c…`), and `ledger -verify` prints the last one.
+- **Limit.** The chain alone cannot tell a ledger from one with lines removed and the rest re-chained. A seal kept apart from the file can: see [What `-verify` proves](commands/ledger.md#what--verify-proves), [Checking against a kept seal](commands/ledger.md#checking-against-a-kept-seal) and [Keeping the seal elsewhere](commands/ledger.md#keeping-the-seal-elsewhere).
 - **Not listed.** DNS queries, the third-party sources of `subs` and `urls`, and the RDAP registry are not targets.
 - **File.** `DB.ledger.jsonl` sits next to the workspace. Later runs into the workspace, and `azhaq resume`, append to it.
 - **Options.** `-ledger FILE` writes it elsewhere, and `-ledger off` writes none. A drop-in command without `-db` writes one only with `-ledger FILE`.
