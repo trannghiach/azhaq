@@ -120,7 +120,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-paths` | string |  | extra path wordlist (one path per line) |
 | `-no-paths` | bool |  | do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning |
 | `-path-climb` | bool |  | also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/) |
-| `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
+| `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms; crawl does this by default (-no-form-fill turns it off) |
 | `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default: all) |
 | `-web-ports` | string |  | ports to probe on each hostname, comma-separated (default: 443, falling back to 80) |
 | `-web-scheme` | string |  | try a name or an address over this scheme only, http or https (default: https, then http) |

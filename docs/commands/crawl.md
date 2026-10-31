@@ -176,7 +176,6 @@ These filters limit what is printed, not what is crawled.
 | `-d` | int | `-1` | katana's -d: link levels below the start URL to visit (3 by default); -depth N is -d N-1 |
 | `-paths` | string |  | extra path wordlist (one path per line) |
 | `-sweep` | bool |  | also ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, admin, …) and for the source map next to each script, as run does; crawl asks only what a crawler does |
-| `-fill-forms` | bool |  | ask the action of each GET form with neutral values in its fields (a search box gets a word): one GET request per form; a form that posts is not sent unless -submit-forms (crawl) |
 | `-no-form-fill` | bool |  | do not ask the action of GET forms with neutral values |
 | `-per-template` | int |  | URLs of one template (/product?id={n}) to request; the rest are listed (default: all) |
 | `-no-follow` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |

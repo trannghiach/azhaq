@@ -35,7 +35,7 @@ func cmdCrawl(args []string) error {
 	fs.Var(&urls, "u", "start URL (repeatable, or comma-separated)")
 	list := fs.String("l", "", "file of start URLs (- for stdin)")
 	given := inherit(fs, append([]string{"depth", "max-items", "parallel", "host-parallel", "delay", "paths", "browser", "browser-writes",
-		"login", "login-user", "login-pass", "per-template", "proxy", "retry", "backoff", "cookie-jar", "host-rate", "max-host-requests", "request-timeout", "max-response-size", "submit-forms", "fill-forms", "path-climb", "no-map-guess", "interact", "interact-clicks", "resolvers", "no-follow",
+		"login", "login-user", "login-pass", "per-template", "proxy", "retry", "backoff", "cookie-jar", "host-rate", "max-host-requests", "request-timeout", "max-response-size", "submit-forms", "path-climb", "no-map-guess", "interact", "interact-clicks", "resolvers", "no-follow",
 		"kf=known-files", "fs=crawl-scope", "ns=crawl-any-host", "c=host-parallel", "p=parallel", "rl=rate", "ct=timeout", "dr=no-follow", "r=resolvers"},
 		targetFlags...)...)
 	var inScope, outScope stringsFlag
@@ -75,6 +75,14 @@ func cmdCrawl(args []string) error {
 	filterRe := fs.String("fr", "", "leave out URLs that match this regex (printed URLs only)")
 	for _, name := range []string{"jc", "jsl", "fx", "td", "nc", "duc", "kb"} {
 		fs.Bool(name, false, "accepted for katana's command lines; azhaq always reads scripts, forms and technologies")
+	}
+	for _, a := range args {
+		if a == "--" {
+			break
+		}
+		if name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); name == "fill-forms" && strings.HasPrefix(a, "-") {
+			return usagef("crawl has no -fill-forms: it asks GET forms by default; -no-form-fill turns that off")
+		}
 	}
 	if err := parse(fs, args); err != nil {
 		return err

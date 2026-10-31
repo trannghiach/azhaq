@@ -292,3 +292,14 @@ func TestRunFoldsQueryShapesOfOneRoute(t *testing.T) {
 		}
 	}
 }
+
+// crawl fills GET forms by default, so -fill-forms is gone; the error names
+// the flag that turns it off.
+func TestCrawlFillFormsIsUsageError(t *testing.T) {
+	for _, a := range []string{"-fill-forms", "--fill-forms=true"} {
+		err := cmdCrawl([]string{"-u", "http://127.0.0.1:1/", a})
+		if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "-no-form-fill") {
+			t.Errorf("%s: %v", a, err)
+		}
+	}
+}
