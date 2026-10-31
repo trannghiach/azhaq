@@ -1,6 +1,6 @@
 # azhaq ports
 
-Open TCP ports (connect scan, no root), named by what they answer on any port, with products and versions; ranges, CIDR and AS numbers without a cap; -udp asks the common UDP ports. Replaces naabu (see [Migrating](../MIGRATING.md#naabu-azhaq-ports)).
+Finds the open TCP ports of hosts with a connect scan, so it needs no root. It names each service by what the port answers, on any port, and gives products and versions. Ranges, CIDR blocks and AS numbers have no size cap. `-udp` also asks the common UDP ports. Replaces naabu (see [Migrating](../MIGRATING.md#naabu-azhaq-ports)).
 
 ## Synopsis
 
@@ -11,63 +11,226 @@ azhaq ports -host HOST[,HOST…] | -l FILE | stdin | TARGET…  [-p LIST | -tp 1
 ## Examples
 
 ```
+# the 1,000 likeliest ports of one host, as JSON
 azhaq ports -host scanme.nmap.org -p top-1000 -json
+
+# three ports of a /16, 2,000 connects a second, only the addresses that are up
 azhaq ports 10.0.0.0/16 -p 22,80,443 -rate 2000 -wn
+
+# UDP ports 1 to 1024 of one host, no TCP
 azhaq ports -host 127.0.0.1 -p none -pu 1-1024 -json
+
+# hosts from a file, slower timing, two ports left out, all output formats
 azhaq ports -l hosts.txt -tp 1000 -ep 25,3306 -T2 -oA scan
+
+# which addresses of a range are up
+azhaq ports 192.0.2.0/24 -sn
 ```
+
+## What it does
+
+1. Takes targets: names, addresses, `host:port`, URLs, CIDR ranges or AS numbers. See [Targets](#targets).
+2. Connects to each port in a random order, the likeliest first, paced by `-rate`. `-p` chooses the ports.
+3. Asks the ports that neither accepted nor refused a connect once more, when few did not answer.
+4. Names the service of each open port from what it says or answers, with its product and version.
+5. With `-udp`, also sends each UDP port one harmless datagram.
+6. Prints one line for each open port.
+
+A port that says nothing is asked the request of its own protocol, an HTTP `HEAD /` and a TLS handshake. Then it gets one harmless request of each other protocol. That is at most 24 connects after the first. Nothing logs in, sends a credential or changes anything. Raw printing ports (9100–9107) are never asked anything. A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only.
 
 ## Output
 
-Host:port per open port (host:port/udp for UDP); -json: {"host","ip","port","protocol","tls","cdn","cdn-name","timestamp" (UTC),"service","product","version","title","banner","state" (UDP)}; -csv: the same fields as columns; -oX nmap XML, -oG greppable, -oA all three. Targets: a name, an address, host:port (that port only, unless -p is given), a URL, a CIDR range (IPv4 or IPv6 down to /104), AS64500 (the prefixes RIPEstat lists), several to a flag separated by commas. -timeout is how long the whole run may take; the wait for one connect is -connect-timeout.
-
-naabu's: `host`, `ip`, `port`, `protocol`, `tls`, `cdn` (true on a CDN or WAF address), `cdn-name`, `timestamp` (UTC), plus `service`, `banner`, `product`, `version` and, for a web page that names no product, its `title` ([below](#udp-products-and-versions)), `state` and `"protocol":"udp"` for a UDP port, and for a TLS port the certificate's `subject_cn` and `subject_an` (httpx's names). A service that speaks first (`ssh`, `ftp`, `smtp`, `telnet`, `irc`, …) is named from what it says. One that waits is asked what it serves, by what it answers and not by its port number, in this order: the request of the protocol whose usual port it is; an HTTP `HEAD / HTTP/1.0` on the open connection (an HTTP answer is `http`, its banner the `Server` header or the status line; a `405` or `501` is asked `GET /` for the page's title and product); for an answer that is not HTTP text, a TLS handshake on a second connection, counted like a connect (`tls`; `https` when HTTP answers inside it; a greeting inside it, as an IMAPS or SMTPS server sends, is read first and names the service, `tls` true); and then one harmless request of each other protocol on a connection of its own, a few at a time (the first in the list that answers is the port's), with the product and version it states ([below](#udp-products-and-versions)). A `HEAD` that stays unanswered for half a second is waited on while the handshake and the list are asked beside it, so a port that answers neither is done when the `HEAD`'s wait ends, not after a wait for each protocol. Every one of these connects is paced, counts against `-max-requests` and is in the ledger; an open port costs at most 24 connects after the first. A binary answer to the `HEAD` is kept in `banner` as `(binary)` and its first bytes in hex. A port that accepts a connection and closes it without a word is `tcpwrapped`. A name ending in `?` is only the port's usual service. Raw printing ports (9100–9107) are never asked anything. After six open ports of one address that no request could name (`-unnamed N`, `run -port-unnamed N`; `-1` for no limit), the remaining silent ports of that address are not asked the whole list: a workspace row says how many in `unprobed` and the summary names them (`open ports whose protocol was not probed, …`). A second name on the same address has its web and TLS ports asked again under its own name. One row per address: a name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it; where it cannot, the summary's notes say so (`IPv6 addresses of 1 name not scanned: no IPv6 route from this machine`). A port that neither accepts nor refuses a connect (a timeout, an ICMP unreachable) is asked once more after the others, when such ports are at most 64 or a tenth of the scan (a loaded or lossy host drops a connect now and then; a firewall that drops nearly everything would only double the scan). A service on a port that usually speaks first (22, 21, 25, 3306, …) is given a second wait for its greeting before it is asked anything, a greeting that arrives in reply to the `HEAD` is read as one, and when none came at all the port gets one more connect after the scan (sshd drops greetings when many connects arrive at once). In `run` and `query`, a scanned address's `ports` row counts these silent ports in `filtered`, and lists them in `filtered_ports` when there are no more than 64; the summary names them (`ports that neither accepted nor refused a connect, asked twice: scanme.nmap.org (45.33.32.156) port 80; …`), since an open port may hide among them.
-
-## Summary and exit codes
-
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
-
-## Details
-
-### Targets, formats and limits
-
-Targets are a name, an address, `host:port`, a URL, a CIDR range or an AS number (`AS13335`: the prefixes RIPEstat lists, said in the summary), comma-separated in `-host`, one per line in `-l` or on stdin, or as arguments. A `host:port` is asked that port only, unless `-p`, `-tp` or `-pf` is given, which then apply to every target. A range is split into blocks of 256 addresses that the run takes one at a time and records, so it has no size limit and `azhaq resume` continues it; an IPv6 range larger than /104 is refused, since no scan finishes it. A name costs the DNS queries of its A and AAAA records and no others. An address that shows nothing has no row; the summary's `counts` has `addresses` (the ones asked, wholly or in part, when a limit stopped the run), and its notes say how many addresses were not up (`-wn`), were outside the scope, or had ports that neither accepted nor refused a connect.
+Plain output is `host:port` for each open port, and `host:port/udp` for an open UDP port. `-json` prints one object per open port, and `-csv` the same fields as columns. [More on formats](#more-on-formats) has the nmap files and the options that choose fields.
 
 | Flag | Output |
 | --- | --- |
 | (none) | `host:port`; a UDP port is `host:port/udp` |
-| `-json`, `-j` | one object per open port: `host`, `ip`, `port`, `protocol`, `tls`, `cdn`, `cdn-name`, `timestamp` (UTC, RFC 3339), `service`, `product`, `version`, `title`, `banner`, `subject_cn`, `subject_an`, and `state` for UDP |
-| `-csv` | a header line, then the same fields as columns (`-lof` lists them); a list is joined with spaces |
-| `-eof a,b` | leaves fields out of `-json`, `-csv` and `-oA`'s JSON |
-| `-oX FILE`, `-oG FILE` | nmap XML and nmap greppable output (`-` for stdout); hosts in address order, ports by number, `service` without the `?` that marks a guess from the port number alone (`method="table"` in the XML) |
+| `-json`, `-j` | one object per open port |
+| `-csv` | a header line, then the same fields as columns |
+| `-oX FILE`, `-oG FILE` | nmap XML and nmap greppable output |
 | `-oA BASE` | `BASE.json`, `BASE.xml`, `BASE.gnmap` |
-| `-sn` | the addresses that are up, one per line (`-json`: `{"host","ip","up":true,"timestamp"}`) |
+| `-sn` | the addresses that are up, one per line; with `-json`, `{"host","ip","up":true,"timestamp"}` |
 
-The XML and greppable layouts follow naabu's. `-timeout` is how long the run may take (`90s`; `ports -timeout 500` is refused with a pointer to `-connect-timeout`).
+The fields of a `-json` row, which are naabu's plus azhaq's:
 
-How the scan runs, and what it does not do silently:
+| Field | Meaning |
+| --- | --- |
+| `host` | The host scanned. |
+| `ip` | Its address. |
+| `port` | The port number. |
+| `protocol` | `tcp`, or `udp`. |
+| `tls` | `true` on a TLS port. |
+| `cdn` | `true` on a CDN or WAF address. |
+| `cdn-name` | The CDN or WAF. |
+| `timestamp` | UTC, RFC 3339. |
+| `service` | The service the port answered as. A name ending in `?` is only the port's usual service. |
+| `product`, `version` | What the service states: see [Products and versions](#products-and-versions-of-tcp-ports). |
+| `title` | The `<title>` of a web page that names no product. |
+| `banner` | What the port said. A binary answer to the `HEAD` is `(binary)` and its first bytes in hex. |
+| `subject_cn`, `subject_an` | The certificate's subject names of a TLS port, as httpx calls them. |
+| `state` | UDP only: `open`, or `open\|filtered`. |
 
+## Summary and exit codes
+
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary of `ports` says:
+
+| Summary | Says |
+| --- | --- |
+| `addresses`, in `counts` | The addresses asked, wholly or in part when a limit stopped the run. |
+| notes | How many addresses were not up (`-wn`), were outside the scope, or had ports that neither accepted nor refused a connect. |
+| AS prefixes | The prefixes RIPEstat lists for an AS number. |
+| `IPv6 addresses of 1 name not scanned: no IPv6 route from this machine` | A name's IPv6 addresses were not scanned, because this machine cannot reach them. |
+| CDN or WAF | The addresses that were asked only ports 80, 443, 8080 and 8443. |
+| the host `-pts` stopped on | The host that `-pts` stopped asking: it answers every port. |
+| `-proxy` or `-source-ip` | The scan asked the banner only. |
+| `-wn` or `-sn` | How many hosts were called down. |
+| `open ports whose protocol was not probed, …` | The open ports that `-unnamed` stopped asking. |
+| `ports that neither accepted nor refused a connect, asked twice: scanme.nmap.org (45.33.32.156) port 80; …` | Ports where an open port may hide. |
+| UDP lines | What `open\|filtered` means, and the closed ports: see [UDP](#udp-ports-and-their-states). |
+
+## Details
+
+### Targets
+- A target is a name, an address, `host:port`, a URL, a CIDR range or an AS number. Give them comma-separated in `-host`, one per line in `-l` or on stdin, or as arguments.
+- A CIDR range is IPv4, or IPv6 down to /104. A larger IPv6 range is refused, since no scan finishes it.
+- `AS13335` stands for the prefixes RIPEstat lists, and the summary says so.
+- A `host:port` is asked that port only, unless `-p`, `-tp` or `-pf` is given. They then apply to every target.
+- A range is split into blocks of 256 addresses. The run takes them one at a time and records them. So a range has no size limit and is not expanded in memory, and `azhaq resume` continues it.
+- A name costs the DNS queries of its A and AAAA records and no others.
+- One row is made for each address. A name's IPv4 and IPv6 addresses are both scanned, IPv6 where this machine can reach it.
+- An address that shows nothing has no row.
+- `-wn` scans only the addresses that accept or refuse a connect to 80 or 443. `-sn` lists them and scans nothing.
+- For `-wn` and `-sn`, an address is up when a connect to 80 or 443 is accepted or refused, asked twice. A host that drops both is called down.
+
+### Ports, order and pace
+- `-p`, `-tp 100|1000|full` and `-pf FILE` add ports. `-ep LIST|FILE` takes ports out.
+- `-p -` is every port, `-p u:53` is a UDP port, and `-p none` leaves the TCP ports out.
+- The ports of a host are asked in a random order, the likeliest first: nmap's top 100, then its top 1000. `-order asc` asks them by number, and `-seed N` repeats an order.
+- `-rate` paces the scan. The default is 1500 connects a second. This machine's loopback is not paced unless you give `-rate`.
+- `-T0` to `-T5` set the rate, the connect timeout and the retries as nmap's templates do. An explicit flag wins.
+- `-c` is how many connects are in flight.
+- `-timeout` is how long the whole run may take, such as `90s`. `ports -timeout 500` is refused, with a pointer to `-connect-timeout`.
+- `-connect-timeout` is the wait for one connect. A bare number is milliseconds.
+
+### How an open port is named
+A service that speaks first (`ssh`, `ftp`, `smtp`, `telnet`, `irc`, …) is named from what it says. A port that waits is asked what it serves, by what it answers and not by its port number. The steps, in this order:
+
+1. The request of the protocol whose usual port it is.
+2. An HTTP `HEAD / HTTP/1.0` on the open connection. An HTTP answer is `http`, and its banner is the `Server` header or the status line. A `405` or `501` is asked `GET /` for the page's title and product.
+3. For an answer that is not HTTP text, a TLS handshake on a second connection, counted like a connect. The service is `tls`, or `https` when HTTP answers inside it. A greeting inside it, as an IMAPS or SMTPS server sends, is read first and names the service, with `tls` true.
+4. One harmless request of each other protocol, each on a connection of its own, a few at a time. The first in the list that answers is the port's, with the product and version it states.
+
+- A `HEAD` that stays unanswered for half a second is waited on while the handshake and the list are asked beside it. A port that answers neither is done when the `HEAD`'s wait ends, not after a wait for each protocol.
+- Every connect, whatever its purpose, counts against `-max-requests`, takes a token of the pace and is in the ledger.
+- An open port costs at most 24 connects after the first. A port named by a late protocol may cost a few more than asking the protocols one by one would. Several are asked at once.
+- A port that accepts a connection and closes it without a word is `tcpwrapped`.
+- Raw printing ports (9100–9107) are never asked anything.
+- A service on a port that usually speaks first (22, 21, 25, 3306, …) gets a second wait for its greeting before it is asked anything. A greeting that arrives in reply to the `HEAD` is read as one.
+- When no greeting came at all, the port gets one more connect after the scan. sshd drops greetings when many connects arrive at once.
+- A second name on the same address has its web and TLS ports asked again under its own name.
+- After six open ports of one address that no request could name, the remaining silent ports of that address are not asked the whole list. `-unnamed N` changes the six, `run -port-unnamed N` does the same in `run`, and `-1` means no limit. A workspace row says how many in `unprobed`, and the summary names them.
+
+### Ports that stay silent
+- A port that neither accepts nor refuses a connect, by a timeout or an ICMP unreachable, is asked once more after the others. That happens when such ports are at most 64 or a tenth of the scan.
+- A loaded or lossy host drops a connect now and then. A firewall that drops nearly everything would only double the scan, so it is not asked again.
+- `-retries N` asks them N more times, and `-retries 0` never.
+- When a connect timed out, the pass first waits one connect timeout, at most 3 s. A listener whose accept queue is full makes Linux drop the SYN, and the port is open once its service has drained the queue.
+- Each ask counts against `-max-requests` and is in the ledger.
+- A port still silent is in the row's `filtered_ports` and in the summary.
+- In `run` and `query`, the `ports` row of a scanned address counts these silent ports in `filtered`. It lists them in `filtered_ports` when there are no more than 64.
+
+### Limits, and what the scan does not do silently
 - A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only, because its other ports are the provider's other customers'. The row has `cdn` and a `note`, and the summary names the addresses. `-cdn-full` scans them in full.
-- A port that neither accepts nor refuses is asked again, after the others: once when few did not answer (the default), or `-retries N` more times, `-retries 0` never. When a connect timed out, the pass waits one connect timeout (at most 3 s) first: a listener whose accept queue is full makes Linux drop the SYN, and the port is open once its service has drained the queue. Each ask counts against `-max-requests` and is in the ledger. A port still silent is in the row's `filtered_ports` and in the summary.
-- `-pts N` stops asking a host after N open ports (a host that answers every port); the row has `"threshold":true` and the summary names the host (ports already in flight are still asked, so a few more than N may be listed).
-- `-detect none` connects and closes (one connect per port, as naabu without `-sV`), `-detect banner` reads what the service says on that connection, `-detect all` (default) also asks a silent port for HTTP and TLS, then one request of each protocol that waits to be asked, each on a connection of its own, several at once while the scan has workers free (at most 24 connects after the first; a port that is named by a late protocol may cost a few more than asking them one by one would). Every connect, whatever its purpose, counts against `-max-requests`, takes a token of the pace and is in the ledger.
-- `-proxy host:port` (SOCKS5) and `-source-ip` make the TCP connects go through that proxy or from that address; the service probes beyond the first connection dial on their own, so with either the scan asks the banner only, and the summary says so. UDP is not sent through a proxy (`-proxy` with `-udp` is refused).
-- With `-wn` or `-sn`, an address is up when a connect to 80 or 443 is accepted or refused, asked twice; a host that drops both is called down, and the summary counts them.
+- `-pts N` stops asking a host after N open ports, for a host that answers every port. The row has `"threshold":true` and the summary names the host. Ports already in flight are still asked, so a few more than N may be listed.
+- `-detect` says what is asked of an open port:
+  - `none` connects and closes: one connect per port, as naabu without `-sV`.
+  - `banner` reads what the service says on that connection.
+  - `all` is the default. It also asks a silent port for HTTP and TLS, then one request of each protocol that waits to be asked. Each goes on a connection of its own, several at once while the scan has workers free.
+- `-proxy host:port` (SOCKS5) and `-source-ip` make the TCP connects go through that proxy or from that address. The service probes beyond the first connection dial on their own, so with either the scan asks the banner only, and the summary says so.
+- UDP is not sent through a proxy. `-proxy` with `-udp` is refused.
+
+### More on formats
+- `-csv` writes a list joined with spaces. `-lof` lists the fields and stops.
+- `-eof a,b` leaves fields out of `-json`, `-csv` and `-oA`'s JSON.
+- `-json` rows have `timestamp` in UTC, RFC 3339, and `subject_cn` and `subject_an` on a TLS port.
+- `-oX FILE` and `-oG FILE` take `-` for stdout. Hosts are in address order and ports by number. `service` has no `?`, which marks a guess from the port number alone (`method="table"` in the XML).
+- The XML and greppable layouts follow naabu's.
 
 ### UDP, products and versions
 
-`ports -udp` asks UDP ports too: the 25 common ones (`-pu top`: 53, 67, 69, 111, 123, 137, 161, 500, 514, 520, 623, 1194, 1434, 1900, 3478, 4500, 5060, 5351, 5353, 5683, 10001, 11211, 27015, 47808, 51820), or the list `-pu` gives (`-pu 1-1024`, `-pu top,5354`: list names and numbers combine, in `-p` too); `-p none` leaves the TCP ports out. In `run` it is `-ports-udp SPEC` (`top`, `full` or a list). A port with no known protocol is asked a DNS query, then an SNMP get with community `public`, then memcached's version, then an empty datagram, until one answers. No privileges are needed: each port gets one datagram on a connected socket, and the kernel tells an ICMP port unreachable from silence.
+#### UDP ports
+- `ports -udp` asks the 25 common UDP ports. `-pu top` asks the same: 53, 67, 69, 111, 123, 137, 161, 500, 514, 520, 623, 1194, 1434, 1900, 3478, 4500, 5060, 5351, 5353, 5683, 10001, 11211, 27015, 47808 and 51820.
+- `-pu LIST` asks a list instead, such as `-pu 1-1024` or `-pu top,5354`. List names and numbers combine, in `-p` too.
+- `-p none` leaves the TCP ports out. In `run` it is `-ports-udp SPEC`, with `top`, `full` or a list.
+- No privileges are needed. Each port gets one datagram on a connected socket, and the kernel tells an ICMP port unreachable from silence.
+- Every datagram counts against `-max-requests`, is paced by `-rate` and goes in the request ledger as kind `udp`.
+- A CDN or WAF address is not asked.
+- Nothing logs in, guesses a credential or changes state.
+
+#### UDP ports and their states
 
 | What came back | State |
 | --- | --- |
 | a datagram | `open`, with the service, product, version and banner the reply gives |
 | an ICMP port unreachable | `closed` |
-| nothing, every way asked | `open|filtered`: a service that ignores the request, or a filter |
+| nothing, every way asked | `open\|filtered`: a service that ignores the request, or a filter |
 
-The request is the harmless one of the protocol the port usually carries: DNS `. NS`, an NTP client request, an SNMP GET of `sysDescr.0` (community `public`), SSDP M-SEARCH, an mDNS service query, a NetBIOS node status request, an IKEv2 header, a STUN binding request, memcached `version`, BACnet Who-Is, CoAP `GET /.well-known/core`, a TFTP read of a file that does not exist (an ERROR packet proves TFTP; it is read on a socket that is not connected, since the server answers from a port of its own), the portmapper's DUMP (the programs it lists), the SQL Server Browser's CLNT_UCAST_EX (version), a SIP OPTIONS, NAT-PMP's public address request, Ubiquiti's discovery request, an ASF presence ping and, as the second ask of 161, an SNMPv3 engine id discovery (the vendor is read from the engine id); a port with no known protocol gets the generic ones. A sysDescr that names Linux, Cisco IOS, JUNOS or Windows gives `product` and `version`. Nothing logs in, guesses a credential or changes state. Every datagram counts against `-max-requests`, is paced by `-rate` and goes in the request ledger as kind `udp`. A CDN or WAF address is not asked.
+The request is the harmless one of the protocol the port usually carries:
 
-JSON rows have `"protocol":"udp"` and `"state"`. In a workspace, the `ports` row has `udp_open`, `udp_open_filtered`, `udp_closed` (how many ports the host refused) with `udp_closed_ports` (the first 16), `udp_scanned`, `udp_limited` and `udp_services` (port, state, service, product, version, banner). Plain output lists `host:port/udp` for an open port and `host:port/udp open|filtered` for a silent one (the first field is the same, `-silent` prints the same lines); `-json` and `-csv` rows have `"state":"open|filtered"`, and each is a result, counted in `results`. The summary says what the state means (`1 UDP port open|filtered: no reply and no ICMP port unreachable after every request its protocol has (a silent service or a firewall); …`). A closed port is not a result (nmap lists closed ports only on request), but the summary names them, so that a scan that found nothing says what it saw: `1 UDP port closed (ICMP port unreachable): 127.0.0.1:9`, up to three as `address:port`, then `and N more`; in a range, the addresses that refused ports and showed nothing else are counted. An address asked on its own, or a name, lists every silent port up to 64; past that the rows would be noise, so the summary counts them and the workspace row's `udp_open_filtered` keeps them (`udp_unlisted` is how many). In a range, an address that answered nothing at all on UDP (down, or dropping it) has no rows: the range row counts its `udp_silent_ports` and `udp_silent_addresses` and the summary says so; ask the address on its own to list them. An address that refused or answered some port, or has an open one, lists its silent ports. On a loopback or LAN address, `open|filtered` usually means a service that does not answer a request it does not understand; a closed port there answers with an ICMP error and is reported `closed`. Across a firewall that drops ICMP, closed ports also read `open|filtered`. A host that refuses with ICMP but rate-limits it (Linux sends about one a second) leaves closed ports silent too: when some ports were refused and at most 80 silent ones remain, those are asked again one at a time at that pace so each reply can arrive (slower, on a non-loopback address only); when more remain, they stay `open|filtered`, `udp_limited` counts them and the summary says some may be closed. A port is `closed` only on an ICMP unreachable for that port.
+- DNS: `. NS`.
+- NTP: a client request.
+- SNMP: a GET of `sysDescr.0`, community `public`. As the second ask of 161, an SNMPv3 engine id discovery: the vendor is read from the engine id.
+- SSDP: M-SEARCH.
+- mDNS: a service query.
+- NetBIOS: a node status request.
+- IKEv2: a header.
+- STUN: a binding request.
+- memcached: `version`.
+- BACnet: Who-Is.
+- CoAP: `GET /.well-known/core`.
+- TFTP: a read of a file that does not exist. An ERROR packet proves TFTP. It is read on a socket that is not connected, since the server answers from a port of its own.
+- The portmapper: DUMP, which lists the programs.
+- SQL Server Browser: CLNT_UCAST_EX, which gives the version.
+- SIP: OPTIONS.
+- NAT-PMP: the public address request.
+- Ubiquiti: its discovery request.
+- ASF: a presence ping.
 
+A sysDescr that names Linux, Cisco IOS, JUNOS or Windows gives `product` and `version`. A port with no known protocol is asked a DNS query first. Then come an SNMP get with community `public`, memcached's version and an empty datagram, until one answers. DNS, SNMP and memcached are what move to odd ports: 5354, 8053, 10161.
+
+#### UDP rows and lines
+- JSON rows have `"protocol":"udp"` and `"state"`. `-json` and `-csv` rows of a silent port have `"state":"open|filtered"`, and each is a result, counted in `results`.
+- Plain output lists `host:port/udp` for an open port and `host:port/udp open|filtered` for a silent one. The first field is the same, and `-silent` prints the same lines.
+- A closed port is not a result, because nmap lists closed ports only on request.
+
+In a workspace, the `ports` row has these UDP fields:
+
+| Field | Meaning |
+| --- | --- |
+| `udp_open`, `udp_open_filtered` | The ports in each state. |
+| `udp_closed` | How many ports the host refused. |
+| `udp_closed_ports` | The first 16 of them. |
+| `udp_scanned` | How many UDP ports were scanned. |
+| `udp_limited` | Silent ports that may be closed: see below. |
+| `udp_services` | For each listed port: port, state, service, product, version, banner. |
+| `udp_unlisted` | How many `open\|filtered` ports the row does not list one by one. |
+| `udp_silent_ports`, `udp_silent_addresses` | On a range row, the silent ports and addresses that answered nothing on UDP. |
+
+#### What the summary says about UDP
+- It says what the state means: `1 UDP port open|filtered: no reply and no ICMP port unreachable after every request its protocol has (a silent service or a firewall); …`.
+- It names the closed ports, so that a scan that found nothing says what it saw: `1 UDP port closed (ICMP port unreachable): 127.0.0.1:9`. Up to three are shown as `address:port`, then `and N more`. In a range, the addresses that refused ports and showed nothing else are counted.
+- An address asked on its own, or a name, lists every silent port up to 64. Past that the rows would be noise: the summary counts them, and the workspace row's `udp_open_filtered` keeps them.
+- In a range, an address that answered nothing at all on UDP, because it is down or drops it, has no rows. The range row counts its `udp_silent_ports` and `udp_silent_addresses`, and the summary says so. Ask the address on its own to list them.
+- An address that refused or answered some port, or has an open one, lists its silent ports.
+
+#### Why a UDP port reads open|filtered
+- A port is `closed` only on an ICMP unreachable for that port.
+- On a loopback or LAN address, `open|filtered` usually means a service that does not answer a request it does not understand. A closed port there answers with an ICMP error and is reported `closed`.
+- Across a firewall that drops ICMP, closed ports also read `open|filtered`.
+- A host that refuses with ICMP but rate-limits it, as Linux does at about one a second, leaves closed ports silent too. When some ports were refused and at most 80 silent ones remain, those are asked again one at a time at that pace. Each reply can then arrive. This is slower, and happens on a non-loopback address only.
+- When more than 80 remain, they stay `open|filtered`, `udp_limited` counts them and the summary says some may be closed.
+
+#### Products and versions of TCP ports
 Each open TCP port gets `product` and `version` next to `service`, from what it says first or answers:
 
 | Source | Example | Product, version |
@@ -100,11 +263,11 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | A web page's title, when the head names no product (and for a `HEAD` that was refused) | `<title>Mailpit</title>` and its stylesheet's version | Mailpit 1.20.7 |
 | `GET /version` of a Go server that answers `/` with a 404 | etcd, Kubernetes or Docker JSON | etcd, Kubernetes, Docker Engine with the version |
 
-`service` is unchanged. The `GET /` for a body is one more connection on a web port whose HEAD answer gave no product and is a 200 or 401 of type JSON or text, or whose HEAD was refused (403, 404, 405, 501); it counts, is paced and is recorded like a connect. Every request above is sent only to a port that said nothing and is not one of the raw printing ports (9100–9107); none logs in, sends a credential or changes anything. A binary answer is read by the protocols' readers and by none that does not recognise it, so a port with no recognised protocol keeps its banner and stays `service` empty.
-
-**`ports`** takes what naabu takes: names, addresses, `host:port` (that port only, unless `-p` is given), URLs, CIDR ranges (IPv4, and IPv6 down to /104) and AS numbers, several to a flag separated by commas, or on stdin or as arguments. A range is not expanded in memory and has no size cap; `-wn` scans only the addresses that accept or refuse a connect to 80 or 443, `-sn` lists them and scans nothing. `-p`, `-tp 100|1000|full` and `-pf FILE` add ports; `-ep LIST|FILE` takes ports out; `-p -` is every port; `-p u:53` is a UDP port. The ports of a host are asked in a random order, the likeliest (nmap's top 100, then its top 1000) first (`-order asc` for numbers, `-seed N` to repeat an order). A scan is paced by `-rate` (default 1500 connects a second; this machine's loopback is not paced unless given), `-T0` to `-T5` set rate, connect timeout and retries as nmap's templates do (an explicit flag wins), `-connect-timeout` is the wait for one connect (a bare number is milliseconds; `-timeout` is how long the whole run may take), `-retries N` asks the ports that did not answer N more times, `-c` is how many connects are in flight. Output is `host:port`, `-json`, `-csv`, nmap XML (`-oX`), greppable (`-oG`) or all three (`-oA BASE`). `-detect none` connects and closes, as naabu does without `-sV`. A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only, and the row says so (`cdn`); `-cdn-full` scans it in full.
-
-**`ports -udp`** also asks the common UDP ports (53, 67, 69, 111, 123, 137, 161, 500, 514, 520, 623, 1194, 1434, 1900, 3478, 4500, 5060, 5351, 5353, 5683, 10001, 11211, 27015, 47808, 51820); `-pu LIST` asks a list instead (`-pu 1-1024`, `-pu top`, `-pu top,5354`: names and numbers combine, in `-p` too), and `-p none` leaves the TCP ports out. In `azhaq run` it is `azhaq run -ports-udp SPEC`. No privileges are needed: each port gets one datagram on a connected socket, and the kernel tells an ICMP port unreachable from silence. A reply makes the port `open`, with the service, product, version and banner it gives; an ICMP port unreachable makes it `closed`; nothing, after every way asked, makes it `open|filtered`. The request is the harmless one of the protocol the port usually carries, and, on a port with no known protocol, a DNS query, an SNMP get with community `public`, memcached's version, then an empty datagram (DNS, SNMP and memcached are what move to odd ports: 5354, 8053, 10161); nothing logs in, guesses a credential or changes state. Every datagram counts against `-max-requests`, is paced and goes in the ledger as kind `udp`. A CDN or WAF address is not asked. Each open TCP port also gets `product` and `version` next to `service`, from what it says first or answers (a greeting such as SSH, FTP, SMTP, POP3, IMAP, MySQL or MariaDB, Telnet, IRC, NNTP, RTSP, SIP or VNC; an HTTP `Server` or `X-Powered-By` header, the body or title of `GET /`; and, for a port that waits to be asked, the answer to one harmless request of Redis, PostgreSQL, MongoDB, MQTT, AMQP, memcached, LDAP, SMB, DNS over TCP, Kafka, ZooKeeper, SQL Server, Oracle TNS, Cassandra, Kerberos, RDP, X11, SOCKS5, STOMP and XMPP, on any port, never with a credential). A web page that names no product gets its `<title>` in `title` (and its `<meta name="generator">` as the product). An SSH, FTP or mail port that sent no greeting is connected to once more after the scan, as sshd drops greetings when many connects arrive at once. A port that accepts a connection and closes it without a word is `tcpwrapped`. How many requests one open port can cost is in [UDP, products and versions](#udp-products-and-versions). [UDP, products and versions](#udp-products-and-versions) lists them.
+- `service` is unchanged.
+- A web page that names no product gets its `<title>` in `title`, and its `<meta name="generator">` as the product.
+- The `GET /` for a body is one more connection on a web port. It is made when the `HEAD` answer gave no product and is a 200 or 401 of type JSON or text. It is also made when the `HEAD` was refused (403, 404, 405, 501). It counts, is paced and is recorded like a connect.
+- Every request above is sent only to a port that said nothing and is not one of the raw printing ports (9100–9107). None logs in, sends a credential or changes anything.
+- A binary answer is read by the protocols' readers, and by none that does not recognise it. So a port with no recognised protocol keeps its banner and stays `service` empty.
 
 ## Flags
 
