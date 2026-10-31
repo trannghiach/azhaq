@@ -172,6 +172,7 @@ jobs:
             open=$(nmap -sT -T4 -Pn --top-ports 1000 -oG - $nets 2>/dev/null | grep -o '/open/' | wc -l)
             echo "dry run: $open open ports across both estates"
             printf 'dry run\n\n%s open ports seen by the agent user after isolation.\n' "$open" > REPORT.md
+            : > "$HOME/ci/stderr.txt"; : > "$HOME/ci/stream.ts.jsonl"
             exit 0
           fi
           # Every line of the event stream gets the second it arrived, so the
