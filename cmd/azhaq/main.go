@@ -352,6 +352,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		dirsMatch[m.flag] = fs.String("dirs-"+m.flag, "", m.help)
 	}
 	graphql := fs.Bool("graphql", false, "read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow)")
+	graphqlWordlist := fs.String("graphql-wordlist", "", "extra probe words (one per line), tried and recombined with the built-in ones when a GraphQL endpoint's introspection is off and its schema has to be recovered from validation errors")
 	skip := fs.String("skip", "", "collectors not to run, comma-separated (see azhaq plan)")
 	noPaths := fs.Bool("no-paths", false, "do not ask each web service for the 32 built-in paths (robots.txt, sitemaps, API descriptions, .git/HEAD, backup, admin, …): some programs count that as scanning")
 	allGets := fs.Bool("all-gets", false, "also request found URLs that look like a GET would change something (logout, delete, reset, save…); by default they are listed, not requested")
@@ -846,6 +847,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if *pathsFile != "" {
 		if opts.Paths, err = loadPathList(*pathsFile); err != nil {
+			return err
+		}
+	}
+	if *graphqlWordlist != "" {
+		if opts.GraphQLWordlist, err = loadLines(*graphqlWordlist); err != nil {
 			return err
 		}
 	}

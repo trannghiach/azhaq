@@ -46,3 +46,25 @@ func TestGraphQLOps(t *testing.T) {
 		t.Errorf("ops %q", got)
 	}
 }
+
+// GraphQLWords reads the field, argument and type names inside a gql tag,
+// a bare query document and a {"query":"…"} string, and leaves out the
+// GraphQL keywords, each name once.
+func TestGraphQLWords(t *testing.T) {
+	script := `const Q=gql` + "`" + `query GetUser($id: ID!) { user(id: $id) { email pastes } }` + "`" + `;
+	fetch("/graphql",{method:"POST",body:JSON.stringify({query:"mutation { deleteAllPastes(owner: true) }"})});
+	function anon(){return "query { systemHealth }"}`
+	got := GraphQLWords(script)
+	want := map[string]bool{"user": true, "id": true, "email": true, "pastes": true, "deleteAllPastes": true, "owner": true, "systemHealth": true}
+	if len(got) != len(want) {
+		t.Fatalf("words %q", got)
+	}
+	for _, w := range got {
+		if !want[w] {
+			t.Errorf("unexpected word %q in %q", w, got)
+		}
+		if graphqlKeyword[w] {
+			t.Errorf("a GraphQL keyword was kept: %q", w)
+		}
+	}
+}

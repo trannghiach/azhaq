@@ -300,3 +300,76 @@ func GraphQLOps(script string) []string {
 	}
 	return out
 }
+
+// graphqlStart matches the head of a query, mutation or subscription
+// document up to its opening brace; the name and the arguments, when
+// given, are optional ("query GetUser($id: ID!) {" or a bare "query {").
+var graphqlStart = lazyRE(`\b(?:query|mutation|subscription)\b\s*(?:[A-Za-z_]\w*)?\s*(?:\([^(){}]{0,300}\))?\s*\{`)
+
+// gqlWord is one identifier inside a GraphQL document: a field, an
+// argument or a type name.
+var gqlWord = lazyRE(`[A-Za-z_]\w*`)
+
+// graphqlKeyword is a word a GraphQL document carries that is not a
+// field, argument or type name of the schema.
+var graphqlKeyword = map[string]bool{
+	"query": true, "mutation": true, "subscription": true, "fragment": true, "on": true,
+	"true": true, "false": true, "null": true, "__typename": true,
+}
+
+// maxGraphQLBody bounds how far GraphQLWords scans for one document's
+// closing brace, so an unmatched "{" in a huge bundle does not read the
+// rest of it.
+const maxGraphQLBody = 8000
+
+// GraphQLWords lists the identifiers inside the GraphQL operations a
+// script or a page carries: field names, their arguments and the types
+// named after a colon, wherever the operation sits (a query document, a
+// gql`…` tag, or a {"query":"…"} string a request builds). Azhaq probes
+// these against an endpoint whose introspection is off: a name the
+// client already asks for is more likely one the server has than a guess.
+func GraphQLWords(text string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(body string) {
+		for _, w := range gqlWord.FindAllString(body, -1) {
+			if graphqlKeyword[w] || seen[w] {
+				continue
+			}
+			seen[w] = true
+			out = append(out, w)
+			if len(out) >= 300 {
+				return
+			}
+		}
+	}
+	for _, loc := range graphqlStart.FindAllStringIndex(text, 64) {
+		if body, ok := braceBody(text, loc[1]-1); ok {
+			add(body)
+		}
+		if len(out) >= 300 {
+			break
+		}
+	}
+	return out
+}
+
+// braceBody is the text between the brace at open (inclusive) and its
+// match, scanning at most maxGraphQLBody bytes; ok is false when no match
+// falls in that span (an unterminated or too-large document).
+func braceBody(s string, open int) (body string, ok bool) {
+	depth := 0
+	end := min(len(s), open+maxGraphQLBody)
+	for i := open; i < end; i++ {
+		switch s[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return s[open+1 : i], true
+			}
+		}
+	}
+	return "", false
+}

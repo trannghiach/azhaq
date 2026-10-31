@@ -200,6 +200,89 @@ func TestSchemaFromSuggestions(t *testing.T) {
 	}
 }
 
+// Fields neither the built-in wordlist nor a suggestion would reach are
+// still recovered: one from a GraphQL operation the map already found in
+// a script on the endpoint's origin (vaultBalance, from: client), one
+// from words derived from the wordlist's verbs and nouns (deleteAllPastes
+// = delete + All + pastes, from: probe). The row reports how many fields
+// each root type has, how they were found, and that it may still be
+// incomplete.
+func TestSchemaRecoversClientAndDerivedWords(t *testing.T) {
+	fetch.Reset()
+	have := map[string]map[string]bool{
+		"Query":     {"pastes": true, "vaultBalance": true},
+		"Mutations": {"createPaste": true, "deleteAllPastes": true},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app.js":
+			w.Header().Set("Content-Type", "application/javascript")
+			_, _ = w.Write([]byte("const Q = gql`query { vaultBalance }`;"))
+		case "/graphql":
+			var q struct{ Query string }
+			_ = json.NewDecoder(r.Body).Decode(&q)
+			w.Header().Set("Content-Type", "application/json")
+			if strings.Contains(q.Query, "__schema") {
+				_, _ = w.Write([]byte(`{"errors":[{"message":"GraphQL introspection is not allowed"}]}`))
+				return
+			}
+			root := "Query"
+			if strings.HasPrefix(q.Query, "mutation") {
+				root = "Mutations"
+			}
+			var errs []map[string]string
+			for _, f := range strings.Fields(strings.Trim(strings.SplitN(q.Query, "{", 2)[1], " }")) {
+				if !have[root][f] {
+					// No "Did you mean": these two names are reachable only
+					// through client-code harvesting or derived words, never
+					// a suggestion.
+					errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "` + root + `".`})
+				}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"errors": errs})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// The map already fetched this script before the schema was recovered.
+	if _, _, err := fetch.Do(context.Background(), srv.Client(), srv.URL+"/app.js"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
+	if fmt.Sprint(got["queries"]) != "[pastes vaultBalance]" {
+		t.Fatalf("queries %v", got["queries"])
+	}
+	if fmt.Sprint(got["mutations"]) != "[createPaste deleteAllPastes]" {
+		t.Fatalf("mutations %v", got["mutations"])
+	}
+	if got["complete"] != false {
+		t.Errorf("complete %v, want false: recovery never proves there is nothing more", got["complete"])
+	}
+	if n, _ := got["client_words"].(float64); n < 1 {
+		t.Errorf("client_words %v, want at least vaultBalance", got["client_words"])
+	}
+	recovery, _ := got["recovery"].(map[string]any)
+	qr, _ := recovery["queries"].(map[string]any)
+	if qr["fields"] != float64(2) {
+		t.Errorf("query fields %v, want 2", qr["fields"])
+	}
+	qby, _ := qr["by"].(map[string]any)
+	if qby["client"] != float64(1) || qby["probe"] != float64(1) {
+		t.Errorf("queries by %v, want one client (vaultBalance) and one probe (pastes)", qby)
+	}
+	if n, _ := qr["words_tried"].(float64); n == 0 {
+		t.Error("words_tried is 0")
+	}
+	mr, _ := recovery["mutations"].(map[string]any)
+	mby, _ := mr["by"].(map[string]any)
+	if mby["probe"] != float64(2) {
+		t.Errorf("mutations by %v, want two probe (createPaste, deleteAllPastes)", mby)
+	}
+}
+
 // An endpoint that runs a query sent with GET says so: {__typename}.
 func TestGETQueries(t *testing.T) {
 	fetch.Reset()

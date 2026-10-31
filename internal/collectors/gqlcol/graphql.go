@@ -23,6 +23,7 @@ import (
 	"github.com/trannghiach/azhaq/internal/gqlschema"
 	"github.com/trannghiach/azhaq/internal/neterr"
 	"github.com/trannghiach/azhaq/internal/normalize"
+	"github.com/trannghiach/azhaq/internal/webextract"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -122,7 +123,8 @@ func ideName(body []byte) string {
 // with a shorter one when the server refuses that for its depth. Active
 // (-graphql): it POSTs to the target.
 type Schema struct {
-	Client *http.Client
+	Client   *http.Client
+	Wordlist []string // -graphql-wordlist: extra probe words for a recovery without introspection
 }
 
 func NewSchema(client *http.Client) *Schema { return &Schema{Client: fetch.Client(client)} }
@@ -193,28 +195,62 @@ func (s *Schema) Run(ctx context.Context, seed types.Seed, emit func(types.Obser
 // recoverSchema reads the root fields of the query and mutation types
 // from the server's validation errors, when introspection gave nothing.
 func (s *Schema) recoverSchema(ctx context.Context, raw string, status int, emit func(types.Observation) error) (types.RunMeta, error) {
-	q, err := s.recoverType(ctx, raw, "query")
+	clientWords := harvestClientWords(raw)
+	q, err := s.recoverType(ctx, raw, "query", clientWords, s.Wordlist)
 	if err != nil {
 		return failed(err)
 	}
 	if q == nil {
 		return types.RunMeta{Status: types.StatusOK}, nil
 	}
-	m, err := s.recoverType(ctx, raw, "mutation")
+	m, err := s.recoverType(ctx, raw, "mutation", clientWords, s.Wordlist)
 	if err != nil {
 		return failed(err)
 	}
 	row := map[string]any{"url": raw, "role": "graphql", "status": status, "introspection": false, "recovered": "suggestions",
-		"queries": q.names(), "types": typeNames(q, m), "errors": q.errors, "query_type": q.name}
+		"queries": q.names(), "types": typeNames(q, m), "errors": q.errors, "query_type": q.name,
+		// Recovery never proves a type has no more fields than it found.
+		"complete": false}
 	sigs := map[string]any{"queries": q.signatures()}
+	recovery := map[string]any{"queries": recoveryCounts(q)}
 	if m != nil {
 		row["mutations"] = m.names()
 		row["errors"] = q.errors + m.errors
 		row["mutation_type"] = m.name
 		sigs["mutations"] = m.signatures()
+		recovery["mutations"] = recoveryCounts(m)
+	}
+	if len(clientWords) > 0 {
+		row["client_words"] = len(clientWords)
 	}
 	row["signatures"] = sigs
+	row["recovery"] = recovery
 	return one(emit, raw, "graphql", row)
+}
+
+// recoveryCounts is how many of a root type's fields were found each way
+// (client, probe or suggestion) and how many words were tried to find
+// them: never proof that the type has no more.
+func recoveryCounts(rt *recoveredType) map[string]any {
+	return map[string]any{"fields": len(rt.fields), "by": rt.counts(), "words_tried": rt.tried}
+}
+
+// harvestClientWords reads the GraphQL operations already in the map for
+// raw's origin -- HTML and scripts fetch.CachedOrigin holds from earlier
+// in the run -- so a field, argument or type name the client code already
+// asks for is tried before a guess.
+func harvestClientWords(raw string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, body := range fetch.CachedOrigin(raw) {
+		for _, w := range webextract.GraphQLWords(string(body)) {
+			if !seen[w] {
+				seen[w] = true
+				out = append(out, w)
+			}
+		}
+	}
+	return out
 }
 
 // failed is what a query that got no answer leaves: capped by the request

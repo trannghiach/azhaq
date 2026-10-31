@@ -368,6 +368,34 @@ func Cached(raw string) (Result, bool) {
 	return e.res, ok && e.err == nil
 }
 
+// maxCachedOriginBodies bounds how many of an origin's cached bodies a
+// caller reads back, so a page with hundreds of scripts cached does not
+// make every reader of CachedOrigin slow.
+const maxCachedOriginBodies = 64
+
+// CachedOrigin is the body of every page and script already fetched from
+// raw's origin, in the process cache, without a request of its own: what
+// the map already has of an origin's HTML and JavaScript.
+func CachedOrigin(raw string) [][]byte {
+	origin := originOf(raw)
+	if origin == "" {
+		return nil
+	}
+	cacheMu.Lock()
+	defer cacheMu.Unlock()
+	var out [][]byte
+	for u, e := range cache {
+		if e.err != nil || len(e.res.Body) == 0 || originOf(u) != origin {
+			continue
+		}
+		out = append(out, e.res.Body)
+		if len(out) >= maxCachedOriginBodies {
+			break
+		}
+	}
+	return out
+}
+
 func Client(c *http.Client) *http.Client {
 	if c != nil {
 		return recorded(c)

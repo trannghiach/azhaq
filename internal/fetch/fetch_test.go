@@ -44,6 +44,50 @@ func TestDoSingleflight(t *testing.T) {
 	}
 }
 
+// CachedOrigin reads back the bodies already fetched from an origin, for
+// a page and a script, and none of another origin's.
+func TestCachedOrigin(t *testing.T) {
+	Reset()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			_, _ = w.Write([]byte("<html>home</html>"))
+		case "/app.js":
+			_, _ = w.Write([]byte("const q = gql`query { ping }`;"))
+		}
+	}))
+	t.Cleanup(srv.Close)
+	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("other origin"))
+	}))
+	t.Cleanup(other.Close)
+
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Do(context.Background(), srv.Client(), srv.URL+"/app.js"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := Do(context.Background(), other.Client(), other.URL+"/"); err != nil {
+		t.Fatal(err)
+	}
+
+	bodies := CachedOrigin(srv.URL + "/graphql")
+	if len(bodies) != 2 {
+		t.Fatalf("bodies %d, want 2 (home and app.js, not the other origin)", len(bodies))
+	}
+	var joined string
+	for _, b := range bodies {
+		joined += string(b)
+	}
+	if !strings.Contains(joined, "home") || !strings.Contains(joined, "gql`query") {
+		t.Errorf("bodies %q missing home or the script", joined)
+	}
+	if strings.Contains(joined, "other origin") {
+		t.Error("CachedOrigin returned another origin's body")
+	}
+}
+
 func TestRedirectHops(t *testing.T) {
 	Reset()
 	mux := http.NewServeMux()
