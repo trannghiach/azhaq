@@ -339,3 +339,42 @@ func TestPortsResumeKeepsEveryOpenPort(t *testing.T) {
 		t.Errorf("the map says %q, want %s", shown, want)
 	}
 }
+
+// A UDP port the host refused (ICMP port unreachable) is closed, not a
+// result; the summary says so, so that a scan that found nothing tells
+// what it saw: how many ports were closed, a few of them named.
+func TestPortsSaysWhichUDPPortsWereClosed(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var gone []int
+	var held []net.PacketConn
+	for i := 0; i < 5; i++ {
+		pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+		if err != nil {
+			t.Skip(err)
+		}
+		held = append(held, pc)
+		gone = append(gone, pc.LocalAddr().(*net.UDPAddr).Port)
+	}
+	for _, pc := range held {
+		pc.Close() // nothing listens on these ports now
+	}
+	sort.Ints(gone)
+	for _, c := range []struct {
+		pu   []int
+		want string
+	}{
+		{gone[:1], fmt.Sprintf("1 UDP port closed (ICMP port unreachable): 127.0.0.1:%d", gone[0])},
+		{gone, fmt.Sprintf("5 UDP ports closed (ICMP port unreachable): 127.0.0.1:%d, 127.0.0.1:%d, 127.0.0.1:%d and 2 more", gone[0], gone[1], gone[2])},
+	} {
+		var spec []string
+		for _, p := range c.pu {
+			spec = append(spec, fmt.Sprint(p))
+		}
+		out, errOut, code := cli(t, "ports", "-host", "127.0.0.1", "-p", "none", "-pu", strings.Join(spec, ","), "-connect-timeout", "300ms", "-json")
+		sum := sumMap(t, errOut)
+		notes, _ := json.Marshal(sum["notes"])
+		if code != exitOK || strings.TrimSpace(out) != "" || sum["results"] != float64(0) || !strings.Contains(string(notes), c.want) {
+			t.Errorf("-pu %v: exit %d, rows %q, summary %v, want the note %q", spec, code, out, sum, c.want)
+		}
+	}
+}

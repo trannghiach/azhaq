@@ -3,8 +3,10 @@ package portcol
 import (
 	"context"
 	"fmt"
+	"net"
 	"slices"
 	"sort"
+	"strconv"
 
 	"github.com/trannghiach/azhaq/internal/portscan"
 )
@@ -42,6 +44,11 @@ func (c *Collector) scanUDPOnce(ctx context.Context, host, ip string) (portscan.
 	return s.rep, s.err
 }
 
+// maxClosedListed: a row names this many of an address's closed UDP ports,
+// the count says the rest (a full scan of a host that refuses them all
+// would be 65535 numbers).
+const maxClosedListed = 16
+
 // addUDP puts what a UDP scan found in a name's row: the ports by state,
 // and what each answer said. Silent ports are listed in udp_services (the
 // rows a command prints) up to maxListed per address; past it the row's
@@ -65,6 +72,9 @@ func addUDP(row map[string]any, r portscan.UDPReport, scanned int) {
 	row["udp_open"] = open
 	row["udp_open_filtered"] = filtered
 	row["udp_closed"] = r.Closed
+	if len(r.ClosedPorts) > 0 {
+		row["udp_closed_ports"] = r.ClosedPorts[:min(len(r.ClosedPorts), maxClosedListed)]
+	}
 	if r.Limited > 0 {
 		row["udp_limited"] = r.Limited
 	}
@@ -81,6 +91,15 @@ type udpSummary struct {
 	silentN   int                     // silent ports of range addresses that answered nothing, not listed
 	silentIPs int                     // those addresses
 	limited   int
+	closed    map[string]closedUDP // address: the ports it refused
+	// Addresses of the ranges that showed nothing else but refused UDP ports.
+	closedN, closedIPs int
+}
+
+// closedUDP is how many UDP ports an address refused and the first of them.
+type closedUDP struct {
+	n     int
+	ports []int
 }
 
 func (u *udpSummary) add(ip string, filtered []int, unlisted, limited int) {
@@ -101,6 +120,20 @@ func (u *udpSummary) add(ip string, filtered []int, unlisted, limited int) {
 	u.limited += limited
 }
 
+// addClosed notes the UDP ports an address refused (an ICMP port
+// unreachable); two rows of an address, one for each name, count once.
+func (u *udpSummary) addClosed(ip string, n int, ports []int) {
+	if n <= 0 {
+		return
+	}
+	if u.closed == nil {
+		u.closed = map[string]closedUDP{}
+	}
+	if c := u.closed[ip]; n > c.n {
+		u.closed[ip] = closedUDP{n, ports}
+	}
+}
+
 // notes say what open|filtered means, once, how many ports are rows, and
 // when a host that refused some ports may have rate-limited its refusals.
 func (u *udpSummary) notes() []string {
@@ -113,6 +146,12 @@ func (u *udpSummary) notes() []string {
 	}
 	if rows > 0 {
 		out = append(out, fmt.Sprintf("%d UDP %s open|filtered: no reply and no ICMP port unreachable after every request its protocol has (a silent service or a firewall); a closed port answers with an ICMP error", rows, plural(rows, "port")))
+	}
+	if n, list := u.closedList(); n > 0 {
+		out = append(out, fmt.Sprintf("%d UDP %s closed (ICMP port unreachable): %s", n, plural(n, "port"), list))
+	}
+	if u.closedIPs > 0 {
+		out = append(out, fmt.Sprintf("%d addresses of the ranges refused UDP ports (ICMP port unreachable, %d ports closed in all) and showed nothing else: they are not listed", u.closedIPs, u.closedN))
 	}
 	if len(u.unlisted) > 0 {
 		sort.Strings(u.unlisted)
@@ -129,6 +168,25 @@ func (u *udpSummary) notes() []string {
 		out = append(out, fmt.Sprintf("udp: %d silent ports on a host that refused others were not asked again at its ICMP rate limit (about one reply a second; too many for that): some of them may be closed, so scan fewer ports to be sure", u.limited))
 	}
 	return out
+}
+
+// closedList is how many ports were refused, and a few as address:port.
+func (u *udpSummary) closedList() (int, string) {
+	ips := make([]string, 0, len(u.closed))
+	for ip := range u.closed {
+		ips = append(ips, ip)
+	}
+	sort.Strings(ips)
+	var all []string
+	total := 0
+	for _, ip := range ips {
+		c := u.closed[ip]
+		total += c.n
+		for _, p := range c.ports {
+			all = append(all, net.JoinHostPort(ip, strconv.Itoa(p)))
+		}
+	}
+	return total, listOfN(all, 3, total)
 }
 
 func plural(n int, word string) string {

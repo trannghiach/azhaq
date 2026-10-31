@@ -3,6 +3,7 @@ package portcol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -133,6 +134,7 @@ func TestUDPFieldsInTheRow(t *testing.T) {
 		UDPOpen     []int              `json:"udp_open"`
 		UDPFiltered []int              `json:"udp_open_filtered"`
 		UDPClosed   int                `json:"udp_closed"`
+		ClosedPorts []int              `json:"udp_closed_ports"`
 		UDPScanned  int                `json:"udp_scanned"`
 		Services    []portscan.UDPPort `json:"udp_services"`
 	}
@@ -141,10 +143,12 @@ func TestUDPFieldsInTheRow(t *testing.T) {
 	}
 	_ = json.Unmarshal(obs[0].Payload, &row)
 	if len(row.UDPOpen) != 1 || row.UDPOpen[0] != port(answer) || len(row.UDPFiltered) != 1 || row.UDPFiltered[0] != port(quiet) ||
-		row.UDPClosed != 1 || row.UDPScanned != 3 || len(row.Services) != 2 || row.Services[0].State != "open" || row.Services[1].State != "open|filtered" {
+		row.UDPClosed != 1 || len(row.ClosedPorts) != 1 || row.ClosedPorts[0] != goneAddr.Port || row.UDPScanned != 3 || len(row.Services) != 2 || row.Services[0].State != "open" || row.Services[1].State != "open|filtered" {
 		t.Errorf("row %s", obs[0].Payload)
 	}
-	if n := Notes(obs); len(n) != 1 || !strings.HasPrefix(n[0], "1 UDP port open|filtered") {
+	n := Notes(obs)
+	if len(n) != 2 || !strings.HasPrefix(n[0], "1 UDP port open|filtered") ||
+		n[1] != fmt.Sprintf("1 UDP port closed (ICMP port unreachable): 127.0.0.1:%d", goneAddr.Port) {
 		t.Errorf("notes %q", n)
 	}
 }

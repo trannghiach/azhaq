@@ -102,6 +102,8 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 		udpFilt   int // open|filtered ports of addresses that answered nothing else, not listed
 		udpSilent int // those addresses
 		withOpen  int
+		// The closed UDP ports of addresses that have no row, and those addresses.
+		udpRefused, udpRefusing int
 	)
 	// One address given is not a sweep: it is asked about, so its silent
 	// UDP ports are rows. In a range, an address that answered nothing at
@@ -199,6 +201,9 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			// Silent ports are rows where the address showed life (a reply, a
 			// refusal or an open port), or was the one asked.
 			listed := len(udp.OpenFiltered) > 0 && (single || len(s.open) > 0 || len(udp.Open) > 0 || udp.Closed > 0)
+			// An address that shows nothing has no row: the range's row counts
+			// them. The one asked has a row for the UDP ports it refused.
+			rowless := len(s.open) == 0 && len(udp.Open) == 0 && !listed && !(c.Discover == DiscoverOnly && s.up) && !(single && udp.Closed > 0)
 			mu.Lock()
 			switch {
 			case !s.up:
@@ -216,9 +221,12 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 				udpFilt += len(udp.OpenFiltered)
 				udpSilent++
 			}
+			if rowless && udp.Closed > 0 {
+				udpRefused += udp.Closed
+				udpRefusing++
+			}
 			mu.Unlock()
-			// An address that shows nothing has no row: the range's row counts them.
-			if len(s.open) == 0 && len(udp.Open) == 0 && !listed && !(c.Discover == DiscoverOnly && s.up) {
+			if rowless {
 				return
 			}
 			row := c.row(ip, ip, ports, s, edgeName, edge)
@@ -249,7 +257,8 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 	}
 	rng := map[string]any{"range": true, "prefix": pf.String(), "addresses": len(addrs) - out, "with_open": withOpen,
 		"scanned": len(c.portsOf("")), "down": down, "outside_scope": out, "filtered_addresses": filtAddrs,
-		"cdn_addresses": edgeAddrs, "udp_silent_ports": udpFilt, "udp_silent_addresses": udpSilent, "open": []int{}}
+		"cdn_addresses": edgeAddrs, "udp_silent_ports": udpFilt, "udp_silent_addresses": udpSilent,
+		"udp_closed_n": udpRefused, "udp_closed_a": udpRefusing, "open": []int{}}
 	raw, _ := json.Marshal(rng)
 	if err := emit(types.Observation{Collector: Name, Source: "tcp", Kind: "ports", Payload: raw, Confidence: 0.95, ObservedAt: time.Now().UTC()}); err != nil {
 		return meta, err

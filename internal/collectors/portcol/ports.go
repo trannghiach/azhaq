@@ -364,6 +364,10 @@ func Notes(obs []types.StoredObservation) []string {
 			Filtered   []int    `json:"filtered_ports"`
 			UDPFilt    []int    `json:"udp_open_filtered"`
 			UDPUnlist  int      `json:"udp_unlisted"`
+			UDPClosed  int      `json:"udp_closed"`
+			ClosedAt   []int    `json:"udp_closed_ports"`
+			ClosedN    int      `json:"udp_closed_n"`
+			ClosedA    int      `json:"udp_closed_a"`
 			UDPSilentN int      `json:"udp_silent_ports"`
 			UDPSilentA int      `json:"udp_silent_addresses"`
 			Unresolved string   `json:"unresolved"`
@@ -396,6 +400,8 @@ func Notes(obs []types.StoredObservation) []string {
 			}
 			udp.silentN += p.UDPSilentN
 			udp.silentIPs += p.UDPSilentA
+			udp.closedN += p.ClosedN
+			udp.closedIPs += p.ClosedA
 			continue
 		}
 		if p.Unresolved != "" {
@@ -418,6 +424,7 @@ func Notes(obs []types.StoredObservation) []string {
 			who = p.Host
 		}
 		udp.add(who, p.UDPFilt, p.UDPUnlist, p.UDPLimit)
+		udp.addClosed(who, p.UDPClosed, p.ClosedAt)
 		if p.Unprobed > 0 {
 			unprobed = append(unprobed, fmt.Sprintf("%s: %d", p.IP, p.Unprobed))
 		}
@@ -479,6 +486,18 @@ func listOf(items []string, n int) string {
 		return strings.Join(items, ", ")
 	}
 	return fmt.Sprintf("%s and %d more", strings.Join(items[:n], ", "), len(items)-n)
+}
+
+// listOfN is up to n of items, then how many more of total there are (the
+// items may be fewer than total).
+func listOfN(items []string, n, total int) string {
+	if len(items) > n {
+		items = items[:n]
+	}
+	if more := total - len(items); more > 0 {
+		return fmt.Sprintf("%s and %d more", strings.Join(items, ", "), more)
+	}
+	return strings.Join(items, ", ")
 }
 
 // portList is "80, 443" with at most n ports, then how many more.

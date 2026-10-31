@@ -131,8 +131,8 @@ func TestUDPStates(t *testing.T) {
 	if len(r.OpenFiltered) != 1 || r.OpenFiltered[0].Port != quiet || r.OpenFiltered[0].State != UDPOpenFiltered {
 		t.Fatalf("open|filtered: %+v", r.OpenFiltered)
 	}
-	if r.Closed != 1 {
-		t.Fatalf("closed: %d", r.Closed)
+	if r.Closed != 1 || len(r.ClosedPorts) != 1 || r.ClosedPorts[0] != closed {
+		t.Fatalf("closed: %d %v, want [%d]", r.Closed, r.ClosedPorts, closed)
 	}
 	// An unknown port is asked a DNS query, an SNMP get, memcached's version
 	// and an empty datagram.

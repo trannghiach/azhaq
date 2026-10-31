@@ -3,6 +3,7 @@ package portcol
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -92,7 +93,10 @@ func TestSilentUDPPortsOfARange(t *testing.T) {
 	if addrRows != 0 || rng == nil || rng["udp_silent_addresses"] != float64(1) || rng["udp_silent_ports"] != float64(1) {
 		t.Fatalf("%d address rows, range row %v", addrRows, rng)
 	}
-	if n := Notes(obs); len(n) != 1 || !strings.Contains(n[0], "1 addresses of the ranges answered no UDP port") {
+	// The other addresses of the block refuse the port: counted, not rows.
+	n := Notes(obs)
+	if len(n) != 2 || !strings.Contains(n[1], "1 addresses of the ranges answered no UDP port") ||
+		n[0] != "3 addresses of the ranges refused UDP ports (ICMP port unreachable, 3 ports closed in all) and showed nothing else: they are not listed" {
 		t.Errorf("notes %q", n)
 	}
 
@@ -114,7 +118,7 @@ func TestSilentUDPPortsOfARange(t *testing.T) {
 	if listed != 1 {
 		t.Errorf("%d silent ports listed, want 1", listed)
 	}
-	if n := Notes(obs); len(n) != 1 || !strings.HasPrefix(n[0], "1 UDP port open|filtered") {
+	if n := Notes(obs); len(n) != 3 || !strings.HasPrefix(n[0], "1 UDP port open|filtered") || !strings.HasPrefix(n[1], "1 UDP port closed (ICMP port unreachable): 127.0.0.2:") {
 		t.Errorf("notes %q", n)
 	}
 }
@@ -147,4 +151,40 @@ func TestSilentUDPPortCountedOnce(t *testing.T) {
 	if len(n) != 1 || !strings.HasPrefix(n[0], "2 UDP ports open|filtered") {
 		t.Errorf("notes %q", n)
 	}
+}
+
+// The ports a row refused are named in the summary: a few, then how many
+// more; two rows of an address count once, and an address given on its own
+// has a row though nothing else answered.
+func TestClosedUDPPortsAreInTheSummary(t *testing.T) {
+	var rep portscan.UDPReport
+	for _, p := range []int{9, 19, 31, 40, 53} {
+		rep.ClosedPorts = append(rep.ClosedPorts, p)
+	}
+	rep.Closed = len(rep.ClosedPorts)
+	row := map[string]any{"host": "a.example", "ip": "10.0.0.9"}
+	addUDP(row, rep, 5)
+	raw, _ := json.Marshal(row)
+	o := types.StoredObservation{Observation: types.Observation{Collector: Name, Payload: raw}}
+	n := Notes([]types.StoredObservation{o, o})
+	if len(n) != 1 || n[0] != "5 UDP ports closed (ICMP port unreachable): 10.0.0.9:9, 10.0.0.9:19, 10.0.0.9:31 and 2 more" {
+		t.Errorf("notes %q", n)
+	}
+
+	port := closedUDPPort(t)
+	obs := runUDPPrefix(t, "127.0.0.1/32", []int{port})
+	if n := Notes(obs); len(n) != 1 || n[0] != fmt.Sprintf("1 UDP port closed (ICMP port unreachable): 127.0.0.1:%d", port) {
+		t.Errorf("one address, one closed port: notes %q", n)
+	}
+}
+
+func closedUDPPort(t *testing.T) int {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip(err)
+	}
+	p := pc.LocalAddr().(*net.UDPAddr).Port
+	pc.Close()
+	return p
 }

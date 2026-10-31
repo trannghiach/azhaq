@@ -57,7 +57,10 @@ type UDPPort struct {
 type UDPReport struct {
 	Open         []UDPPort
 	OpenFiltered []UDPPort
-	Closed       int
+	// Closed counts the ports the host refused with an ICMP port
+	// unreachable; ClosedPorts are those ports, in order.
+	Closed      int
+	ClosedPorts []int
 	// Limited counts the silent ports that were not asked again at the
 	// pace of an ICMP rate limit, though other ports of the host were
 	// refused: some of them may be closed.
@@ -83,7 +86,7 @@ func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UD
 	s.init()
 	var r UDPReport
 	answered, silent, closed, err := s.udpPass(ctx, host, ip, ports, 0, 0)
-	r.Open, r.Closed = answered, closed
+	r.Open, r.ClosedPorts = answered, closed
 	var spent []int // asked every way their protocol has
 	for pass := 1; err == nil && len(silent) > 0 && pass <= 3; pass++ {
 		var ask []int
@@ -99,7 +102,7 @@ func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UD
 			break
 		}
 		var gap time.Duration
-		if pass == 1 && closed > 0 && !isLoopback(ip) {
+		if pass == 1 && len(closed) > 0 && !isLoopback(ip) {
 			if len(silent) <= icmpPaceMax {
 				gap = icmpGap
 			} else {
@@ -107,11 +110,13 @@ func (s *Scanner) ScanUDP(ctx context.Context, host, ip string, ports []int) (UD
 			}
 		}
 		var again []UDPPort
-		var more int
+		var more []int
 		again, silent, more, err = s.udpPass(ctx, host, ip, silent, pass, gap)
 		r.Open = append(r.Open, again...)
-		r.Closed += more
+		r.ClosedPorts = append(r.ClosedPorts, more...)
 	}
+	sort.Ints(r.ClosedPorts)
+	r.Closed = len(r.ClosedPorts)
 	silent = append(silent, spent...)
 	for _, p := range silent {
 		r.OpenFiltered = append(r.OpenFiltered, UDPPort{Port: p, State: UDPOpenFiltered, Service: udpGuess(p)})
@@ -135,7 +140,7 @@ var (
 	}
 )
 
-func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int, gap time.Duration) (open []UDPPort, silent []int, closed int, err error) {
+func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pass int, gap time.Duration) (open []UDPPort, silent, closed []int, err error) {
 	var mu sync.Mutex
 	sem := make(chan struct{}, s.udpWorkers)
 	var wg sync.WaitGroup
@@ -175,7 +180,7 @@ func (s *Scanner) udpPass(ctx context.Context, host, ip string, ports []int, pas
 			case UDPOpen:
 				open = append(open, u)
 			case UDPClosed:
-				closed++
+				closed = append(closed, p)
 			default:
 				silent = append(silent, p)
 			}
