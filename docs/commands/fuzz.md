@@ -178,13 +178,37 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-scope` | string |  | a program's scope: a file or hackerone, bugcrowd, intigriti, yeswehack |
 | `-program` | string |  | the program to take from a -scope list |
 
+**What to ask**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-mode` | string | `clusterbomb` | how several wordlists combine: clusterbomb (every combination), pitchfork (line by line) or sniper (one wordlist in each §marked§ place of the request in turn) |
+| `-e` | string |  | extensions added to each FUZZ word, comma-separated: .php,.bak |
+| `-recursion` | bool |  | descend into directories found (the URL must end with FUZZ) |
+| `-recursion-depth` | int |  | levels of recursion (0: no limit) |
+
+**Matchers and filters**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-mc` | string |  | match these statuses, comma-separated values and ranges, or all (default 200-299,301,302,307,401,403,405,500, unless another matcher is given) |
+| `-mr` | string |  | match answers (headers and body) with this regexp; the keyword stands for its input |
+| `-fc` | string |  | filter out these statuses |
+| `-fs` | string |  | filter out these response sizes |
+| `-fl` | string |  | filter out these line counts |
+| `-fw` | string |  | filter out these word counts |
+| `-ac` | bool |  | calibrate the filters on names that cannot exist, as ffuf does (off by default, as in ffuf; -acs, -acc and -ach turn it on too) |
+
 **The request**
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `-X` | string |  | HTTP method (default GET, POST with -d); the keyword may stand in it |
 | `-d` | string |  | request body; the keyword may stand in it |
 | `-H` | string, repeatable |  | header "Name: value"; the keyword may stand in name and value, Host included (repeatable). A header that names a host (Host, X-Forwarded-Host, X-Host, X-Original-Host) joins the target when no -allow, -deny or -scope is given; with one, the host must be in the scope |
 | `-r` | bool |  | follow redirects |
+| `-request` | string |  | read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds |
+| `-request-proto` | string | `https` | the protocol for the URL a -request file's Host header gives |
 
 **Before and after each request**
 
@@ -223,6 +247,13 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-se-after` | int |  | stop after this many requests in a row failing, in place of -se's twice -t |
 | `-control` | string |  | steer the run from this file: lines added to it are commands (rate N, pause, resume, stop, fc\|fs\|fw\|fl\|fr\|ft VALUE, afc… to add, none to remove, show, savejson FILE, queueshow, queuedel N, queueskip) |
 
+**Session and network**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-x` | string |  | send every request through this proxy: an http, https, socks5 or socks5h URL |
+| `-replay-proxy` | string |  | send each match once more through this proxy (Burp, for the history); the copy is the proxy's own, not counted by -max-requests or -rate and not in the ledger |
+
 **Output**
 
 | Flag | Type | Default | Meaning |
@@ -230,19 +261,19 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-db` | string |  | keep the matches in this database for query, show, export and diff (none by default) |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
 | `-o` | string |  | write the report to this file, in the format -of says (json by default; a name ending .txt gets what stdout shows, as before) |
+| `-of` | string |  | the format of -o: json, ejson, html, md, csv, ecsv, all (all writes one file for each, with the suffixes) |
 | `-silent` | bool |  | print the input values only, no progress; the summary only when something failed |
+| `-s` | bool |  | ffuf's name for -silent |
 | `-v` | bool |  | print the full URL and redirect location with each result |
 | `-c` | bool |  | colour the status of each result in the text output |
 
 <details>
-<summary>Flags familiar from ffuf, other names and flags accepted with no effect (58)</summary>
+<summary>Flags familiar from ffuf, other names and flags accepted with no effect (40)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
 | `-D` | bool |  | dirsearch wordlists: %EXT% in a line stands for each -e extension | ffuf's name |
 | `-V` | bool |  | print the version | ffuf's name |
-| `-X` | string |  | HTTP method (default GET, POST with -d); the keyword may stand in it | ffuf's name |
-| `-ac` | bool |  | calibrate the filters on names that cannot exist, as ffuf does (off by default, as in ffuf; -acs, -acc and -ach turn it on too) | ffuf's name |
 | `-acc` | string, repeatable |  | a name to calibrate with instead of the random ones | ffuf's name |
 | `-ach` | bool |  | calibrate for each host and directory of the path (with a Host header or a keyword in the host) | ffuf's name |
 | `-ack` | string | `FUZZ` | the keyword calibration replaces | ffuf's name |
@@ -253,15 +284,10 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-config` | string |  | read these settings from an ffuf configuration file (default: ~/.config/ffuf/ffufrc, else ~/.ffufrc); flags override it | ffuf's name |
 | `-data-binary` | string |  | ffuf's alias of -d | ffuf's name |
 | `-debug-log` | string |  | write each failed request and its error to this file | ffuf's name |
-| `-e` | string |  | extensions added to each FUZZ word, comma-separated: .php,.bak | ffuf's name |
 | `-enc` | string, repeatable |  | encoders for a keyword: 'FUZZ:urlencode b64encode' (repeatable); one of b64decode, b64encode, hexdecode, hexencode, jsonescape, jsonunescape, lower, md5, sha1, sha224, sha256, sha384, sha512, unicodedecode, unicodeencodeall, upper, urldecode, urlencode, urlencodeall, utf16, utf16be, xmlescape, xmlunescape or a .tmpl file with #PAYLOAD# | ffuf's name |
-| `-fc` | string |  | filter out these statuses | ffuf's name |
-| `-fl` | string |  | filter out these line counts | ffuf's name |
 | `-fmode` | string | `or` | filters: an answer is dropped by any (or) or by all (and) of them | ffuf's name |
 | `-fr` | string |  | filter out answers matching this regexp | ffuf's name |
-| `-fs` | string |  | filter out these response sizes | ffuf's name |
 | `-ft` | string |  | filter out answers by milliseconds to the first byte: >MS or <MS | ffuf's name |
-| `-fw` | string |  | filter out these word counts | ffuf's name |
 | `-http2` | bool |  | use HTTP/2 where the server offers it | ffuf's name |
 | `-ic` | bool |  | ignore comments in wordlists | ffuf's name |
 | `-ignore-body` | bool |  | do not read the answer's body: size is the Content-Length, words and lines 0 | ffuf's name |
@@ -269,30 +295,19 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-input-num` | int | `100` | how many inputs an -input-cmd gives | ffuf's name |
 | `-input-shell` | string | `/bin/sh` | the shell that runs an -input-cmd | ffuf's name |
 | `-maxtime-job` | seconds |  | give up a job (the first one, or a directory found by -recursion) after this many seconds and go on with the next (0: no limit) | ffuf's name |
-| `-mc` | string |  | match these statuses, comma-separated values and ranges, or all (default 200-299,301,302,307,401,403,405,500, unless another matcher is given) | ffuf's name |
 | `-ml` | string |  | match these line counts (values and ranges) | ffuf's name |
 | `-mmode` | string | `or` | matchers: an answer must match any (or) or all (and) of them | ffuf's name |
-| `-mode` | string | `clusterbomb` | how several wordlists combine: clusterbomb (every combination), pitchfork (line by line) or sniper (one wordlist in each §marked§ place of the request in turn) | ffuf's name |
-| `-mr` | string |  | match answers (headers and body) with this regexp; the keyword stands for its input | ffuf's name |
 | `-ms` | string |  | match these response sizes (values and ranges) | ffuf's name |
 | `-mt` | string |  | match answers by milliseconds to the first byte: >MS or <MS | ffuf's name |
 | `-mw` | string |  | match these word counts (values and ranges) | ffuf's name |
 | `-od` | string |  | keep the request and answer of each match as a file in this directory (its name is shown with the match) | ffuf's name |
-| `-of` | string |  | the format of -o: json, ejson, html, md, csv, ecsv, all (all writes one file for each, with the suffixes) | ffuf's name |
 | `-or` | bool |  | write no -o file when there are no matches | ffuf's name |
 | `-raw` | bool |  | send the path and query as written, not encoded | ffuf's name |
-| `-recursion` | bool |  | descend into directories found (the URL must end with FUZZ) | ffuf's name |
-| `-recursion-depth` | int |  | levels of recursion (0: no limit) | ffuf's name |
 | `-recursion-strategy` | string | `default` | default: directories that redirect to themselves; greedy: every match | ffuf's name |
-| `-replay-proxy` | string |  | send each match once more through this proxy (Burp, for the history); the copy is the proxy's own, not counted by -max-requests or -rate and not in the ledger | ffuf's name |
-| `-request` | string |  | read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds | ffuf's name |
-| `-request-proto` | string | `https` | the protocol for the URL a -request file's Host header gives | ffuf's name |
-| `-s` | bool |  | ffuf's name for -silent | ffuf's name |
 | `-sa` | bool |  | stop on all of these: -sf, over 20% of answers 429, and -se | ffuf's name |
 | `-se` | bool |  | stop on spurious errors: twice -t requests in a row failing (without it, five requests in a row that got no answer stop the run) | ffuf's name |
 | `-sf` | bool |  | stop when more than 95% of the first 50 or more answers are 403 | ffuf's name |
 | `-sni` | string |  | the server name for TLS (the keyword does not work here) | ffuf's name |
-| `-x` | string |  | send every request through this proxy: an http, https, socks5 or socks5h URL | ffuf's name |
 | `-cookie` | string, repeatable |  | ffuf's alias of -b | other name |
 | `-data` | string |  | ffuf's alias of -d | other name |
 | `-data-ascii` | string |  | ffuf's alias of -d | other name |

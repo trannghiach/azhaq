@@ -119,6 +119,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-rate` | float |  | parameter requests per second per host (0: no limit, as arjun) |
 | `-t` | int | `5` | requests in flight per page (arjun -t) |
 | `-d` | float |  | seconds to wait before each request, one at a time (arjun -d) |
+| `-T` | float | `15` | seconds to wait for each request; one that times out is asked again with 5 s more, up to 20 s (arjun -T) |
 | `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
 | `-timeout` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
 | `-urls-timeout` | duration | `3m0s` | time each archive source gets per domain (the Wayback Machine's answer for a large domain takes several minutes) |
@@ -145,11 +146,10 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
 <details>
-<summary>Flags familiar from arjun (3)</summary>
+<summary>Flags familiar from arjun (2)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
-| `-T` | float | `15` | seconds to wait for each request; one that times out is asked again with 5 s more, up to 20 s (arjun -T) | arjun's name |
 | `-include` | string |  | sent with every request: a query (a=1&b=2) for GET; for a body a form, a JSON object, or XML, or a template with $arjun$ where the names go | arjun's name |
 | `-stable` | bool |  | one request at a time, 3 to 9 s apart, and 30 s wait after a refused connection (arjun --stable) | arjun's name |
 

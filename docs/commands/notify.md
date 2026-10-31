@@ -167,19 +167,19 @@ custom failed: POST http://host/…: 500 … (after 3 tries) ×4 (id ops)
 | `-proxy` | string |  | HTTP or SOCKS5 proxy URL for the notification requests (default: the environment's); certificates are verified |
 | `-delay` | float |  | delay in seconds before each message |
 | `-rate-limit` | int | `1` | maximum number of requests to send per second (0: no limit) |
+| `-bulk` | bool |  | pack lines into messages of up to -char-limit characters instead of one message per line |
+| `-id` | string, repeatable |  | send only to the configured entries with this id (repeatable or comma-separated) |
 | `-json` | bool |  | one JSON object per message on standard output, the summary as JSON on standard error |
 | `-silent` | bool |  | no summary unless something failed |
 
 <details>
-<summary>Flags familiar from notify, other names and flags accepted with no effect (21)</summary>
+<summary>Flags familiar from notify, other names and flags accepted with no effect (19)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
-| `-bulk` | bool |  | pack lines into messages of up to -char-limit characters instead of one message per line | notify's name |
 | `-char-limit` | int | `4000` | max character limit per message: a longer line goes out in pieces that end in ... | notify's name |
 | `-config` | string |  | notify configuration file: YAML of these flags, by their long names ($HOME/.config/notify/config.yaml when it exists); a flag given here wins | notify's name |
 | `-data` | string |  | input file to send for notify (default: standard input) | notify's name |
-| `-id` | string, repeatable |  | send only to the configured entries with this id (repeatable or comma-separated) | notify's name |
 | `-msg-format` | string |  | format of each message: {{data}}, {{date}}, {{time}}, {{datetime}}, {{count}}; wins over the provider's *_format | notify's name |
 | `-provider` | string, repeatable |  | provider to send the notification to: slack, discord, pushover, googlechat, smtp, teams, telegram, custom, gotify (repeatable or comma-separated) | notify's name |
 | `-verbose` | bool |  | log each delivery and each retry | notify's name |

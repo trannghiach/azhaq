@@ -94,7 +94,16 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-w` | string |  | wordlist (default: SecLists' common.txt, built in: 4750 words) |
+| `-e` | string |  | also try each word with these extensions, comma-separated (php,bak) |
 | `-depth` | int | `1` | directory levels to sweep; 2 also sweeps directories found |
+
+**Matchers and filters**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-mc` | string |  | report only these statuses (comma-separated, ranges, or all; default ffuf's: 200-299,301,302,307,401,403,405,500) |
+| `-fc` | string |  | hide these statuses |
+| `-fs` | string |  | hide these response sizes |
 
 **Scope and safety**
 
@@ -133,17 +142,13 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
 <details>
-<summary>Flags familiar from ffuf (11)</summary>
+<summary>Flags familiar from ffuf (7)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
-| `-e` | string |  | also try each word with these extensions, comma-separated (php,bak) | ffuf's name |
-| `-fc` | string |  | hide these statuses | ffuf's name |
 | `-fl` | string |  | hide these line counts | ffuf's name |
 | `-fr` | string |  | hide answers whose headers or body match this regular expression | ffuf's name |
-| `-fs` | string |  | hide these response sizes | ffuf's name |
 | `-fw` | string |  | hide these word counts | ffuf's name |
-| `-mc` | string |  | report only these statuses (comma-separated, ranges, or all; default ffuf's: 200-299,301,302,307,401,403,405,500) | ffuf's name |
 | `-ml` | string |  | report only these line counts | ffuf's name |
 | `-mr` | string |  | report only answers whose headers or body match this regular expression | ffuf's name |
 | `-ms` | string |  | report only these response sizes (values and ranges, 100-200) | ffuf's name |

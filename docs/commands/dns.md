@@ -141,11 +141,39 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 | `-w` | string, repeatable |  | words to guess: a file, a comma list or -; with -d DOMAIN resolves WORD.DOMAIN for each (wildcard answers left out) |
 | `-start` | int |  | skip this many names at the start of the input, in order after de-duplication |
 
+**Record types**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-a` | bool |  | ask A records and print the names that have one (the default) |
+| `-aaaa` | bool |  | ask AAAA records and print the names that have one |
+| `-cname` | bool |  | ask CNAME records and print the names that have one |
+| `-ns` | bool |  | ask NS records and print the names that have one |
+| `-txt` | bool |  | ask TXT records and print the names that have one |
+| `-srv` | bool |  | ask SRV records and print the names that have one |
+| `-ptr` | bool |  | ask PTR records and print the names that have one |
+| `-mx` | bool |  | ask MX records and print the names that have one |
+| `-soa` | bool |  | ask SOA records and print the names that have one |
+| `-caa` | bool |  | ask CAA records and print the names that have one |
+| `-any` | bool |  | ask ANY records and print the names that have one |
+| `-axfr` | bool |  | ask each name server of the name, and the -resolvers you gave, for the whole zone over TCP (active; the name servers must be in scope: -allow, -scope) |
+| `-all` | bool |  | ask every type but AXFR and print the records (-resp); an address gets only PTR |
+| `-e` | string, repeatable |  | types not to ask with -all, comma-separated |
+
 **What to ask**
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-no-wildcard` | bool |  | print names even when they only resolve because their zone has a wildcard |
+
+**Answer format and filters**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-resp` | bool |  | print each record as: NAME [TYPE] [VALUE] |
+| `-resp-only` | bool |  | print the values of the records only |
+| `-rcode` | string |  | print NAME [RCODE] for names whose answer has one of these codes, comma-separated (noerror, nxdomain, servfail, refused, or a number); a name with no records is shown |
+| `-response-type-filter` | string |  | print names with no record of these types, comma-separated (a, cname, ...) |
 
 **Scope and safety**
 
@@ -185,39 +213,21 @@ The summary also lists failures per kind of error, and takeover candidates: a CN
 | `-v` | bool |  | print each name that got no records, with its status, on stderr |
 
 <details>
-<summary>Flags familiar from dnsx, other names and flags accepted with no effect (52)</summary>
+<summary>Flags familiar from dnsx, other names and flags accepted with no effect (34)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
-| `-a` | bool |  | ask A records and print the names that have one (the default) | dnsx's name |
-| `-aaaa` | bool |  | ask AAAA records and print the names that have one | dnsx's name |
-| `-all` | bool |  | ask every type but AXFR and print the records (-resp); an address gets only PTR | dnsx's name |
-| `-any` | bool |  | ask ANY records and print the names that have one | dnsx's name |
 | `-asn` | bool |  | add the autonomous system of each address (as-number, as-name, as-country, as-range), asked of Team Cymru's DNS service | dnsx's name |
-| `-axfr` | bool |  | ask each name server of the name, and the -resolvers you gave, for the whole zone over TCP (active; the name servers must be in scope: -allow, -scope) | dnsx's name |
-| `-caa` | bool |  | ask CAA records and print the names that have one | dnsx's name |
 | `-cdn` | bool |  | name the CDN, WAF or cloud in front of each name (cdn, cdn-name, cdn-type) | dnsx's name |
-| `-cname` | bool |  | ask CNAME records and print the names that have one | dnsx's name |
-| `-e` | string, repeatable |  | types not to ask with -all, comma-separated | dnsx's name |
 | `-health-check` | bool |  | ask each resolver a known name, print how it answered and how long it took, and exit | dnsx's name |
 | `-hostsfile` | bool |  | answer from the system hosts file before asking resolvers | dnsx's name |
-| `-mx` | bool |  | ask MX records and print the names that have one | dnsx's name |
-| `-ns` | bool |  | ask NS records and print the names that have one | dnsx's name |
 | `-omit-raw` | bool |  | leave the records as text (all) out of -json | dnsx's name |
 | `-output-template` | string |  | print each name as this template; {{host}}, {{a}}, {{ip}} and the other -json fields, lists joined by commas | dnsx's name |
-| `-ptr` | bool |  | ask PTR records and print the names that have one | dnsx's name |
 | `-raw` | bool |  | print the raw DNS answers, as dig does | dnsx's name |
-| `-rcode` | string |  | print NAME [RCODE] for names whose answer has one of these codes, comma-separated (noerror, nxdomain, servfail, refused, or a number); a name with no records is shown | dnsx's name |
-| `-resp` | bool |  | print each record as: NAME [TYPE] [VALUE] | dnsx's name |
-| `-resp-only` | bool |  | print the values of the records only | dnsx's name |
-| `-response-type-filter` | string |  | print names with no record of these types, comma-separated (a, cname, ...) | dnsx's name |
-| `-soa` | bool |  | ask SOA records and print the names that have one | dnsx's name |
-| `-srv` | bool |  | ask SRV records and print the names that have one | dnsx's name |
 | `-stats` | bool |  | print progress on stderr every 5 seconds | dnsx's name |
 | `-stream` | bool |  | names come from stdin as they are written and are not de-duplicated | dnsx's name |
 | `-trace` | bool |  | follow the delegations from the root servers to the answer (the roots are asked, so use it on names you may ask) | dnsx's name |
 | `-trace-max-recursion` | int | `32` | most steps of -trace | dnsx's name |
-| `-txt` | bool |  | ask TXT records and print the names that have one | dnsx's name |
 | `-wildcard-domain` | string |  | also probe this zone for a wildcard (a zone the registrable domain does not reach, such as corp.internal) | dnsx's name |
 | `-aw` | bool |  | same as -auto-wildcard | other name |
 | `-debug` | bool |  | same as -raw | other name |

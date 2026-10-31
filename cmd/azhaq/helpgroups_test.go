@@ -109,9 +109,15 @@ func TestProbeHelpShowsOwnFlagsOnly(t *testing.T) {
 			t.Errorf("probe -h lacks %q", want)
 		}
 	}
-	for _, httpx := range []string{"sc", "title", "td", "mc", "fr", "irr"} {
-		if rows[httpx] {
-			t.Errorf("probe -h lists httpx's -%s", httpx)
+	// httpx's flags people use stay shown, with the matchers and fields; no other one does.
+	for _, used := range []string{"sc", "title", "td", "ip", "mc", "fc", "fr", "irr", "tls-grab"} {
+		if !rows[used] {
+			t.Errorf("probe -h leaves out httpx's -%s, which people use", used)
+		}
+	}
+	for _, rare := range []string{"cdn", "favicon", "asn", "wc", "rt", "csv", "extract-regex"} {
+		if rows[rare] {
+			t.Errorf("probe -h lists httpx-only -%s", rare)
 		}
 	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
@@ -119,7 +125,7 @@ func TestProbeHelpShowsOwnFlagsOnly(t *testing.T) {
 	if want := len(spec.hidden); !strings.HasPrefix(last, itoa(want)+" more flags (httpx's names, aliases, accepted only): ") || !strings.HasSuffix(last, "azhaq probe -h all") {
 		t.Errorf("probe -h ends with %q, want the -h all line for %d flags", last, want)
 	}
-	if n := len(lines); n > 80 {
+	if n := len(lines); n > 100 {
 		t.Errorf("probe -h is %d lines, want a short page", n)
 	}
 }
@@ -197,7 +203,7 @@ func TestHelpAllHoldsEveryFlag(t *testing.T) {
 	if help != short {
 		t.Error("azhaq help probe differs from azhaq probe -h")
 	}
-	if hAll == short || !strings.Contains(hAll, "  -sc ") {
+	if hAll == short || !strings.Contains(hAll, "  -cdn ") {
 		t.Error("help probe all is not the long page")
 	}
 }
@@ -299,14 +305,17 @@ func TestHelpJSONMarksHiddenFlagsAndCommands(t *testing.T) {
 		t.Errorf("hidden commands %v, want new, worker and bench", hiddenCmd)
 	}
 	for _, c := range []struct{ cmd, flag, hidden, why string }{
-		{"probe", "sc", "yes", "compat:httpx"},
+		{"probe", "sc", "", ""},
+		{"probe", "cdn", "yes", "compat:httpx"},
 		{"probe", "status-code", "yes", "alias"},
 		{"probe", "u", "", ""},
 		{"probe", "deny-path", "", ""},
 		{"run", "dirs-ext", "yes", "rare"},
 		{"plan", "dirs-ext", "yes", "rare"},
 		{"run", "allow", "", ""},
-		{"fuzz", "mc", "yes", "compat:ffuf"},
+		{"fuzz", "mc", "", ""},
+		{"fuzz", "ic", "yes", "compat:ffuf"},
+		{"dns", "a", "", ""},
 		{"crawl", "nc", "yes", "accepted"},
 	} {
 		got, ok := flags[c.cmd][c.flag]

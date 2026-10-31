@@ -227,6 +227,7 @@ On tesla.com, `subs -live -dns-rate 10` with two resolvers took 161 s and listed
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
 | `-d` | string, repeatable |  | domain (repeatable; a comma list, a URL or a name with a trailing dot is cleaned, as subfinder does) |
+| `-dL` | string |  | file of domains (- for stdin) |
 
 **What to ask**
 
@@ -236,6 +237,8 @@ On tesla.com, `subs -live -dns-rate 10` with two resolvers took 161 s and listed
 | `-w` | string |  | also resolve WORD.domain for each word in this file, like puredns bruteforce (active DNS; the names found are live) |
 | `-permute` | bool |  | also resolve variations of the names found (api → api-dev, api2, dev.api), like alterx \| dnsx (active DNS) |
 | `-all-sources` | bool |  | also run slower subdomain sources outside the default set |
+| `-sources` | string |  | subdomain sources to run, comma-separated (default: the default set; none: no source, for a DNS-only run) |
+| `-m` | string, repeatable |  | only names matching these (comma list or file; * matches anything), as subfinder -m |
 | `-providers` | string |  | API keys per source, YAML (default ~/.config/azhaq/providers.yaml, else subfinder's provider-config.yaml) |
 
 **Pace and limits**
@@ -267,29 +270,26 @@ On tesla.com, `subs -live -dns-rate 10` with two resolvers took 161 s and listed
 | `-db` | string |  | keep the graph in this database for query, show, export and diff (default: a temporary one) |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
 | `-o` | string |  | also write results to this file |
+| `-oI` | bool |  | text output: host,ip,source, with -live (subfinder -oI); -json rows get an ip field |
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
 | `-v` | bool |  | print a line for every finished task, not only failures |
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
+| `-ls` | bool |  | list the sources and exit: name, then * if a key is required and ~ if one improves the answer; with -json one object each (name, default, recursive, keyRequirement) |
+| `-stats` | bool |  | after the run, one note per source: requests, names, errors and seconds, as subfinder -stats |
 | `-no-history` | bool |  | do not read or write the name history (names earlier runs found, kept under $AZHAQ_DATA_DIR, else ~/.local/share/azhaq; with -live each is checked by DNS in the run) |
 
 <details>
-<summary>Flags familiar from subfinder, other names and flags accepted with no effect (17)</summary>
+<summary>Flags familiar from subfinder, other names and flags accepted with no effect (11)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
 | `-cs` | bool |  | text output: host,[source,source] (subfinder -cs) | subfinder's name |
-| `-dL` | string |  | file of domains (- for stdin) | subfinder's name |
 | `-exclude-sources` | string |  | subdomain sources never to run, comma-separated | subfinder's name |
 | `-f` | string, repeatable |  | leave out names matching these (comma list or file), as subfinder -f | subfinder's name |
 | `-filter-regex` | string, repeatable |  | leave out names matching this regular expression | subfinder's name |
-| `-ls` | bool |  | list the sources and exit: name, then * if a key is required and ~ if one improves the answer; with -json one object each (name, default, recursive, keyRequirement) | subfinder's name |
-| `-m` | string, repeatable |  | only names matching these (comma list or file; * matches anything), as subfinder -m | subfinder's name |
 | `-match-regex` | string, repeatable |  | only names matching this regular expression | subfinder's name |
 | `-oD` | string |  | write one file per domain into this directory (NAME.txt, NAME.json with -json), as well as stdout | subfinder's name |
-| `-oI` | bool |  | text output: host,ip,source, with -live (subfinder -oI); -json rows get an ip field | subfinder's name |
 | `-recursive` | bool |  | only sources that look for subdomains of subdomains, as subfinder -recursive (see -ls) | subfinder's name |
-| `-sources` | string |  | subdomain sources to run, comma-separated (default: the default set; none: no source, for a DNS-only run) | subfinder's name |
-| `-stats` | bool |  | after the run, one note per source: requests, names, errors and seconds, as subfinder -stats | subfinder's name |
 | `-version` | bool |  | print the version and exit | subfinder's name |
 | `-nW` | bool |  | same as -live (subfinder's name) | other name |
 | `-oJ` | bool |  | same as -json (subfinder's name) | other name |

@@ -75,15 +75,15 @@ var helpSpecs = map[string]helpSpec{
 	},
 	"subs": {
 		groups: []helpGroup{
-			{"Targets and input", `d`},
-			{"What to ask", `live w permute all-sources providers`},
+			{"Targets and input", `d dL`},
+			{"What to ask", `live w permute all-sources sources m providers`},
 			{"Pace and limits", `source-rate source-rates source-timeout max-time max-body max-results max-names dns-rate t timeout`},
 			{"Network", `resolvers proxy`},
-			{"Output", `db json o silent v fail-on-errors no-history`},
+			{"Output", `db json o oI silent v fail-on-errors ls stats no-history`},
 		},
 		hidden: map[string]string{
 			"compat:subfinder": `
-				cs dL exclude-sources f filter-regex ls m match-regex oD oI recursive sources stats version
+				cs exclude-sources f filter-regex match-regex oD recursive version
 			`,
 			"alias": `
 				nW oJ
@@ -96,7 +96,9 @@ var helpSpecs = map[string]helpSpec{
 	"dns": {
 		groups: []helpGroup{
 			{"Targets and input", `d l w start`},
+			{"Record types", `a aaaa cname ns txt srv ptr mx soa caa any axfr all e`},
 			{"What to ask", `no-wildcard`},
+			{"Answer format and filters", `resp resp-only rcode response-type-filter`},
 			{"Scope and safety", `allow deny scope program`},
 			{"Pace and limits", `rl t dns-rate retry timeout maxtime`},
 			{"Network", `resolvers proxy`},
@@ -104,9 +106,8 @@ var helpSpecs = map[string]helpSpec{
 		},
 		hidden: map[string]string{
 			"compat:dnsx": `
-				a aaaa all any asn axfr caa cdn cname e health-check hostsfile mx ns omit-raw output-template
-				ptr raw rcode resp resp-only response-type-filter soa srv stats stream trace trace-max-recursion
-				txt wildcard-domain
+				asn cdn health-check hostsfile omit-raw output-template raw stats stream trace
+				trace-max-recursion wildcard-domain
 			`,
 			"alias": `
 				aw debug disable-update-check hc hf j or ot r rate-limit rc re recon ro rtf threads wd wt
@@ -118,8 +119,11 @@ var helpSpecs = map[string]helpSpec{
 	},
 	"probe": {
 		groups: []helpGroup{
-			{"Targets and input", `u l p scope program max-ips`},
-			{"What to ask", `no-follow no-tech`},
+			{"Targets and input", `u l p scope program max-ips no-stdin`},
+			{"What to ask", `path x body probe fr no-follow no-tech tls-grab hash jarm`},
+			{"Matchers and filters", `mc ms mdc fc`},
+			{"Output fields", `sc title td ip location`},
+			{"Raw responses", `sr srd irh irr debug-req`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger`},
 			{"Pace and limits", `rate rl delay host-parallel parallel dns-rate req-timeout timeout max-requests`},
 			{"Session and network", `H cookie proxy resolvers`},
@@ -127,19 +131,17 @@ var helpSpecs = map[string]helpSpec{
 		},
 		hidden: map[string]string{
 			"compat:httpx": `
-				asn auto-referer body body-preview cdn cname content-length content-type cpe csp-probe csv
-				csv-output-encoding custom-fingerprint-file debug debug-req debug-resp exclude
-				exclude-output-fields extract-fqdn extract-preset extract-regex favicon fc filter-cdn
-				filter-condition filter-duplicates filter-error-page filter-favicon filter-length
-				filter-line-count filter-page-type filter-regex filter-response-time filter-string
-				filter-word-count follow-host-redirects fr hash http2 include-chain include-response-base64
-				input-mode ip irh irr j jarm knowledge-base leave-default-ports line-count list-dsl-variables
-				location markdown match-cdn match-favicon match-length match-line-count match-regex
-				match-response-time match-word-count max-host-error max-redirects maxhr mc mdc method ms
-				no-decode no-fallback no-stdin omit-body output-all path pipeline probe probe-all-ips
-				random-agent request respect-hsts response-size-to-read response-size-to-save response-time
-				retries rlm sc screenshot sni-name sr srd store-chain strip target td title tls-grab tls-probe
-				vhost vhost-input web-server websocket word-count wordpress x
+				asn auto-referer body-preview cdn cname content-length content-type cpe csp-probe csv
+				csv-output-encoding custom-fingerprint-file debug debug-resp exclude exclude-output-fields
+				extract-fqdn extract-preset extract-regex favicon filter-cdn filter-condition filter-duplicates
+				filter-error-page filter-favicon filter-length filter-line-count filter-page-type filter-regex
+				filter-response-time filter-string filter-word-count follow-host-redirects http2 include-chain
+				include-response-base64 input-mode j knowledge-base leave-default-ports line-count
+				list-dsl-variables markdown match-cdn match-favicon match-length match-line-count match-regex
+				match-response-time match-word-count max-host-error max-redirects maxhr method no-decode
+				no-fallback omit-body output-all pipeline probe-all-ips random-agent request respect-hsts
+				response-size-to-read response-size-to-save response-time retries rlm screenshot sni-name
+				store-chain strip target tls-probe vhost vhost-input web-server websocket word-count wordpress
 			`,
 			"alias": `
 				bp cff cl csvo ct e efqdn eof ep er fcdn fd fdc fe fep ffc fhr filter-code fl flc
@@ -156,37 +158,37 @@ var helpSpecs = map[string]helpSpec{
 	"crawl": {
 		groups: []helpGroup{
 			{"Targets and input", `u l scope program`},
-			{"What to ask", `d paths sweep fill-forms no-form-fill per-template no-follow no-map-guess browser interact interact-clicks`},
-			{"What to list", `assets no-catchall rejected`},
+			{"What to ask", `d paths sweep fill-forms no-form-fill per-template no-follow no-map-guess browser interact interact-clicks fs kf jsl`},
+			{"What to list", `assets no-catchall rejected em ndef do`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger submit-forms browser-writes`},
-			{"Pace and limits", `rl delay backoff retry host-rate host-parallel parallel request-timeout max-requests max-host-requests max-items max-response-size`},
+			{"Pace and limits", `rl delay backoff retry host-rate hrl host-parallel parallel request-timeout ct max-requests max-host-requests max-items max-response-size`},
 			{"Session and network", `H cookie cookie-jar login login-user login-pass proxy resolvers`},
-			{"Output", `db o json jsonl silent v`},
+			{"Output", `db o json jsonl f ot silent v`},
 		},
 		hidden: map[string]string{
 			"compat:katana": `
-				cos cs ct depth do ef em eof f fr fs hrl hrlm iqp kf lof mdp mr mrs ndef ns ob ot path-climb rd
-				rlm sf sfd sr srd
+				cos cs depth ef eof fr hrlm iqp lof mdp mr mrs ns ob path-climb rd rlm sf sfd sr srd
 			`,
 			"alias": `
 				c dr j p pc r rate timeout
 			`,
 			"accepted": `
-				duc fx jc jsl kb nc s td
+				duc fx jc kb nc s td
 			`,
 		},
 	},
 	"urls": {
 		groups: []helpGroup{
 			{"Targets and input", `d dL`},
-			{"What to ask", `providers provider-config archive raw`},
-			{"Pace and limits", `urls-max urls-pages urls-pause urls-threads urls-timeout timeout`},
+			{"What to ask", `providers provider-config archive raw subs`},
+			{"Matchers and filters", `mc mt ft blacklist fp from to`},
+			{"Pace and limits", `urls-max urls-pages urls-pause urls-threads urls-timeout retries timeout`},
 			{"Network", `proxy`},
 			{"Output", `db o json silent v sort stream fail-on-capped fail-on-errors`},
 		},
 		hidden: map[string]string{
 			"compat:gau": `
-				blacklist config fc fp from ft mc mt retries subs to version
+				config fc version
 			`,
 			"alias": `
 				threads
@@ -195,17 +197,16 @@ var helpSpecs = map[string]helpSpec{
 	},
 	"ports": {
 		groups: []helpGroup{
-			{"Targets and input", `host l p scope program`},
-			{"What to ask", `udp detect order unnamed`},
+			{"Targets and input", `host l p tp ep no-stdin scope program`},
+			{"What to ask", `udp pu detect order unnamed seed sn wn`},
 			{"Scope and safety", `allow deny kill-file ledger`},
-			{"Pace and limits", `rate min-rate workers connect-timeout dns-rate max-requests timeout`},
+			{"Pace and limits", `rate min-rate workers connect-timeout dns-rate retries max-requests timeout`},
 			{"Network", `proxy resolvers`},
-			{"Output", `db json o silent v`},
+			{"Output", `db json o oA oX silent v`},
 		},
 		hidden: map[string]string{
 			"compat:naabu": `
-				T cp csv ef eh eof ep iv lof no-stdin oA oG oX pf proxy-auth pts pu retries sa seed sn source-ip
-				tp wn
+				T cp csv ef eh eof iv lof oG pf proxy-auth pts sa source-ip
 			`,
 			"alias": `
 				c j max-retries r
@@ -221,7 +222,8 @@ var helpSpecs = map[string]helpSpec{
 	"dirs": {
 		groups: []helpGroup{
 			{"Targets and input", `u l scope program`},
-			{"What to ask", `w depth`},
+			{"What to ask", `w e depth`},
+			{"Matchers and filters", `mc fc fs`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger`},
 			{"Pace and limits", `rate t max-requests timeout`},
 			{"Session and network", `H cookie`},
@@ -229,25 +231,27 @@ var helpSpecs = map[string]helpSpec{
 		},
 		hidden: map[string]string{
 			"compat:ffuf": `
-				e fc fl fr fs fw mc ml mr ms mw
+				fl fr fw ml mr ms mw
 			`,
 		},
 	},
 	"fuzz": {
 		groups: []helpGroup{
 			{"Targets and input", `u w start scope program`},
-			{"The request", `d H r`},
+			{"What to ask", `mode e recursion recursion-depth`},
+			{"Matchers and filters", `mc mr fc fs fl fw ac`},
+			{"The request", `X d H r request request-proto`},
 			{"Before and after each request", `preflight preflight-mode preflight-error preflight-var preflight-var-auto postflight postflight-var postflight-var-auto`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger seal-to`},
 			{"Pace and limits", `rate t p timeout maxtime max-requests se-after control`},
-			{"Output", `db json o silent v c`},
+			{"Session and network", `x replay-proxy`},
+			{"Output", `db json o of silent s v c`},
 		},
 		hidden: map[string]string{
 			"compat:ffuf": `
-				D V X ac acc ach ack acs b cc ck config data-binary debug-log e enc fc fl fmode fr fs ft fw
-				http2 ic ignore-body input-cmd input-num input-shell maxtime-job mc ml mmode mode mr ms mt mw od
-				of or raw recursion recursion-depth recursion-strategy replay-proxy request request-proto s sa
-				se sf sni x
+				D V acc ach ack acs b cc ck config data-binary debug-log enc fmode fr ft http2 ic ignore-body
+				input-cmd input-num input-shell maxtime-job ml mmode ms mt mw od or raw recursion-strategy sa se
+				sf sni
 			`,
 			"alias": `
 				cookie data data-ascii
@@ -262,24 +266,19 @@ var helpSpecs = map[string]helpSpec{
 			{"Targets and input", `u l i scope program`},
 			{"What to ask", `w X c casing passive`},
 			{"Scope and safety", `allow deny deny-path kill-file ledger`},
-			{"Pace and limits", `rate t d max-requests timeout urls-timeout`},
+			{"Pace and limits", `rate t d T max-requests timeout urls-timeout`},
 			{"Session and network", `H cookie proxy`},
 			{"Output", `db json o oB oJ oT silent v`},
 		},
 		hidden: map[string]string{
 			"compat:arjun": `
-				T include stable
+				include stable
 			`,
 		},
 	},
 	"asn": {
 		groups: []helpGroup{
-			{"", `l db json o silent timeout v`},
-		},
-		hidden: map[string]string{
-			"compat:asnmap": `
-				a
-			`,
+			{"", `l a db json o silent timeout v`},
 		},
 	},
 	"shots": {
@@ -300,11 +299,11 @@ var helpSpecs = map[string]helpSpec{
 	},
 	"notify": {
 		groups: []helpGroup{
-			{"", `provider-config proxy delay rate-limit json silent`},
+			{"", `provider-config proxy delay rate-limit bulk id json silent`},
 		},
 		hidden: map[string]string{
 			"compat:notify": `
-				bulk char-limit config data id msg-format provider verbose version
+				char-limit config data msg-format provider verbose version
 			`,
 			"alias": `
 				cl d duc i mf nc p pc rl v

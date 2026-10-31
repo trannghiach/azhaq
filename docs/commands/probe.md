@@ -135,13 +135,51 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-scope` | string |  | a program's scope: a file (HackerOne CSV, bounty-targets JSON, Burp options, lines) or hackerone, bugcrowd, intigriti, yeswehack |
 | `-program` | string |  | the program to take from a -scope list (handle, name or URL) |
 | `-max-ips` | int | `4096` | addresses expanded from -asn and -cidr prefixes, for the whole run |
+| `-no-stdin` | bool |  | do not read targets from stdin |
 
 **What to ask**
 
 | Flag | Type | Default | Meaning |
 | --- | --- | --- | --- |
+| `-path` | string |  | path or paths to ask of every target, a list (comma-separated) or a file: joined onto the path of a URL input, as httpx does, with the URL's query kept and the path's added; a host has no path, so the path is the whole of it |
+| `-x` | string |  | also send these methods to every target (GET, POST, HEAD, …; all for the common ones): requests that can change data on the target |
+| `-body` | string |  | body sent with the -x methods: it can change data on the target |
+| `-probe` | bool |  | print a row for every target: [SUCCESS], or [FAILED] when nothing answered |
+| `-fr` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) |
 | `-no-follow` | bool |  | do not follow redirects: each URL is asked once and its redirect recorded with the Location (httpx's default) |
 | `-no-tech` | bool |  | skip technology fingerprints (saves about 30 MB of memory) |
+| `-tls-grab` | bool |  | report the certificate and the TLS version of each answer |
+| `-hash` | string |  | report these body and header digests: md5,mmh3,simhash,sha1,sha256,sha512 |
+| `-jarm` | bool |  | report the JARM fingerprint of TLS servers (ten handshakes a server) |
+
+**Matchers and filters**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-mc` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) |
+| `-ms` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case |
+| `-mdc` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' |
+| `-fc` | string |  | drop rows with these status codes |
+
+**Output fields**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-sc` | bool |  | print the status code |
+| `-title` | bool |  | print the page title |
+| `-td` | bool |  | print the technologies |
+| `-ip` | bool |  | print the address connected to |
+| `-location` | bool |  | print the redirect location (and where a followed chain ended) |
+
+**Raw responses**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-sr` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt |
+| `-srd` | string |  | directory of -sr (default output) |
+| `-irh` | bool |  | add the response headers to -json rows (header, raw_header) |
+| `-irr` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) |
+| `-debug-req` | bool |  | print each request to stderr |
 
 **Scope and safety**
 
@@ -187,13 +225,12 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
 <details>
-<summary>Flags familiar from httpx, other names and flags accepted with no effect (175)</summary>
+<summary>Flags familiar from httpx, other names and flags accepted with no effect (152)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
 | `-asn` | bool |  | print and report the autonomous system of the address (RIPEstat) | httpx's name |
 | `-auto-referer` | bool |  | send each request's URL as its Referer | httpx's name |
-| `-body` | string |  | body sent with the -x methods: it can change data on the target | httpx's name |
 | `-body-preview` | int |  | print the first N characters of the body | httpx's name |
 | `-cdn` | bool |  | print the CDN, WAF or cloud in front | httpx's name |
 | `-cname` | bool |  | print the first CNAME | httpx's name |
@@ -205,7 +242,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-csv-output-encoding` | string |  | CSV encoding: utf-8 writes a byte order mark first (implies -csv) | httpx's name |
 | `-custom-fingerprint-file` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones | httpx's name |
 | `-debug` | bool |  | print each request and response to stderr | httpx's name |
-| `-debug-req` | bool |  | print each request to stderr | httpx's name |
 | `-debug-resp` | bool |  | print each response to stderr | httpx's name |
 | `-exclude` | string |  | leave out: cdn (ports other than 80 and 443 of CDN addresses), private-ips, a port, an address or range, or a regex | httpx's name |
 | `-exclude-output-fields` | string |  | leave these fields out of -json rows, comma-separated | httpx's name |
@@ -213,7 +249,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-extract-preset` | string |  | print what a ready regex finds: url, ipv4, mail | httpx's name |
 | `-extract-regex` | string, repeatable |  | print what this regex finds in the response | httpx's name |
 | `-favicon` | bool |  | also hash each front page's favicon (one or two more requests per service) | httpx's name |
-| `-fc` | string |  | drop rows with these status codes | httpx's name |
 | `-filter-cdn` | string |  | drop rows behind these CDN providers | httpx's name |
 | `-filter-condition` | string |  | drop rows for which this condition holds | httpx's name |
 | `-filter-duplicates` | bool |  | drop rows that answer almost as one already printed (same status and a body within 3 bits of its simhash) | httpx's name |
@@ -227,22 +262,15 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-filter-string` | string |  | drop rows whose response holds one of these strings | httpx's name |
 | `-filter-word-count` | string |  | drop rows with these word counts | httpx's name |
 | `-follow-host-redirects` | bool |  | with -fr: follow redirects to the same host only | httpx's name |
-| `-fr` | bool |  | follow redirects within the site (status, title and length are then the last answer's; the chain is in chain_status_codes) | httpx's name |
-| `-hash` | string |  | report these body and header digests: md5,mmh3,simhash,sha1,sha256,sha512 | httpx's name |
 | `-http2` | bool |  | report whether the server speaks HTTP/2 (one more request each) | httpx's name |
 | `-include-chain` | bool |  | add each hop of a followed redirect to -json rows (chain) | httpx's name |
 | `-include-response-base64` | bool |  | like -irr, base64-encoded | httpx's name |
 | `-input-mode` | string |  | input mode: burp reads the URLs of a Burp XML export given with -l | httpx's name |
-| `-ip` | bool |  | print the address connected to | httpx's name |
-| `-irh` | bool |  | add the response headers to -json rows (header, raw_header) | httpx's name |
-| `-irr` | bool |  | add the request and the response to -json rows (request, body, header, raw_header) | httpx's name |
 | `-j` | bool |  | JSONL output (as -json) | httpx's name |
-| `-jarm` | bool |  | report the JARM fingerprint of TLS servers (ten handshakes a server) | httpx's name |
 | `-knowledge-base` | bool |  | report the kind of page (login, captcha, …) in knowledgebase; needs the dit model (see TROUBLESHOOTING) | httpx's name |
 | `-leave-default-ports` | bool |  | print URLs with their default port (:80, :443) | httpx's name |
 | `-line-count` | bool |  | print the line count | httpx's name |
 | `-list-dsl-variables` | bool |  | list the fields -json rows hold, and stop | httpx's name |
-| `-location` | bool |  | print the redirect location (and where a followed chain ended) | httpx's name |
 | `-markdown` | bool |  | print a Markdown table | httpx's name |
 | `-match-cdn` | string |  | keep rows behind these CDN providers | httpx's name |
 | `-match-favicon` | string |  | keep rows with these favicon hashes (implies the favicon request) | httpx's name |
@@ -254,18 +282,12 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-max-host-error` | int |  | as -maxhr | httpx's name |
 | `-max-redirects` | int | `10` | with -fr: redirects to follow | httpx's name |
 | `-maxhr` | int |  | connects or timeouts in a row after which a host is not asked again (default 5) | httpx's name |
-| `-mc` | string |  | keep rows with these status codes (200,302, spans 200-299, classes 4xx) | httpx's name |
-| `-mdc` | string |  | keep rows for which this condition holds, over the -json fields: 'contains(body, "admin") && status_code == 200' | httpx's name |
 | `-method` | bool |  | print the request method | httpx's name |
-| `-ms` | string |  | keep rows whose response (headers and body) holds one of these strings, comma-separated, any case | httpx's name |
 | `-no-decode` | bool |  | hash and match the body as sent, not converted to UTF-8 | httpx's name |
 | `-no-fallback` | bool |  | ask an input without a scheme over both http and https and report each that answers | httpx's name |
-| `-no-stdin` | bool |  | do not read targets from stdin | httpx's name |
 | `-omit-body` | bool |  | with -sr: leave the body out of the stored file | httpx's name |
 | `-output-all` | string |  | write the results to FILE (text), FILE.json, FILE.csv and FILE.md | httpx's name |
-| `-path` | string |  | path or paths to ask of every target, a list (comma-separated) or a file: joined onto the path of a URL input, as httpx does, with the URL's query kept and the path's added; a host has no path, so the path is the whole of it | httpx's name |
 | `-pipeline` | bool |  | report whether the server answers pipelined requests (ten requests each) | httpx's name |
-| `-probe` | bool |  | print a row for every target: [SUCCESS], or [FAILED] when nothing answered | httpx's name |
 | `-probe-all-ips` | bool |  | send the request to every address of a name, one row each | httpx's name |
 | `-random-agent` | bool |  | send a browser's User-Agent picked at random for each request | httpx's name |
 | `-request` | string |  | send the request in this file (request line, headers, blank line, body) to every target: it can change data on the target | httpx's name |
@@ -275,17 +297,11 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-response-time` | bool |  | print the response time | httpx's name |
 | `-retries` | int |  | times to send a request again when nothing answered (each counts as a request) | httpx's name |
 | `-rlm` | float |  | services asked per minute (as -rl, per minute) | httpx's name |
-| `-sc` | bool |  | print the status code | httpx's name |
 | `-screenshot` | bool |  | save a screenshot of each web service's front page under -srd/screenshot (Chrome on the machine); rows are printed when the run ends, with screenshot_path; implies -sr | httpx's name |
 | `-sni-name` | string |  | TLS server name to ask for, whatever the host | httpx's name |
-| `-sr` | bool |  | store each response (request and response as sent) under -srd/response/HOST/SHA1.txt, with an index.txt | httpx's name |
-| `-srd` | string |  | directory of -sr (default output) | httpx's name |
 | `-store-chain` | bool |  | like -sr, with the redirect chain in the file | httpx's name |
 | `-strip` | string |  | strip tags from the body preview: html or xml (the preview always has its tags stripped, as httpx) | httpx's name |
 | `-target` | string, repeatable |  | target (as -u) | httpx's name |
-| `-td` | bool |  | print the technologies | httpx's name |
-| `-title` | bool |  | print the page title | httpx's name |
-| `-tls-grab` | bool |  | report the certificate and the TLS version of each answer | httpx's name |
 | `-tls-probe` | bool |  | probe the names of each certificate too (implies -tls-grab) | httpx's name |
 | `-vhost` | bool |  | report a virtual host (one more request each) | httpx's name |
 | `-vhost-input` | bool |  | lines are vhost,ip: ask the ip with the vhost as Host | httpx's name |
@@ -293,7 +309,6 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | `-websocket` | bool |  | print websocket for a server that speaks it | httpx's name |
 | `-word-count` | bool |  | print the word count | httpx's name |
 | `-wordpress` | bool |  | report WordPress plugins and themes | httpx's name |
-| `-x` | string |  | also send these methods to every target (GET, POST, HEAD, …; all for the common ones): requests that can change data on the target | httpx's name |
 | `-bp` | int |  | print the first N characters of the body | other name |
 | `-cff` | string |  | wappalyzer fingerprints (JSON) to add to the built-in ones | other name |
 | `-cl` | bool |  | print the content length | other name |

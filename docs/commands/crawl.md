@@ -184,6 +184,9 @@ These filters limit what is printed, not what is crawled.
 | `-browser` | bool |  | also load pages in Chrome: the requests their scripts send and the links of the rendered page (needs Chrome) |
 | `-interact` | bool |  | with -browser: click the buttons, links and menus of each page (up to -interact-clicks) to find what only a click brings; a click is made whatever its label says, and the writes it would send are refused by their method and mapped, not sent |
 | `-interact-clicks` | int | `12` | clicks -interact makes on each page |
+| `-fs` | string |  | the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address) |
+| `-kf` | string |  | ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths |
+| `-jsl` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies |
 
 **What to list**
 
@@ -192,6 +195,9 @@ These filters limit what is printed, not what is crawled.
 | `-assets` | bool |  | also list images, fonts and media, and the source maps and build manifests azhaq reads (scripts and stylesheets are listed by default, as katana lists them) |
 | `-no-catchall` | bool |  | leave out URLs that answer with the page every unknown path gets (client-side routes of a single-page app) |
 | `-rejected` | bool |  | also list the strings read from scripts and pages and kept out of the URLs, each with its reason (text: string, a tab, the reason; -json: one object each) |
+| `-em` | string |  | list only URLs with these extensions, comma-separated (none: URLs without one) |
+| `-ndef` | bool |  | do not leave out the default extensions |
+| `-do` | bool |  | also list the URLs found and left out of the crawl's scope (never requested) |
 
 **Scope and safety**
 
@@ -214,9 +220,11 @@ These filters limit what is printed, not what is crawled.
 | `-backoff` | bool |  | when a host answers 429 or 503, wait (1 s doubling to 30 s, or its Retry-After) and ask again, up to 3 times; the summary says which hosts did |
 | `-retry` | int |  | ask again this many times when a host that answered before gives no answer (a timeout, a reset) |
 | `-host-rate` | float |  | requests per second to each host, besides -rate over all (0: none) |
+| `-hrl` | int |  | requests per second to each host (katana's -hrl) |
 | `-host-parallel` | int |  | requests in flight per host (default 10, as katana) |
 | `-parallel` | int |  | work items in flight (default 16) |
 | `-request-timeout` | duration |  | time one request gets, headers and body (default: 10 s for headers, 30 s in all; not -timeout, the run's bound) |
+| `-ct` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) |
 | `-max-requests` | int |  | requests to targets this run may send (0: no cap); the work left over is for azhaq resume |
 | `-max-host-requests` | int |  | requests one host may be sent (0: no cap); the rest of its work is left for azhaq resume |
 | `-max-items` | int |  | max collector invocations (default 2048) |
@@ -243,37 +251,30 @@ These filters limit what is printed, not what is crawled.
 | `-o` | string |  | also write results to this file |
 | `-json` | bool |  | JSONL output, and the summary as one JSON object on stderr |
 | `-jsonl` | bool |  | katana's JSON lines: {timestamp, request{method, endpoint, tag, attribute, source}, response{status_code, technologies, forms, content_length}, error} |
+| `-f` | string |  | print these fields of each URL instead of the URL, comma-separated: url,path,fqdn,rdn,rurl,qurl,qpath,file,ufile,key,value,kv,dir,udir,method (katana's -f) |
+| `-ot` | string |  | print each URL through this template, {{url}} or any field name in braces ({{rdn}} {{path}} …) |
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
 <details>
-<summary>Flags familiar from katana, other names and flags accepted with no effect (46)</summary>
+<summary>Flags familiar from katana, other names and flags accepted with no effect (36)</summary>
 
 | Flag | Type | Default | Meaning | Kind |
 | --- | --- | --- | --- | --- |
 | `-cos` | string, repeatable |  | never follow URLs that match this regex | katana's name |
 | `-cs` | string, repeatable |  | follow only URLs that match this regex | katana's name |
-| `-ct` | duration |  | stop after this long and keep what was found; azhaq resume continues (0: no limit) | katana's name |
 | `-depth` | int | `4` | max fan-out waves (0 = seed wave only, not unlimited) | katana's name |
-| `-do` | bool |  | also list the URLs found and left out of the crawl's scope (never requested) | katana's name |
 | `-ef` | string |  | leave out URLs with these extensions, comma-separated, besides the default list (images, fonts, archives, media, .pdf, .txt, .map, …) | katana's name |
-| `-em` | string |  | list only URLs with these extensions, comma-separated (none: URLs without one) | katana's name |
 | `-eof` | string |  | leave these fields out of -json and -jsonl lines, comma-separated (request.tag, response.forms, tech, …) | katana's name |
-| `-f` | string |  | print these fields of each URL instead of the URL, comma-separated: url,path,fqdn,rdn,rurl,qurl,qpath,file,ufile,key,value,kv,dir,udir,method (katana's -f) | katana's name |
 | `-fr` | string |  | leave out URLs that match this regex (printed URLs only) | katana's name |
-| `-fs` | string |  | the hosts a crawl follows links to: rdn (the start host's registrable domain and its subdomains), fqdn (the host only), dn (hosts that name its domain keyword) or a regex on the host (default: rdn for a name, the origin itself for an address) | katana's name |
-| `-hrl` | int |  | requests per second to each host (katana's -hrl) | katana's name |
 | `-hrlm` | int |  | requests per minute to each host (katana's -hrlm) | katana's name |
 | `-iqp` | bool |  | ask one URL of each path whatever its query values (katana's -iqp; the others are listed) | katana's name |
-| `-kf` | string |  | ask each web service only for its robots.txt and sitemaps and read every entry (all, robotstxt or sitemapxml); replaces the 32 built-in paths | katana's name |
 | `-lof` | bool |  | list the fields -f, -sf and -ot take, and the fields of -jsonl lines, and exit | katana's name |
 | `-mdp` | int |  | requests one host may be sent, then its work is left for resume (katana's -mdp) | katana's name |
 | `-mr` | string |  | list only URLs that match this regex (regex of the printed URL; the crawl itself is not limited) | katana's name |
 | `-mrs` | int |  | bytes read of a page (katana's -mrs; default 2 MiB, scripts and JSON 16 MiB) | katana's name |
-| `-ndef` | bool |  | do not leave out the default extensions | katana's name |
 | `-ns` | bool |  | follow links to any host, within -allow and -deny (katana's -ns) | katana's name |
 | `-ob` | bool |  | with -sr: write the status line and headers only | katana's name |
-| `-ot` | string |  | print each URL through this template, {{url}} or any field name in braces ({{rdn}} {{path}} …) | katana's name |
 | `-path-climb` | bool |  | also list and ask the parent directories of each link a page names (/a/b/c: /a/b/ and /a/) | katana's name |
 | `-rd` | int |  | seconds to wait before each request (katana's -rd) | katana's name |
 | `-rlm` | int |  | requests per minute over all hosts (katana's -rlm) | katana's name |
@@ -292,7 +293,6 @@ These filters limit what is printed, not what is crawled.
 | `-duc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-fx` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-jc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
-| `-jsl` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-kb` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-nc` | bool |  | accepted for katana's command lines; azhaq always reads scripts, forms and technologies | accepted, no effect |
 | `-s` | string |  | accepted for katana's command lines; azhaq orders its work by worth within a host, not by -s depth-first or breadth-first | accepted, no effect |
