@@ -1,6 +1,6 @@
 # azhaq ingest
 
-Add other tools' results to a database (subfinder, dnsx, httpx, katana, naabu, nuclei, gau and ffuf output, or connector facts).
+Add other tools' results to a database: subfinder, dnsx, httpx, katana, naabu, nuclei, gau and ffuf output, or connector facts.
 
 ## Synopsis
 
@@ -11,16 +11,32 @@ azhaq ingest FILE… | -in FILE | - [-db FILE]
 ## Examples
 
 ```
+# Add the output of two tools to one database
 azhaq ingest httpx.jsonl katana.jsonl -db example.db
+
+# Read from a pipe
 subfinder -d example.com -json | azhaq ingest - -db example.db
+
+# Ingest, then hand the web services to the next tool
 httpx -l hosts.txt -json | azhaq ingest -in - -db example.db && azhaq export -db example.db -format targets
 ```
 
+## What it does
+
+1. Reads each file you give, or standard input for `-`.
+2. Turns the lines into facts and adds them to the database `-db`. Without `-db` it makes a new file.
+3. Prints its summary.
+
+Files are arguments (`azhaq ingest a.jsonl b.jsonl`). `-` is stdin, and `-in FILE` still works. The formats it reads are listed under `-in` in Flags.
+
 ## Output
 
-The map of what was added.
+`ingest` prints no rows, only its summary. What it added is in the database: look at the map with `azhaq query` or `azhaq export`.
 
-`ingest` prints only its summary: `results` is the facts read (of every file given), `counts` the lines read per format. Files are arguments (`azhaq ingest a.jsonl b.jsonl`), `-` is stdin, and `-in FILE` still works.
+| Summary field | Meaning |
+| --- | --- |
+| `results` | The facts read, of every file given. |
+| `counts` | The lines read, per format. |
 
 ## Summary and exit codes
 

@@ -11,19 +11,53 @@ azhaq query -db FILE [-type T] [-role R] [-coverage C] [-status N] [-method M] [
 ## Examples
 
 ```
+# Rows with the role auth
 azhaq query -db app.db -role auth
+
+# API routes that take POST, with only the fields you need, as JSON
 azhaq query -db app.db -role api -method POST -fields key,methods,body -json
+
+# URLs that answered with a server error
 azhaq query -db app.db -type URL -status 5xx
+
+# Hostnames the last run saw and the run before it did not
 azhaq query -db h1.db -type Hostname -new
+
+# Every target whose work failed: the list to retry
+azhaq query -db app.db -failed
 ```
+
+## What it does
+
+`azhaq query` reads the map of a workspace (`-db`, default the last run's) and prints the rows that match the flags you give. The best rows come first.
+
+The filters are `-type`, `-role`, `-coverage`, `-evidence`, `-status`, `-method`, `-host`, `-scope`, `-since`, `-new` and `-match`. Each takes the values listed in Flags. `-match` is a case-insensitive text match on the key, or a regular expression with `-re`.
 
 ## Output
 
-The matching rows of the map, best first.
+Plain output is the matching rows of the map. `-json` prints one JSON object per row.
 
-`query -json` prints map rows (as `run -json`, with `found_in`), or only the `-fields` asked for; every row that matches, unless `-limit` says otherwise (the summary then says how many matched). `query -failed` prints every failed target instead: `target`, `collector`, `source`, `error`, `retryable`.
+| Form | What it prints |
+| --- | --- |
+| `-json` | Map rows as `run -json` prints them, with `found_in`. |
+| `-json -fields A,B` | Only the fields you ask for. |
+| `-failed` | Every failed target instead of map rows. See the table below. |
+
+`query -failed` rows have these fields:
+
+| Field | Meaning |
+| --- | --- |
+| `target` | The target whose work failed. |
+| `collector` | The collector that did the work. |
+| `source` | The third-party source, when a source failed. |
+| `error` | What went wrong. |
+| `retryable` | True for timeouts, dropped connections, 429 and 5xx. |
+
+The fields mean what they mean in the `failed` list of the summary: see [OUTPUT.md](../OUTPUT.md).
 
 ## Summary and exit codes
+
+`query` prints every row that matches, unless `-limit` says otherwise. The summary then says how many matched.
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
