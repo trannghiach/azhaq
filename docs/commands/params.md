@@ -1,6 +1,6 @@
 # azhaq params
 
-Query parameters pages read, from a list (GET; -X POST, JSON or XML send bodies). Replaces arjun (see [Migrating](../MIGRATING.md#arjun-azhaq-params)).
+Finds the query parameters a page reads, by trying names from a list. Names go in the query by default; `-X POST`, `-X JSON` and `-X XML` send them in a body. Replaces arjun (see [Migrating](../MIGRATING.md#arjun-azhaq-params)).
 
 ## Synopsis
 
@@ -11,20 +11,69 @@ azhaq params -u URL | -l FILE | -i FILE | stdin  [-w small|medium|large|FILE] [-
 ## Examples
 
 ```
+# one page, the built-in list of names
 azhaq params -u https://app.example.com/search
+
+# your own wordlist, 5 requests a second, arjun's JSON file
 azhaq params -u https://app.example.com/search -w burp-parameter-names.txt -rate 5 -oJ params.json
-azhaq params -i burp-export.xml -allow app.example.com -X POST    # bodies may change data
+
+# pages from a Burp export, names sent in a body (bodies may change data)
+azhaq params -i burp-export.xml -allow app.example.com -X POST
 ```
+
+## What it does
+
+1. Takes pages from `-u`, `-l`, `-i` or stdin.
+2. Asks each page with random names first, to get a reference answer and the page's own noise.
+3. Sends the names of the list in groups and compares each answer with that reference.
+4. Narrows a group that changed the answer down to the names that did it, and prints them with `why`.
+
+A body method sends requests that may change data on the target.
 
 ## Output
 
-URL and parameter names per line; -json: {"url","method","params","why"} (why: status, size, headers, location, lines, reflected or named for each name; values: the value a name needed, for debug and the like). -oJ writes arjun's file, {"URL": {"params","method","headers"}}; -oT one request per line, URL?name=1234&…. A page that rate-limits (429, 418, 503) or leaves requests unanswered fails with exit 3 and a note; a page left alone says why.
+Plain output is the URL and the parameter names, one line per page. With `-json` you get one object per page.
 
-`url`, `method` (`GET`, or `POST`, `JSON`, `XML` when names were sent in a body), `params`, and `why` (what changed in the answer for each name: `status`, `size`, `headers` (the set of header names), `location` (the redirect target), `lines`, `reflected` (its value came back more often than random names' values do) or `named` (the page printed the name)); `values` holds the value a name needed (`{"debug":"true"}`) when it only answered to that one; `writes` is the number of body requests sent. A page that answers names it does not read (most names of a group, or nearly every name tried alone, change its answer, and so do as many random names made like them) is listed in the summary's `notes`; the names of that group are dropped and the search stops there, names found in earlier groups stay. A page that rate-limits (429, 418, 503), or leaves requests unanswered, fails with exit 3 (`failed`, retryable) and a note; a page left alone (it changes by itself, is not text, is past `-params-per-host`) has a note too. With `-oJ FILE` the command writes arjun's file, `{"URL": {"params": [...], "method": "GET", "headers": {...}}}`; with `-oT FILE` one request per line, `URL?name=1234&other=5678` (a body method: the URL, a tab and the body).
+| Field | Meaning |
+| --- | --- |
+| `url` | The page. |
+| `method` | `GET`, or `POST`, `JSON` or `XML` when the names were sent in a body. |
+| `params` | The names found. |
+| `why` | What changed in the answer for each name. The values are below. |
+| `values` | The value a name needed, such as `{"debug":"true"}`, when it answered only to that one. |
+| `writes` | The number of body requests sent. |
+
+What `why` says for a name:
+
+| Value | The answer changed in |
+| --- | --- |
+| `status` | its status |
+| `size` | its size |
+| `headers` | the set of header names |
+| `location` | the redirect target |
+| `lines` | its line count |
+| `reflected` | the name's value came back more often than random names' values do |
+| `named` | the page printed the name |
+
+Two files can be written as well:
+
+- `-oJ FILE` writes arjun's file: `{"URL": {"params": [...], "method": "GET", "headers": {...}}}`.
+- `-oT FILE` writes one request per line: `URL?name=1234&other=5678`. For a body method the line is the URL, a tab and the body.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). These cases are specific to `params`.
+
+- A page that rate-limits (429, 418, 503) or leaves requests unanswered fails with exit 3. The failure is listed as `failed` and retryable, with a note.
+- A page left alone has a note that says why: it changes by itself, is not text, or is past `-params-per-host`.
+- A page that answers names it does not read is listed in the summary's `notes`: see Details.
+
+## Details
+
+### Pages that answer names they do not read
+- A page answers names it does not read when most names of a group, or nearly every name tried alone, change its answer. As many random names made like them change it too.
+- The names of that group are dropped and the search stops there. Names found in earlier groups stay.
+- The summary's `notes` list the page.
 
 ## Flags
 
