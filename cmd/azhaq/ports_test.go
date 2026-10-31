@@ -533,3 +533,24 @@ func TestPortsPinnedPortSurvivesP(t *testing.T) {
 		t.Errorf("pinned only: exit %d\n%s\n%s", code, out, errOut)
 	}
 }
+
+// -ec and -exclude-cdn limit a CDN or WAF address; -cdn-full is the
+// default and is accepted, but not together with them.
+func TestPortsExcludeCDNFlags(t *testing.T) {
+	for _, flag := range []string{"-ec", "-exclude-cdn"} {
+		err := cmdPorts([]string{"-host", "127.0.0.1", "-p", "1", flag, "-cdn-full"})
+		if err == nil || exitCode(err) != exitUsage || !strings.Contains(err.Error(), "contradict") {
+			t.Errorf("%s -cdn-full: %v", flag, err)
+		}
+	}
+	cfg, err := portConfig(portFlags{excludeCDN: true})
+	if err != nil || !cfg.ExcludeCDN {
+		t.Errorf("-port-exclude-cdn: %+v, %v", cfg, err)
+	}
+	if cfg, err = portConfig(portFlags{cdnFull: true}); err != nil || cfg.ExcludeCDN {
+		t.Errorf("-port-cdn-full is the default: %+v, %v", cfg, err)
+	}
+	if _, err = portConfig(portFlags{cdnFull: true, excludeCDN: true}); err == nil || exitCode(err) != exitUsage {
+		t.Errorf("both: %v", err)
+	}
+}

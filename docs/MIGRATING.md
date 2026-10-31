@@ -511,7 +511,7 @@ Behaviour, fields and edge cases: [`azhaq ports`](commands/ports.md).
 | `-sV`, `-nmap-cli 'nmap -sV'` | `-detect all` | The default. `-detect none` connects and closes. `-detect banner` reads what the service says. |
 | `-Pn`, `-sn` | `-Pn`, `-sn` | `-Pn` is the default. `-wn` scans only the addresses that are up. |
 | `-sa`, `-iv 4` | `-sa`, `-iv 4` | |
-| `-cdn`, `-ec` | `-cdn`, `-cdn-full` | A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only, and the row says `cdn`. `-cdn-full` scans it in full. |
+| `-cdn`, `-ec` | `-cdn`, `-ec`, `-exclude-cdn` | A CDN or WAF address is scanned in full, as naabu does, and the row says `cdn`. `-ec` asks it only 80, 443, 8080 and 8443: naabu's two ports plus 8080 and 8443. `-cdn-full` is accepted and does nothing. |
 | `-source-ip IP`, `-proxy` | `-source-ip IP`, `-proxy` | `-proxy-auth` too. |
 | `-cp DATA` | `-cp DATA` | Sent to each open port before reading. |
 | `-lof`, `-eof` | `-lof`, `-eof` | |

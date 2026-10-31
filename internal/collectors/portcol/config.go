@@ -23,7 +23,7 @@ type Config struct {
 	Payload          []byte
 	Proxy, ProxyAuth string
 
-	CDNFull                    bool
+	ExcludeCDN                 bool
 	Discover                   Discovery
 	IPv4Only, IPv6Only, AllIPs bool
 	PortsFor                   map[string][]int
@@ -41,7 +41,7 @@ func (c *Collector) Apply(cfg Config) {
 	if cfg.MinRate > 0 && s.Rate < cfg.MinRate {
 		s.Rate = cfg.MinRate
 	}
-	c.CDNFull, c.Discover = cfg.CDNFull, cfg.Discover
+	c.ExcludeCDN, c.Discover = cfg.ExcludeCDN, cfg.Discover
 	c.IPv4Only, c.IPv6Only, c.AllIPs = cfg.IPv4Only, cfg.IPv6Only, cfg.AllIPs
 	c.PortsFor = cfg.PortsFor
 }

@@ -5,7 +5,7 @@ Finds the open TCP ports of hosts with a connect scan, so it needs no root. It n
 ## Synopsis
 
 ```
-azhaq ports -host HOST[,HOST…] | -l FILE | stdin | TARGET…  [-p LIST | -tp 100|1000|full | -pf FILE] [-ep LIST] [-udp | -pu LIST] [-rate N] [-T0..5] [-connect-timeout MS] [-retries N] [-c N] [-sn | -wn] [-cdn-full] [-csv | -json] [-oX F] [-oG F] [-oA BASE]
+azhaq ports -host HOST[,HOST…] | -l FILE | stdin | TARGET…  [-p LIST | -tp 100|1000|full | -pf FILE] [-ep LIST] [-udp | -pu LIST] [-rate N] [-T0..5] [-connect-timeout MS] [-retries N] [-c N] [-sn | -wn] [-ec] [-csv | -json] [-oX F] [-oG F] [-oA BASE]
 ```
 
 ## Examples
@@ -36,7 +36,7 @@ azhaq ports 192.0.2.0/24 -sn
 5. With `-udp`, also sends each UDP port one harmless datagram.
 6. Prints one line for each open port.
 
-A port that says nothing is asked the request of its own protocol, an HTTP `HEAD /` and a TLS handshake. Then it gets one harmless request of each other protocol. That is at most 24 connects after the first. Nothing logs in, sends a credential or changes anything. Raw printing ports (9100–9107) are never asked anything. A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only.
+A port that says nothing is asked the request of its own protocol, an HTTP `HEAD /` and a TLS handshake. Then it gets one harmless request of each other protocol. That is at most 24 connects after the first. Nothing logs in, sends a credential or changes anything. Raw printing ports (9100–9107) are never asked anything. A CDN or WAF address is scanned in full, as naabu does; `-ec` limits it to ports 80, 443, 8080 and 8443.
 
 ## Output
 
@@ -80,7 +80,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 | notes | How many addresses were not up (`-wn`), were outside the scope, or had ports that neither accepted nor refused a connect. |
 | AS prefixes | The prefixes RIPEstat lists for an AS number. |
 | `IPv6 addresses of 1 name not scanned: no IPv6 route from this machine` | A name's IPv6 addresses were not scanned, because this machine cannot reach them. |
-| CDN or WAF | The addresses that were asked only ports 80, 443, 8080 and 8443. |
+| CDN or WAF | With `-ec`, the addresses that were asked only ports 80, 443, 8080 and 8443. |
 | the host `-pts` stopped on | The host that `-pts` stopped asking: it answers every port. |
 | `-proxy` or `-source-ip` | The scan asked the banner only. |
 | `-wn` or `-sn` | How many hosts were called down. |
@@ -140,7 +140,7 @@ A service that speaks first (`ssh`, `ftp`, `smtp`, `telnet`, `irc`, …) is name
 - In `run` and `query`, the `ports` row of a scanned address counts these silent ports in `filtered`. It lists them in `filtered_ports` when there are no more than 64.
 
 ### Limits, and what the scan does not do silently
-- A CDN or WAF address is asked ports 80, 443, 8080 and 8443 only, because its other ports are the provider's other customers'. The row has `cdn` and a `note`, and the summary names the addresses. `-cdn-full` scans them in full.
+- A CDN or WAF address is scanned in full, as naabu does. The row has `cdn` and a `note`. `-ec` (`-exclude-cdn`) asks it only ports 80, 443, 8080 and 8443, which is naabu's two ports plus 8080 and 8443, because its other ports are the provider's other customers'. The summary then names the addresses. `-cdn-full` is accepted and does nothing; it is the default.
 - `-pts N` stops asking a host after N open ports, for a host that answers every port. The row has `"threshold":true` and the summary names the host. Ports already in flight are still asked, so a few more than N may be listed.
 - `-detect` says what is asked of an open port:
   - `none` connects and closes: one connect per port, as naabu without `-sV`.
@@ -341,6 +341,13 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-silent` | bool |  | results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line |
 | `-v` | bool |  | print a line for every finished task, not only failures |
 
+**Other**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-ec` | bool |  | same as -exclude-cdn |
+| `-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu's two ports plus 8080 and 8443; the default is the full list) |
+
 <details>
 <summary>Flags familiar from naabu, other names, flags accepted with no effect and rarely used flags (22)</summary>
 
@@ -367,7 +374,7 @@ Each open TCP port gets `product` and `version` next to `service`, from what it 
 | `-Pn` | bool |  | accepted: addresses are scanned without asking whether they are up, which is the default | accepted, no effect |
 | `-cdn` | bool |  | accepted: a CDN address is marked in the output, always | accepted, no effect |
 | `-nc` | bool |  | accepted: no colours are printed | accepted, no effect |
-| `-cdn-full` | bool |  | scan CDN and WAF addresses in full, not only ports 80, 443, 8080 and 8443 | rarely needed |
+| `-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default | rarely needed |
 
 </details>
 <!-- flags:end -->

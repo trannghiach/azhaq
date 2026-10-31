@@ -298,7 +298,7 @@ Examples of what `notes` holds for a run:
 | `-ports` | string |  | scan TCP ports: top-100, top-1000, full or a list of ports, ranges and these names, such as 22,80,8000-8100 or top-100,8888 (active; the targets given are the scope unless -allow) |
 | `-ports-on` | string, repeatable |  | scan only these ports on a host: HOST=22,80 |
 | `-ports-udp` | string |  | ask UDP ports (active): top (about 25 common ones), full or a list of ports, ranges and these names, such as 53,123,161,1-1024 or top,5354; a reply is open, an ICMP unreachable closed, neither open\|filtered (-ports none: UDP only) |
-| `-port-cdn-full` | bool |  | scan CDN and WAF addresses in full, not only their web ports |
+| `-port-cdn-full` | bool |  | accepted: CDN and WAF addresses are scanned in full by default |
 | `-dns-brute` | string |  | resolve WORD.domain for each word in this file (active; the targets given are the scope unless -allow) |
 | `-permute` | bool |  | resolve variations of found names (active; the targets given are the scope unless -allow) |
 | `-graphql` | bool |  | read the schema of GraphQL endpoints with an introspection query (active; the targets given are the scope unless -allow) |
@@ -418,6 +418,12 @@ Examples of what `notes` holds for a run:
 | `-stream` | bool |  | also print each name, service, URL and open port as it is found (found lines, before the ranked map) |
 | `-fail-on-errors` | bool |  | exit 3 on every failure: also fan-out (a source for the domain of a URL) and a source that failed while others answered |
 | `-fail-on-capped` | bool |  | exit 4 also when the run hit -depth with hints left |
+
+**Other**
+
+| Flag | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `-port-exclude-cdn` | bool |  | ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu -ec asks 80 and 443; this adds 8080 and 8443) |
 
 <details>
 <summary>Rarely used flags (73)</summary>

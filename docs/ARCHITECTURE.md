@@ -1361,7 +1361,7 @@ It scans hosts in scope with full TCP connects. So it needs no root, and it leav
 - **Order.** The ports of a host are asked in tiers with `-port-order random`: nmap's top 100, the rest of its top 1000, and the others. Each tier is shuffled by a seed.
 - **Retries.** A port that did not answer is asked again by the rule of `-port-retries`.
 - **Discovery.** `-port-discover first|only` asks each address a connect to 80 and 443 first.
-- **CDN and WAF ranges.** An address in one gets ports 80, 443, 8080 and 8443 only, because the edge answers for thousands of customers. `-port-cdn-full` lifts that.
+- **CDN and WAF ranges.** An address in one is scanned in full, as naabu does. `-port-exclude-cdn` limits it to ports 80, 443, 8080 and 8443, because the edge answers for thousands of customers.
 
 A `Prefix` seed is scanned by `azhaq-ports` itself. It goes address by address in blocks of 256, without expanding the prefix into seeds or asking reverse DNS. So a range has no size cap. The addresses that answer are followed by the other collectors.
 

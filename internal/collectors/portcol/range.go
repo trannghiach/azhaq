@@ -158,7 +158,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			edge, edgeName := false, ""
 			if name, kind := fingerprint.Network(net.ParseIP(ip)); name != "" && kind != "cloud" {
 				edge, edgeName = true, name
-				if !c.CDNFull {
+				if c.ExcludeCDN {
 					ports = cdnPorts
 				}
 			}
@@ -224,7 +224,7 @@ func (c *Collector) runPrefix(ctx context.Context, seed types.Seed, emit func(ty
 			if len(s.silent) > 0 {
 				filtAddrs++
 			}
-			if edge && !c.CDNFull {
+			if edge && c.ExcludeCDN {
 				edgeAddrs++
 			}
 			if len(udp.OpenFiltered) > 0 && !listed {

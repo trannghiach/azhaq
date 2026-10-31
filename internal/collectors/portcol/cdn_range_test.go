@@ -48,8 +48,8 @@ func serve(t *testing.T, addr string) int {
 	return l.Addr().(*net.TCPAddr).Port
 }
 
-// A name that CNAMEs to a CDN is asked on four ports by default, on all
-// of them with CDNFull, and the row says which.
+// A name that CNAMEs to a CDN is asked on all its ports by default, on
+// four with ExcludeCDN, and the row says which.
 func TestCDNRuleAndFlag(t *testing.T) {
 	port := serve(t, "127.0.0.1:0")
 	pool := dnsr.New(dnsr.Options{Resolvers: []string{"192.0.2.1"}, PerSecond: -1})
@@ -63,13 +63,14 @@ func TestCDNRuleAndFlag(t *testing.T) {
 		}
 		return m, nil
 	}
-	for _, full := range []bool{false, true} {
+	for _, exclude := range []bool{false, true} {
+		full := !exclude
 		var asked atomic.Int32
 		c := New(pool, []int{port, 1, 2, 3, 4, 5}, 0)
 		c.Scanner.Take = func() error { asked.Add(1); return nil }
 		c.Scanner.Detect = portscan.DetectNone
 		c.IPv6 = func() bool { return false }
-		c.CDNFull = full
+		c.ExcludeCDN = exclude
 		var obs []types.Observation
 		_, err := c.Run(context.Background(), types.Seed{Type: types.TypeHostname, Keys: map[string]string{"fqdn": "shop.example.org"}}, func(o types.Observation) error { obs = append(obs, o); return nil })
 		if err != nil {

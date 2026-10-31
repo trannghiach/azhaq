@@ -333,7 +333,8 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	portThreshold := fs.Int("port-threshold", 0, "stop asking a host after this many open ports: it answers every port (0: no limit)")
 	portUnnamed := fs.Int("port-unnamed", 0, "after this many open ports of an address that no protocol probe could name, ask its other silent ports their banner only (0: 6; -1: no limit; each probe is a connect)")
 	portDetect := fs.String("port-detect", "all", "what is asked of an open port: all (its banner, then HTTP and TLS, then one request of each protocol that waits to be asked, each on its own connection, several at once while the scan has workers free: at most 24 connects after the first), banner (what it says on the one connection) or none (connect and close)")
-	portCDNFull := fs.Bool("port-cdn-full", false, "scan CDN and WAF addresses in full, not only their web ports")
+	portCDNFull := fs.Bool("port-cdn-full", false, "accepted: CDN and WAF addresses are scanned in full by default")
+	portExcludeCDN := fs.Bool("port-exclude-cdn", false, "ask a CDN or WAF address only ports 80, 443, 8080 and 8443 (naabu -ec asks 80 and 443; this adds 8080 and 8443)")
 	portDiscover := fs.String("port-discover", "", "ask first whether an address is up, by a connect to 80 and 443: first (scan the ones that answer) or only (list them, scan nothing)")
 	portIP := fs.String("port-ip", "", "the address families of a name to scan: 4 or 6 (default both)")
 	portAllIPs := fs.Bool("port-all-ips", false, "scan every address of a name, not the first two of each family")
@@ -397,7 +398,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return usagef("-ports-udp: %v", err)
 	}
 	portCfg, err := portConfig(portFlags{minRate: *portMinRate, timeout: *portTimeout, retries: *portRetries, workers: *portWorkers,
-		order: *portOrder, seed: *portSeed, threshold: *portThreshold, unnamed: *portUnnamed, detect: *portDetect, cdnFull: *portCDNFull, discover: *portDiscover,
+		order: *portOrder, seed: *portSeed, threshold: *portThreshold, unnamed: *portUnnamed, detect: *portDetect, cdnFull: *portCDNFull, excludeCDN: *portExcludeCDN, discover: *portDiscover,
 		ip: *portIP, allIPs: *portAllIPs, source: *portSource, payload: *portPayload, on: portsOn, proxy: *portProxy, proxyAuth: *portProxyAuth})
 	if err != nil {
 		return err

@@ -281,9 +281,9 @@ A real page that is byte-for-byte the not-found page cannot be told apart by any
 
 ### `ports` on a CDN name scans four ports
 
-**Why:** An address in a CDN or WAF range is asked 80, 443, 8080 and 8443 only. The row has `cdn`, and the summary says so.
+**Why:** `-ec` (`-exclude-cdn`, or `-port-exclude-cdn` in `run`) limits an address in a CDN or WAF range to 80, 443, 8080 and 8443. The row has `cdn`, and the summary says so. Without `-ec` it is scanned in full.
 
-**Fix:** `-cdn-full` scans it in full.
+**Fix:** Drop `-ec`.
 
 ### `ports` on a range says addresses "answered neither a connect to 80 nor to 443"
 

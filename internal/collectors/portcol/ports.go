@@ -28,9 +28,9 @@ import (
 
 const Name = "azhaq-ports"
 
-// cdnPorts are the only ports scanned on a CDN or WAF address, unless the
-// scan is told to scan them all: the edge answers for thousands of
-// customers, so its other ports say nothing about the target.
+// cdnPorts are the only ports scanned on a CDN or WAF address when the
+// scan is told to exclude them (-ec): naabu's 80 and 443, and 8080 and 8443.
+// By default the address is scanned in full, as naabu does.
 var cdnPorts = []int{80, 443, 8080, 8443}
 
 // Discovery is how a scan tells which addresses are up before it asks
@@ -58,8 +58,9 @@ type Collector struct {
 	// IPv6 says whether this machine can reach IPv6 addresses; nil is
 	// fetch.IPv6Routable.
 	IPv6 func() bool
-	// CDNFull scans CDN and WAF addresses in full, not just their web ports.
-	CDNFull bool
+	// ExcludeCDN limits a CDN or WAF address to its web ports; by default it
+	// is scanned in full.
+	ExcludeCDN bool
 	// Discover is how addresses are told up before they are scanned.
 	Discover Discovery
 	// IPv4Only and IPv6Only keep a name to one family; AllIPs scans every
@@ -129,8 +130,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	}
 	host := normalize.Hostname(seed.Key())
 	var ips []string
-	// A name behind a CDN or WAF answers on the provider's shared edges:
-	// only their web ports are the target's. Any of its addresses or its
+	// A name behind a CDN or WAF answers on the provider's shared edges
+	// (-ec limits it to their web ports). Any of its addresses or its
 	// CNAME says so for all of them (CloudFront's IPv6 ranges read as
 	// plain AWS).
 	edgeName := ""
@@ -202,7 +203,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		ports := c.portsOf(host)
 		name := edgeName
 		edge := name != ""
-		if edge && !c.CDNFull {
+		if edge && c.ExcludeCDN {
 			ports = cdnPorts
 		}
 		// A scan an earlier run stopped asks only the ports it had not.
@@ -294,10 +295,10 @@ func (c *Collector) row(host, ip string, ports []int, s *scan, edge string, isEd
 	}
 	if isEdge {
 		row["cdn"] = edge
-		if c.CDNFull {
-			row["note"] = "CDN or WAF address: scanned in full"
-		} else {
+		if c.ExcludeCDN {
 			row["note"] = "CDN or WAF address: web ports only"
+		} else {
+			row["note"] = "CDN or WAF address: scanned in full"
 		}
 	}
 	return row
@@ -382,7 +383,6 @@ func Notes(obs []types.StoredObservation) []string {
 			Outside    int      `json:"outside_scope"`
 			FiltAddrs  int      `json:"filtered_addresses"`
 			Edges      int      `json:"cdn_addresses"`
-			CDNFull    bool     `json:"cdn_full"`
 			UDPLimit   int      `json:"udp_limited"`
 			Unprobed   int      `json:"unprobed"`
 		}
@@ -455,7 +455,7 @@ func Notes(obs []types.StoredObservation) []string {
 		out = append(out, fmt.Sprintf("%d addresses answered neither a connect to 80 nor to 443 (asked twice) and were not scanned: a host that drops both is not found this way, scan without -wn to ask it anyway", down))
 	}
 	if len(edges) > 0 {
-		out = append(out, fmt.Sprintf("CDN or WAF addresses were asked only on ports 80, 443, 8080 and 8443, as their other ports belong to the provider's other customers (%s): -cdn-full scans them in full", listOf(edges, 3)))
+		out = append(out, fmt.Sprintf("CDN or WAF addresses were asked only on ports 80, 443, 8080 and 8443, as -ec says (%s): drop -ec to scan them in full", listOf(edges, 3)))
 	}
 	if len(stopped) > 0 {
 		out = append(out, fmt.Sprintf("reached the open-port threshold (-pts): ports not yet asked were left out, and open ports past it may be missing: %s", listOf(stopped, 3)))

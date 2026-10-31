@@ -143,7 +143,7 @@ func init() {
 			}},
 		{name: "ports", group: groupDropIn, like: "naabu", run: cmdPorts,
 			summary: "open TCP ports (connect scan, no root), named by what they answer on any port, with products and versions; ranges, CIDR and AS numbers without a cap; -udp asks the common UDP ports",
-			usage:   "-host HOST[,HOST…] | -l FILE | stdin | TARGET…  [-p LIST | -tp 100|1000|full | -pf FILE] [-ep LIST] [-udp | -pu LIST] [-rate N] [-T0..5] [-connect-timeout MS] [-retries N] [-c N] [-sn | -wn] [-cdn-full] [-csv | -json] [-oX F] [-oG F] [-oA BASE]",
+			usage:   "-host HOST[,HOST…] | -l FILE | stdin | TARGET…  [-p LIST | -tp 100|1000|full | -pf FILE] [-ep LIST] [-udp | -pu LIST] [-rate N] [-T0..5] [-connect-timeout MS] [-retries N] [-c N] [-sn | -wn] [-ec] [-csv | -json] [-oX F] [-oG F] [-oA BASE]",
 			output:  "host:port per open port (host:port/udp for UDP); -json: {\"host\",\"ip\",\"port\",\"protocol\",\"tls\",\"cdn\",\"cdn-name\",\"timestamp\" (UTC),\"service\",\"product\",\"version\",\"title\",\"banner\",\"state\" (UDP)}; -csv: the same fields as columns; -oX nmap XML, -oG greppable, -oA all three. Targets: a name, an address, host:port (that port only, unless -p is given), a URL, a CIDR range (IPv4 or IPv6 down to /104), AS64500 (the prefixes RIPEstat lists), several to a flag separated by commas. -timeout is how long the whole run may take; the wait for one connect is -connect-timeout",
 			examples: []string{
 				"azhaq ports -host scanme.nmap.org -p top-1000 -json",

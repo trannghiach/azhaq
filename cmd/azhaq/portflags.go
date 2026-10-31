@@ -18,7 +18,7 @@ type portFlags struct {
 	seed                                         int64
 	order, detect, discover, ip, source, payload string
 	proxy, proxyAuth                             string
-	cdnFull, allIPs                              bool
+	excludeCDN, cdnFull, allIPs                  bool
 	on                                           []string
 }
 
@@ -26,7 +26,10 @@ type portFlags struct {
 // not know is a usage error, before anything is sent.
 func portConfig(f portFlags) (portcol.Config, error) {
 	cfg := portcol.Config{Timeout: f.timeout, Workers: f.workers, MinRate: f.minRate, Seed: f.seed, Threshold: f.threshold, Unnamed: f.unnamed,
-		CDNFull: f.cdnFull, AllIPs: f.allIPs}
+		ExcludeCDN: f.excludeCDN, AllIPs: f.allIPs}
+	if f.excludeCDN && f.cdnFull {
+		return cfg, usagef("-port-exclude-cdn and -port-cdn-full contradict: drop -port-cdn-full, as CDN and WAF addresses are scanned in full by default")
+	}
 	switch {
 	case f.retries < 0:
 	case f.retries == 0:
