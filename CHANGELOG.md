@@ -4,6 +4,13 @@
 
 ### Fixed
 
+- `fuzz`: `azhaq resume` no longer asks again what a stopped run already asked: a run stopped by `-max-requests`, `-maxtime`, the kill file or Ctrl-C keeps the exact inputs it asked, and the resume asks only the others and counts only what it newly did. Before, answers that came back out of order were forgotten (15 requests for 10 words).
+- `shots -nmap` takes every open TCP port of the scan, as `gowitness scan nmap` does, instead of only the ports nmap named http (a web port nmap guessed wrong, `nessus` for Juice Shop, was a usage error). Ports not named a web service are tried over https then http as fan-out: one that does not answer is listed with `"fanout": true` and the exit code stays 0; a dead port nmap named http or https still exits 3. New `-service-contains` and `-skip-port`; the summary says how many ports were tried and how many answered.
+- `dns`: without a type flag, `-json` prints only names that have an A record, as dnsx does; `-rcode` prints the others. `results` equals the rows, and `asked − did not resolve = results`.
+- `subs -live` no longer prints a name whose CNAME chain ends without an address (a CNAME to a deleted service): it is counted as `CNAME without an address` and stays in the summary's `takeover` list and the `[takeover]` line. A CNAME whose target resolves, such as a CDN, is live.
+- `ports`: a `host:port` keeps its port when `-p`, `-tp` or `-pf` is given: `-host 127.0.0.1,127.0.0.1:10025 -p 3001` scans 3001 and 10025.
+- `dirs`: `-fc`, `-fs`, `-fw`, `-fl` or `-fr` turns calibration off, as ffuf does: the filters are the user's, no guesses are sent, and every answer they do not remove is listed. Before, `-fs 2410 -mc all` dropped valid 200s as catch-all answers.
+- `urls` and `subs`: the `sources` block has each source's `requests`, retries included, and a note adds them up; the docs say the top-level `requests` counts requests to the targets, which `urls` never sends.
 - `run` and `crawl -browser` no longer count, ledger or hold to the scope the requests Chrome makes to its own pages (`chrome-extension:`, `chrome:`, `data:`, `blob:`, `about:`, `file:`): a page that embeds a PDF added 19 such lines to the ledger and the request count, which no server received. The ledger and the count now equal what the server received.
 - `subs` asks crt.sh's public PostgreSQL first, with subfinder's query and no `LIMIT`, and the JSON API only when the database fails or has no names: seconds where the JSON API takes 20 to 40 s on a large domain. A SOCKS5 proxy carries the connection; with an HTTP proxy the JSON API is used and the row's note says so.
 - `fuzz` reuses the buffers that read each answer instead of allocating 37 KB per request: a 4,700-request sweep uses about 30% less client CPU.
