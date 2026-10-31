@@ -418,7 +418,7 @@ func TestMigratingCoversTheTools(t *testing.T) {
 		if n < 3 {
 			t.Errorf("%s: %d command lines, want 3", tool, n)
 		}
-		if !strings.Contains(sec, "What differs on purpose") || !strings.Contains(sec, "On top:") {
+		if !strings.Contains(sec, "What differs on purpose") || !strings.Contains(sec, "What azhaq adds") {
 			t.Errorf("%s: no account of what differs or what azhaq adds", tool)
 		}
 	}
