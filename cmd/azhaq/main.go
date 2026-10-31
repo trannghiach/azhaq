@@ -533,7 +533,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		}
 	}
 	if active && len(allow) == 0 {
+		noRule := len(deny) == 0 && *scopeSpec == ""
 		allow = seedScope(seeds) // the targets given are the scope, as in the drop-ins
+		if noRule {
+			// With no rule, what the command line names is the authorization:
+			// a host a -header names joins the targets.
+			allow = append(allow, headerHosts(fetch.Extra)...)
+		}
 	}
 	rules := scope.Rules{Allow: append([]string(nil), allow...), Deny: append([]string(nil), deny...)}.Compile()
 	if err := hostHeadersInScope(fetch.Extra, rules); err != nil {
@@ -2152,9 +2158,42 @@ func browserAgent() string {
 var hostHeaders = scope.HostHeaders
 
 // hostHeadersInScope refuses a -header that names a host the scope leaves
-// out: it would reach that host through an address the scope allows.
+// out: it would reach that host through an address the scope allows. With no
+// -allow, -deny or -scope the host a header names joins the targets instead
+// (see headerHosts): what the user typed is what they authorized.
 func hostHeadersInScope(h http.Header, rules scope.Rules) error {
 	return hostHeadersFrom("-header", h, rules)
+}
+
+// headerHosts are the hosts the host-naming headers of h name, without
+// duplicates.
+func headerHosts(h http.Header) []string {
+	var out []string
+	for k, vs := range h {
+		if !scope.NamesHost(k) {
+			continue
+		}
+		for _, v := range vs {
+			for _, host := range scope.HeaderHosts(v) {
+				if !slices.Contains(out, host) {
+					out = append(out, host)
+				}
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// flagHeaderHosts are the hosts the -header flags among run flags name.
+func flagHeaderHosts(runFlags []string) []string {
+	h := http.Header{}
+	for _, raw := range runFlagValues(runFlags, "header") {
+		if k, v, ok := strings.Cut(raw, ":"); ok {
+			h.Add(strings.TrimSpace(k), strings.TrimSpace(v))
+		}
+	}
+	return headerHosts(h)
 }
 
 // hostHeadersFrom is hostHeadersInScope for headers that came from what

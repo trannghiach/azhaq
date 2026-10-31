@@ -55,8 +55,11 @@ type Config struct {
 	// answers are 403; StopOnAll (-sa) also on 429 over 20% and on errors.
 	StopOn403, StopOnAll bool
 	// Allow, when set, says whether a request's host is in scope; one that
-	// is not is not sent. The hosts its Host-naming headers name count too.
-	Allow func(host string) bool
+	// is not is not sent. The hosts its Host-naming headers name count too,
+	// except the headers in OpenHeaders (lower-case names): the user typed
+	// them, with no scope rule, so what they name is what was authorized.
+	Allow       func(host string) bool
+	OpenHeaders map[string]bool
 	// OriginTrips unanswered requests in a row stop the run: the target is
 	// down. Zero: never. With TripOnAnyError every error counts, not only a
 	// missing answer (-se).
@@ -693,11 +696,12 @@ func (e *engine) calibrateFilters(rs []*Response, key string) {
 // inScope says whether req may be sent: its URL's host and every host a
 // Host-naming header of it names (a front end routes by those) pass Allow.
 func (e *engine) inScope(req *Request) bool {
-	return InScope(e.cfg.Allow, req)
+	return InScope(e.cfg.Allow, req, e.cfg.OpenHeaders)
 }
 
-// InScope is that check for any sender of a request: allow nil lets all through.
-func InScope(allow func(string) bool, req *Request) bool {
+// InScope is that check for any sender of a request: allow nil lets all
+// through, and the headers named in open (lower case) are not held to it.
+func InScope(allow func(string) bool, req *Request, open map[string]bool) bool {
 	if allow == nil {
 		return true
 	}
@@ -705,7 +709,7 @@ func InScope(allow func(string) bool, req *Request) bool {
 		return false
 	}
 	for _, h := range req.Headers {
-		if !scope.NamesHost(h.Name) {
+		if !scope.NamesHost(h.Name) || open[strings.ToLower(h.Name)] {
 			continue
 		}
 		for _, host := range scope.HeaderHosts(h.Value) {

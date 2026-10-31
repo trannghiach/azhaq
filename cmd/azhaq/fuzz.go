@@ -46,7 +46,7 @@ func cmdFuzz(args []string) error {
 	fs.StringVar(data, "data", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-ascii", "", "ffuf's alias of -d")
 	fs.StringVar(data, "data-binary", "", "ffuf's alias of -d")
-	fs.Var(&headers, "H", "header \"Name: value\"; the keyword may stand in name and value, Host included (repeatable). A header that names a host (Host, X-Forwarded-Host, X-Host, X-Original-Host) is held to the scope as the URL's host is")
+	fs.Var(&headers, "H", "header \"Name: value\"; the keyword may stand in name and value, Host included (repeatable). A header that names a host (Host, X-Forwarded-Host, X-Host, X-Original-Host) joins the target when no -allow, -deny or -scope is given; with one, the host must be in the scope")
 	fs.Var(&cookies, "b", "cookie data \"NAME=VALUE; NAME2=VALUE2\"")
 	fs.Var(&cookies, "cookie", "ffuf's alias of -b")
 	reqFile := fs.String("request", "", "read the request from this file (a raw HTTP request, as Burp saves it); -u, -X, -d, -H and -b replace what it holds")
@@ -317,7 +317,12 @@ func cmdFuzz(args []string) error {
 		return usageErr{err}
 	}
 
-	rules, err := fuzzScope(tmpl, keywords, *scopeSpec, *program, allow, deny)
+	// What -H typed, as against what a -request file brought.
+	typedTmpl, err := fuzz.NewTemplate("", "http://x/", "", headers, nil)
+	if err != nil {
+		return usageErr{err}
+	}
+	rules, openHeaders, err := fuzzScope(tmpl, typedTmpl.Headers, keywords, *scopeSpec, *program, allow, deny)
 	if err != nil {
 		return err
 	}
@@ -351,7 +356,7 @@ func cmdFuzz(args []string) error {
 		Template: tmpl, Lists: kept, Mode: md, Set: set, Threads: *threads, Sender: sender,
 		Calibrate: calibrate, CalKeyword: *ack, CalGroups: calGroups, Recursion: *recursion, Depth: *depth, Strategy: *strategy,
 		MaxTimeJob: time.Duration(*maxtimeJob * float64(time.Second)), DelayMin: dmin, DelayMax: dmax,
-		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
+		StopOn403: *sf || *sa, StopOnAll: *sa, Allow: rules.Allows, OpenHeaders: openHeaders, OriginTrips: trips, TripOnAnyError: anyErr, Start: *start,
 		Progress: new(fuzz.Progress),
 	}
 	if *replayProxy != "" {
@@ -677,19 +682,25 @@ func appendUnique(dst []string, add ...string) []string {
 
 // fuzzScope is the rules the run keeps to: -allow, -deny and a program's
 // -scope, else the host of -u (when the keyword stands at the start of
-// the host, its domain: FUZZ.example.com is example.com). A Host header
-// that names a host is held to them as the URL's host is: a literal one the
-// rules leave out is refused, one that holds the keyword (virtual hosts) is
-// checked for each input, and without -allow its domain is the scope too.
-func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, deny []string) (scope.Rules, error) {
+// the host, its domain: FUZZ.example.com is example.com).
+//
+// A header that names a host (Host, X-Forwarded-Host, …) is held to them as
+// the URL's host is, with one exception: with no -allow, -deny or -scope, a
+// host that -H names (typed) joins the target, a literal one in the scope and
+// one that holds the keyword (virtual hosts) open for every word: what the
+// user typed is what they authorized. A host from a -request file is not
+// typed: a literal one the rules leave out is refused before the run, one with
+// the keyword is checked for each input, and its domain is the scope too.
+func fuzzScope(t fuzz.Template, typed []fuzz.Header, keywords []string, spec, program string, allow, deny []string) (rules scope.Rules, open map[string]bool, err error) {
 	allow, deny = append([]string(nil), allow...), append([]string(nil), deny...)
 	if spec != "" {
 		sc, err := loadScope(spec, program)
 		if err != nil {
-			return scope.Rules{}, err
+			return scope.Rules{}, nil, err
 		}
 		allow, deny = append(allow, sc.Allow...), append(deny, sc.Deny...)
 	}
+	noRule := len(allow) == 0 && len(deny) == 0 && spec == ""
 	if len(allow) == 0 {
 		u, _ := url.Parse(t.URL)
 		hosts := []struct{ what, host string }{{"-u", u.Hostname()}}
@@ -697,8 +708,17 @@ func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, 
 			if !scope.NamesHost(h.Name) {
 				continue
 			}
+			isTyped := slices.Contains(typed, h)
 			for _, host := range scope.HeaderHosts(h.Value) {
-				if holdsKeyword(host, keywords) {
+				switch {
+				case noRule && isTyped && holdsKeyword(host, keywords):
+					if open == nil {
+						open = map[string]bool{}
+					}
+					open[strings.ToLower(h.Name)] = true
+				case noRule && isTyped:
+					allow = append(allow, host)
+				case holdsKeyword(host, keywords):
 					hosts = append(hosts, struct{ what, host string }{"-H " + h.Name, host})
 				}
 			}
@@ -710,15 +730,15 @@ func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, 
 					host = rest
 				}
 				if strings.Contains(host, k) {
-					return scope.Rules{}, usagef("the host in %s holds the keyword %s: say what may be touched with -allow DOMAIN or -scope", hh.what, k)
+					return scope.Rules{}, nil, usagef("the host in %s holds the keyword %s: say what may be touched with -allow DOMAIN or -scope", hh.what, k)
 				}
 			}
 			allow = append(allow, host)
 		}
 	}
-	rules := scope.Rules{Allow: allow, Deny: deny}
+	rules = scope.Rules{Allow: allow, Deny: deny}
 	if u, err := url.Parse(t.URL); err == nil && !strings.Contains(u.Hostname(), "FUZZ") && !rules.Allows(u.Hostname()) {
-		return scope.Rules{}, usagef("%s is outside the scope", u.Hostname())
+		return scope.Rules{}, nil, usagef("%s is outside the scope", u.Hostname())
 	}
 	// A literal host header, before anything is sent; the ones that hold a
 	// keyword are held to the scope for each input (fuzz.InScope).
@@ -729,9 +749,9 @@ func fuzzScope(t fuzz.Template, keywords []string, spec, program string, allow, 
 		}
 	}
 	if err := hostHeadersFrom("-H", lit, rules.Compile()); err != nil {
-		return scope.Rules{}, err
+		return scope.Rules{}, nil, err
 	}
-	return rules, nil
+	return rules, open, nil
 }
 
 // holdsKeyword says whether s holds a wordlist keyword.

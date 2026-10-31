@@ -276,12 +276,12 @@ func TestFuzzDBKeepsTheHits(t *testing.T) {
 
 func TestFuzzScopeRules(t *testing.T) {
 	tm, _ := fuzz.NewTemplate("", "http://FUZZ.example.com/", "", nil, nil)
-	r, err := fuzzScope(tm, []string{"FUZZ"}, "", "", nil, nil)
+	r, _, err := fuzzScope(tm, nil, []string{"FUZZ"}, "", "", nil, nil)
 	if err != nil || !r.Allows("a.example.com") || r.Allows("example.org") {
 		t.Errorf("%+v %v", r, err)
 	}
 	tm, _ = fuzz.NewTemplate("", "http://app.example.com/FUZZ", "", nil, nil)
-	r, err = fuzzScope(tm, []string{"FUZZ"}, "", "", nil, []string{"app.example.com"})
+	r, _, err = fuzzScope(tm, nil, []string{"FUZZ"}, "", "", nil, []string{"app.example.com"})
 	if err == nil || !errors.As(err, new(usageErr)) {
 		t.Errorf("a denied host: %+v %v", r, err)
 	}

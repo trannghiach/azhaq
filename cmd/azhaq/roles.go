@@ -172,6 +172,7 @@ func cmdRoles(args []string) error {
 	if len(runArgs) > 0 && runArgs[0] == "--" {
 		runArgs = runArgs[1:]
 	}
+	noRule := !hasFlag(runArgs, "allow", "deny", "scope") // before -replay-writes adds the targets as -allow
 	roles, err := parseRoles(specs)
 	if err != nil {
 		return err
@@ -234,6 +235,14 @@ func cmdRoles(args []string) error {
 			for _, h := range hosts {
 				runArgs = append(runArgs, "-allow", h)
 			}
+			if noRule {
+				// The hosts the -role headers name were typed with the targets.
+				for _, r := range roles {
+					for _, h := range headerHosts(headerOf(r.headers)) {
+						runArgs = append(runArgs, "-allow", h)
+					}
+				}
+			}
 		}
 	}
 	for _, a := range runArgs {
@@ -245,14 +254,19 @@ func cmdRoles(args []string) error {
 		}
 	}
 	// A header that names a host is held to the scope before the first
-	// request of any role: the runs and the replay send it to the target's address.
+	// request of any role: the runs and the replay send it to the target's
+	// address. With no -allow, -deny or -scope, a host a -role header names
+	// joins the targets (the user typed it); what a -role-cmd prints was not
+	// typed, and is held to the targets when it has run.
 	if rolesHostRules, err = rolesScope(runArgs, sc, allows); err != nil {
 		return err
 	}
 	defer func() { rolesHostRules = scope.Rules{} }()
-	for _, r := range roles {
-		if err := hostHeadersFrom("role "+r.name+" header", headerOf(r.headers), rolesHostRules); err != nil {
-			return err
+	if !noRule {
+		for _, r := range roles {
+			if err := hostHeadersFrom("role "+r.name+" header", headerOf(r.headers), rolesHostRules); err != nil {
+				return err
+			}
 		}
 	}
 	if *dir == "" {
