@@ -41,6 +41,7 @@ type report struct {
 	Skipped     []engine.Skip    `json:"skipped,omitempty"`
 	Takeover    []takeoverRow    `json:"takeover,omitempty"` // names another party may take over
 	Degraded    bool             `json:"degraded,omitempty"` // a source the run depends on failed (subs); the exit code is not changed
+	Sources     *sourceHealth    `json:"sources,omitempty"`  // subs and urls: how many sources answered, which failed and why, what each gave
 	Stopped     string           `json:"stopped,omitempty"`  // the limit that stopped the work
 	Resume      string           `json:"resume,omitempty"`
 	Notes       []string         `json:"notes,omitempty"`
@@ -48,7 +49,9 @@ type report struct {
 
 	what   string // the unit of Results: "names", "web services"
 	warned bool   // a note says the results mislead (a role's dead session): exit 3
-	start  time.Time
+	// failOnErrors: -fail-on-errors was given, so no failure is made up for.
+	failOnErrors bool
+	start        time.Time
 }
 
 func newReport(command string) *report {
@@ -99,7 +102,8 @@ func (r *report) finish(asJSON, silent bool) error {
 	case asJSON:
 		raw, _ := json.Marshal(r)
 		fmt.Fprintf(os.Stderr, "%s\n", raw)
-	case silent && r.Exit == exitOK:
+	case silent && r.Exit == exitOK && (r.Sources == nil || r.Sources.failures() == 0):
+		// A source that failed is something that failed: it is said under -silent too.
 	default:
 		r.print(os.Stderr)
 	}
@@ -213,6 +217,9 @@ func (r *report) print(w io.Writer) {
 	}
 	for _, n := range r.Next {
 		fmt.Fprintf(w, "  next: %s\n", n)
+	}
+	if r.Sources != nil && r.Sources.failures() > 0 {
+		fmt.Fprintf(w, "  %s\n", r.Sources.line(r.Exit, r.ownFailures(), r.failOnErrors, r.Command == "urls"))
 	}
 	switch r.Exit {
 	case exitPartial:

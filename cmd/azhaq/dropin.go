@@ -635,6 +635,8 @@ func cmdURLs(args []string) error {
 	}
 	defer done()
 	urlsNotes(rep, payloads(st, "azhaq-urls"), *failCapped)
+	rep.Sources = archiveHealth(payloads(st, "azhaq-urls"))
+	rep.failOnErrors = hasFlag(given(), "fail-on-errors")
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
 }
