@@ -66,6 +66,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - With `-se` the run stops after twice `-t` failures of any kind in a row, as in ffuf. `-se-after N` names that number.
 - `-sf`, `-sa` and `-maxtime-job` say what they did in the summary. The first two end with exit 4, the last adds a note.
 - A report that cannot be written is a `failed` entry, not a silent loss. The exit code is 3. The place is tested before the first request.
+- A note counts the preflight and postflight requests sent: they are in the request total. One that failed is a `failed` entry, `preflight/postflight failed: …`, and the exit code is 3.
 - With calibration on, a note says what it filtered: `auto-calibration filtered out answers with size 1234`.
 - The summary also counts the requests the scope held back and the copies `-replay-proxy` sent: see [Scope, budget and pace](#scope-budget-and-pace).
 
@@ -151,6 +152,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - The host in `-u` is the scope unless `-allow`, `-deny` or `-scope` say otherwise. When the keyword starts the host, as in `FUZZ.example.com`, the scope is its domain.
 - A request to a host outside the scope is not sent, and the summary counts it.
 - Every request goes through the run's budget and pace (`-max-requests`, `-rate`) and the ledger, and stops at the kill file.
+- `-x` and `-replay-proxy` need their scheme, as in `http://127.0.0.1:8080`. The environment's `HTTP_PROXY` is not read, because Go sends loopback traffic through a proxy only when it is named.
 - The copies `-replay-proxy` sends go to the proxy you named. They are not requests to the target, so they are not in the ledger, the budget or the pace. The summary says how many were sent.
 
 ### Not in `fuzz`

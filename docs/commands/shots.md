@@ -105,6 +105,12 @@ A page that was not fully loaded when the picture was taken has these fields, an
 - The refused URLs are also in the summary's skipped list, once each.
 - Nothing outside the scope is loaded by default.
 
+### Chrome, ports and file names
+- `AZHAQ_CHROME` names the browser. In a container where Chrome cannot start its sandbox, `AZHAQ_CHROME_NO_SANDBOX=1` runs it without one. Do that only where you accept that the pages it loads are untrusted.
+- Chrome refuses some ports, such as 6000, 6666 and 10080, with `net::ERR_UNSAFE_PORT`. `-unsafe-ports` allows them by default.
+- A URL you give is shot as given, one file for each page, named like `http_host_port_path_hash.png`. The URLs a run finds itself are shot only when they are front pages.
+- A page that calls `alert()` on load has its dialog accepted and is shot. Nothing waits for a click.
+
 ### Pace
 
 At a set `-rate`, a page's time runs from when it last moved. A slow pace gives whole pictures, not blank ones.
