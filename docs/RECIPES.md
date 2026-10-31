@@ -291,7 +291,7 @@ azhaq crawl -u https://app.example.com/ -json -rejected                    # str
 azhaq crawl -u http://127.0.0.1:5030/ -submit-forms -allow 127.0.0.1 -ledger crawl.ledger.jsonl
 ```
 
-Catch: `-submit-forms` changes data on the target (a sign-up form creates an account). Use it on a target you may write to; the ledger lists every submission and the summary counts them. A form whose address looks like it would change something (`logout`, `delete`) and a form that uploads a file are left alone, and the summary says so. Without `-sweep`, `crawl` does not ask the built-in paths (`/admin`, `/.git/HEAD`, API description names); `-kf all` asks only `robots.txt` and the sitemaps and reads every entry.
+Catch: `-submit-forms` changes data on the target (a sign-up form creates an account). Use it on a target you may write to; the ledger lists every submission and the summary counts them. A form whose address looks like it would change something (`logout`, `delete`), a form that uploads a file and a form that posts outside the crawl's scope are left alone, and the summary says so. A form that posts to its own page (an empty action) is sent. Without `-sweep`, `crawl` does not ask the built-in paths (`/admin`, `/.git/HEAD`, API description names); `-kf all` asks only `robots.txt` and the sitemaps and reads every entry.
 
 ## 20. Probe web services like httpx
 
