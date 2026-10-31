@@ -25,6 +25,7 @@ type MapEntry struct {
 	Title     string   // the page title, if any
 	Template  string   // URL template; set on every templated URL row
 	Count     int      // URLs folded into this row by GroupTemplates
+	NotAsked  int      // of Count, the URLs found and not requested (-per-template, a budget)
 	Folded    int      // hostnames folded into a summary row (dead, wildcard)
 	Methods   []string // from API descriptions and the calls scripts make
 	Params    []string // query, form and API parameter names
@@ -611,7 +612,11 @@ func (m MapEntry) Line() string {
 		b.WriteString(p)
 	}
 	if m.Count > 1 {
-		fmt.Fprintf(&b, "  (%d urls)", m.Count)
+		if m.NotAsked > 0 {
+			fmt.Fprintf(&b, "  (%d urls, %d not asked)", m.Count, m.NotAsked)
+		} else {
+			fmt.Fprintf(&b, "  (%d urls)", m.Count)
+		}
 	}
 	return b.String()
 }
@@ -726,12 +731,14 @@ func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 		i, ok := idx[key]
 		if !ok {
 			r.Count = 1
+			r.NotAsked = notAsked(r)
 			idx[key] = len(out)
 			out = append(out, r)
 			continue
 		}
 		g := &out[i]
 		g.Count++
+		g.NotAsked += notAsked(r)
 		g.mergeEvidence(r)
 		for _, f := range r.Forms {
 			g.Forms = addForm(g.Forms, f)
@@ -742,10 +749,18 @@ func groupTemplates(rows []MapEntry, foldNames bool) []MapEntry {
 	}
 	for i := range out {
 		if out[i].Count == 1 {
-			out[i].Count = 0
+			out[i].Count, out[i].NotAsked = 0, 0
 		}
 	}
 	return out
+}
+
+// notAsked is 1 for a URL found and never requested.
+func notAsked(r MapEntry) int {
+	if r.Coverage == "hint" || r.Coverage == "capped" {
+		return 1
+	}
+	return 0
 }
 
 type apiOp struct {

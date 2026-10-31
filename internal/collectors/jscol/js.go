@@ -115,6 +115,113 @@ type script struct {
 	source    string // and the file it is
 	line, col int    // where an inline script starts in the page
 	mapRef    string // the map its SourceMap header names
+	scan      *scanFuture
+}
+
+// scanned is what a script's text alone gives. It is read on goroutines as
+// soon as the script is loaded, while the next script is fetched at the
+// run's pace and the others are read, so that reading a large bundle does
+// not leave the pace without a request to send.
+type scanned struct {
+	loc                *webextract.Locator
+	routes             []webextract.ClientRoute
+	ws                 []webextract.Socket
+	hash               bool
+	assembled          []webextract.Ref
+	specStart, specEnd int
+	refs               []webextract.Ref
+	markup             []webextract.PageRef
+	cands              []webextract.Cand
+	calls              []webextract.Call
+	scriptRefs, chunks []string
+	manifests          []string
+	mapURL             string
+	secrets            []webextract.Secret
+	gqlOps             []string
+}
+
+type scanFuture struct {
+	done chan struct{}
+	v    scanned
+}
+
+func (f *scanFuture) get() scanned {
+	<-f.done
+	return f.v
+}
+
+// startScan reads s on goroutines; page is the page's URL, appRoot where
+// its router takes paths from.
+func startScan(s script, page string, base, appRoot *url.URL) *scanFuture {
+	f := &scanFuture{done: make(chan struct{})}
+	var wg sync.WaitGroup
+	run := func(fn func(v *scanned)) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fn(&f.v)
+		}()
+	}
+	run(func(v *scanned) {
+		v.loc = webextract.NewLocator(s.body)
+		v.routes = webextract.ClientRoutes(s.body)
+		v.ws = webextract.WebSockets(s.body)
+		v.hash = webextract.HashRouting(s.body)
+		v.assembled = webextract.AssembledRefs(s.body)
+		v.specStart, v.specEnd = webextract.EmbeddedSpec(s.body)
+	})
+	run(func(v *scanned) {
+		// A path in a script on another host is still one the page's
+		// requests go to.
+		refBase := s.url
+		if !webextract.SameOrigin(page, s.url.String()) {
+			refBase = base
+		}
+		v.refs = webextract.JSURLRefs(s.body, refBase)
+		if !s.fromMap && !s.inline && strings.Contains(s.body, "<") {
+			v.markup = webextract.LinkRefs([]byte(s.body), s.url)
+		}
+	})
+	run(func(v *scanned) {
+		if !s.fromMap {
+			v.cands = webextract.Candidates(s.body, base, s.url, !strings.HasSuffix(strings.ToLower(s.url.Path), ".css"))
+		}
+	})
+	run(func(v *scanned) {
+		if !s.inline {
+			v.calls = webextract.Calls(s.body)
+			return
+		}
+		for _, c := range webextract.PageCalls(s.body) {
+			if !strings.HasPrefix(c.Path, "/") && !strings.HasPrefix(c.Path, "http://") && !strings.HasPrefix(c.Path, "https://") {
+				ref, err := s.url.Parse(c.Path)
+				if err != nil {
+					continue
+				}
+				c.Path = ref.String()
+			}
+			v.calls = append(v.calls, c)
+		}
+	})
+	run(func(v *scanned) {
+		v.scriptRefs = webextract.ScriptRefs(s.body, s.url)
+		v.chunks = webextract.ChunkURLs(s.body)
+		if !s.fromMap && !s.inline {
+			v.manifests = webextract.ScriptManifests(s.body, s.url, appRoot)
+		}
+		if !s.fromMap {
+			v.mapURL = webextract.SourceMapURL(s.body, s.url)
+		}
+	})
+	run(func(v *scanned) {
+		v.secrets = webextract.Secrets(s.body)
+		v.gqlOps = webextract.GraphQLOps(s.body)
+	})
+	go func() {
+		wg.Wait()
+		close(f.done)
+	}()
+	return f
 }
 
 // site is where in s the bytes start..end lie, as a reader finds them:
@@ -399,6 +506,17 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	var maps []sourceMap
 	appRoot := &url.URL{Scheme: base.Scheme, Host: base.Host, Path: "/"} // where the app's router takes its paths from
 	origin := base.Scheme + "://" + base.Host
+	// kick starts reading each script as it joins the queue.
+	started := 0
+	kick := func() {
+		for ; started < len(queue); started++ {
+			queue[started].scan = startScan(queue[started], raw, base, appRoot)
+		}
+	}
+	load := func(src string, needExt bool) {
+		queue = c.load(ctx, raw, src, needExt, queue, &fetched)
+		kick()
+	}
 	// readManifests reads the build manifests a page or a script points
 	// to: a script one (Next.js) is read as a script; a JSON one has its
 	// scripts queued, its maps read and its pages kept.
@@ -406,7 +524,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	readManifests = func(refs []string) {
 		for _, ref := range refs {
 			if looksLikeJS(ref) {
-				queue = c.load(ctx, raw, ref, false, queue, &fetched)
+				load(ref, false)
 				continue
 			}
 			if len(mans) >= maxManifests {
@@ -425,7 +543,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			for _, f := range m.Scripts {
 				if u, err := mb.Parse(f); err == nil {
 					bm.scripts++
-					queue = c.load(ctx, raw, u.String(), true, queue, &fetched)
+					load(u.String(), true)
 				}
 			}
 			// A map the manifest lists is asked for out of the origin's
@@ -446,6 +564,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				if sm, sources := c.readMap(ctx, raw, u.String(), js, false); sm.url != "" {
 					maps = append(maps, sm)
 					queue = append(queue, sources...)
+					kick()
 				}
 			}
 			for _, p := range m.Pages {
@@ -463,6 +582,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	case isJS:
 		c.parsed.Store(final, true)
 		queue = append(queue, script{url: base, body: string(res.Body), mapRef: headerMap(res.Header, base)})
+		kick()
 	case strings.Contains(ct, "html") || ct == "":
 		if fetch.ErrorPage(res) {
 			return types.RunMeta{Status: types.StatusOK}, nil
@@ -475,9 +595,10 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		for _, in := range webextract.InlineScriptsAt(res.Body) {
 			queue = append(queue, script{url: base, body: in.Text, inline: true, line: in.Line, col: in.Col})
 		}
+		kick()
 		srcs := webextract.ScriptSrcs(res.Body, base)
 		for _, src := range srcs {
-			queue = c.load(ctx, raw, src, false, queue, &fetched)
+			load(src, false)
 		}
 		readManifests(webextract.PageManifests(res.Body, base, srcs))
 	default:
@@ -500,14 +621,13 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
 		}
 		s := queue[i]
-		loc := webextract.NewLocator(s.body)
-		routes := webextract.ClientRoutes(s.body)
-		ws := webextract.WebSockets(s.body)
+		sc := s.scan.get()
+		loc, routes, ws := sc.loc, sc.routes, sc.ws
 		for _, r := range routes {
 			views.add(r.Path, r.Guard)
 			views.at.add(r.Path, s, loc, r.Start, r.End, false)
 		}
-		hash = hash || webextract.HashRouting(s.body)
+		hash = hash || sc.hash
 		for _, w := range ws {
 			k, ok := socketKey(w, base)
 			if !ok || !fetch.SameSite(raw, k.url) {
@@ -524,14 +644,8 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				socks[j].sites = append(socks[j].sites, s.site(loc, w.Start, w.End, !w.Default))
 			}
 		}
-		// A path in a script on another host is still one the page's
-		// requests go to.
-		refBase := s.url
-		if !webextract.SameOrigin(raw, s.url.String()) {
-			refBase = base
-		}
-		specStart, specEnd := webextract.EmbeddedSpec(s.body)
-		for _, r := range webextract.JSURLRefs(s.body, refBase) {
+		specStart, specEnd := sc.specStart, sc.specEnd
+		for _, r := range sc.refs {
 			if r.URL == raw || inRoutes(routes, r.Start) || webextract.InSocket(ws, r.Start) || !keepString(raw, r.URL) {
 				continue
 			}
@@ -551,25 +665,21 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			found = append(found, r.URL)
 			named.add(webextract.RouteKey(r.URL), s, loc, r.Start, r.End, false)
 		}
-		if !s.fromMap && !s.inline && strings.Contains(s.body, "<") {
-			// Markup a script carries (an Angular template, a string of
-			// HTML): its links are the app's; one built from an expression
-			// (src="`+_(i[8])+`") is no URL.
-			for _, ref := range webextract.LinkRefs([]byte(s.body), s.url) {
-				if ref.Method != "" {
-					continue
-				}
-				cands = append(cands, strCand{Cand: markupCand(ref, base), s: s, loc: loc})
+		// Markup a script carries (an Angular template, a string of
+		// HTML): its links are the app's; one built from an expression
+		// (src="`+_(i[8])+`") is no URL.
+		for _, ref := range sc.markup {
+			if ref.Method != "" {
+				continue
 			}
+			cands = append(cands, strCand{Cand: markupCand(ref, base), s: s, loc: loc})
 		}
-		if !s.fromMap {
-			for _, cd := range webextract.Candidates(s.body, base, s.url, !strings.HasSuffix(strings.ToLower(s.url.Path), ".css")) {
-				cands = append(cands, strCand{cd, s, loc})
-			}
+		for _, cd := range sc.cands {
+			cands = append(cands, strCand{cd, s, loc})
 		}
 		// Paths joined from constants are relative to the app's root,
 		// where single-page apps send their requests from.
-		for _, r := range webextract.AssembledRefs(s.body) {
+		for _, r := range sc.assembled {
 			p := r.URL
 			if !strings.HasPrefix(p, "http") {
 				p = origin + "/" + strings.TrimPrefix(p, "/")
@@ -579,57 +689,27 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				named.add(webextract.RouteKey(link), s, loc, r.Start, r.End, false)
 			}
 		}
-		var cs []webextract.Call
-		if s.inline {
-			for _, c := range webextract.PageCalls(s.body) {
-				if !strings.HasPrefix(c.Path, "/") && !strings.HasPrefix(c.Path, "http://") && !strings.HasPrefix(c.Path, "https://") {
-					ref, err := s.url.Parse(c.Path)
-					if err != nil {
-						continue
-					}
-					c.Path = ref.String()
-				}
-				cs = append(cs, c)
-			}
-		} else {
-			cs = webextract.Calls(s.body)
-		}
+		cs := sc.calls
 		for _, c := range cs {
 			if k, ok := callRoute(c, origin, raw); ok {
 				called.add(k, s, loc, c.At, c.End, true)
 			}
 		}
 		calls = append(calls, cs...)
-		for _, sec := range webextract.Secrets(s.body) {
-			if !secretSeen[sec.Value] && len(secrets) < 100 {
-				secretSeen[sec.Value] = true
-				row := map[string]any{"kind": sec.Kind, "severity": sec.Severity, "value": sec.Value, "script": s.url.String()}
-				if sec.Name != "" {
-					row["name"] = sec.Name
-				}
-				secrets = append(secrets, row)
-			}
-		}
-		for _, op := range webextract.GraphQLOps(s.body) {
-			if !opSeen[op] {
-				opSeen[op] = true
-				ops = append(ops, op)
-			}
-		}
-		for _, ref := range webextract.ScriptRefs(s.body, s.url) {
-			queue = c.load(ctx, raw, ref, true, queue, &fetched)
+		for _, ref := range sc.scriptRefs {
+			load(ref, true)
 		}
 		// Chunks the loader names at run time (webpack chunk maps).
-		for _, ch := range webextract.ChunkURLs(s.body) {
+		for _, ch := range sc.chunks {
 			if ref, err := s.url.Parse(ch); err == nil {
-				queue = c.load(ctx, raw, ref.String(), true, queue, &fetched)
+				load(ref.String(), true)
 			}
 		}
 		if !s.fromMap && !s.inline {
-			readManifests(webextract.ScriptManifests(s.body, s.url, appRoot))
+			readManifests(sc.manifests)
 		}
 		if !s.fromMap && len(maps) < maxMaps {
-			ref, guessed := webextract.SourceMapURL(s.body, s.url), false
+			ref, guessed := sc.mapURL, false
 			if ref == "" {
 				ref = s.mapRef
 			}
@@ -639,6 +719,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			if m, sources := c.readMap(ctx, raw, ref, s.url, guessed); m.url != "" {
 				maps = append(maps, m)
 				queue = append(queue, sources...)
+				kick()
 			}
 		}
 	}
@@ -729,27 +810,6 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			setFrom(row, raw, at)
 		}
 		return emitRow(row, 0.7)
-	}
-	if len(secrets) > 0 {
-		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "secrets": secrets})
-		if err := emit(types.Observation{
-			Collector: Name, Source: raw, Kind: "secrets",
-			Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC(),
-		}); err != nil {
-			return meta, err
-		}
-		meta.EmitCount++
-	}
-	if len(ops) > 0 {
-		sort.Strings(ops)
-		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "graphql_operations": ops})
-		if err := emit(types.Observation{
-			Collector: Name, Source: raw, Kind: "graphql",
-			Payload: payload, Confidence: 0.7, ObservedAt: time.Now().UTC(),
-		}); err != nil {
-			return meta, err
-		}
-		meta.EmitCount++
 	}
 	for _, m := range maps {
 		row := map[string]any{"url": m.url, "via": "js", "role": "sourcemap", "sources": m.count}
@@ -909,6 +969,18 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			Type: types.TypeURL, Keys: map[string]string{"url": src},
 		})
 	}
+	// Strings with a complete query (/catalog?category=Gin) are pages of
+	// their own, each a row and asked like a link of the page; the route's
+	// row keeps the names.
+	variants := map[string][]string{}
+	variantSeen := map[string]bool{}
+	for _, l := range found {
+		if completeQuery(l) && !variantSeen[l] {
+			variantSeen[l] = true
+			k := webextract.RouteKey(l)
+			variants[k] = append(variants[k], l)
+		}
+	}
 	for _, link := range webextract.CollapseURLs(found) {
 		if meta.EmitCount >= maxEmit {
 			break
@@ -950,8 +1022,97 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 				Keys: map[string]string{"url": webextract.RouteKey(link)},
 			})
 		}
+		for _, v := range variants[webextract.RouteKey(link)] {
+			if meta.EmitCount >= maxEmit {
+				break
+			}
+			row := map[string]any{"url": v, "via": "js", "role": role}
+			if at := named[webextract.RouteKey(v)]; len(at) > 0 {
+				row["found_in"] = at
+				setFrom(row, raw, at)
+			}
+			if err := emitRow(row, 0.7); err != nil {
+				return meta, err
+			}
+			if webextract.Hintable(v) {
+				meta.NextHints = append(meta.NextHints, types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": v}})
+			}
+		}
+	}
+	// What the scripts name goes to the scheduler now, before the rest of
+	// what they hold is gathered: the run's pace has requests to send.
+	if len(meta.NextHints) > 0 && catalog.Hint(ctx, meta.NextHints...) {
+		meta.NextHints = nil
+	}
+	for _, s := range queue {
+		if ctx.Err() != nil {
+			return types.RunMeta{Status: types.StatusCancelled}, ctx.Err()
+		}
+		sc := s.scan.get()
+		for _, sec := range sc.secrets {
+			if !secretSeen[sec.Value] && len(secrets) < 100 {
+				secretSeen[sec.Value] = true
+				row := map[string]any{"kind": sec.Kind, "severity": sec.Severity, "value": sec.Value, "script": s.url.String()}
+				if sec.Name != "" {
+					row["name"] = sec.Name
+				}
+				secrets = append(secrets, row)
+			}
+		}
+		for _, op := range sc.gqlOps {
+			if !opSeen[op] {
+				opSeen[op] = true
+				ops = append(ops, op)
+			}
+		}
+	}
+	if len(secrets) > 0 {
+		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "secrets": secrets})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "secrets",
+			Payload: payload, Confidence: 0.8, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
+	}
+	if len(ops) > 0 {
+		sort.Strings(ops)
+		payload, _ := json.Marshal(map[string]any{"url": raw, "via": "js", "graphql_operations": ops})
+		if err := emit(types.Observation{
+			Collector: Name, Source: raw, Kind: "graphql",
+			Payload: payload, Confidence: 0.7, ObservedAt: time.Now().UTC(),
+		}); err != nil {
+			return meta, err
+		}
+		meta.EmitCount++
 	}
 	return meta, nil
+}
+
+// completeQuery says whether a URL's query holds a value for every name
+// (?category=Gin): one with an empty value (?current=) is the start of a
+// URL the app finishes at run time.
+func completeQuery(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.RawQuery == "" {
+		return false
+	}
+	q, err := url.ParseQuery(u.RawQuery)
+	if err != nil || len(q) == 0 {
+		return false
+	}
+	for k, vs := range q {
+		if k == "" {
+			return false
+		}
+		for _, v := range vs {
+			if v == "" || strings.ContainsAny(v, "{}[]$`") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // markupCand judges a URL read from markup inside a script. A browser

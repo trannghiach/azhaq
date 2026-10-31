@@ -218,7 +218,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	shotCodes := fs.String("shot-codes", "", "take only pages that answer with these statuses, comma-separated (default: any); the others are listed as skipped")
 	shotHTML := fs.Bool("shot-html", false, "keep each page's rendered HTML beside its screenshot")
 	chromePath := fs.String("chrome", "", "the Chrome or Chromium to run (default $AZHAQ_CHROME, else the first found)")
-	chromeProxy := fs.String("chrome-proxy", "", "send Chrome's own connections through this http or socks5 proxy (default: the environment's)")
+	chromeProxy := fs.String("chrome-proxy", "", "send Chrome's own connections through this http or socks5 proxy (default: -proxy, else the environment's); a plain http:// request reaches an http proxy as a proxy request, a page over TLS as a CONNECT tunnel")
 	chromeProfile := fs.String("chrome-profile", "", "a Chrome user data directory to use and keep: sessions it holds go with the pages (default: a temporary one)")
 	unsafePorts := fs.Bool("unsafe-ports", true, "let Chrome open the ports it refuses by default (6000, 6666, 10080 and others); -unsafe-ports=false keeps its refusal")
 	webScheme := fs.String("web-scheme", "", "try a name or an address over this scheme only, http or https (default: https, then http)")

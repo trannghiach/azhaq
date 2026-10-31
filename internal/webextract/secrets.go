@@ -14,28 +14,45 @@ type Secret struct {
 	Name     string `json:"name,omitempty"` // the property or variable it was assigned to
 }
 
+// secretPatterns are tried only on a script that holds one of a pattern's
+// literals: a regular expression over a megabyte of script is slow, and
+// nearly every script holds none of these.
 var secretPatterns = []struct {
 	kind, severity string
+	has            []string
 	re             *lazyRegexp
 }{
-	{"aws-access-key-id", "medium", lazyRE(`\b((?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[A-Z0-9]{16})\b`)},
-	{"google-api-key", "medium", lazyRE(`\b(AIza[0-9A-Za-z_-]{35})\b`)},
-	{"github-token", "high", lazyRE(`\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})\b`)},
-	{"github-token", "high", lazyRE(`\b(github_pat_[A-Za-z0-9_]{60,})\b`)},
-	{"gitlab-token", "high", lazyRE(`\b(glpat-[A-Za-z0-9_-]{20})\b`)},
-	{"slack-token", "high", lazyRE(`\b(xox[baprs]-[0-9A-Za-z-]{10,})\b`)},
-	{"slack-webhook", "high", lazyRE(`(https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,})`)},
-	{"discord-webhook", "high", lazyRE(`(https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{50,})`)},
-	{"stripe-secret-key", "high", lazyRE(`\b((?:sk|rk)_live_[0-9a-zA-Z]{24,})\b`)},
-	{"stripe-publishable-key", "info", lazyRE(`\b(pk_live_[0-9a-zA-Z]{24,})\b`)},
-	{"sendgrid-key", "high", lazyRE(`\b(SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})\b`)},
-	{"mailgun-key", "high", lazyRE(`\b(key-[0-9a-f]{32})\b`)},
-	{"twilio-key", "medium", lazyRE(`\b(SK[0-9a-f]{32})\b`)},
-	{"openai-key", "high", lazyRE(`\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,})\b`)},
-	{"anthropic-key", "high", lazyRE(`\b(sk-ant-[A-Za-z0-9_-]{80,})\b`)},
-	{"private-key", "high", lazyRE(`(-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----)`)},
-	{"jwt", "info", lazyRE(`\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)},
+	{"aws-access-key-id", "medium", []string{"AKIA", "ASIA", "ABIA", "ACCA", "A3T"}, lazyRE(`\b((?:AKIA|ASIA|ABIA|ACCA|A3T[A-Z0-9])[A-Z0-9]{16})\b`)},
+	{"google-api-key", "medium", []string{"AIza"}, lazyRE(`\b(AIza[0-9A-Za-z_-]{35})\b`)},
+	{"github-token", "high", []string{"ghp_", "gho_", "ghu_", "ghs_", "ghr_"}, lazyRE(`\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})\b`)},
+	{"github-token", "high", []string{"github_pat_"}, lazyRE(`\b(github_pat_[A-Za-z0-9_]{60,})\b`)},
+	{"gitlab-token", "high", []string{"glpat-"}, lazyRE(`\b(glpat-[A-Za-z0-9_-]{20})\b`)},
+	{"slack-token", "high", []string{"xox"}, lazyRE(`\b(xox[baprs]-[0-9A-Za-z-]{10,})\b`)},
+	{"slack-webhook", "high", []string{"hooks.slack.com"}, lazyRE(`(https://hooks\.slack\.com/services/T[A-Z0-9]+/B[A-Z0-9]+/[A-Za-z0-9]{20,})`)},
+	{"discord-webhook", "high", []string{"/api/webhooks/"}, lazyRE(`(https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/\d+/[A-Za-z0-9_-]{50,})`)},
+	{"stripe-secret-key", "high", []string{"_live_"}, lazyRE(`\b((?:sk|rk)_live_[0-9a-zA-Z]{24,})\b`)},
+	{"stripe-publishable-key", "info", []string{"pk_live_"}, lazyRE(`\b(pk_live_[0-9a-zA-Z]{24,})\b`)},
+	{"sendgrid-key", "high", []string{"SG."}, lazyRE(`\b(SG\.[A-Za-z0-9_-]{22}\.[A-Za-z0-9_-]{43})\b`)},
+	{"mailgun-key", "high", []string{"key-"}, lazyRE(`\b(key-[0-9a-f]{32})\b`)},
+	{"twilio-key", "medium", []string{"SK"}, lazyRE(`\b(SK[0-9a-f]{32})\b`)},
+	{"openai-key", "high", []string{"T3BlbkFJ"}, lazyRE(`\b(sk-(?:proj-)?[A-Za-z0-9_-]{20,}T3BlbkFJ[A-Za-z0-9_-]{20,})\b`)},
+	{"anthropic-key", "high", []string{"sk-ant-"}, lazyRE(`\b(sk-ant-[A-Za-z0-9_-]{80,})\b`)},
+	{"private-key", "high", []string{"-----BEGIN "}, lazyRE(`(-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----)`)},
+	{"jwt", "info", []string{"eyJ"}, lazyRE(`\b(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)},
 }
+
+// holdsAny says whether s holds one of the literals.
+func holdsAny(s string, lits []string) bool {
+	for _, l := range lits {
+		if strings.Contains(s, l) {
+			return true
+		}
+	}
+	return false
+}
+
+// envPrefixes start the names of the build variables a bundler inlines.
+var envPrefixes = []string{"REACT_APP_", "NEXT_PUBLIC_", "VUE_APP_", "VITE_", "NUXT_ENV_", "GATSBY_"}
 
 var (
 	// awsSecretNear is a 40-character secret key next to an access key id.
@@ -57,6 +74,9 @@ func Secrets(script string) []Secret {
 		}
 	}
 	for _, p := range secretPatterns {
+		if !holdsAny(script, p.has) {
+			continue
+		}
 		for _, m := range p.re.FindAllStringSubmatchIndex(script, 64) {
 			v := script[m[2]:m[3]]
 			s := Secret{Kind: p.kind, Severity: p.severity, Value: v}
@@ -71,10 +91,12 @@ func Secrets(script string) []Secret {
 			add(s)
 		}
 	}
-	for _, m := range envVar.FindAllStringSubmatch(script, 64) {
-		add(Secret{Kind: "build-variable", Severity: "info", Name: m[1], Value: m[2]})
+	if holdsAny(script, envPrefixes) {
+		for _, m := range envVar.FindAllStringSubmatch(script, 64) {
+			add(Secret{Kind: "build-variable", Severity: "info", Name: m[1], Value: m[2]})
+		}
 	}
-	for _, m := range assigned.FindAllStringSubmatch(script, 64) {
+	for _, m := range assignedIn(script, 64) {
 		name, v := m[1], m[2]
 		if seen[v] || notSecret(v) || entropy(v) < 3.2 || strings.Contains(v, "/") && !strings.ContainsAny(v, "+=") ||
 			notSecretName.MatchString(name) || oddChars(v) {
@@ -85,6 +107,71 @@ func Secrets(script string) []Secret {
 	sort.SliceStable(out, func(i, j int) bool { return rank(out[i].Severity) < rank(out[j].Severity) })
 	return out
 }
+
+// assignedWords are what makes a name sound secret (assigned's pattern,
+// lower case, without its optional separators).
+var assignedWords = []string{"secret", "token", "passw", "apikey", "api_key", "api-key", "accesskey", "access_key", "access-key",
+	"privatekey", "private_key", "private-key", "authkey", "auth_key", "auth-key"}
+
+// assignedIn is assigned's matches, found in the stretches of script around
+// the words that make a name sound secret rather than in all of it.
+func assignedIn(script string, n int) [][]string {
+	low := asciiLower(script)
+	var spans [][2]int
+	for _, w := range assignedWords {
+		for from := 0; ; {
+			i := strings.Index(low[from:], w)
+			if i < 0 {
+				break
+			}
+			i += from
+			from = i + len(w)
+			start, end := max(0, i-assignedBefore), min(len(script), i+len(w)+assignedAfter)
+			spans = append(spans, [2]int{start, end})
+		}
+	}
+	if len(spans) == 0 {
+		return nil
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	merged := spans[:1]
+	for _, sp := range spans[1:] {
+		if last := &merged[len(merged)-1]; sp[0] <= last[1] {
+			last[1] = max(last[1], sp[1])
+		} else {
+			merged = append(merged, sp)
+		}
+	}
+	var out [][]string
+	for _, sp := range merged {
+		for _, m := range assigned.FindAllStringSubmatch(script[sp[0]:sp[1]], n-len(out)) {
+			out = append(out, m)
+		}
+		if len(out) >= n {
+			break
+		}
+	}
+	return out
+}
+
+// asciiLower lower-cases A-Z only, so that offsets in the result are the
+// script's.
+func asciiLower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + 'a' - 'A'
+		}
+	}
+	return string(b)
+}
+
+// assignedBefore and assignedAfter bound a name's text before its secret
+// word and the value after it.
+const (
+	assignedBefore = 128
+	assignedAfter  = 320
+)
 
 func rank(sev string) int {
 	switch sev {

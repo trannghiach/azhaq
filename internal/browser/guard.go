@@ -186,8 +186,21 @@ func (g *guard) handle(c net.Conn) {
 	if tls {
 		scheme = "https"
 	}
+	p, err := upstream(scheme, addr, g.via)
+	if err != nil {
+		if ws {
+			fetch.Refund()
+		}
+		return
+	}
+	if p != nil && p.Scheme == "http" && !tls && !ws {
+		// An HTTP proxy is asked for each plain request, as the run's own
+		// requests are, not for a tunnel it cannot read.
+		g.forward(c, r, p, addr)
+		return
+	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	up, err := dialOut(ctx, scheme, addr, g.via)
+	up, err := dialOut(ctx, p, addr)
 	cancel()
 	if err != nil {
 		if ws {
@@ -353,17 +366,19 @@ func closeWrite(c net.Conn) {
 	_ = c.Close()
 }
 
-// dialOut connects to addr as the run's own requests to a scheme://addr
-// URL would: through the proxy -proxy or the environment names for it, if any (Burp,
-// a SOCKS tunnel), or directly, a name through the run's resolver.
-func dialOut(ctx context.Context, scheme, addr string, via *url.URL) (net.Conn, error) {
-	p, err := via, error(nil)
-	if p == nil {
-		p, err = fetch.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+// upstream is the proxy Chrome's connection to addr goes through, as the
+// run's own requests to a scheme://addr URL would: the one -chrome-proxy
+// (via) names, else -proxy's or the environment's; nil for none.
+func upstream(scheme, addr string, via *url.URL) (*url.URL, error) {
+	if via != nil {
+		return via, nil
 	}
-	if err != nil {
-		return nil, err
-	}
+	return fetch.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+}
+
+// dialOut connects to addr through the proxy p (Burp, a SOCKS tunnel), or
+// directly when there is none, a name through the run's resolver.
+func dialOut(ctx context.Context, p *url.URL, addr string) (net.Conn, error) {
 	if p == nil {
 		return fetch.Dial(ctx, "tcp", addr)
 	}
@@ -381,6 +396,53 @@ func dialOut(ctx context.Context, scheme, addr string, via *url.URL) (net.Conn, 
 		return connectVia(ctx, p, addr)
 	}
 	return nil, fmt.Errorf("proxy %s: Chrome's connections go through http and socks5 proxies only", p.Redacted())
+}
+
+// forward relays the plain HTTP requests Chrome sends on c to the HTTP
+// proxy p, each as the absolute URI a proxy reads (what the run's own
+// client sends it): a CONNECT tunnel would hide the request from the proxy,
+// and many proxies refuse one to any port but 443.
+func (g *guard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
+	at := p.Host
+	if p.Port() == "" {
+		at = net.JoinHostPort(p.Hostname(), "80")
+	}
+	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
+	up, err := fetch.Dial(ctx, "tcp", at)
+	cancel()
+	if err != nil {
+		return
+	}
+	defer up.Close()
+	stop := context.AfterFunc(g.ctx, func() { _ = up.Close() })
+	defer stop()
+	from := bufio.NewReader(up)
+	for {
+		req, err := http.ReadRequest(r)
+		if err != nil {
+			return
+		}
+		req.URL.Scheme = "http"
+		if req.Host == "" {
+			req.Host = addr
+		}
+		if u := p.User; u != nil {
+			pass, _ := u.Password()
+			req.Header.Set("Proxy-Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(u.Username()+":"+pass)))
+		}
+		if err := req.WriteProxy(up); err != nil {
+			return
+		}
+		res, err := http.ReadResponse(from, req)
+		if err != nil {
+			return
+		}
+		err = res.Write(c)
+		res.Body.Close()
+		if err != nil || res.Close || req.Close {
+			return
+		}
+	}
 }
 
 // runDialer reaches a proxy as the run's HTTP client does.

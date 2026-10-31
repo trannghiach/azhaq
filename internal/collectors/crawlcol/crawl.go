@@ -156,11 +156,21 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			return meta, err
 		}
 		meta.EmitCount++
-		if f.Action == "" || f.Action == raw || !crawlscope.Within(raw, f.Action) {
+		if f.Action == "" {
 			continue
 		}
+		if !crawlscope.Within(raw, f.Action) {
+			if c.SubmitForms && !strings.EqualFold(f.Method, "GET") {
+				fetch.Note("a POST form to " + f.Action + " was not submitted: it is outside the crawl's scope")
+			}
+			continue
+		}
+		isGet := strings.EqualFold(f.Method, "GET")
+		if isGet && f.Action == raw && !c.FillForms {
+			continue // the page itself; a POST to its own address is the usual form
+		}
 		switch {
-		case strings.EqualFold(f.Method, "GET"):
+		case isGet:
 			if err := c.getForm(raw, f, emit, &meta); err != nil {
 				return meta, err
 			}
@@ -387,8 +397,10 @@ func (c *Collector) getForm(page string, f webextract.Form, emit func(types.Obse
 		hint(f.Action)
 		return nil
 	}
-	if err := row(f.Action); err != nil {
-		return err
+	if f.Action != page {
+		if err := row(f.Action); err != nil {
+			return err
+		}
 	}
 	if err := row(filled); err != nil {
 		return err
@@ -415,7 +427,11 @@ func (c *Collector) postForm(ctx context.Context, page string, f webextract.Form
 	}
 	res, err := fetch.SubmitForm(ctx, c.Client, f.Action, q)
 	if err != nil {
-		if neterr.Quiet(err) || errors.Is(err, neterr.ErrBudget) {
+		if neterr.Quiet(err) {
+			fetch.Note("a POST form to " + f.Action + " was not submitted: " + strings.TrimPrefix(err.Error(), "not requested: "))
+			return nil
+		}
+		if errors.Is(err, neterr.ErrBudget) {
 			return nil
 		}
 		return err

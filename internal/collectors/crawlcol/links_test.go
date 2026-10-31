@@ -188,3 +188,39 @@ func TestPostFormsAreSubmittedOnlyWhenAsked(t *testing.T) {
 		t.Errorf("the route is not listed with its method: %v", rows)
 	}
 }
+
+// A form posts to the page it is on when its action is empty or its own
+// address: it is sent, and a GET form to its own page is asked filled.
+func TestFormsOfTheirOwnPageAreSentAndAsked(t *testing.T) {
+	var posts []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts = append(posts, r.URL.Path)
+			return
+		}
+		if r.URL.Path != "/find" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<html><body><form method="post"><input name="a"></form><form action="/find"><input name="q"></form></body></html>`)
+	}))
+	t.Cleanup(srv.Close)
+	c := New(srv.Client())
+	c.SubmitForms, c.FillForms = true, true
+	var hints []string
+	meta, err := c.Run(context.Background(), types.Seed{Type: types.TypeURL, Keys: map[string]string{"url": srv.URL + "/find"}},
+		func(types.Observation) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range meta.NextHints {
+		hints = append(hints, strings.TrimPrefix(h.Key(), srv.URL))
+	}
+	if len(posts) != 1 || posts[0] != "/find" {
+		t.Errorf("posts %v", posts)
+	}
+	if strings.Join(hints, " ") != "/find?q=azhaq" {
+		t.Errorf("hints %v", hints)
+	}
+}

@@ -50,3 +50,26 @@ func TestSecretsSkipParserTables(t *testing.T) {
 		t.Fatalf("%+v", got)
 	}
 }
+
+// A secret is found wherever it sits in a large script, with the patterns
+// that need a word of their own tried only where the word is.
+func TestSecretsInALargeScript(t *testing.T) {
+	filler := strings.Repeat("function f(a,b){return a+b};var s=\"a text with SK and key- in it\";", 4000)
+	cases := map[string]string{
+		"assigned":  `this.config.auth.clientSecret = "s3cr3tValue-ab12CD34ef56";`,
+		"github":    `var g="ghp_abcdefghijklmnopqrstuvwxyz0123456789";`,
+		"env":       `window.__ENV={REACT_APP_API_URL:"https://api.example.org/v1"};`,
+		"upper-key": `var API_KEY = "Zm9vYmFyMTIzNDU2Nzg5MA";`,
+	}
+	for name, line := range cases {
+		for _, at := range []int{0, len(filler) / 2, len(filler)} {
+			got := Secrets(filler[:at] + "\n" + line + "\n" + filler[at:])
+			if len(got) != 1 {
+				t.Errorf("%s at %d: %d secrets, want 1: %v", name, at, len(got), got)
+			}
+		}
+	}
+	if got := Secrets(filler); len(got) != 0 {
+		t.Errorf("filler holds secrets: %v", got)
+	}
+}
