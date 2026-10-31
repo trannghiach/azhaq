@@ -10,6 +10,7 @@ go run ./bench -domains=false           # leave out the passive domain lookups
 go run ./bench -crapi                   # also OWASP crAPI (about 2 GB of images)
 go run ./bench -refbin DIR -nmap SCRIPT # reference tools built elsewhere; nmap unpacked without sudo
 go run ./bench -readme                  # rewrite the README's benchmark table from the newest record
+go run ./bench -merge a.json b.json     # join records of sections run apart into one (CI runs eight groups in parallel)
 ```
 
 Run it from the repository root. It needs Docker (Juice Shop and VAmPI from `bench/compose.yaml`, the services lab from `bench/services.yaml` when the services section runs), network access, a C compiler (jsluice uses cgo), Python 3 (arjun), Chrome (screenshots, `-browser`, `-login`) and linux/amd64 (the reference tools are pinned to their linux/amd64 release archives, or taken from `-refbin`). It exits non-zero if a check fails, and writes a JSON record to `bench/history/`. The bench never stops containers: `-down` takes down only its own two (`azhaq-bench`).

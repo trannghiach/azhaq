@@ -1,9 +1,12 @@
 name: bench
 
-# The whole benchmark on a runner, both profiles by default. Push an
-# annotated tag bench-NAME whose message holds the bench's flags (for
-# example "-only probe,apps -profile polite", or nothing for everything).
-# The record and the log go to the ci-results branch under bench/NAME/.
+# The whole benchmark, both profiles by default, in parallel jobs: each job
+# runs a group of sections on its own runner and a last job joins their
+# records into one (go run ./bench -merge). Push an annotated tag
+# bench-NAME whose message holds the bench's flags (for example
+# "-profile polite"); a message with -only runs those sections in one job.
+# The joined record and the logs go to the ci-results branch under
+# bench/NAME/.
 on:
   push:
     tags: ["bench-*"]
@@ -12,9 +15,46 @@ permissions:
   contents: write
 
 jobs:
-  bench:
+  plan:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    outputs:
+      args: ${{ steps.p.outputs.args }}
+      parts: ${{ steps.p.outputs.parts }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: p
+        run: |
+          args=""
+          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
+            args=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
+          fi
+          echo "args=$args" >> "$GITHUB_OUTPUT"
+          # Groups of about 15 minutes; sections that read each other's
+          # results stay together (network and probe use the domains').
+          if [[ " $args " == *" -only "* ]]; then
+            parts='[{"name":"only","only":""}]'
+          else
+            parts='[{"name":"apps","only":"apps,openapi"},
+              {"name":"dirs-params","only":"dirs,params"},
+              {"name":"fuzz-shots","only":"fuzz,shots"},
+              {"name":"once","only":"dropin,scope,scale,secrets,tenants"},
+              {"name":"claims","only":"claims"},
+              {"name":"domains","only":"domains,urls,network,probe"},
+              {"name":"ports","only":"ports,services"},
+              {"name":"dns","only":"brute,dns,lab,notify,docs"}]'
+          fi
+          echo "parts=$(echo "$parts" | jq -c .)" >> "$GITHUB_OUTPUT"
+
+  part:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.parts) }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -25,26 +65,67 @@ jobs:
       - name: reference tools from apt
         run: sudo apt-get update -q && sudo apt-get install -y -q nmap dnsutils
       - name: bench
+        env:
+          ARGS: ${{ needs.plan.outputs.args }}
+          ONLY: ${{ matrix.only }}
         run: |
-          args=""
-          if [ "$(git cat-file -t "refs/tags/$GITHUB_REF_NAME")" = tag ]; then
-            args=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
-          fi
-          echo "bench flags: $args"
+          only=()
+          [ -n "$ONLY" ] && only=(-only "$ONLY")
+          echo "bench flags: $ARGS ${only[*]}"
           # shellcheck disable=SC2086 # the flags are words
-          go run ./bench $args -nmap "$(command -v nmap)" 2>&1 | tee bench.log || true
+          go run ./bench $ARGS "${only[@]}" -nmap "$(command -v nmap)" 2>&1 | tee "bench-${{ matrix.name }}.log" || true
+          mkdir -p part
+          mv "bench-${{ matrix.name }}.log" part/
+          f=$(ls -t bench/history/*.json 2>/dev/null | head -1 || true)
+          # Only a record this job wrote: the checkout holds older ones.
+          if [ -n "$f" ] && ! git ls-files --error-unmatch "$f" >/dev/null 2>&1; then
+            cp "$f" "part/${{ matrix.name }}.json"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: bench-${{ matrix.name }}
+          path: part/
+          retention-days: 7
+
+  merge:
+    needs: [plan, part]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: bench-*
+          path: parts
+          merge-multiple: true
+      - name: join
+        run: |
+          ls parts
+          go run ./bench -merge -out bench/joined parts/*.json 2>&1 | tee merge.log || true
+          { for l in parts/*.log; do echo "=== $l"; cat "$l"; done; echo "=== join"; cat merge.log; } > bench.log
       - name: publish
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           files=(bench.log)
-          f=$(ls -t bench/history/*.json 2>/dev/null | head -1 || true)
+          f=$(ls -t bench/joined/*.json 2>/dev/null | head -1 || true)
           [ -n "$f" ] && files+=("$f")
           .github/ci/publish.sh "bench/$GITHUB_REF_NAME" "${files[@]}"
       - name: failed checks
         # Annotations read without a login; the record is on ci-results.
+        env:
+          PARTS: ${{ needs.plan.outputs.parts }}
         run: |
-          f=$(ls -t bench/history/*.json | head -1)
+          missing=0
+          for n in $(jq -r '.[].name' <<<"$PARTS"); do
+            [ -f "parts/$n.json" ] || { echo "::error title=bench::the $n job wrote no record (see its log)"; missing=1; }
+          done
+          f=$(ls -t bench/joined/*.json | head -1)
           jq -r '"::notice title=bench::\([.checks[] | select(.pass)] | length) of \(.checks | length) checks pass"' "$f"
           jq -r '.checks[] | select(.pass | not) | "::warning title=FAIL::\(.name): \(.detail | .[0:300])"' "$f" | head -40
+          exit $missing

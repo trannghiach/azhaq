@@ -105,6 +105,7 @@ func main() {
 	flag.StringVar(&refBin, "refbin", os.Getenv("AZHAQ_REFBIN"), "a folder of reference tool binaries to use before bench/.work/bin (env AZHAQ_REFBIN)")
 	flag.StringVar(&nmapAt, "nmap", os.Getenv("AZHAQ_NMAP"), "nmap, or a script that runs an unpacked one (env AZHAQ_NMAP; else nmap in PATH)")
 	readme := flag.Bool("readme", false, "rewrite the benchmark table in README.md from the newest record in -out, and exit")
+	merge := flag.Bool("merge", false, "join the records named as arguments (section jobs run apart) into one record in -out, print it, and exit")
 	toolsOnly := flag.Bool("tools-only", false, "install the reference tools (and arjun) into -work/bin and exit: for a machine that runs them by hand")
 	flag.BoolVar(&fresh, "fresh", false, "run the reference tools again instead of reusing today's cached results")
 	out := flag.String("out", "bench/history", "directory for the JSON record")
@@ -116,6 +117,15 @@ func main() {
 	}
 	if *readme {
 		must(writeReadme(*out))
+		return
+	}
+	if *merge {
+		must(mergeRecords(flag.Args(), *out))
+		for _, c := range rec.Checks {
+			if !c.Pass {
+				os.Exit(1)
+			}
+		}
 		return
 	}
 	politeDomains = strings.Split(*pd, ",")
@@ -307,7 +317,7 @@ func main() {
 	stopLab()
 	printReport()
 	must(os.MkdirAll(*out, 0o755))
-	name := filepath.Join(*out, time.Now().UTC().Format("2006-01-02T150405")+"-"+rec.Commit+".json")
+	name := filepath.Join(*out, recordName(time.Now().UTC().Format(time.RFC3339), rec.Commit))
 	raw, _ := json.MarshalIndent(rec, "", "  ")
 	must(os.WriteFile(name, append(raw, '\n'), 0o644))
 	fmt.Printf("\nrecord %s\n", name)
