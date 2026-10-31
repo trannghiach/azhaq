@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -350,5 +352,41 @@ func TestProbeOneRowPerInput(t *testing.T) {
 		if wantCode := map[bool]int{true: exitPartial, false: exitOK}[tc.failed != ""]; code != wantCode || rep.Requests != int64(tc.requests) {
 			t.Errorf("%s: exit %d with %d requests, want %d with %d", tc.name, code, rep.Requests, wantCode, tc.requests)
 		}
+	}
+}
+
+// tunnel is a proxy that carries every CONNECT to target, so a name asked
+// on port 443 reaches a test server.
+func tunnel(t *testing.T, target string) string {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		up, err := net.Dial("tcp", target)
+		if r.Method != http.MethodConnect || err != nil {
+			http.Error(w, "no tunnel", http.StatusBadGateway)
+			return
+		}
+		conn, _, _ := w.(http.Hijacker).Hijack()
+		_, _ = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		go func() { _, _ = io.Copy(up, conn); up.Close() }()
+		go func() { _, _ = io.Copy(conn, up); conn.Close() }()
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL
+}
+
+// A bare name is asked over HTTPS, and over HTTP only when that fails:
+// two names that answer on the first try spend two requests and end the
+// run complete under -max-requests 2, not stopped with tasks left.
+func TestProbeBoundedRunThatAnsweredEverythingIsComplete(t *testing.T) {
+	t.Chdir(t.TempDir())
+	site := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<title>ok</title>"))
+	}))
+	t.Cleanup(site.Close)
+	resolvers := serveZone(t, fakeZone{a: map[string]string{"a.labtest.com": "192.0.2.1", "b.labtest.org": "192.0.2.2"}})
+	out, rep, code := runContract(t, "probe", "-u", "a.labtest.com", "-u", "b.labtest.org", "-max-requests", "2",
+		"-resolvers", resolvers, "-proxy", tunnel(t, strings.TrimPrefix(site.URL, "https://")))
+	if rows := probeRows(t, out); len(rows) != 2 || code != exitOK || rep.Requests != 2 || rep.Stopped != "" || !rep.Complete {
+		t.Errorf("exit %d, %d requests, stopped %q: %s", code, rep.Requests, rep.Stopped, out)
 	}
 }
