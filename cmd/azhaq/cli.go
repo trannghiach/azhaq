@@ -54,7 +54,7 @@ func init() {
 		{name: "plan", group: groupMap, run: cmdPlan,
 			summary: "show what a run would do and send, without sending anything",
 			usage:   "(-url URL | -domain D | -list FILE | -scope … -program P) [run flags]",
-			output:  "the collectors that would run on each seed, the seeds left out of scope, the active techniques asked for, the third-party source queries (counted) and a bound on the requests to the targets: per web service, and the cap",
+			output:  "the collectors that would run on each seed, the seeds left out of scope, the active techniques asked for, what is sent to the targets (GET requests only, or each port scan, UDP probe, POST body and sign-in that is planned), the third-party source queries (counted) and a bound on the requests to the targets: per web service, and the cap",
 			examples: []string{
 				"azhaq plan -url https://app.example.com/",
 				"azhaq plan -scope bugcrowd -program tesla -dirs words.txt",

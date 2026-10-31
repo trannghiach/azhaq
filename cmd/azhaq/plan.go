@@ -13,6 +13,8 @@ import (
 
 	"github.com/trannghiach/azhaq/catalog"
 	"github.com/trannghiach/azhaq/engine"
+	"github.com/trannghiach/azhaq/internal/collectors/portcol"
+	"github.com/trannghiach/azhaq/internal/portscan"
 	"github.com/trannghiach/azhaq/types"
 )
 
@@ -74,13 +76,99 @@ type planRequests struct {
 	scoped     bool
 }
 
-// sendLimits are the options that bound what a run sends to its targets.
+// sendLimits are the options that bound or change what a run sends to its
+// targets.
 type sendLimits struct {
 	max          int64  // requests at most; 0: no cap
 	by           string // the option that set max
 	noFavicon    bool
 	chrome       bool // -browser or -screenshots
 	chromeWrites bool // -browser-writes
+	interact     bool // -interact
+	login        string
+	loginUser    string
+	graphql      bool
+	submitForms  bool
+	dirs         bool
+	params       bool
+	paramsBody   string // POST, JSON or XML when -params sends names in a body
+	tcpPorts     int    // ports asked on each address (-ports)
+	udpPorts     int    // UDP ports asked on each address (-ports-udp)
+	portsOn      bool   // some hosts have ports of their own
+	portDetect   portscan.Detect
+	portPayload  bool
+	portDiscover portcol.Discovery
+}
+
+// planSends are the lines on what a run sends besides the GET requests for
+// pages, each true of the options given. gets are the techniques that send
+// GET requests too; others send something else: a port scan's connects and
+// the probes of what answers, UDP datagrams, POST bodies, a sign-in, DNS
+// guesses.
+func planSends(b engine.Budgets, send sendLimits) (gets, others []string) {
+	out := &others
+	if send.dirs {
+		gets = append(gets, "GET requests for each word of the -dirs wordlist (and each -dirs-ext extension) under each web service")
+	}
+	if send.params && send.paramsBody == "" {
+		gets = append(gets, "GET requests with batches of the -params wordlist as query names")
+	}
+	if b.Active["ports"] && send.tcpPorts > 0 {
+		ports := plural(send.tcpPorts, "port") + " of each address"
+		if send.portsOn {
+			ports += " (a host given with a port: that port only)"
+		}
+		line := "TCP connects (full handshakes) to " + ports + " (-ports)"
+		switch send.portDiscover {
+		case portcol.DiscoverFirst:
+			line += ", after a connect to 80 and 443 to tell whether the address is up (-port-discover)"
+		case portcol.DiscoverOnly:
+			line = "TCP connects to ports 80 and 443 of each address, to tell whether it is up (-port-discover only), and no other port"
+		}
+		*out = append(*out, line)
+		if send.portDiscover != portcol.DiscoverOnly {
+			switch send.portDetect {
+			case portscan.DetectAll:
+				*out = append(*out, "each open port is asked what it is, on connections of their own (-port-detect all): its banner, and for a port that says nothing its protocol's own request on its usual number, one HEAD /, a TLS handshake and one request of each of the other protocols until one answers (at most 24 more connects per port; a GET / for a web page whose head names no product)")
+			case portscan.DetectBanner:
+				*out = append(*out, "an open port is read for what it says first, and nothing is sent on it (-port-detect banner)")
+			default:
+				*out = append(*out, "an open port is closed at once (-port-detect none)")
+			}
+			if send.portPayload {
+				*out = append(*out, "the -port-payload text is sent to each open port before it is read")
+			}
+		}
+	}
+	if b.Active["ports"] && send.udpPorts > 0 {
+		*out = append(*out, fmt.Sprintf("UDP datagrams to %s of each address (-ports-udp): the harmless request of the protocol the port usually carries, and, for a port that stays silent, each other request its protocol has (a port with no known protocol: a DNS query, an SNMP get with community public, memcached's version, an empty datagram)", plural(send.udpPorts, "port")))
+	}
+	if send.graphql {
+		*out = append(*out, "POST requests with a GraphQL introspection query to the GraphQL endpoints found (-graphql): they read the schema and change nothing")
+	}
+	if send.paramsBody != "" {
+		*out = append(*out, fmt.Sprintf("%s requests whose body holds the parameter names guessed (-params-method %s, -params-writes): a body may change data on the target", send.paramsBody, send.paramsBody))
+	}
+	if send.submitForms {
+		*out = append(*out, "POST requests that submit the forms the crawl finds with neutral values (-submit-forms): this changes data on the target")
+	}
+	if send.login != "" {
+		*out = append(*out, fmt.Sprintf("Chrome signs in at %s as %s (-login): the sign-in's POST goes to the target, and the session it gets goes with every request", send.login, send.loginUser))
+	}
+	if send.chrome && send.interact {
+		*out = append(*out, "Chrome clicks the buttons, links and menus of each page (-interact): a click that would send a write is mapped, not made, and none is made on log out or delete")
+	}
+	if b.Active["dns-brute"] || b.Active["permute"] {
+		var what []string
+		if b.Active["dns-brute"] {
+			what = append(what, "WORD.domain for each word (-dns-brute)")
+		}
+		if b.Active["permute"] {
+			what = append(what, "variations of the names found (-permute)")
+		}
+		*out = append(*out, "DNS queries for "+strings.Join(what, " and ")+", to the resolvers: not requests to the targets")
+	}
+	return gets, others
 }
 
 func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths []string, limits map[string]string, send sendLimits, rep *report) runPlan {
@@ -143,7 +231,21 @@ func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths
 	if runs("azhaq-paths") {
 		p.Paths = paths
 	}
-	p.Sends = []string{"GET requests only, to the targets and what they lead to inside the scope"}
+	gets, others := planSends(b, send)
+	switch {
+	case b.Passive && len(others) == 0:
+		p.Sends = []string{"nothing to the targets (-passive): third-party sources and DNS only"}
+		p.Requests.Passive = true
+		return p
+	case b.Passive:
+		// The techniques below still go to the targets: -passive leaves out the pages.
+		p.Sends = append([]string{"no pages are requested (-passive); only what the active techniques send goes to the targets"}, append(gets, others...)...)
+		return p
+	case len(others) == 0 && !send.chrome:
+		p.Sends = []string{"GET requests only, to the targets and what they lead to inside the scope"}
+	default:
+		p.Sends = []string{"GET requests to the targets and what they lead to inside the scope"}
+	}
 	if !b.AllGets {
 		p.Sends = append(p.Sends, "found URLs that look like a GET would change something (logout, delete, save, reset…) are listed, not requested (-all-gets to request them)")
 	}
@@ -153,11 +255,7 @@ func buildPlan(cat *catalog.Catalog, seeds []types.Seed, b engine.Budgets, paths
 	case send.chrome:
 		p.Sends = append(p.Sends, "Chrome sends GET, HEAD and OPTIONS only, except signing in: the writes pages would send are mapped and listed, not sent (-browser-writes to send them)")
 	}
-	if b.Passive {
-		p.Sends = []string{"nothing to the targets (-passive): third-party sources and DNS only"}
-		p.Requests.Passive = true
-		return p
-	}
+	p.Sends = append(append(p.Sends, gets...), others...)
 	if runs("azhaq-http") {
 		p.Requests.PerService = 1 + len(p.Paths)
 		if !send.noFavicon {

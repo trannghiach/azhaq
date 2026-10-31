@@ -953,7 +953,13 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	if out.plan {
 		paths := append(append([]string{}, pathscol.DefaultWordlist...), opts.Paths...)
-		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon, chrome: *shots != "" || *render, chromeWrites: *browserWrites}
+		send := sendLimits{max: *maxRequests, by: "-max-requests", noFavicon: *noFavicon, chrome: *shots != "" || *render, chromeWrites: *browserWrites,
+			interact: *interact, dirs: *dirsFile != "", params: *paramsFile != "", login: *login, loginUser: *loginUser, graphql: *graphql, submitForms: *submitForms,
+			portsOn: len(portsOn) > 0, portDetect: portCfg.Detect, portPayload: len(portCfg.Payload) > 0, portDiscover: portCfg.Discover}
+		if m := strings.ToUpper(*paramsMethod); *paramsFile != "" && m != "GET" {
+			send.paramsBody = m
+		}
+		send.tcpPorts, send.udpPorts = len(opts.Ports), len(opts.UDPPorts)
 		if *daily > 0 && (send.max == 0 || *daily < send.max) {
 			// A plan reads no database: what today's runs spent is not
 			// taken off.
