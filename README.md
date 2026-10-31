@@ -2,9 +2,32 @@
 
 azhaq is one Go binary for reconnaissance. It stands in for subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, gowitness, asnmap and notify, with their flags and JSON field names. It adds what that chain does not do. It maps the routes an app's JavaScript calls and compares what each of your accounts may read and write. It holds every request to a scope and a budget, and records what it sent. Everything lands in one SQLite workspace you can query, export and diff.
 
-Coming from one of those tools? [docs/MIGRATING.md](docs/MIGRATING.md) puts its flags next to azhaq's, says what differs on purpose and gives three command lines for each. `azhaq docs migrating` prints it offline.
+## One workflow
 
-## What it replaces
+Each step reads the workspace the one before wrote. `acme` stands for your program.
+
+```
+azhaq scope  -scope bugcrowd -program acme                                 # what you may touch
+azhaq plan   -scope bugcrowd -program acme -max-requests 5000              # what a run would send; sends nothing
+azhaq run    -scope bugcrowd -program acme -max-requests 5000 -rate 5 -db acme.db   # names, services, crawl, files, ranked map
+azhaq hunt   -db acme.db                                                   # where to look first; also: azhaq show, azhaq query
+azhaq roles  -dir acme-roles -role anon -role "alice=Authorization: Bearer $TA" -role "bob=Authorization: Bearer $TB" -- -url https://app.acme.com/   # what one account reaches of another's
+azhaq report -dir acme-roles -o findings/                                  # each cross-role finding as a submission
+```
+
+The summary of each ends with `next:` lines, commands that follow from what the run measured. Three features the default run leaves off, because they send more:
+
+- `azhaq subs -d example.com -permute`, or `run -permute`: resolves variations of the names found (`api2`, `api-dev`) and finds the neighbours the sources never saw.
+- `azhaq run -url URL -browser -interact`: Chrome clicks the buttons and menus of an app that draws its pages in the browser, and finds the routes only a click shows.
+- `azhaq fuzz … -preflight page.req -preflight-var-auto TOKEN:csrf_token`: reads a fresh token before each request, to fuzz a form protected by a CSRF token.
+
+Each has a recipe in [docs/RECIPES.md](docs/RECIPES.md).
+
+## Already use httpx, katana, ffuf…?
+
+The drop-in commands take your tools' flags and print their JSON field names. [docs/MIGRATING.md](docs/MIGRATING.md) puts each tool's flags next to azhaq's, says what differs on purpose and gives three command lines for each. `azhaq docs migrating` prints it offline.
+
+### What each replaces
 
 | If you use | Run | Also |
 | --- | --- | --- |

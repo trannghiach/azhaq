@@ -14,12 +14,14 @@ Task by task: the commands, what to look at, and the catches. `azhaq docs recipe
 Map and test an app
 
 - [Map a single-page app and get its API into Burp](#map-a-single-page-app-and-get-its-api-into-burp)
+- [Find the routes only a click shows](#find-the-routes-only-a-click-shows)
 - [Map an app behind a login](#map-an-app-behind-a-login)
 - [Find IDOR and BOLA with two accounts](#find-idor-and-bola-with-two-accounts)
 - [Use tokens that live a few minutes](#use-tokens-that-live-a-few-minutes)
 - [Test writes across accounts](#test-writes-across-accounts)
 - [Read a GraphQL schema](#read-a-graphql-schema)
 - [Start a test from a map](#start-a-test-from-a-map)
+- [Fuzz a form that has a CSRF token](#fuzz-a-form-that-has-a-csrf-token)
 - [Write a finding up](#write-a-finding-up)
 
 Run safely, repeat, audit
@@ -36,6 +38,7 @@ Run safely, repeat, audit
 Use azhaq in place of another tool
 
 - [The live subdomains of a domain, politely](#the-live-subdomains-of-a-domain-politely) (subfinder and dnsx)
+- [Find subdomains by variation](#find-subdomains-by-variation) (alterx and dnsx)
 - [Resolve names the dnsx way](#resolve-names-the-dnsx-way)
 - [Content discovery in the ffuf way](#content-discovery-in-the-ffuf-way)
 - [Find the parameters a page reads](#find-the-parameters-a-page-reads)
@@ -62,6 +65,25 @@ azhaq export -db app.db -format openapi > app.openapi.json
 `azhaq show -db app.db URL` says where a route was found, such as `main.js:6472:88  this.http.post(…)`.
 
 **Catch:** an app that draws its links with scripts may need `-browser`. The summary says so in a `next:` line.
+
+## Find the routes only a click shows
+
+An app that draws its pages in the browser shows part of its routes to a click. `-browser` loads the pages in Chrome. `-interact` also clicks their buttons, links, tabs and menus.
+
+```
+azhaq run -url https://app.example.com/ -browser -interact -db app.db
+azhaq crawl -u https://app.example.com/ -browser -interact -db app.db
+azhaq query -db app.db -role api,client-route -fields key,methods,evidence
+```
+
+Chrome must be installed. `run` maps everything. `crawl` is the katana-style crawler, and lists the URLs it found.
+
+**You get:** the summary says what the clicks did, for example `-interact: 6 clicks on 3 pages found 4 routes; 0 downloads and mail or phone links not clicked; the 0 writes the clicks tried were mapped, not sent`. The query lists the routes a click's script called as `api` rows with `evidence` `browser`, such as `/api/billing/plans  GET  browser`. The address a click went to is a row too: a route after the hash is a `client-route`.
+
+- `azhaq crawl` and `azhaq run` print `next: … -browser -interact` themselves when three or more URLs answered with the one page every unknown path gets and the front page is an empty shell. It is the sign of a single-page app.
+- `-interact-clicks N` sets the clicks on each page, 12 by default.
+
+**Catch:** a click is made whatever its label says, and a link's GET is requested. The writes a click would send are refused by their method and mapped, never sent. `-browser-writes` is a separate choice that lets pages send them. Chrome stays inside the scope and the budget.
 
 ## Map an app behind a login
 
@@ -197,6 +219,35 @@ A map of thousands of routes does not say where to start. `hunt` ranks it, with 
 **You get:** run the `next` command of the top row. [hunt's Output](commands/hunt.md#output) lists the signals.
 
 **Catch:** `hunt` ranks what the map holds. A thin map gives a short list, see [The map looks thin](TROUBLESHOOTING.md#the-map-looks-thin). A row is a place to look, not a finding.
+
+## Fuzz a form that has a CSRF token
+
+A login form that checks a token refuses a request that repeats the token you copied. Every guess is then a refusal, and the real password is never asked.
+
+1. Fuzz the form as it is. The token in the body is a fixed value you copied from the page.
+
+   ```
+   azhaq fuzz -u https://app.example.com/login -X POST -H 'Content-Type: application/x-www-form-urlencoded' -d 'csrf_token=a1b2c3&user=admin&pass=FUZZ' -w pass.txt -mc all -fr 'bad credentials'
+   ```
+
+   Every answer is 403, and the summary prints `next: azhaq fuzz … -preflight PAGE.req -preflight-var-auto TOKEN:csrf_token`, with the count it measured.
+
+2. Save the request that gets the page as a raw file, and read a fresh token from its answer before each guess:
+
+   ```
+   printf 'GET /login HTTP/1.1\n\n' > page.req
+   azhaq fuzz -u https://app.example.com/login -X POST -H 'Content-Type: application/x-www-form-urlencoded' -d 'csrf_token=TOKEN&user=admin&pass=FUZZ' -w pass.txt -mc all -fr 'bad credentials' -preflight page.req -preflight-var-auto 'TOKEN:csrf_token'
+   ```
+
+**You get:** one row for the password that did not answer `bad credentials`, with the status the form gives on success, such as 302. The summary says `N preflight/postflight requests were sent`: one page request for each guess, counted in the request total.
+
+- `TOKEN` stands for the value of the field `csrf_token` in the answer to `page.req`. It can sit in the body, a header or the path.
+- `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source: `form`, `meta`, `cookie` or `header`. `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp.
+- `-preflight-mode per-thread` asks once for each thread, for a token that lasts. `-postflight FILE` sends a request after each guess.
+- `-H 'Content-Type: …'` is not added for you: a form is read only with its content type.
+- `-fr 'bad credentials'` hides the answers that carry the form's error text. Take that text from your form.
+
+**Catch:** the page requests count against `-max-requests` and `-rate` and must be in scope. A page request that fails is a `failed` entry with exit 3. With `-preflight-error ignore` the guess goes on without the value. A value that would move a request to another host is refused.
 
 ## Write a finding up
 
@@ -375,6 +426,25 @@ The last command leaves them out. A name that is only a CNAME is listed with `-l
 
 **Catch:** subdomain.center answers a random 500 names per call, and its real names differ between calls. Two runs list different names. A run asks it again only while a round gives a new name that resolves. The name history brings back names an earlier run found.
 
+## Find subdomains by variation
+
+Passive sources give the names that some log or archive saw. Names built from them find the neighbours: `api2` next to `api`, `api-dev` next to `api`.
+
+```
+azhaq subs -d example.com -live -permute -db subs.db -json | jq -r 'select(.source == "permute") | .host'
+azhaq run -domain example.com -permute -db example.db
+```
+
+The first line is `subfinder | alterx | dnsx`. The second does it inside the whole map: the names found get probed, crawled and ranked with the rest.
+
+**You get:** the names no source gave, that resolve. In `-json` their `source` is `permute`. The summary counts them as `found by guessing`, and `asked by guessing` is how many variations were asked.
+
+- Each name found gets up to 120 variations: a number next to its first label (`api2` gives `api1`, `api3`), an environment word joined to it (`api-dev`, `dev-api`, `apidev`), and the word in place of the label (`dev`). The words are `dev`, `stage`, `test`, `qa`, `prod`, `admin`, `api`, `v1` and more.
+- A name a variation found is not varied again.
+- Wildcard answers are left out. A name with a CNAME whose target is gone is a name that exists, and a takeover candidate.
+
+**Catch:** variations are active DNS. They are sent to the resolvers, never to the target, and only the domains you give are in scope. `azhaq plan -domain example.com -permute` says what will be sent before anything is.
+
 ## Resolve names the dnsx way
 
 Resolve the names of a program, as dnsx reads them, with the records that matter and at a rate you set:
@@ -463,28 +533,7 @@ An ffuf line works as it is. It takes the same flags, gives the same counts and 
 
 **Catch:** `fuzz` calibrates only with `-ac`, as ffuf does. A line moved over gives ffuf's matches, and a catch-all answer is listed unless you ask for `-ac` or a filter. Calibration is paced by `-rate`. The default strategy asks 6 guesses, so with `-rate 5` it takes about a second: see [fuzz](commands/fuzz.md#calibration).
 
-### A form that wants a one-use token
-
-1. Save the page request as `page.req` and the login as `login.req`, both as raw request files.
-2. Read the token from the page:
-
-   ```
-   azhaq fuzz -request login.req -request-proto https -w pass.txt:PASS -mc all -fc 403 \
-     -preflight page.req -preflight-var-auto 'TOKEN:csrf'
-   ```
-
-How it works:
-
-- `TOKEN` in `login.req` is replaced by the value of the field `csrf` in the answer to `page.req`. `TOKEN` can sit in the body, a header or the path.
-- The page is asked again before each request. `-preflight-mode per-thread` asks once for each thread, for tokens that last.
-- `-preflight-var 'TOKEN:regexp'` takes the first group of a regexp from the body, then the headers.
-- `-preflight-var-auto 'TOKEN:[meta]csrf-token'` names the source: `form`, `meta`, `cookie` or `header`.
-
-**Catches**
-
-- The flight requests count against `-max-requests` and `-rate`, and must be in scope. The summary says so, as in `4 preflight/postflight requests were sent`.
-- A flight request that fails is a `failed` entry with exit 3. With `-preflight-error ignore` the request goes on without the value.
-- A value that would move a request to another host is refused, always.
+A form that wants a one-use token: see [Fuzz a form that has a CSRF token](#fuzz-a-form-that-has-a-csrf-token).
 
 ## Crawl an app the way katana does
 
