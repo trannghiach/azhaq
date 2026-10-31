@@ -147,6 +147,21 @@ func (b *Browser) allowed(raw string) bool {
 	return true // data:, blob:, about:, chrome: nothing leaves the machine
 }
 
+// local reports whether raw is served by Chrome itself (chrome-extension:,
+// chrome:, data:, blob:, about:, file: ...): only http, https, ws, wss and
+// ftp URLs go to a host.
+func local(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" {
+		return false
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http", "https", "ws", "wss", "ftp":
+		return false
+	}
+	return true
+}
+
 func (b *Browser) allowedHost(host string) bool {
 	if host == "" {
 		return false
@@ -244,6 +259,14 @@ func (b *Browser) fail(root context.Context, id cdpfetch.RequestID) {
 // decide sends on or fails a paused request; t is the open page its frame
 // was known to be of when it was paused, or nil.
 func (b *Browser) decide(root context.Context, ev cdpfetch.EventRequestPaused, t *tab) {
+	if ev.Request != nil && local(ev.Request.URL) {
+		// Chrome's own pages (its PDF viewer loads chrome-extension: and
+		// chrome: files) reach no target: not counted, not listed, not
+		// refused.
+		b.done(t)
+		_, _ = chromedp.CallBrowser(root, cdpfetch.ContinueRequest, cdpfetch.ContinueRequestParams{RequestID: ev.RequestID})
+		return
+	}
 	r := refusal{frame: ev.FrameID, doc: ev.ResourceType == network.ResourceTypeDocument}
 	raw, write := "", false
 	if ev.Request != nil {
