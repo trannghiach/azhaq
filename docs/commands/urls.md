@@ -1,6 +1,6 @@
 # azhaq urls
 
-Archived URLs of domains (Wayback Machine, Common Crawl, OTX, urlscan, Arquivo). Replaces gau (see [Migrating](../MIGRATING.md#gau-azhaq-urls)).
+Lists the URLs that web archives hold for a domain: the Wayback Machine, Common Crawl, OTX, urlscan.io and Arquivo. Replaces gau (see [Migrating](../MIGRATING.md#gau-azhaq-urls)).
 
 ## Synopsis
 
@@ -11,20 +11,67 @@ azhaq urls -d DOMAIN | -dL FILE | DOMAIN… | stdin  [-subs] [-providers wayback
 ## Examples
 
 ```
+# every URL the archives hold for a domain
 azhaq urls -d example.com
+
+# with subdomains, from two archives, without static files, one URL per host and path
 azhaq urls example.com -subs -providers wayback,commoncrawl -blacklist png,jpg,css,js -fp | httpx
+
+# only 200 answers of type text/html captured since 2024, with no pause between requests
 azhaq urls -d example.com -mc 200 -mt text/html -from 2024 -urls-pause 0
 ```
 
+## What it does
+
+1. Takes domains from `-d`, `-dL`, arguments or stdin.
+2. Asks each archive for the URLs of the domain. `-providers` chooses the archives, and `-subs` adds the subdomains.
+3. Reads pages from each archive, and asks again when an archive answers 429 or 503.
+4. Applies your filters, and prints each URL once unless you give `-raw`.
+
 ## Output
 
-One URL per line, as the pages arrive (-sort: sorted, at the end; a terminal sorts); -json: {"url","source"}; -o appends.
+By default URLs are printed as each archive page arrives, unsorted, when stdout is not a terminal. On a terminal, or with `-sort`, they are sorted and printed at the end. `-raw` prints every row the archives gave, as they gave it. `-o` appends to the file. With `-json` you get one object per URL.
 
-`url`, `source` (the archive that gave it first: wayback, commoncrawl, otx, urlscan, arquivo). One line per URL, as its page arrives when stdout is not a terminal (unsorted, each URL once), sorted at the end on a terminal or with `-sort`; `-raw` prints every row the archives gave, as they gave it. `-o` appends to the file. The summary lists, for each archive, `count`, `pages`, `seconds`, `requests` (sent, retries included), `retried` with `waited_seconds` (a 429 or 503 was asked again after its `Retry-After`, or 2, 5, 10, 20, then 30 s, for as long as the archive's `-urls-timeout` and the run's `-timeout` allow), its `error` (`failed after 4 tries, 429 Too Many Requests`, `failed after 4 tries, dial tcp …: connection refused`, or `…, Retry-After 2m0s; the 2m0s to wait is more than the 45s left (-urls-timeout or -timeout)`), `capped` when it stopped at `-urls-pages` with more to read, or `unfiltered` (what the archive keeps none of: `status`, `type`, `date`) with `unfiltered_by` (`-mc`, `-ft`, …) when a filter was given that it cannot apply: it is asked all the same and its URLs are kept, as gau keeps them, with no status on the row; the notes say the same in words (`otx has no status of its captures: its 13 URLs are not filtered by -mc`).
+| Field | Meaning |
+| --- | --- |
+| `url` | The archived URL. |
+| `source` | The archive that gave it first: `wayback`, `commoncrawl`, `otx`, `urlscan` or `arquivo`. |
+
+The summary lists one row for each archive:
+
+| Field | Meaning |
+| --- | --- |
+| `count` | URLs the archive gave. |
+| `pages` | Pages read from it. |
+| `seconds` | Time spent on it. |
+| `requests` | Requests sent, retries included. |
+| `retried`, `waited_seconds` | Requests asked again after a 429 or 503, and the seconds waited: see Details. |
+| `error` | Why the archive failed, in words: see Details. |
+| `capped` | Set when the archive stopped at `-urls-pages` with more to read. |
+| `unfiltered`, `unfiltered_by` | What the archive keeps none of, and the filter that could not apply: see Details. |
 
 ## Summary and exit codes
 
 The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+
+## Details
+
+### Retries
+- A 429 or 503 is asked again after its `Retry-After`, or after 2, 5, 10, 20, then 30 s.
+- It is asked again for as long as the archive's `-urls-timeout` and the run's `-timeout` allow.
+- The summary row counts them in `retried` and `waited_seconds`.
+
+### Errors
+- `error` says why the archive failed. It reads like these:
+  - `failed after 4 tries, 429 Too Many Requests`
+  - `failed after 4 tries, dial tcp …: connection refused`
+  - `…, Retry-After 2m0s; the 2m0s to wait is more than the 45s left (-urls-timeout or -timeout)`
+
+### Filters an archive cannot apply
+- `unfiltered` lists what an archive keeps none of: `status`, `type` or `date`.
+- When you give a filter it cannot apply, `unfiltered_by` names the filter, such as `-mc` or `-ft`.
+- The archive is asked all the same and its URLs are kept, as gau keeps them, with no status on the row.
+- The notes say the same in words: `otx has no status of its captures: its 13 URLs are not filtered by -mc`.
 
 ## Flags
 
