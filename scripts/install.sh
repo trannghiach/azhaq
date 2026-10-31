@@ -102,7 +102,13 @@ if [ -n "${COSIGN:-}" ] && [ -z "$COSIGN_BIN" ]; then
     err "COSIGN=$COSIGN is not an executable"
 fi
 if [ -n "$REQUIRE_SIG" ] && [ -z "$COSIGN_BIN" ]; then
-    err "a signature is required (-s, AZHAQ_REQUIRE_SIGNATURE) but cosign was not found: install it (https://docs.sigstore.dev/cosign/system_config/installation/) or name it with COSIGN=/path/to/cosign; nothing was downloaded or installed"
+    printf 'install.sh: a signature is required (-s, AZHAQ_REQUIRE_SIGNATURE) but cosign was not found; nothing was downloaded or installed.\n' >&2
+    printf 'install.sh: install cosign, then run this again. Any one of:\n' >&2
+    printf '  go install github.com/sigstore/cosign/v2/cmd/cosign@latest   (needs Go; puts cosign in $(go env GOPATH)/bin)\n' >&2
+    printf '  brew install cosign   |   pacman -S cosign   |   apk add cosign   |   nix-shell -p cosign\n' >&2
+    printf '  a release binary: https://github.com/sigstore/cosign/releases/latest\n' >&2
+    printf 'install.sh: if it is installed outside PATH, name it with COSIGN=/path/to/cosign (other systems: https://docs.sigstore.dev/cosign/system_config/installation/)\n' >&2
+    exit 1
 fi
 
 case $(uname -s) in

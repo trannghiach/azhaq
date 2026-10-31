@@ -85,8 +85,8 @@ for how in "--require-signature" "-s"; do
         fail "$how without cosign exits non-zero"
     elif installed || downloads; then
         fail "$how without cosign downloads or installs nothing"
-    elif grep -q 'cosign was not found' "$out"; then
-        pass "$how without cosign: stops before any download, naming cosign"
+    elif grep -q 'cosign was not found' "$out" && grep -q 'go install github.com/sigstore/cosign/v2/cmd/cosign@latest' "$out" && grep -q 'releases/latest' "$out"; then
+        pass "$how without cosign: stops before any download, saying how to get cosign"
     else
         fail "$how without cosign names cosign"; cat "$out"
     fi

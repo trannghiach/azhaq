@@ -52,6 +52,7 @@ docker run --rm -v "$PWD:/work" -u "$(id -u)" ghcr.io/trannghiach/azhaq run -dom
 - Nothing is written when the checksum does not match, or when cosign is found and the signature check fails.
 - Without cosign, it installs after the checksum check, says the signature was not verified and prints the command that verifies it.
 - `sh install.sh --require-signature` (or `-s`), or `AZHAQ_REQUIRE_SIGNATURE=1`, refuses that: the script stops before downloading anything when cosign is missing, and stops when the signature does not verify. From the pipe: `curl -fsSL URL | sh -s -- --require-signature`.
+- To get cosign: `go install github.com/sigstore/cosign/v2/cmd/cosign@latest` (it lands in `$(go env GOPATH)/bin`), `brew install cosign`, `pacman -S cosign`, `apk add cosign`, `nix-shell -p cosign`, or a binary from <https://github.com/sigstore/cosign/releases/latest>. The script prints these when a signature is required and cosign is missing.
 - `-v` picks a release and `-d` a directory: `sh install.sh -v v0.8.1 -d /usr/local/bin`, or from the pipe `curl -fsSL URL | sh -s -- -v v0.8.1 -d DIR`.
 - `COSIGN=/path/to/cosign` names the cosign to use. The script stops if it is not an executable.
 - It needs curl or wget, tar, gzip, sha256sum or shasum, awk, sed, head, mktemp, uname, cp, chmod and mkdir, and cosign (optional, required with `-s`). It names every missing tool before it downloads anything.
