@@ -16,6 +16,9 @@
 - `ports` scans a CDN or WAF address in full by default, as naabu does. `-ec` and `-exclude-cdn` (`run`: `-port-exclude-cdn`) limit it to ports 80, 443, 8080 and 8443. `-cdn-full` and `-port-cdn-full` are accepted and do nothing.
 - `ports -pu LIST` without `-p`, `-tp` or `-pf` asks only those UDP ports, as `nmap -sU` does (it also scanned TCP top-100 first and, at a low `-rate` under `-timeout`, never reached the UDP port). A UDP scan a limit, `-timeout` or a signal stopped says how many of a port's payloads were asked.
 - README opens with the workflow (scope, plan, run, hunt, roles, report) and three features (`subs -permute`, `-browser -interact`, `fuzz -preflight`); the table of replaced tools sits under "Already use httpx, katana, ffuf…?".
+- `-permute` asks every kind of variation for each name (about 800 for `api.example.com`, every one of alterx's default patterns' names among them): the cap of 120 is gone, and the word in place and `dev.api.example.com` are asked, as the help says.
+- `fuzz -d` sends `Content-Type: application/x-www-form-urlencoded` when no `-H` gives one, as ffuf does.
+- `worker` without `-server` or a token, `watch` without `-db` or run options, `new` without `-db` and `-scope PLATFORM` without `-program` exit 2 (usage), not 1.
 
 ### Added
 
@@ -47,6 +50,12 @@
 - `azhaq plan` with `-interact` said no click is made on a log out or delete link; every click is made, and a write it would send is refused by its method and mapped (sent with `-browser-writes`).
 - Docs: a `-role-cmd` command's own requests are not azhaq's: not in the ledger and not held to the scope (roles page, concepts, output, flag help).
 - Docs: Migrating's asnmap table lists asnmap's real flags; `crawl` asks every URL of a template (Migrating said 3); `params -json` rows list the fields they print; each command page holds the facts that lived only in Troubleshooting, Migrating or Architecture.
+- `run` and `roles` with `-login` or `-role-login` no longer miss a session that a logout link ended silently (no cleared cookie, a start page that answers alike): the run takes a JSON answer a visitor is refused as its check page, tests a 401 by signing in again, finds the request that ends the new session and does not ask it again. Roles signed in with Chrome read every row as 401 because of it.
+- After a session is renewed, the `-dirs` and `-params` sweeps and the `-browser` and `-screenshots` page tasks that ran since the last good check run again with the new session, once each; before, their requests were only counted.
+- `fuzz -preflight` carries the cookies a flight's answer sets (the session cookie that makes a token valid) to the next flight, the fuzz request and the postflight, per request or per thread, merged with `-b`. Before, a CSRF-protected login was fuzzed without its session and the right word was missed.
+- `run -params` keeps the parameters `params` finds on the page's row of the map (`query -fields params`); before, the row had none.
+- `subs` keeps the names DNS answered before a stop (SIGTERM, Ctrl-C, `-timeout`): they are rows, and `azhaq resume` asks only the names that were not answered.
+- `subs -live` asks a sampled source's next round while the last round's names are looked up, so a round costs the longer of the call and the check, not the sum.
 
 ## v0.10.1
 
