@@ -23,15 +23,18 @@ azhaq report -dir azhaq-roles-20261028-101500 -url https://app/rest/basket/6 -re
 ## What it does
 
 1. Opens `DIR/roles.db`, the evidence store of an `azhaq roles` run. `-dir` is that run's `-dir`.
-2. Picks the rows to write up. Without `-url`, a row gets a report when its verdict is one of these four:
+2. Picks the rows to write up. Without `-url`, a row gets a report when its verdict is one of these five:
    - `reads another role's object`
    - `writes another role's object`
+   - `writes another role's object: accepted; the change cannot be read back to confirm`
    - `anyone writes another role's object`
    - `anyone reads sensitive fields`
 3. Orders the reports by confidence: `proved`, `likely`, `guess`, then rows that carry none.
 4. Writes one Markdown report per row. Every piece of a report comes from the evidence; what the evidence does not hold is named in the report.
 
-With `-url URL`, `report` writes that one row's report to standard output. A write row also needs `-method M`. A row whose verdict is not one of the four is refused.
+With `-url URL`, `report` writes that one row's report to standard output. A write row also needs `-method M`. A row whose verdict is not one of the five is refused, with exit 1, and a `-url` that matches no row is exit 1 too.
+
+When no row qualifies, `report` prints a note on stderr, writes nothing and exits 0.
 
 ## Output
 
@@ -47,7 +50,7 @@ azhaq report: 3 reports in azhaq-roles-20261028-101500/reports
 
 ### The parts of a report
 
-1. **Title.** It names the bug class. A read is broken object level authorization, and a write adds "(write)". Sensitive fields anyone reads are excessive data exposure.
+1. **Title.** It names the bug class. A read is broken object level authorization, and a write adds "(write)", or "(write accepted, not read back)" when the change could not be read back. Sensitive fields anyone reads are excessive data exposure.
 2. **Summary.** Two sentences.
 3. **Severity.** A level labelled a guess, with the reason. Sensitive fields and a write raise it.
 4. **Steps.** Numbered, with the curl commands from the evidence. The sessions are shell variables: `$ALICE_TOKEN`, `$BOB_TOKEN`.
