@@ -64,7 +64,14 @@
     "jenkins",
     "build"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 4.0
+   },
+   "mem_mb_measured": 452,
+   "image_mb": 302
   },
   {
    "id": "jenkins--CVE-2018-1000861",
@@ -114,7 +121,14 @@
     "jenkins",
     "build"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 20.1
+   },
+   "mem_mb_measured": 1594,
+   "image_mb": 208
   },
   {
    "id": "jenkins--CVE-2024-23897",
@@ -172,7 +186,14 @@
     "jenkins",
     "build"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 2.2
+   },
+   "mem_mb_measured": 3645,
+   "image_mb": 226
   },
   {
    "id": "nexus--CVE-2020-10199",
@@ -214,7 +235,14 @@
     "nexus",
     "repo"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 36.1
+   },
+   "mem_mb_measured": 999,
+   "image_mb": 276
   },
   {
    "id": "nexus--CVE-2024-4956",
@@ -264,7 +292,14 @@
     "nexus",
     "repo"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 24.2
+   },
+   "mem_mb_measured": 2009,
+   "image_mb": 355
   },
   {
    "id": "xxl-job--unacc",
@@ -318,73 +353,14 @@
     "scheduler",
     "cron"
    ],
-   "proxy": true
-  },
-  {
-   "id": "saltstack--CVE-2020-11651",
-   "path": "saltstack/CVE-2020-11651",
-   "product": "SaltStack Salt master",
-   "family": "salt",
-   "version": "2019.2.3",
-   "cve": [
-    "CVE-2020-11651"
-   ],
-   "category": "ci-cd",
-   "services": {
-    "saltstack": {
-     "image": "vulhub/saltstack:2019.2.3"
-    }
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
    },
-   "ports": [
-    {
-     "service": "saltstack",
-     "host_port": 8000,
-     "container_port": 8000,
-     "transport": "tcp",
-     "protocol": "http",
-     "primary": true
-    },
-    {
-     "service": "saltstack",
-     "host_port": 4505,
-     "container_port": 4505,
-     "transport": "tcp",
-     "protocol": "zeromq",
-     "primary": false
-    },
-    {
-     "service": "saltstack",
-     "host_port": 4506,
-     "container_port": 4506,
-     "transport": "tcp",
-     "protocol": "zeromq",
-     "primary": false
-    },
-    {
-     "service": "saltstack",
-     "host_port": 2222,
-     "container_port": 22,
-     "transport": "tcp",
-     "protocol": "ssh",
-     "primary": false
-    }
-   ],
-   "probe": {
-    "kind": "http",
-    "scheme": "http",
-    "port": 8000,
-    "path": "/",
-    "status_below": 500
-   },
-   "summary": "SaltStack Salt master: authentication bypass on the ZeroMQ ports (CVE-2020-11651) and directory traversal (CVE-2020-11652) give command execution and file read.",
-   "mem_mb": 250,
-   "ready_s": 60,
-   "names": [
-    "salt",
-    "config",
-    "ops"
-   ],
-   "proxy": false
+   "mem_mb_measured": 883,
+   "image_mb": 434
   },
   {
    "id": "git--CVE-2017-8386",
@@ -424,7 +400,14 @@
     "scm",
     "code"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 1,
+   "image_mb": 109
   },
   {
    "id": "wordpress--CVE-2026-63030",
@@ -471,7 +454,14 @@
     "site",
     "marketing"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 436,
+   "image_mb": 477
   },
   {
    "id": "joomla--CVE-2023-23752",
@@ -517,7 +507,14 @@
     "portal",
     "site"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 27.4
+   },
+   "mem_mb_measured": 248,
+   "image_mb": 323
   },
   {
    "id": "joomla--CVE-2017-8917",
@@ -563,7 +560,14 @@
     "portal",
     "site"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 15.3
+   },
+   "mem_mb_measured": 233,
+   "image_mb": 312
   },
   {
    "id": "joomla--CVE-2015-8562",
@@ -608,7 +612,14 @@
     "intranet",
     "www2"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 79,
+   "image_mb": 255
   },
   {
    "id": "tikiwiki--CVE-2020-15906",
@@ -661,7 +672,14 @@
     "kb",
     "docs"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 21.1
+   },
+   "mem_mb_measured": 265,
+   "image_mb": 441
   },
   {
    "id": "showdoc--CNVD-2020-26585",
@@ -703,7 +721,14 @@
     "api-docs",
     "showdoc"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 10,
+   "image_mb": 179
   },
   {
    "id": "showdoc--3.2.5-sqli",
@@ -743,7 +768,14 @@
     "api-docs",
     "showdoc"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 11,
+   "image_mb": 185
   },
   {
    "id": "v2board--1.6-privilege-escalation",
@@ -789,7 +821,14 @@
     "portal",
     "billing"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.4
+   },
+   "mem_mb_measured": 208,
+   "image_mb": 338
   },
   {
    "id": "owncloud--CVE-2023-49103",
@@ -831,7 +870,14 @@
     "cloud",
     "share"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 6.4
+   },
+   "mem_mb_measured": 56,
+   "image_mb": 315
   },
   {
    "id": "struts2--s2-045",
@@ -873,7 +919,14 @@
     "portal",
     "legacy"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 6.8
+   },
+   "mem_mb_measured": 318,
+   "image_mb": 234
   },
   {
    "id": "struts2--s2-061",
@@ -915,7 +968,14 @@
     "portal",
     "web"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.0
+   },
+   "mem_mb_measured": 343,
+   "image_mb": 254
   },
   {
    "id": "spring--CVE-2022-22965",
@@ -957,7 +1017,14 @@
     "service",
     "app"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.8
+   },
+   "mem_mb_measured": 272,
+   "image_mb": 135
   },
   {
    "id": "spring--CVE-2022-22947",
@@ -1007,7 +1074,14 @@
     "gw",
     "edge-api"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 10.0
+   },
+   "mem_mb_measured": 385,
+   "image_mb": 137
   },
   {
    "id": "thinkphp--5-rce",
@@ -1047,7 +1121,14 @@
     "app",
     "mall"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 10,
+   "image_mb": 158
   },
   {
    "id": "laravel--CVE-2021-3129",
@@ -1089,7 +1170,14 @@
     "dash",
     "portal"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 17,
+   "image_mb": 200
   },
   {
    "id": "django--CVE-2018-14574",
@@ -1131,7 +1219,14 @@
     "web",
     "backend"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 41,
+   "image_mb": 68
   },
   {
    "id": "fastjson--1.2.24-rce",
@@ -1173,7 +1268,14 @@
     "service",
     "rest"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.5
+   },
+   "mem_mb_measured": 326,
+   "image_mb": 133
   },
   {
    "id": "shiro--CVE-2016-4437",
@@ -1215,7 +1317,14 @@
     "portal",
     "oa"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 242,
+   "image_mb": 137
   },
   {
    "id": "rails--CVE-2018-3760",
@@ -1257,7 +1366,14 @@
     "web",
     "rails"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 64,
+   "image_mb": 378
   },
   {
    "id": "next.js--CVE-2025-29927",
@@ -1299,7 +1415,14 @@
     "dashboard",
     "web"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 90,
+   "image_mb": 213
   },
   {
    "id": "flask--ssti",
@@ -1339,7 +1462,14 @@
     "util",
     "internal"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 74,
+   "image_mb": 333
   },
   {
    "id": "gradio--CVE-2024-1561",
@@ -1381,7 +1511,14 @@
     "demo",
     "ai"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 141,
+   "image_mb": 138
   },
   {
    "id": "redis--4-unacc",
@@ -1420,7 +1557,14 @@
     "redis",
     "kv"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 2,
+   "image_mb": 31
   },
   {
    "id": "redis--CVE-2022-0543",
@@ -1461,7 +1605,14 @@
     "redis",
     "session"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 3,
+   "image_mb": 56
   },
   {
    "id": "couchdb--CVE-2022-24706",
@@ -1519,7 +1670,14 @@
     "db",
     "docs-db"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 41,
+   "image_mb": 228
   },
   {
    "id": "elasticsearch--CVE-2014-3120",
@@ -1569,7 +1727,14 @@
     "es",
     "logs"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 192,
+   "image_mb": 194
   },
   {
    "id": "elasticsearch--CVE-2015-1427",
@@ -1619,7 +1784,14 @@
     "es",
     "index"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 213,
+   "image_mb": 202
   },
   {
    "id": "mysql--CVE-2012-2122",
@@ -1659,7 +1831,14 @@
     "mysql",
     "sql"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 36,
+   "image_mb": 161
   },
   {
    "id": "postgres--CVE-2018-1058",
@@ -1700,7 +1879,14 @@
     "pg",
     "postgres"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 6.0
+   },
+   "mem_mb_measured": 21,
+   "image_mb": 14
   },
   {
    "id": "influxdb--CVE-2019-20933",
@@ -1742,7 +1928,14 @@
     "influx",
     "tsdb"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 8,
+   "image_mb": 82
   },
   {
    "id": "neo4j--CVE-2021-34371",
@@ -1808,7 +2001,14 @@
     "neo4j",
     "kg"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.3
+   },
+   "mem_mb_measured": 456,
+   "image_mb": 183
   },
   {
    "id": "solr--CVE-2019-17558",
@@ -1858,7 +2058,14 @@
     "search",
     "catalog"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.5
+   },
+   "mem_mb_measured": 700,
+   "image_mb": 400
   },
   {
    "id": "h2database--CVE-2018-10054",
@@ -1908,7 +2115,14 @@
     "h2",
     "devdb"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 12.5
+   },
+   "mem_mb_measured": 202,
+   "image_mb": 102
   },
   {
    "id": "hugegraph--CVE-2024-27348",
@@ -1958,7 +2172,14 @@
     "hugegraph",
     "kg"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.4
+   },
+   "mem_mb_measured": 1323,
+   "image_mb": 545
   },
   {
    "id": "phpmyadmin--CVE-2018-12613",
@@ -2003,7 +2224,14 @@
     "phpmyadmin",
     "dbadmin"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 58,
+   "image_mb": 202
   },
   {
    "id": "phpmyadmin--CVE-2016-5734",
@@ -2048,7 +2276,14 @@
     "phpmyadmin",
     "dbadmin"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 54,
+   "image_mb": 238
   },
   {
    "id": "adminer--CVE-2021-21311",
@@ -2090,7 +2325,14 @@
     "dbtool",
     "sql"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 11,
+   "image_mb": 156
   },
   {
    "id": "pgadmin--CVE-2022-4223",
@@ -2132,7 +2374,14 @@
     "dbadmin",
     "pg-ui"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.8
+   },
+   "mem_mb_measured": 122,
+   "image_mb": 606
   },
   {
    "id": "mongo-express--CVE-2019-10758",
@@ -2177,7 +2426,14 @@
     "mongo-ui",
     "dbadmin"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 53,
+   "image_mb": 507
   },
   {
    "id": "webmin--CVE-2019-15107",
@@ -2219,7 +2475,14 @@
     "sysadmin",
     "ops"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.2
+   },
+   "mem_mb_measured": 25,
+   "image_mb": 110
   },
   {
    "id": "supervisor--CVE-2017-11610",
@@ -2261,7 +2524,14 @@
     "procs",
     "workers"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 16,
+   "image_mb": 331
   },
   {
    "id": "glassfish--CVE-2017-1000028",
@@ -2311,7 +2581,14 @@
     "jee-admin",
     "appserver"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.3
+   },
+   "mem_mb_measured": 389,
+   "image_mb": 329
   },
   {
    "id": "1panel--CVE-2024-39907",
@@ -2353,7 +2630,14 @@
     "1panel",
     "hosting"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 77,
+   "image_mb": 189
   },
   {
    "id": "nginx-ui--CVE-2026-27944",
@@ -2395,7 +2679,14 @@
     "edge-admin",
     "lb-admin"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 83,
+   "image_mb": 115
   },
   {
    "id": "jupyter--notebook-rce",
@@ -2435,7 +2726,14 @@
     "jupyter",
     "ds"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 48,
+   "image_mb": 254
   },
   {
    "id": "elfinder--CVE-2021-32682",
@@ -2477,7 +2775,14 @@
     "fm",
     "assets-admin"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 8,
+   "image_mb": 175
   },
   {
    "id": "superset--CVE-2023-27524",
@@ -2519,7 +2824,14 @@
     "superset",
     "reports"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 9.4
+   },
+   "mem_mb_measured": 173,
+   "image_mb": 588
   },
   {
    "id": "openfire--CVE-2023-32315",
@@ -2561,7 +2873,14 @@
     "xmpp",
     "im"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.3
+   },
+   "mem_mb_measured": 255,
+   "image_mb": 270
   },
   {
    "id": "tomcat--CVE-2020-1938",
@@ -2611,7 +2930,14 @@
     "app",
     "legacy"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.3
+   },
+   "mem_mb_measured": 193,
+   "image_mb": 232
   },
   {
    "id": "tomcat--tomcat8",
@@ -2651,7 +2977,14 @@
     "app",
     "old-app"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.8
+   },
+   "mem_mb_measured": 140,
+   "image_mb": 154
   },
   {
    "id": "jboss--CVE-2017-12149",
@@ -2701,7 +3034,14 @@
     "jee",
     "appsrv"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 408,
+   "image_mb": 321
   },
   {
    "id": "jetty--CVE-2021-28164",
@@ -2743,7 +3083,14 @@
     "svc",
     "web"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.2
+   },
+   "mem_mb_measured": 168,
+   "image_mb": 239
   },
   {
    "id": "apache-cxf--CVE-2024-28752",
@@ -2785,7 +3132,14 @@
     "ws",
     "cxf"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 76,
+   "image_mb": 118
   },
   {
    "id": "nginx--CVE-2017-7529",
@@ -2827,7 +3181,14 @@
     "static",
     "edge"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 3,
+   "image_mb": 42
   },
   {
    "id": "php--CVE-2019-11043",
@@ -2872,7 +3233,14 @@
     "php",
     "www"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 13,
+   "image_mb": 186
   },
   {
    "id": "php--fpm",
@@ -2909,7 +3277,14 @@
     "php",
     "backend"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.5
+   },
+   "mem_mb_measured": 7,
+   "image_mb": 148
   },
   {
    "id": "php--CVE-2012-1823",
@@ -2951,7 +3326,14 @@
     "php",
     "legacy"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 6,
+   "image_mb": 172
   },
   {
    "id": "uwsgi--unacc",
@@ -3002,60 +3384,14 @@
     "api",
     "uwsgi"
    ],
-   "proxy": true
-  },
-  {
-   "id": "dubbo--CVE-2019-17564",
-   "path": "dubbo/CVE-2019-17564",
-   "product": "Apache Dubbo",
-   "family": "dubbo",
-   "version": "2.7.3",
-   "cve": [
-    "CVE-2019-17564"
-   ],
-   "category": "middleware",
-   "services": {
-    "provider": {
-     "image": "vulhub/dubbo:2.7.3"
-    },
-    "zookeeper": {
-     "image": "zookeeper:3.7.0"
-    }
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
    },
-   "ports": [
-    {
-     "service": "provider",
-     "host_port": 8080,
-     "container_port": 8080,
-     "transport": "tcp",
-     "protocol": "http",
-     "primary": true
-    },
-    {
-     "service": "zookeeper",
-     "host_port": 2181,
-     "container_port": 2181,
-     "transport": "tcp",
-     "protocol": "zookeeper",
-     "primary": false
-    }
-   ],
-   "probe": {
-    "kind": "http",
-    "scheme": "http",
-    "port": 8080,
-    "path": "/",
-    "status_below": 500
-   },
-   "summary": "Apache Dubbo 2.7.3: the HTTP protocol deserializes request bodies with Spring's HttpInvoker, giving remote code execution.",
-   "mem_mb": 450,
-   "ready_s": 60,
-   "names": [
-    "rpc",
-    "dubbo",
-    "svc"
-   ],
-   "proxy": true
+   "mem_mb_measured": 16,
+   "image_mb": 149
   },
   {
    "id": "flink--CVE-2020-17518",
@@ -3105,7 +3441,14 @@
     "stream",
     "etl"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 282,
+   "image_mb": 408
   },
   {
    "id": "spark--unacc",
@@ -3172,7 +3515,14 @@
     "analytics",
     "etl"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.4
+   },
+   "mem_mb_measured": 379,
+   "image_mb": 392
   },
   {
    "id": "nacos--CVE-2021-29441",
@@ -3222,7 +3572,14 @@
     "config",
     "registry"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.0
+   },
+   "mem_mb_measured": 595,
+   "image_mb": 154
   },
   {
    "id": "java--rmi-registry-bind-deserialization",
@@ -3259,7 +3616,14 @@
     "svc",
     "jmx"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 4.5
+   },
+   "mem_mb_measured": 25,
+   "image_mb": 111
   },
   {
    "id": "goahead--CVE-2017-17562",
@@ -3301,7 +3665,14 @@
     "cam",
     "gw"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 1,
+   "image_mb": 51
   },
   {
    "id": "activemq--CVE-2015-5254",
@@ -3351,65 +3722,14 @@
     "activemq",
     "queue"
    ],
-   "proxy": true
-  },
-  {
-   "id": "activemq--CVE-2023-46604",
-   "path": "activemq/CVE-2023-46604",
-   "product": "Apache ActiveMQ",
-   "family": "activemq",
-   "version": "5.17.3",
-   "cve": [
-    "CVE-2023-46604"
-   ],
-   "category": "messaging",
-   "services": {
-    "activemq": {
-     "image": "vulhub/activemq:5.17.3"
-    }
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
    },
-   "ports": [
-    {
-     "service": "activemq",
-     "host_port": 61616,
-     "container_port": 61616,
-     "transport": "tcp",
-     "protocol": "openwire",
-     "primary": false
-    },
-    {
-     "service": "activemq",
-     "host_port": 8161,
-     "container_port": 8161,
-     "transport": "tcp",
-     "protocol": "http",
-     "primary": true
-    },
-    {
-     "service": "activemq",
-     "host_port": 5005,
-     "container_port": 5005,
-     "transport": "tcp",
-     "protocol": "jdwp",
-     "primary": false
-    }
-   ],
-   "probe": {
-    "kind": "http",
-    "scheme": "http",
-    "port": 8161,
-    "path": "/",
-    "status_below": 500
-   },
-   "summary": "OpenWire protocol is designed by ActiveMQ, to allow native access to ActiveMQ from a number of different languages and platforms.",
-   "mem_mb": 450,
-   "ready_s": 60,
-   "names": [
-    "mq",
-    "activemq",
-    "broker"
-   ],
-   "proxy": true
+   "mem_mb_measured": 268,
+   "image_mb": 191
   },
   {
    "id": "activemq--CVE-2024-32114",
@@ -3467,7 +3787,14 @@
     "activemq",
     "queue"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.3
+   },
+   "mem_mb_measured": 225,
+   "image_mb": 142
   },
   {
    "id": "rocketmq--CVE-2023-33246",
@@ -3514,7 +3841,14 @@
     "rocketmq",
     "events"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.5
+   },
+   "mem_mb_measured": 553,
+   "image_mb": 140
   },
   {
    "id": "rocketmq--CVE-2023-37582",
@@ -3572,7 +3906,14 @@
     "rocketmq",
     "mq-ns"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.5
+   },
+   "mem_mb_measured": 729,
+   "image_mb": 140
   },
   {
    "id": "celery--celery3_redis_unauth",
@@ -3614,7 +3955,14 @@
     "tasks",
     "celery"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 72,
+   "image_mb": 131
   },
   {
    "id": "grafana--CVE-2021-43798",
@@ -3656,7 +4004,14 @@
     "metrics",
     "dash"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 29,
+   "image_mb": 78
   },
   {
    "id": "grafana--CVE-2024-9264",
@@ -3698,7 +4053,14 @@
     "metrics",
     "dash"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 52,
+   "image_mb": 153
   },
   {
    "id": "grafana--admin-ssrf",
@@ -3738,7 +4100,14 @@
     "metrics",
     "boards"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 33,
+   "image_mb": 85
   },
   {
    "id": "zabbix--CVE-2017-2824",
@@ -3797,7 +4166,14 @@
     "monitor",
     "noc"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.2
+   },
+   "mem_mb_measured": 220,
+   "image_mb": 190
   },
   {
    "id": "ntopng--CVE-2021-28073",
@@ -3842,7 +4218,14 @@
     "netflow",
     "traffic"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 166,
+   "image_mb": 189
   },
   {
    "id": "skywalking--8.3.0-sqli",
@@ -3885,7 +4268,14 @@
     "skywalking",
     "traces"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.8
+   },
+   "mem_mb_measured": 733,
+   "image_mb": 274
   },
   {
    "id": "hertzbeat--CVE-2024-42323",
@@ -3935,7 +4325,14 @@
     "uptime",
     "status"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.1
+   },
+   "mem_mb_measured": 842,
+   "image_mb": 492
   },
   {
    "id": "opentsdb--CVE-2020-35476",
@@ -3977,7 +4374,14 @@
     "opentsdb",
     "series"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.1
+   },
+   "mem_mb_measured": 433,
+   "image_mb": 518
   },
   {
    "id": "opensmtpd--CVE-2020-7247",
@@ -4017,7 +4421,14 @@
     "smtp",
     "mx2"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 8,
+   "image_mb": 41
   },
   {
    "id": "dns--dns-zone-transfer",
@@ -4063,7 +4474,14 @@
     "dns",
     "ns-int"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 13,
+   "image_mb": 77
   },
   {
    "id": "samba--CVE-2017-7494",
@@ -4110,7 +4528,14 @@
     "smb",
     "nas"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 4.5
+   },
+   "mem_mb_measured": 8,
+   "image_mb": 223
   },
   {
    "id": "libssh--CVE-2018-10933",
@@ -4150,7 +4575,14 @@
     "bastion",
     "jump"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 1,
+   "image_mb": 127
   },
   {
    "id": "inetutils--CVE-2026-24061",
@@ -4189,7 +4621,14 @@
     "console",
     "oob"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 1,
+   "image_mb": 94
   },
   {
    "id": "openssl--CVE-2014-0160",
@@ -4236,7 +4675,14 @@
     "vpn-web",
     "ssl"
    ],
-   "proxy": false
+   "proxy": false,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 1.5
+   },
+   "mem_mb_measured": 3,
+   "image_mb": 67
   },
   {
    "id": "php--8.1-backdoor",
@@ -4276,7 +4722,14 @@
     "labs",
     "php8"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 5,
+   "image_mb": 94
   },
   {
    "id": "yapi--unacc",
@@ -4319,7 +4772,14 @@
     "api-docs",
     "mock"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 9.0
+   },
+   "mem_mb_measured": 140,
+   "image_mb": 632
   },
   {
    "id": "n8n--CVE-2025-68613",
@@ -4361,7 +4821,14 @@
     "automation",
     "flows"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 3.0
+   },
+   "mem_mb_measured": 149,
+   "image_mb": 420
   },
   {
    "id": "aria2--rce",
@@ -4401,7 +4868,34 @@
     "aria",
     "fetch"
    ],
-   "proxy": true
+   "proxy": true,
+   "smoke": {
+    "ok": true,
+    "date": "2026-10-31",
+    "ready_s": 0.0
+   },
+   "mem_mb_measured": 6,
+   "image_mb": 88
+  }
+ ],
+ "dropped": [
+  {
+   "id": "saltstack--CVE-2020-11651",
+   "category": "ci-cd",
+   "reason": "probe failed after 180.1s: RemoteDisconnected: Remote end closed connection without response",
+   "date": "2026-10-31"
+  },
+  {
+   "id": "dubbo--CVE-2019-17564",
+   "category": "middleware",
+   "reason": "probe failed after 180.2s: status 500",
+   "date": "2026-10-31"
+  },
+  {
+   "id": "activemq--CVE-2023-46604",
+   "category": "messaging",
+   "reason": "probe failed after 180.0s: ConnectionRefusedError: [Errno 111] Connection refused",
+   "date": "2026-10-31"
   }
  ]
 }
