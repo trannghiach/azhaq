@@ -62,11 +62,11 @@ The first run of a workspace is the baseline. Everything in it is new, and it li
 | `+ web services` | Front pages that answer now and did not before. |
 | `+ URLs` | URLs found now that were not before. |
 | `~ API routes` | New, changed or removed routes, each tied to its script. See below. |
-| `~ hosts whose open ports changed` | Hosts whose open ports differ from the previous run's. |
+| `~ hosts whose open ports changed` | Hosts scanned in both runs whose open ports differ. |
 | `~ pages that answer differently` | Pages whose status, title or item count changed. |
 | `- hostnames gone` | Names that resolved in the previous run and do not now. |
 | `- web services gone` | Front pages that answered in the previous run and do not now. |
-| `- URLs gone` | URLs of the previous run that were not found this time. |
+| `- URLs gone` | URLs the previous run requested and answered, not found this time. |
 
 ### Lines of the API routes section
 
@@ -106,7 +106,9 @@ The route lines also go, as text, to Slack, Discord and Telegram.
 
 Without `-every`, `watch` runs once and exits with the code of its run.
 
-A notification that did not arrive is named on stderr, and the exit code is 3. The run's own 3 or 4 wins.
+With `-every`, `watch` runs until a signal stops it, and that exits 0. A run that ended 3 or 4 does not end the loop: the next one starts after `-every`. A run that cannot start, or fails with an error, ends `watch` with that error.
+
+A notification that did not arrive is named on stderr. Without `-every` the exit code is then 3, and the run's own 3 or 4 wins. With `-every` it stays on stderr.
 
 The summary and the other exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
 
@@ -140,7 +142,7 @@ The names are read from `fetch`, `XMLHttpRequest` (`send`), axios and jQuery cal
   - Slack: `username` and `icon_emoji`.
   - Discord: `username` and `avatar_url`.
   - Telegram: `parse_mode`, `thread` and `preview=yes`.
-- Failed deliveries are tried again as [notify](notify.md#delivery-and-retries) does.
+- Every delivery, to a webhook or a provider, goes through notify's sender. A 429, a 5xx or a failed connection is tried up to three times, `Retry-After` is honoured up to a minute, and another 4xx is not tried again: see [Delivery and retries](notify.md#delivery-and-retries).
 - A delivery that failed is printed on stderr as `azhaq watch: POST https://host/…: reason`, never with the URL. See [notify](notify.md#secrets).
 
 ## Flags

@@ -32,7 +32,7 @@ JSON-RPC (Model Context Protocol) on stdin and stdout.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The server runs until its input closes or a signal comes. A signal ends it with exit 0, after the commands in flight stop.
 
 ## Flags
 

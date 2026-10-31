@@ -76,6 +76,7 @@ Some work failed and did not get its answer. Fan-out and partial failures are li
 - A limit stopped the run: `-max-requests`, `-timeout`, `-daily-requests` or `-max-items`.
 - The kill file stopped it: `-kill-file`, default `DB.stop`. See [the kill file](CONCEPTS.md#the-kill-file).
 - A signal stopped it: Ctrl-C, `kill` or SIGHUP. All three stop a command the same way, with its summary printed and its ledger sealed.
+- `gallery` and `mcp` are servers, and a signal is how they end: they exit 0. `mcp` first interrupts the commands in flight, which seal their ledgers.
 - Work is left. `azhaq resume -db FILE` continues. See [Workspaces, runs and resuming](CONCEPTS.md#workspaces-runs-and-resuming).
 
 ## The summary
