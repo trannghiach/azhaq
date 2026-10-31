@@ -601,12 +601,13 @@ Behaviour and fields: [`azhaq asn`](commands/asn.md).
 
 | asnmap | azhaq | Note |
 | --- | --- | --- |
-| `-a AS64500` | `-a AS64500` | Repeatable. |
+| `-a AS64500` | `-a AS64500` | Repeatable. azhaq also takes `as64500` and `64500`. |
 | `-f FILE` | `-l FILE` | A file of AS numbers. `-l -` reads stdin, and so does a pipe with no `-a`. |
 | `-json` | `-json` | `{"as_number","as_name","prefix"}`, one object for each prefix. |
 | `-o FILE` | `-o FILE` | |
 | `-silent`, `-v` | `-silent`, `-v` | |
 | `-i`, `-d`, `-org` | | Not in azhaq. |
+| `-csv`, `-v6`, `-r`, `-p`, `-config`, `-auth` | | Not in azhaq. |
 
 ### What differs on purpose
 
@@ -614,6 +615,7 @@ Behaviour and fields: [`azhaq asn`](commands/asn.md).
 
 - `azhaq asn` takes AS numbers only. It does not look up an IP address, a domain or an organization, as `asnmap -i`, `asnmap -d` and `asnmap -org` do.
 - It lists the prefixes an autonomous system announces, from RIPEstat. It needs no key.
+- `-json` prints one object for each prefix. `asnmap -json` prints one object for each AS, with the prefixes in an `as_range` list, and adds `input` and `as_country`.
 
 ### Examples
 

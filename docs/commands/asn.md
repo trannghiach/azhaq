@@ -1,6 +1,6 @@
 # azhaq asn
 
-Lists the prefixes an autonomous system announces. Replaces asnmap.
+Lists the prefixes an autonomous system announces. Replaces asnmap (see [Migrating](../MIGRATING.md#asnmap-azhaq-asn)).
 
 ## Synopsis
 

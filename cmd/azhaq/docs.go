@@ -13,7 +13,7 @@ import (
 // topics are the documents azhaq docs prints, in the order it lists them.
 var topics = []struct{ name, file, about string }{
 	{"readme", "", "what Azhaq does, install, examples, benchmarks"},
-	{"migrating", "MIGRATING.md", "coming from subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowitness or notify: their flags next to Azhaq's"},
+	{"migrating", "MIGRATING.md", "coming from subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowitness, asnmap or notify: their flags next to Azhaq's"},
 	{"recipes", "RECIPES.md", "how do I…: map an app, log in, find IDOR, test writes, map a program, resume, watch, export, GraphQL, MCP, live subdomains"},
 	{"concepts", "CONCEPTS.md", "what the words mean: a map row, coverage, kinds, exit codes, roles verdicts, what Azhaq sends"},
 	{"troubleshooting", "TROUBLESHOOTING.md", "why is my URL hint, the map looks thin, exit 3, exit 4, Chrome, where is my database"},
@@ -30,7 +30,7 @@ var commandPageName = regexp.MustCompile(`^[a-z][a-z-]*$`)
 const docsOverview = `azhaq maps what an application or a bug bounty program exposes, and who may
 read and write it. One binary, one SQLite workspace you can query, export and
 diff. It stands in for subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu,
-gowitness and notify, with their flags and JSON fields, and adds access
+gowitness, asnmap and notify, with their flags and JSON fields, and adds access
 control, scope, a request budget and a ledger of what was sent.
 
 Start with:

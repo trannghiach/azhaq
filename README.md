@@ -1,6 +1,6 @@
 # azhaq
 
-azhaq is one Go binary for reconnaissance. It stands in for subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, gowitness and notify, with their flags and JSON field names. It adds what that chain does not do. It maps the routes an app's JavaScript calls and compares what each of your accounts may read and write. It holds every request to a scope and a budget, and records what it sent. Everything lands in one SQLite workspace you can query, export and diff.
+azhaq is one Go binary for reconnaissance. It stands in for subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, gowitness, asnmap and notify, with their flags and JSON field names. It adds what that chain does not do. It maps the routes an app's JavaScript calls and compares what each of your accounts may read and write. It holds every request to a scope and a budget, and records what it sent. Everything lands in one SQLite workspace you can query, export and diff.
 
 Coming from one of those tools? [docs/MIGRATING.md](docs/MIGRATING.md) puts its flags next to azhaq's, says what differs on purpose and gives three command lines for each. `azhaq docs migrating` prints it offline.
 
@@ -17,6 +17,7 @@ Coming from one of those tools? [docs/MIGRATING.md](docs/MIGRATING.md) puts its 
 | arjun | [`azhaq params`](docs/commands/params.md) | a control against pages that answer any name |
 | naabu, nmap (service versions, UDP) | [`azhaq ports`](docs/commands/ports.md) | UDP without root, products and versions |
 | gowitness | [`azhaq shots`](docs/commands/shots.md) | Chrome held to the scope and the budget |
+| asnmap | [`azhaq asn`](docs/commands/asn.md) | AS numbers also expand to targets in `ports` and `run -asn` |
 | notify | [`azhaq notify`](docs/commands/notify.md) | a lost message is exit 3 |
 
 ## What it adds
@@ -281,7 +282,7 @@ The Juice Shop truth is the 77 routes its server defines that its frontend calls
 
 - [Commands](#commands): one page for each command, with examples, fields, edge cases and flags.
 - [Recipes](docs/RECIPES.md): task by task, from mapping an app to proving what was sent.
-- [Migrating](docs/MIGRATING.md): from subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowitness or notify, flags side by side.
+- [Migrating](docs/MIGRATING.md): from subfinder, dnsx, httpx, katana, ffuf, gau, arjun, naabu, nmap, gowitness, asnmap or notify, flags side by side.
 - [Concepts](docs/CONCEPTS.md): a row, coverage, evidence, kinds, scope, budget, the ledger, roles verdicts, what azhaq sends.
 - [Troubleshooting](docs/TROUBLESHOOTING.md): a URL that is `hint`, a thin map, exit 3, exit 4, the kill file, Chrome.
 - [Output](docs/OUTPUT.md): stdout and stderr, the summary, exit codes, the ledger format.
