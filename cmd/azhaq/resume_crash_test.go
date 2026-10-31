@@ -94,7 +94,7 @@ func TestResumeAfterSIGKILLNeverSendsAWriteTwice(t *testing.T) {
 		t.Errorf("GET /slow, whose answer was lost, reached the server %d times, want 2", slows.Load())
 	}
 	notes := strings.Join(rep.Notes, "\n")
-	if !strings.Contains(notes, "1 write was sent before the run was killed") || !regexp.MustCompile(`\d+ requests sent before the run was killed had no stored answer and were asked again`).MatchString(notes) {
+	if !strings.Contains(notes, "1 write was sent before the run was killed") || !regexp.MustCompile(`\d+ requests? sent before the run was killed had no stored answer and (was|were) asked again`).MatchString(notes) {
 		after, _ := os.ReadFile(db + ".ledger.jsonl")
 		t.Errorf("the notes do not say what the resume did:\n%s\nsummary: %+v\nledger after the resume:\n%s", notes, rep, after)
 	}
