@@ -73,7 +73,7 @@ func cmdFuzz(args []string) error {
 	ft := fs.String("ft", "", "filter out answers by milliseconds to the first byte: >MS or <MS")
 	mmode := fs.String("mmode", "or", "matchers: an answer must match any (or) or all (and) of them")
 	fmode := fs.String("fmode", "or", "filters: an answer is dropped by any (or) or by all (and) of them")
-	ac := fs.Bool("ac", true, "calibrate the filters on paths that cannot exist (-ac=false turns it off; ffuf's default is off; it is also off when -fc, -fs, -fw, -fl, -fr or -ft is given, as a line moved from ffuf has calibrated by hand, unless -ac is given)")
+	ac := fs.Bool("ac", false, "calibrate the filters on names that cannot exist, as ffuf does (off by default, as in ffuf; -acs, -acc and -ach turn it on too)")
 	ack := fs.String("ack", "FUZZ", "the keyword calibration replaces")
 	ach := fs.Bool("ach", false, "calibrate for each host and directory of the path (with a Host header or a keyword in the host)")
 	fs.Var(&acStrategies, "acs", "calibration strategy: basic, advanced (adds the names as directories), or a file ~/.config/ffuf/autocalibration/NAME.json (repeatable or comma list)")
@@ -306,25 +306,11 @@ func cmdFuzz(args []string) error {
 		}
 	}
 
-	// A command line moved from ffuf that gives its own filters has calibrated
-	// by hand: calibrating again would add requests and could drop answers
-	// it keeps. -ac (or -acs, -acc, -ach) asks for it.
-	calibrate := *ac
+	// As ffuf's help says, -acs, -acc and -ach imply -ac.
+	calibrate := *ac || !given["ac"] && (given["acs"] || given["acc"] || given["ach"])
 	var notes []string
 	if rcNote != "" {
 		notes = append(notes, rcNote)
-	}
-	if !given["ac"] && !given["acs"] && !given["acc"] && !given["ach"] {
-		var own []string
-		for _, f := range []string{"fc", "fs", "fw", "fl", "fr", "ft"} {
-			if given[f] {
-				own = append(own, "-"+f)
-			}
-		}
-		if len(own) > 0 {
-			calibrate = false
-			notes = append(notes, "auto-calibration is off because "+strings.Join(own, ", ")+" was given, as in a command line moved from ffuf; -ac turns it on")
-		}
 	}
 	calGroups, err := fuzz.CalibrationGroups(splitAll(acStrategies), acStrings)
 	if err != nil {

@@ -123,7 +123,7 @@ azhaq dirs -u https://app.example.com/api/                 # built-in common.txt
 azhaq dirs -u https://app.example.com/ -w big.txt -fs 4242 -fc 404 -e .php,.bak
 ```
 
-`dirs` calibrates like `ffuf -ac`; with `-fs`/`-fw`/`-fl` the sizes, word and line counts are ffuf's, so a filter value moves over from a ffuf run.
+`dirs` calibrates like `ffuf -ac` (`fuzz` only with `-ac`, as ffuf); with `-fs`/`-fw`/`-fl` the sizes, word and line counts are ffuf's, so a filter value moves over from a ffuf run.
 
 ## 10. Read a GraphQL schema
 
@@ -244,7 +244,7 @@ azhaq fuzz -u https://app.example.com/FUZZ -w common.txt -rate 5 -control ctl & 
 
 An ffuf line works as it is: same flags, same counts, same report files (`jq .results[0]` reads them as it reads ffuf's). `-request` takes the file Burp's "copy to file" gives, with `FUZZ` in it; the keyword is looked for in the method, URL, headers and body. `-replay-proxy` sends only the matches through the proxy, so Burp's history holds the hits; `-x` sends every request through it. Neither copy to a proxy counts toward `-max-requests` and `-rate`, because it is not a request to the target; the requests to the target do, `-ac` calibration included.
 
-Catch: a line with `-fs`, `-fc`, `-fw`, `-fl`, `-fr` or `-ft` runs without calibration, as it did in ffuf; add `-ac` for it. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.
+Catch: `fuzz` calibrates only with `-ac`, as ffuf does, so a line moved over gives ffuf's matches and a catch-all answer is listed unless you ask for `-ac` or a filter. Calibration is paced by `-rate`, so with `-rate 5` the first six requests take over a second.
 
 A form that wants a one-use token: save the page request and the login as files, and read the token from the page.
 

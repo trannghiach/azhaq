@@ -213,7 +213,7 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 
 <!-- azhaq: fuzz dirs -->
 
-`azhaq fuzz` takes ffuf's flags, counts words, lines and sizes as ffuf does, and calibrates and recurses as it does, so a command line moved from ffuf gives the same results. `azhaq dirs` is the short form for the common job: paths from a wordlist, calibrated, with SecLists' `common.txt` built in.
+`azhaq fuzz` takes ffuf's flags, counts words, lines and sizes as ffuf does, and calibrates (with `-ac`) and recurses as it does, so a command line moved from ffuf gives the same results. `azhaq dirs` is the short form for the common job: paths from a wordlist, calibrated, with SecLists' `common.txt` built in.
 
 | ffuf | azhaq `fuzz` | Note |
 | --- | --- | --- |
@@ -226,7 +226,7 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 | `-mc -ms -mw -ml -mr -mt` | the same | |
 | `-fc -fs -fw -fl -fr -ft` | the same | |
 | `-mmode`, `-fmode` | the same | |
-| `-ac`, `-acc`, `-acs`, `-ack`, `-ach` | the same | See the note on calibration. |
+| `-ac`, `-acc`, `-acs`, `-ack`, `-ach` | the same | Calibration is off unless `-ac` is given, as in ffuf; `-acc`, `-acs` and `-ach` imply `-ac`. |
 | `-recursion`, `-recursion-depth`, `-recursion-strategy` | the same | |
 | `-t 40`, `-p 0.1`, `-rate 100` | the same | |
 | `-maxtime`, `-maxtime-job` | the same | |
@@ -251,7 +251,7 @@ On top: the routes a frontend's JavaScript calls, with methods and body names; G
 
 What differs on purpose:
 
-- **Calibration.** It is on, and ffuf's is off unless `-ac` is given. It is switched off when you give `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft`, since a command line moved from ffuf that has its own filters calibrated by hand, and the summary says so. It needs the keyword `FUZZ` (or the one `-ack` names); without it a note says nothing was calibrated.
+- **Calibration.** `dirs` calibrates by default, as ffuf with `-ac`; it is switched off when you give `-fc`, `-fs`, `-fw`, `-fl`, `-fr` or `-ft`, since a command line moved from ffuf that has its own filters calibrated by hand, and the summary says so. `fuzz` does not calibrate unless you give `-ac`, as in ffuf, so a command line moved over returns ffuf's matches. Either needs the keyword `FUZZ` (or the one `-ack` names); without it a note says nothing was calibrated.
 - **Scope.** The host in `-u` is the scope, unless `-allow`, `-deny` or `-scope` say otherwise. An input that would go to another host is counted and not sent. A header that names a host (`Host`, `X-Forwarded-Host`, `X-Host`, `X-Original-Host`, in `-H` or a `-request` file) is held to the scope as the URL's host is, since a front end routes by it: one the scope leaves out stops the run with exit 2 before the first request (`-H 'Host: app.example.com'` against `-u https://10.0.0.5/` needs `-allow app.example.com`), and one that holds the keyword is checked for each word. `Host: FUZZ.example.com` is still fine: the scope is the domain.
 - **Budget and pace.** Every request, calibration included, counts against `-max-requests` and `-rate`, goes in the ledger and stops at the kill file. ffuf's calibration is not paced.
 - **Dead target.** Five unanswered requests in a row stop the run with exit 3. `-se` makes it twice `-t` failures of any kind, as ffuf's.

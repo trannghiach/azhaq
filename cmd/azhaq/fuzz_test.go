@@ -95,29 +95,63 @@ func fuzzRows(t *testing.T, args ...string) ([]string, report, error) {
 	return rows, lastReport(t, errOut), err
 }
 
-func TestFuzzPathsCalibratedByDefault(t *testing.T) {
+// fuzz is ffuf: it calibrates only when -ac (or -acs, -acc, -ach) is given.
+func TestFuzzCalibratesOnlyWithAC(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "docs", "x"))
+	words := wlist(t, "admin", "nothing", "docs", "x")
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", words)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(rows) != 4 || rep.Requests != 4 || rep.Exit != 0 || rep.Command != "fuzz" || !rep.Complete {
+		t.Errorf("by default (ffuf's): %q, summary %+v", rows, rep)
+	}
+	for _, n := range rep.Notes {
+		if strings.Contains(n, "calibration") {
+			t.Errorf("a note about calibration without -ac: %s", n)
+		}
+	}
 	want := []string{"200 " + srv.URL + "/admin FUZZ=admin", "301 " + srv.URL + "/docs FUZZ=docs"}
-	if strings.Join(rows, "|") != strings.Join(want, "|") {
-		t.Errorf("rows %q", rows)
+	for _, args := range [][]string{{"-ac"}, {"-acs", "basic"}, {"-ach"}, {"-acc", "zzqq"}} {
+		rows, rep, err = fuzzRows(t, append([]string{"-u", srv.URL + "/FUZZ", "-w", words}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Join(rows, "|") != strings.Join(want, "|") || rep.Requests <= 4 {
+			t.Errorf("%v: rows %q, %d requests", args, rows, rep.Requests)
+		}
 	}
-	if rep.Command != "fuzz" || rep.Results != 2 || !rep.Complete || rep.Exit != 0 || rep.Requests != 10 {
-		t.Errorf("summary %+v", rep)
-	}
-	// -ac=false shows the catch-all page too.
-	rows, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing", "docs", "x"), "-ac=false")
+	// An explicit -ac=false stays off, whatever else is given.
+	rows, rep, _ = fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", words, "-acs", "basic", "-ac=false")
 	if len(rows) != 4 || rep.Requests != 4 {
-		t.Errorf("without calibration: %q, %d requests", rows, rep.Requests)
+		t.Errorf("-ac=false -acs: %q, %d requests", rows, rep.Requests)
+	}
+}
+
+// Two keywords, as in ffuf's clusterbomb: every answer that matches -mc is
+// listed, the short ones too (calibration would drop answers of one size).
+func TestFuzzClusterbombKeepsEveryMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("q") == "apple" {
+			fmt.Fprint(w, strings.Repeat("a product ", 40))
+			return
+		}
+		fmt.Fprint(w, `{"status":"success","data":[]}`)
+	}))
+	t.Cleanup(srv.Close)
+	rows, rep, err := fuzzRows(t, "-u", srv.URL+"/search?q=FUZZ&x=BAR", "-w", wlist(t, "apple", "zzzzzz")+":FUZZ", "-w", wlist(t, "1", "2")+":BAR",
+		"-mode", "clusterbomb", "-mc", "200")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 4 || rep.Requests != 4 {
+		t.Errorf("%d results, %d requests: %q", len(rows), rep.Requests, rows)
 	}
 }
 
 func TestFuzzRecursion(t *testing.T) {
 	srv := fuzzServer(t)
-	rows, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "docs", "guide", "x"), "-recursion", "-recursion-depth", "2")
+	rows, _, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "docs", "guide", "x"), "-recursion", "-recursion-depth", "2", "-ac")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,9 +303,8 @@ func TestFuzzResumeArgs(t *testing.T) {
 	}
 }
 
-// A command line moved from ffuf that gives its own filter has calibrated by
-// hand: no calibration request goes out unless -ac says so.
-func TestFuzzOwnFilterTurnsCalibrationOff(t *testing.T) {
+// A filter of the command's own sends no calibration request; -ac with it does.
+func TestFuzzOwnFilterAndAC(t *testing.T) {
 	srv := fuzzServer(t)
 	_, rep, err := fuzzRows(t, "-u", srv.URL+"/FUZZ", "-w", wlist(t, "admin", "nothing"), "-mc", "all", "-fs", "4242")
 	if err != nil {
