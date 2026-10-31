@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `urls -mc` and `-fc` judge OTX's URLs by the `httpcode` it records and urlscan.io's by the page `status` (`-mt` and `-ft` by its `mimeType`); a URL with no recorded status is not kept by `-mc` and not dropped by `-fc`. Before, OTX's URLs were kept unfiltered under a note that OTX has no status, so `-mc 200` printed URLs recorded as 0 and 404.
+- `dns -axfr`: a zone that no server transferred is a failed technique, listed under `failed` with exit 3, in text and `-json` alike; before, the run ended complete with a note.
+- `probe -p` replaces the port of a `host:port` or URL input, as httpx does: `-l 127.0.0.1:3001 -p 5002` asks port 5002, and `input` stays the line as given. Without `-p`, an input still asks its own port once.
 - `urls` without `-subs` keeps the `www.` URLs of the domain: the Wayback Machine answers `example.com/*` with `www.example.com`'s captures too, and gau prints them; azhaq dropped them as a subdomain (26 of gau's 150 for vulnweb.com).
 - `fuzz`: `azhaq resume` no longer asks again what a stopped run already asked: a run stopped by `-max-requests`, `-maxtime`, the kill file or Ctrl-C keeps the exact inputs it asked, and the resume asks only the others and counts only what it newly did. Before, answers that came back out of order were forgotten (15 requests for 10 words).
 - `shots -nmap` takes every open TCP port of the scan, as `gowitness scan nmap` does, instead of only the ports nmap named http (a web port nmap guessed wrong, `nessus` for Juice Shop, was a usage error). Ports not named a web service are tried over https then http as fan-out: one that does not answer is listed with `"fanout": true` and the exit code stays 0; a dead port nmap named http or https still exits 3. New `-service-contains` and `-skip-port`; the summary says how many ports were tried and how many answered.
