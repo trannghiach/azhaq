@@ -84,6 +84,17 @@ func (c *Collector) RunBatch(ctx context.Context, seeds []types.Seed, emit func(
 		answers[a.Name] = a
 	}
 	metas := make([]types.RunMeta, len(seeds))
+	// A run stopped in the middle of the batch keeps the names that were
+	// answered; the rest are not recorded, and a resume asks them. What is
+	// left to ask about an answered name (a wildcard check) gets a moment
+	// of its own, and a name it cannot settle is not kept either.
+	stopped := ctx.Err() != nil
+	dctx := ctx
+	if stopped {
+		var cancel context.CancelFunc
+		dctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+	}
 	for i, seed := range seeds {
 		host := hosts[i]
 		meta := types.RunMeta{Status: types.StatusOK}
@@ -96,7 +107,15 @@ func (c *Collector) RunBatch(ctx context.Context, seeds []types.Seed, emit func(
 		case net.ParseIP(host) != nil:
 			payload["ips"] = []string{host}
 		default:
-			c.describe(ctx, host, answers[host], payload, &meta)
+			if a := answers[host]; stopped && (a.Status == dnsr.StatusFailed || a.Status == dnsr.StatusBroken) {
+				metas[i] = types.RunMeta{Status: types.StatusCancelled}
+				continue
+			}
+			c.describe(dctx, host, answers[host], payload, &meta)
+			if stopped && dctx.Err() != nil {
+				metas[i] = types.RunMeta{Status: types.StatusCancelled}
+				continue
+			}
 		}
 		raw, _ := json.Marshal(payload)
 		if err := emit(seed, types.Observation{

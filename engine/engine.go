@@ -277,10 +277,9 @@ func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) 
 	if len(todo) == 0 {
 		return nil, nil
 	}
+	// A stop does not refuse what a batch already has: the names answered
+	// before it are kept, and the collector leaves out the rest.
 	emit := func(seed types.Seed, o types.Observation) error {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
 		ent, ok := ents[seedKey(normalize.Seed(seed))]
 		if !ok {
 			return fmt.Errorf("%s: observation for a seed outside the batch: %s", name, seed.Key())
@@ -303,8 +302,9 @@ func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) 
 	done := timing.Start(ctx, name, fmt.Sprintf("%d seeds", len(todo)))
 	metas, err := b.RunBatch(ctx, todo, emit)
 	done()
-	if ctx.Err() != nil {
-		return nil, ctx.Err()
+	stopped := ctx.Err() != nil
+	if stopped && (err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		err = nil
 	}
 	out := make([]BatchResult, 0, len(todo))
 	for i, seed := range todo {
@@ -314,6 +314,9 @@ func (e *Engine) RunBatch(ctx context.Context, name string, seeds []types.Seed) 
 		}
 		if m.Status == "" {
 			m.Status = types.StatusOK
+		}
+		if stopped && (m.Status != types.StatusOK || m.EmitCount == 0) {
+			continue // not answered before the stop: azhaq resume asks it
 		}
 		if err != nil {
 			m.Status = types.StatusError

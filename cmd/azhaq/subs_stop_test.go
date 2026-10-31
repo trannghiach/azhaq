@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -147,5 +148,120 @@ func TestSubsLiveSaysWhenTheResolversGaveNoAnswer(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no note naming the resolver and the refusal in %q", rep.Notes)
+	}
+}
+
+// A resolver that answers some names and holds the rest: SIGTERM keeps the
+// answered names as rows (exit 4), and resume asks only the ones that hung.
+func TestSubsStopKeepsTheNamesAnswered(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX signals")
+	}
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("no UDP: %v", err)
+	}
+	var hold atomic.Bool
+	hold.Store(true)
+	var mu sync.Mutex
+	asked := map[string]int{} // A queries per source name
+	srv := &dns.Server{PacketConn: pc, Handler: dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		q := r.Question[0]
+		name := strings.TrimSuffix(strings.ToLower(q.Name), ".")
+		m := new(dns.Msg)
+		m.SetReply(r)
+		switch name {
+		case "a.example.org", "b.example.org", "c.example.org", "d.example.org":
+			mu.Lock()
+			if q.Qtype == dns.TypeA {
+				asked[name]++
+			}
+			mu.Unlock()
+			if (name == "c.example.org" || name == "d.example.org") && hold.Load() {
+				return // never answered
+			}
+			if q.Qtype == dns.TypeA {
+				m.Answer = append(m.Answer, &dns.A{Hdr: dns.RR_Header{Name: q.Name, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60}, A: net.ParseIP("192.0.2.7")})
+			}
+		default:
+			m.Rcode = dns.RcodeNameError
+		}
+		_ = w.WriteMsg(m)
+	})}
+	go func() { _ = srv.ActivateAndServe() }()
+	defer srv.Shutdown()
+	resolver := pc.LocalAddr().String()
+	dir := t.TempDir()
+	db := filepath.Join(dir, "s.db")
+	start := func(args ...string) (*exec.Cmd, *strings.Builder, *strings.Builder) {
+		cmd := exec.Command(os.Args[0], args...)
+		cmd.Env = append(os.Environ(), "AZHAQ_TEST_AS_MAIN=1", "AZHAQ_DATA_DIR="+dir, "AZHAQ_TEST_SUBS_NAMES=a.example.org,b.example.org,c.example.org,d.example.org")
+		var out, errOut strings.Builder
+		cmd.Stdout, cmd.Stderr = &out, &errOut
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		return cmd, &out, &errOut
+	}
+	cmd, out, errOut := start("subs", "-d", "example.org", "-live", "-resolvers", resolver, "-no-history", "-db", db, "-json")
+	for i := 0; i < 400; i++ {
+		mu.Lock()
+		n := asked["c.example.org"] + asked["d.example.org"]
+		mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	time.Sleep(300 * time.Millisecond) // a and b answered
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-done:
+	case <-time.After(20 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("the run did not stop on SIGTERM:\n%s", errOut.String())
+	}
+	if code := cmd.ProcessState.ExitCode(); code != exitLimit {
+		t.Fatalf("exit %d, want %d\n%s", code, exitLimit, errOut.String())
+	}
+	for _, n := range []string{"a.example.org", "b.example.org"} {
+		if !strings.Contains(out.String(), `"host":"`+n+`"`) {
+			t.Errorf("%s answered before the stop and is no row:\n%s", n, out.String())
+		}
+	}
+	if strings.Contains(out.String(), `"host":"c.example.org"`) || strings.Contains(out.String(), `"host":"d.example.org"`) {
+		t.Errorf("a name that never answered is a row:\n%s", out.String())
+	}
+	counts, _ := sumMap(t, errOut.String())["counts"].(map[string]any)
+	if counts["not asked"] != float64(2) || counts["did not resolve"] != nil {
+		t.Errorf("counts %v: two names were not asked", counts)
+	}
+	// Resume asks the two that hung, and not the two it has.
+	mu.Lock()
+	before := map[string]int{"a.example.org": asked["a.example.org"], "b.example.org": asked["b.example.org"]}
+	mu.Unlock()
+	hold.Store(false)
+	cmd, out, errOut = start("resume", "-db", db, "-json")
+	if err := cmd.Wait(); err != nil {
+		t.Fatalf("resume: %v\n%s", err, errOut.String())
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	for n, was := range before {
+		if asked[n] != was {
+			t.Errorf("resume asked %s again", n)
+		}
+	}
+	if asked["c.example.org"] == 0 || asked["d.example.org"] == 0 {
+		t.Errorf("resume did not ask the names that hung: %v", asked)
+	}
+	for _, n := range []string{"a", "b", "c", "d"} {
+		if !strings.Contains(out.String(), `"key":"`+n+`.example.org"`) {
+			t.Errorf("resume prints no row for %s:\n%s", n, out.String())
+		}
 	}
 }
