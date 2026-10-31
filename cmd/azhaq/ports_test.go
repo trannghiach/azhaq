@@ -406,7 +406,7 @@ func TestPortsOnMixesBareAndPinned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	on := tg.portsOn(def)
+	on := tg.portsOn(def, false)
 	want := map[string][]int{
 		"127.0.0.1": {22, 80, 8080, 10025},
 		"10.0.0.7":  {80},
@@ -416,6 +416,18 @@ func TestPortsOnMixesBareAndPinned(t *testing.T) {
 	}
 	if !reflect.DeepEqual(on, want) {
 		t.Errorf("ports on %v, want %v", on, want)
+	}
+	// With -p (own), every target takes it and a host:port keeps its port.
+	on = tg.portsOn([]int{3001}, true)
+	want = map[string][]int{
+		"127.0.0.1": {3001, 10025},
+		"10.0.0.7":  {80, 3001},
+		"10.0.1.5":  {3001, 9999},
+		"a.test":    {81, 3001},
+		"b.test":    {82, 3001},
+	}
+	if !reflect.DeepEqual(on, want) {
+		t.Errorf("ports on with -p: %v, want %v", on, want)
 	}
 	// 10.0.1.5 is scanned inside its range, so no block of its own is made.
 	lines, _, err := tg.listLines()
@@ -468,5 +480,56 @@ func TestPortsMixedHostKeepsTheDefaultScan(t *testing.T) {
 		if !strings.Contains(out, fmt.Sprintf(`"port":%d`, p)) {
 			t.Errorf("port %d is missing from\n%s", p, out)
 		}
+	}
+}
+
+// -p applies to every target, and a host:port keeps its own port beside it:
+// the pinned port is never lost, bare host or not.
+func TestPortsPinnedPortSurvivesP(t *testing.T) {
+	t.Chdir(t.TempDir())
+	var ls []net.Listener
+	var ps []int
+	for i := 0; i < 2; i++ {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Skip(err)
+		}
+		defer l.Close()
+		go func() {
+			for {
+				c, err := l.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+		ls = append(ls, l)
+		ps = append(ps, l.Addr().(*net.TCPAddr).Port)
+	}
+	a, b := ps[0], ps[1]
+	for _, c := range []struct {
+		name string
+		host string
+		want []int
+		not  []int
+	}{
+		{"bare and pinned with -p", fmt.Sprintf("127.0.0.1,127.0.0.1:%d", b), []int{a, b}, nil},
+		{"pinned only with -p", fmt.Sprintf("127.0.0.1:%d", b), []int{a, b}, nil},
+	} {
+		out, errOut, code := cli(t, "ports", "-host", c.host, "-p", fmt.Sprint(a), "-detect", "none", "-json", "-no-stdin")
+		if code != exitOK {
+			t.Fatalf("%s: exit %d\n%s", c.name, code, errOut)
+		}
+		for _, p := range c.want {
+			if !strings.Contains(out, fmt.Sprintf(`"port":%d`, p)) {
+				t.Errorf("%s: port %d is missing from\n%s", c.name, p, out)
+			}
+		}
+	}
+	// Without -p a host:port is asked that port only.
+	out, errOut, code := cli(t, "ports", "-host", fmt.Sprintf("127.0.0.1:%d", b), "-detect", "none", "-json", "-no-stdin")
+	if code != exitOK || !strings.Contains(out, fmt.Sprintf(`"port":%d`, b)) || strings.Contains(out, fmt.Sprintf(`"port":%d`, a)) {
+		t.Errorf("pinned only: exit %d\n%s\n%s", code, out, errOut)
 	}
 }

@@ -114,13 +114,14 @@ func (t *portTargets) add(tok string) error {
 }
 
 // portsOn is the ports each host given with a port of its own is asked:
-// only that port, but an address that was also given bare (or lies in a
-// range that was given) gets def as well, so every target keeps what it
-// stands for.
-func (t *portTargets) portsOn(def []int) map[string][]int {
+// its port, plus def when it was also given bare (or lies in a range that
+// was given) or when def is the user's own -p, -tp or -pf (own): those
+// apply to every target and a host:port never loses its port. Without
+// them a host:port is asked that port only.
+func (t *portTargets) portsOn(def []int, own bool) map[string][]int {
 	out := make(map[string][]int, len(t.ports))
 	for h, ps := range t.ports {
-		if t.asksBare(h) {
+		if own || t.asksBare(h) {
 			ps = append(append([]int(nil), def...), ps...)
 			sort.Ints(ps)
 			ps = slices.Compact(ps)

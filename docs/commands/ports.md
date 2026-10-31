@@ -94,7 +94,7 @@ The summary and the exit codes are the shared ones: see [the summary](../OUTPUT.
 - A target is a name, an address, `host:port`, a URL, a CIDR range or an AS number. Give them comma-separated in `-host`, one per line in `-l` or on stdin, or as arguments.
 - A CIDR range is IPv4, or IPv6 down to /104. A larger IPv6 range is refused, since no scan finishes it.
 - `AS13335` stands for the prefixes RIPEstat lists, and the summary says so.
-- A `host:port` is asked that port only, unless `-p`, `-tp` or `-pf` is given. They then apply to every target. Each entry stands for itself: `-host 10.0.0.5,10.0.0.5:8081` scans the default ports of 10.0.0.5 and port 8081, and the same goes for an address in a given range, or a name given both ways.
+- A `host:port` is asked that port only. `-p`, `-tp` and `-pf` apply to every target, and a `host:port` keeps its own port beside them: `-host 10.0.0.5:8081 -p 80` asks 80 and 8081. Each entry stands for itself: `-host 10.0.0.5,10.0.0.5:8081` scans the default ports of 10.0.0.5 and port 8081, and the same goes for an address in a given range, or a name given both ways.
 - A range is split into blocks of 256 addresses. The run takes them one at a time and records them. So a range has no size limit and is not expanded in memory, and `azhaq resume` continues it.
 - A name costs the DNS queries of its A and AAAA records and no others.
 - One row is made for each address. A name's first two IPv4 and first two IPv6 addresses are scanned, IPv6 where this machine can reach it. `-sa` scans every address, and `-iv 4` or `-iv 6` keeps one family.

@@ -263,8 +263,8 @@ func cmdPorts(args []string) error {
 	if len(udpPorts) > 0 {
 		run = append(run, "-ports-udp", portscan.Spec(udpPorts))
 	}
-	if !own {
-		on := tg.portsOn(ports)
+	if !own || len(ports) > 0 {
+		on := tg.portsOn(ports, own)
 		hs := make([]string, 0, len(on))
 		for h := range on {
 			hs = append(hs, h)
