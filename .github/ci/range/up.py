@@ -62,11 +62,18 @@ def start_proxy(ctx, proxy):
 
 
 def start_dns(ctx, d, labdns, run_as):
-    cmd = [labdns, "-addr", d["listen"], "-zone", os.path.join(ctx.out, d["zone"])]
+    # The zone goes in on stdin: the user the resolver runs as cannot read
+    # the runner's files, and no copy is left for anyone to read.
+    with open(os.path.join(ctx.out, d["zone"]), "rb") as f:
+        raw = f.read()
+    cmd = [labdns, "-addr", d["listen"], "-zone", "-"]
     if run_as:
         cmd = ["sudo", "-n", "-u", run_as, "setsid", "nohup"] + cmd
     logf = open(os.path.join(ctx.out, "labdns-%d.log" % d["estate"]), "a")
-    ctx.popen(cmd, stdout=logf, stderr=logf, stdin=subprocess.DEVNULL, start_new_session=True)
+    p = ctx.popen(cmd, stdout=logf, stderr=logf, stdin=subprocess.PIPE, start_new_session=True)
+    if getattr(p, "stdin", None):
+        p.stdin.write(raw)
+        p.stdin.close()
 
 
 def dns_ready(ctx, d, apex):

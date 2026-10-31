@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -485,12 +486,18 @@ func main() {
 	delay := flag.Duration("delay", 0, "wait this long before each answer (makes queries in flight measurable)")
 	axfr := flag.Bool("axfr", true, "allow zone transfers of azqlab.lan over TCP")
 	cymru := flag.Bool("cymru", false, "answer Team Cymru's address-to-AS lookups for 127.0.0.0/24 (AS64500) instead of forwarding them")
-	zonePath := flag.String("zone", "", "answer the zones in this JSON file instead of azqlab.lan (format: zoneFile in main.go)")
+	zonePath := flag.String("zone", "", "answer the zones in this JSON file (- reads it from stdin) instead of azqlab.lan (format: zoneFile in main.go)")
 	flag.Parse()
 	lab := defaultLab()
 	lab.axfr = *axfr
 	if *zonePath != "" {
-		raw, err := os.ReadFile(*zonePath)
+		var raw []byte
+		var err error
+		if *zonePath == "-" {
+			raw, err = io.ReadAll(os.Stdin) // no file another user could read
+		} else {
+			raw, err = os.ReadFile(*zonePath)
+		}
 		if err != nil {
 			log.Fatal(err)
 		}
