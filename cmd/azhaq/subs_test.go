@@ -448,3 +448,13 @@ func TestSubsHistoryNamesAreUnverifiedUnlessASourceGaveThem(t *testing.T) {
 		t.Errorf("-live rows are marked unverified:\n%s", out)
 	}
 }
+
+// subs, run and resume give each source 30 seconds unless told otherwise.
+func TestSourceTimeoutFlagDefaultsToThirtySeconds(t *testing.T) {
+	for _, cmd := range []string{"subs", "run"} {
+		f := flagsOf(cmd).Lookup("source-timeout")
+		if f == nil || f.DefValue != "30s" {
+			t.Errorf("%s -source-timeout: %+v", cmd, f)
+		}
+	}
+}

@@ -41,7 +41,7 @@ A table below has the other tool's flag on the left and azhaq's on the right. A 
 | `-nW` | `-live` (or `-nW`) | Only names that resolve; wildcard answers are left out. `subfinder -nW` is the same job as subfinder piped to dnsx. |
 | `-r 1.1.1.1,8.8.8.8` | `-resolvers 1.1.1.1,8.8.8.8` | A file or a comma list; `udp:`, `tcp:`, `dot:` and `doh:` prefixes. |
 | `-pc FILE` | `-providers FILE` | API keys per source. Without it azhaq reads `~/.config/azhaq/providers.yaml`, else subfinder's `provider-config.yaml`. |
-| `-timeout 30` | `-source-timeout 30s` | How long each source gets. azhaq's `-timeout` is the whole run's. |
+| `-timeout 30` | `-source-timeout 30s` | How long each source gets: 30 s by default, as subfinder's. azhaq's `-timeout` is the whole run's. |
 | `-oJ`, `-json` | `-json` (or `-oJ`) | `{"host","input","source","sources"}`, plus `unverified` and `wildcard_certificate` when they apply. |
 | `-o FILE` | `-o FILE` | |
 | `-silent`, `-v` | `-silent`, `-v` | |

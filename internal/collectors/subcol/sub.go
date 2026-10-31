@@ -41,8 +41,9 @@ const (
 	DefaultMaxNames = 200000
 	// DefaultSourceTimeout bounds each passive source apart from the run's
 	// -timeout (-source-timeout): a slow one (crt.sh) is abandoned and
-	// listed, retryable and non-fatal while the others answered.
-	DefaultSourceTimeout = 60 * time.Second
+	// listed, retryable and non-fatal while the others answered. It is
+	// subfinder's per-request limit.
+	DefaultSourceTimeout = 30 * time.Second
 	// lateGrace is how long after a source's deadline Run still waits for
 	// it: some sources ignore the context (subfinder's crt.sh tries a
 	// Postgres connection first).

@@ -552,3 +552,14 @@ func TestSampledGuessBudgetFollowsThePace(t *testing.T) {
 		}
 	}
 }
+
+// A source gets 30 seconds by default, subfinder's per-request limit, so a
+// run waits no longer for crt.sh than subfinder does.
+func TestDefaultSourceTimeoutIsSubfinders(t *testing.T) {
+	if got := New(Options{}).opts.SourceTimeout; got != 30*time.Second {
+		t.Errorf("default source timeout %s", got)
+	}
+	if DefaultSourceTimeout != 30*time.Second {
+		t.Errorf("DefaultSourceTimeout %s", DefaultSourceTimeout)
+	}
+}
