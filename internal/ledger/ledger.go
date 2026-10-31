@@ -230,6 +230,12 @@ type Check struct {
 // Verify recomputes the chain of the file at path. err says what is wrong
 // with c.BadLine, or why the file could not be read.
 func Verify(path string) (c Check, err error) {
+	return verifyChain(path, nil)
+}
+
+// verifyChain is Verify, calling onSeal with every seal line it finds
+// intact, in order, so a caller can check more than only the last one.
+func verifyChain(path string, onSeal func(Entry)) (c Check, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return c, err
@@ -272,11 +278,33 @@ func Verify(path string) (c Check, err error) {
 		if e.Kind == KindSeal {
 			c.Seals++
 			c.Seal, c.Unsealed = e.Hash, 0
+			if onSeal != nil {
+				onSeal(e)
+			}
 		} else {
 			c.Entries++
 			c.Unsealed++
 		}
 	}
+}
+
+// VerifySeal is Verify, and also requires that one of want is the hash of
+// one of the file's seals: proof that no line was removed with the rest
+// re-chained from there, which recomputing the chain alone cannot show (a
+// rebuilt chain is internally consistent too, it is just not the one the
+// run wrote). matched is the member of want that was found, "" when
+// Verify itself already failed or none of want was there.
+func VerifySeal(path string, want []string) (c Check, matched string, err error) {
+	have := map[string]bool{}
+	for _, w := range want {
+		have[w] = true
+	}
+	c, err = verifyChain(path, func(e Entry) {
+		if matched == "" && have[e.Hash] {
+			matched = e.Hash
+		}
+	})
+	return c, matched, err
 }
 
 var active atomic.Pointer[Ledger]

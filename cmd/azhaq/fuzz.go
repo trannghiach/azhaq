@@ -94,6 +94,7 @@ func cmdFuzz(args []string) error {
 	delay := fs.String("p", "", "seconds each thread waits after a request: 0.1, or a random time in a range 0.1-2.0")
 	ledgerFlag := fs.String("ledger", "", ledgerHelp)
 	killFile := fs.String("kill-file", "", killFileHelp)
+	sealTo := fs.String("seal-to", "", sealToHelp)
 	timeout := fs.Float64("timeout", 10, "each request's timeout, in `seconds`")
 	maxtime := fs.Float64("maxtime", 0, "stop after this many `seconds` and say so (0: no limit)")
 	maxtimeJob := fs.Float64("maxtime-job", 0, "give up a job (the first one, or a directory found by -recursion) after this many `seconds` and go on with the next (0: no limit)")
@@ -476,7 +477,7 @@ func cmdFuzz(args []string) error {
 		go ctrl.Watch(ctx, *controlFile)
 	}
 	rep := newReport("fuzz")
-	led, err := startLedger(*ledgerFlag, *killFile, c.db, c.db == "", rules)
+	led, err := startLedger(*ledgerFlag, *killFile, c.db, c.db == "", rules, *sealTo)
 	if err != nil {
 		return err
 	}

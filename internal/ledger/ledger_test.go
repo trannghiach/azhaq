@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -53,6 +54,70 @@ func TestVerifyCatchesAnEditedLine(t *testing.T) {
 	if c, err := Verify(path); err != nil || c.BadLine != 0 || c.Unsealed != 9 || c.Seals != 0 {
 		t.Fatalf("cut after line 9: %+v %v", c, err)
 	}
+}
+
+// Deleting a run of lines from the middle and re-chaining the rest (new
+// Seq, Prev and Hash from there on, so Verify alone calls it intact) still
+// changes every hash from the deletion on, including the seal's: VerifySeal
+// catches that the seal taken when the run ended is no longer in the file.
+func TestVerifySealCatchesLinesRemovedAndRechained(t *testing.T) {
+	l, path := open(t)
+	for i := 0; i < 30; i++ {
+		l.Record(Entry{Kind: "http", Method: "GET", Target: fmt.Sprintf("http://a.test/%d", i), Host: "a.test"})
+	}
+	if err := l.Close(); err != nil {
+		t.Fatal(err)
+	}
+	trueSeal := l.Last()
+	if c, _, err := VerifySeal(path, []string{trueSeal}); err != nil || c.BadLine != 0 {
+		t.Fatalf("intact chain: %+v %v", c, err)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	forged := forgeChain(append(lines[:5], lines[25:]...))
+	if err := os.WriteFile(path, []byte(forged), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify alone, recomputing the chain from what is left, calls the
+	// forged file intact and sealed: it has no way to know 20 lines and
+	// their original seal are gone.
+	if c, err := Verify(path); err != nil || c.BadLine != 0 || c.Seals != 1 {
+		t.Fatalf("forged chain looked broken to plain Verify: %+v %v", c, err)
+	}
+	c, matched, err := VerifySeal(path, []string{trueSeal})
+	if err != nil {
+		t.Fatalf("VerifySeal errored on a chain that is internally consistent: %v", err)
+	}
+	if matched != "" {
+		t.Errorf("the original seal %q matched the forged chain", matched)
+	}
+	if c.Seal == trueSeal {
+		t.Error("the forged file still ends in the original seal")
+	}
+}
+
+// forgeChain drops the Seq, Prev and Hash of entries, a re-chain tool
+// would recompute, and sets them again as Record does, so the result
+// passes Verify despite the lines removed before it ran.
+func forgeChain(lines []string) string {
+	prev := ""
+	var out strings.Builder
+	for i, line := range lines {
+		var e Entry
+		_ = json.Unmarshal([]byte(line), &e)
+		e.Seq, e.Prev = int64(i+1), prev
+		e.Hash = e.sum()
+		raw, _ := json.Marshal(e)
+		out.Write(raw)
+		out.WriteByte('\n')
+		prev = e.Hash
+	}
+	return out.String()
 }
 
 func TestConcurrentRecordsKeepTheChain(t *testing.T) {
