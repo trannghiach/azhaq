@@ -395,35 +395,9 @@ func (p *Pool) Transfer(ctx context.Context, domain string, servers []string) (*
 func (p *Pool) transfer(ctx context.Context, domain, server string) (*Data, error) {
 	ctx, cancel := context.WithTimeout(ctx, 4*p.timeout)
 	defer cancel()
-	var c net.Conn
-	var err error
-	if p.dial != nil {
-		c, err = p.dial.DialContext(ctx, "tcp", server)
-	} else {
-		var dd net.Dialer
-		c, err = dd.DialContext(ctx, "tcp", server)
-	}
+	rrs, err := p.x.Transfer(ctx, domain, server)
 	if err != nil {
 		return nil, err
-	}
-	defer c.Close()
-	go func() { // a transfer that outlasts its time is cut
-		<-ctx.Done()
-		_ = c.Close()
-	}()
-	m := new(dns.Msg)
-	m.SetAxfr(dns.Fqdn(domain))
-	tr := &dns.Transfer{Conn: &dns.Conn{Conn: c}, ReadTimeout: p.timeout}
-	ch, err := tr.In(m, server)
-	if err != nil {
-		return nil, err
-	}
-	var rrs []dns.RR
-	for env := range ch {
-		if env.Error != nil {
-			return nil, env.Error
-		}
-		rrs = append(rrs, env.RR...)
 	}
 	if len(rrs) == 0 {
 		return nil, fmt.Errorf("%s sent no records", server)

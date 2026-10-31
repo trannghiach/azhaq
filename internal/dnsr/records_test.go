@@ -293,7 +293,7 @@ func TestEveryTransportAnswers(t *testing.T) {
 			t.Fatalf("%s: %v", spec, err)
 		}
 		p := New(Options{Resolvers: keys, PerSecond: -1})
-		p.dot.TLSConfig = &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+		p.x.SetDoTTLS(&tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12})
 		d := p.Lookup(context.Background(), "rec.test", LookupOptions{Types: []uint16{dns.TypeMX}})
 		if !reflect.DeepEqual(d.MX, []string{"mail.rec.test"}) || len(d.Failures) > 0 {
 			t.Errorf("%s: mx %v failures %v", spec, d.MX, d.Failures)

@@ -110,11 +110,5 @@ func cnameTarget(m *dns.Msg) string {
 // exchangeAt asks one server directly (not through the pool's resolvers).
 func (p *Pool) exchangeAt(ctx context.Context, q *dns.Msg, server string) (*dns.Msg, error) {
 	q.RecursionDesired = false
-	ctx, cancel := context.WithTimeout(ctx, p.timeout)
-	defer cancel()
-	in, _, err := p.udp.ExchangeContext(ctx, q, server)
-	if err == nil && in.Truncated {
-		in, _, err = p.tcp.ExchangeContext(ctx, q, server)
-	}
-	return in, err
+	return p.x.ExchangeAt(ctx, q, server)
 }

@@ -4,23 +4,18 @@
 package dnsr
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
-	"io"
 	"net"
-	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
-	"golang.org/x/net/proxy"
 
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/limit"
 	"github.com/trannghiach/azhaq/internal/normalize"
 )
@@ -102,13 +97,9 @@ type Pool struct {
 	limit   *limit.Limiter
 	timeout time.Duration
 	retries int
-	udp     *dns.Client
-	tcp     *dns.Client
-	dot     *dns.Client
-	doh     *http.Client
-	proto   map[string]Server   // by key
-	named   bool                // the resolvers were given, not the defaults
-	dial    proxy.ContextDialer // DNS goes through this (-proxy), over TCP; nil: direct
+	x       *egress.DNSExchanger // sends the queries: the only code here that opens a connection
+	proto   map[string]Server    // by key
+	named   bool                 // the resolvers were given, not the defaults
 	next    atomic.Uint64
 
 	// TraceRoots and TracePort replace RootServers and port 53 for Trace
@@ -260,20 +251,10 @@ func New(o Options) *Pool {
 		limit:   limit.New(o.PerSecond, cmpBurst(o)),
 		timeout: o.Timeout,
 		retries: o.Retries,
-		udp:     &dns.Client{Net: "udp", Timeout: o.Timeout},
-		tcp:     &dns.Client{Net: "tcp", Timeout: o.Timeout},
-		dot:     &dns.Client{Net: "tcp-tls", Timeout: o.Timeout},
-		doh:     &http.Client{Timeout: o.Timeout},
+		x:       egress.NewDNSExchanger(o.Timeout, o.Proxy),
 		cache:   map[string]*entry{},
 		six:     map[string]*entry{},
 		wild:    map[string]bool{},
-	}
-	if u, err := url.Parse(o.Proxy); err == nil && o.Proxy != "" {
-		if d, err := proxy.FromURL(u, &net.Dialer{Timeout: o.Timeout}); err == nil {
-			if cd, ok := d.(proxy.ContextDialer); ok {
-				p.dial = cd
-			}
-		}
 	}
 	return p
 }
@@ -286,17 +267,7 @@ func cmpBurst(o Options) int {
 }
 
 // ProxyError says whether proxy is a URL New can use for DNS.
-func ProxyError(raw string) error {
-	u, err := url.Parse(raw)
-	if err != nil {
-		return err
-	}
-	if u.Scheme != "socks5" && u.Scheme != "socks5h" {
-		return fmt.Errorf("%q: DNS goes through a socks5 proxy only (socks5://host:port)", raw)
-	}
-	_, err = proxy.FromURL(u, proxy.Direct)
-	return err
-}
+func ProxyError(raw string) error { return egress.CheckDNSProxy(raw) }
 
 // Reserved says whether name is one the pool does not send to its resolvers:
 // a special-use name (localhost, *.test, *.local) or a single label, when the
@@ -678,107 +649,11 @@ func (p *Pool) exchange(ctx context.Context, q *dns.Msg, server string) (*dns.Ms
 	if p.Exchange != nil {
 		return p.Exchange(ctx, q, server)
 	}
-	ctx, cancel := context.WithTimeout(ctx, p.timeout)
-	defer cancel()
 	srv, ok := p.proto[server]
 	if !ok {
 		srv = Server{Key: server, Net: NetUDP, Addr: server}
 	}
-	switch {
-	case srv.Net == NetDoH:
-		return p.exchangeDoH(ctx, q, srv)
-	case p.dial != nil:
-		// Through a proxy everything is TCP: a SOCKS5 proxy carries no UDP
-		// here. DoT keeps its TLS inside the tunnel.
-		return p.viaProxy(ctx, q, srv)
-	case srv.Net == NetTCP:
-		in, _, err := p.tcp.ExchangeContext(ctx, q, srv.Addr)
-		return in, err
-	case srv.Net == NetDoT:
-		in, _, err := p.dot.ExchangeContext(ctx, q, srv.Addr)
-		return in, err
-	}
-	in, _, err := p.udp.ExchangeContext(ctx, q, srv.Addr)
-	// A reply too big for a plain UDP datagram (a long CNAME chain) is read
-	// again over TCP, as a truncated one is.
-	if (err == nil && in.Truncated) || errors.Is(err, dns.ErrBuf) {
-		in, _, err = p.tcp.ExchangeContext(ctx, q, srv.Addr)
-	}
-	return in, err
-}
-
-// viaProxy asks one resolver over TCP through the proxy.
-func (p *Pool) viaProxy(ctx context.Context, q *dns.Msg, srv Server) (*dns.Msg, error) {
-	c, err := p.dial.DialContext(ctx, "tcp", srv.Addr)
-	if err != nil {
-		return nil, err
-	}
-	conn := &dns.Conn{Conn: c}
-	defer conn.Close()
-	client := p.tcp
-	if srv.Net == NetDoT {
-		client = p.dot
-		tc, err := dotConn(ctx, c, srv.Addr, p.dot.TLSConfig)
-		if err != nil {
-			return nil, err
-		}
-		conn = &dns.Conn{Conn: tc}
-	}
-	in, _, err := client.ExchangeWithConnContext(ctx, q, conn)
-	return in, err
-}
-
-// exchangeDoH asks over HTTPS as RFC 8484 says: the wire message in a
-// POST body, or base64url in the dns parameter of a GET.
-func (p *Pool) exchangeDoH(ctx context.Context, q *dns.Msg, srv Server) (*dns.Msg, error) {
-	wire := q.Copy()
-	wire.Id = 0 // RFC 8484: a cache-friendly id
-	raw, err := wire.Pack()
-	if err != nil {
-		return nil, err
-	}
-	var req *http.Request
-	if srv.GET {
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, srv.Addr+queryJoin(srv.Addr)+"dns="+base64.RawURLEncoding.EncodeToString(raw), nil)
-	} else {
-		req, err = http.NewRequestWithContext(ctx, http.MethodPost, srv.Addr, bytes.NewReader(raw))
-		if err == nil {
-			req.Header.Set("Content-Type", "application/dns-message")
-		}
-	}
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Accept", "application/dns-message")
-	client := p.doh
-	if p.dial != nil {
-		client = &http.Client{Timeout: p.timeout, Transport: &http.Transport{DialContext: p.dial.DialContext}}
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: HTTP %d", srv.Addr, resp.StatusCode)
-	}
-	in := new(dns.Msg)
-	if err := in.Unpack(body); err != nil {
-		return nil, err
-	}
-	in.Id = q.Id
-	return in, nil
-}
-
-func queryJoin(u string) string {
-	if strings.Contains(u, "?") {
-		return "&"
-	}
-	return "?"
+	return p.x.Exchange(ctx, q, egress.DNSServer{Key: srv.Key, Net: srv.Net, Addr: srv.Addr, GET: srv.GET})
 }
 
 // records returns the addresses of type qtype and the CNAME chain in m.

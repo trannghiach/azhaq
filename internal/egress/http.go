@@ -25,8 +25,8 @@ type guarded struct {
 
 func newGuarded(class Class, base *http.Transport, sni string) *guarded {
 	g := &guarded{class: class, base: base, sni: sni}
-	if class == Own {
-		g.rt = base
+	if class == Own || class == DNS {
+		g.rt = base // the user's own, or a DNS query the exchanger records itself
 	} else {
 		g.rt = ledger.WrapAs(string(class), base)
 	}

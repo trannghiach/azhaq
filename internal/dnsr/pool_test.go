@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/miekg/dns"
+
+	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
 // testZone answers for example.org. *.wild.example.org is a wildcard.
@@ -368,5 +371,50 @@ func TestBigAnswerFitsWithEDNS0(t *testing.T) {
 	p := New(Options{Resolvers: []string{serve(t, big)}, PerSecond: -1, Timeout: time.Second})
 	if a := p.Resolve(context.Background(), "big.example.org"); a.Status != StatusOK || len(a.A) != 50 {
 		t.Fatalf("%+v", a)
+	}
+}
+
+// Every query a pool sends is in the ledger as a dns line, the retries and
+// the second opinions included: the ledger says what was sent.
+func TestPoolQueriesAreInTheLedger(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "l.jsonl")
+	l, err := ledger.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger.Use(l)
+	defer ledger.Use(nil)
+	var sent atomic.Int32
+	h := dns.HandlerFunc(func(w dns.ResponseWriter, r *dns.Msg) {
+		sent.Add(1)
+		m := new(dns.Msg)
+		m.SetReply(r)
+		rr, _ := dns.NewRR(r.Question[0].Name + " 60 IN A 192.0.2.1")
+		m.Answer = append(m.Answer, rr)
+		_ = w.WriteMsg(m)
+	})
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &dns.Server{PacketConn: pc, Handler: h}
+	go srv.ActivateAndServe()
+	defer srv.Shutdown()
+	p := New(Options{Resolvers: []string{pc.LocalAddr().String()}, PerSecond: -1})
+	for _, name := range []string{"a.example.com", "b.example.com"} {
+		if a := p.Resolve(context.Background(), name); !a.Live() {
+			t.Fatalf("%s: %+v", name, a)
+		}
+	}
+	l.Close()
+	n := 0
+	_ = ledger.Read(path, func(e ledger.Entry) error {
+		if e.Kind == "dns" && e.Class == "dns" {
+			n++
+		}
+		return nil
+	})
+	if n == 0 || int32(n) != sent.Load() {
+		t.Fatalf("%d dns lines in the ledger, the server was asked %d times", n, sent.Load())
 	}
 }

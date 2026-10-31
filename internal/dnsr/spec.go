@@ -2,8 +2,6 @@ package dnsr
 
 import (
 	"bufio"
-	"context"
-	"crypto/tls"
 	"fmt"
 	"net"
 	"net/url"
@@ -147,26 +145,4 @@ func ParseResolvers(spec string) ([]string, error) {
 		return nil, fmt.Errorf("no resolvers in %q", spec)
 	}
 	return out, nil
-}
-
-// dotConn wraps c, a connection to a DoT resolver, in TLS.
-func dotConn(ctx context.Context, c net.Conn, addr string, cfg *tls.Config) (net.Conn, error) {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return nil, err
-	}
-	var tc *tls.Config
-	if cfg != nil {
-		tc = cfg.Clone()
-	} else {
-		tc = &tls.Config{MinVersion: tls.VersionTLS12}
-	}
-	if tc.ServerName == "" {
-		tc.ServerName = host
-	}
-	conn := tls.Client(c, tc)
-	if err := conn.HandshakeContext(ctx); err != nil {
-		return nil, err
-	}
-	return conn, nil
 }
