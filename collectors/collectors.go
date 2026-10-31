@@ -33,34 +33,35 @@ import (
 
 // Options configure the built-in collectors for one run.
 type Options struct {
-	Client      *http.Client // target requests; nil for the shared default
-	Paths       []string     // extra wordlist entries for azhaq-paths
-	DNS         *dnsr.Pool   // resolver pool; nil for the default resolvers
-	Subdomains  subcol.Options
-	BruteWords  []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
-	URLs        urlcol.Options
-	WebPorts    []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
-	NoTech      bool             // skip technology fingerprints
-	Probe       bool             // azhaq-http answers like httpx: no catch-all check
-	NoFavicon   bool             // azhaq-http does not hash favicons
-	Ports       []int            // azhaq-ports: ports to scan (runs only with -ports)
-	UDPPorts    []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
-	PortRate    float64          // azhaq-ports: connection attempts per second
-	PortConfig  portcol.Config   // azhaq-ports: timeouts, retries, order and the rest
-	Dirs        dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
-	Params      paramcol.Options // azhaq-params: parameter names (runs only with -params)
-	MaxIPs      int              // azhaq-prefix: addresses expanded from prefixes for the run
-	Shots       string           // azhaq-shots: screenshot directory (runs only when set)
-	ShotHTML    bool             // azhaq-shots: keep each rendered page beside its picture
-	WebScheme   string           // "http" or "https": the only scheme tried on a name or an address
-	Browser     *browser.Browser // the run's Chrome, started on first use
-	Render      bool             // azhaq-render: load pages in Chrome (-browser)
-	NoMapGuess  bool             // azhaq-js does not ask for main.js.map next to a bundle that names no map
-	FillForms   bool             // azhaq-crawl asks the action of GET forms with neutral values
-	PathClimb   bool             // azhaq-crawl lists the parent directories of its links
-	SubmitForms bool             // azhaq-crawl submits POST forms (changes data)
-	KnownFiles  string           // azhaq-paths: ask only robots.txt and sitemaps (all, robotstxt, sitemapxml)
-	HTTP        *httpcol.Spec    // azhaq probe's httpx flags; nil outside probe
+	Client          *http.Client // target requests; nil for the shared default
+	Paths           []string     // extra wordlist entries for azhaq-paths
+	DNS             *dnsr.Pool   // resolver pool; nil for the default resolvers
+	Subdomains      subcol.Options
+	BruteWords      []string // wordlist for azhaq-dns-brute (runs only with -dns-brute)
+	URLs            urlcol.Options
+	WebPorts        []int            // ports azhaq-http tries on each hostname; nil for 443 then 80
+	NoTech          bool             // skip technology fingerprints
+	Probe           bool             // azhaq-http answers like httpx: no catch-all check
+	NoFavicon       bool             // azhaq-http does not hash favicons
+	Ports           []int            // azhaq-ports: ports to scan (runs only with -ports)
+	UDPPorts        []int            // azhaq-ports: UDP ports to ask (with -ports-udp)
+	PortRate        float64          // azhaq-ports: connection attempts per second
+	PortConfig      portcol.Config   // azhaq-ports: timeouts, retries, order and the rest
+	Dirs            dirscol.Options  // azhaq-dirs: wordlist sweep (runs only with -dirs)
+	Params          paramcol.Options // azhaq-params: parameter names (runs only with -params)
+	MaxIPs          int              // azhaq-prefix: addresses expanded from prefixes for the run
+	Shots           string           // azhaq-shots: screenshot directory (runs only when set)
+	ShotHTML        bool             // azhaq-shots: keep each rendered page beside its picture
+	WebScheme       string           // "http" or "https": the only scheme tried on a name or an address
+	Browser         *browser.Browser // the run's Chrome, started on first use
+	Render          bool             // azhaq-render: load pages in Chrome (-browser)
+	NoMapGuess      bool             // azhaq-js does not ask for main.js.map next to a bundle that names no map
+	FillForms       bool             // azhaq-crawl asks the action of GET forms with neutral values
+	PathClimb       bool             // azhaq-crawl lists the parent directories of its links
+	SubmitForms     bool             // azhaq-crawl submits POST forms (changes data)
+	KnownFiles      string           // azhaq-paths: ask only robots.txt and sitemaps (all, robotstxt, sitemapxml)
+	HTTP            *httpcol.Spec    // azhaq probe's httpx flags; nil outside probe
+	GraphQLWordlist []string         // -graphql-wordlist: extra probe words for a schema recovered without introspection
 }
 
 func RegisterAll(cat *catalog.Catalog, client *http.Client) {
@@ -85,7 +86,9 @@ func Register(cat *catalog.Catalog, o Options) {
 	cat.MustRegister(jc)
 	apicol.Register(cat, client)
 	cat.MustRegister(gqlcol.New(client))
-	cat.MustRegister(gqlcol.NewSchema(client))
+	gs := gqlcol.NewSchema(client)
+	gs.Wordlist = o.GraphQLWordlist
+	cat.MustRegister(gs)
 	if o.KnownFiles != "" {
 		cat.MustRegister(&pathscol.Collector{Client: client, Wordlist: pathscol.KnownFiles(o.KnownFiles), Known: true})
 	} else if len(o.Paths) > 0 {

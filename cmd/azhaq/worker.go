@@ -60,7 +60,7 @@ func isFile(s string) bool {
 }
 
 // File options: the worker gets the file's contents.
-var fileOptions = map[string]bool{"dirs": true, "params": true, "params-targets": true, "paths": true, "dns-brute": true, "resolvers": true}
+var fileOptions = map[string]bool{"dirs": true, "params": true, "params-targets": true, "paths": true, "dns-brute": true, "resolvers": true, "graphql-wordlist": true}
 
 // forWorkers builds the configuration workers get from the run's own
 // options, its scope (as -allow and -deny rules) and its session.

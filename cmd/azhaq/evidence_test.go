@@ -60,7 +60,7 @@ func TestRecoveredGraphQLSchemaIsMarked(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _, _ := strings.Cut(sdl.String(), "\n")
-	if want := "# introspection disabled on " + u + "; recovered from 12 validation errors and 2 client operations: partial, may lack types and fields"; first != want {
+	if want := "# introspection disabled on " + u + "; recovered from 12 validation errors and 2 client operations: partial, may lack types and fields; recovery does not prove there are no others"; first != want {
 		t.Errorf("first line %q", first)
 	}
 	for _, want := range []string{"type Query {\n  me: UserObject", "login(user: String!): [Session!]", "left out of Query: ping"} {
@@ -80,12 +80,38 @@ func TestRecoveredGraphQLSchemaIsMarked(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &doc); err != nil || doc.Data["__schema"] == nil {
 		t.Fatalf("%v %s", err, out.String())
 	}
-	if doc.X["introspection"] != false || doc.X["recovered"] != "suggestions" || doc.X["partial"] != true {
+	if doc.X["introspection"] != false || doc.X["recovered"] != "suggestions" || doc.X["partial"] != true || doc.X["complete"] != false {
 		t.Errorf("x-azhaq %v", doc.X)
 	}
 
 	notes := engine.GraphQLNotes(g.obs)
-	if len(notes) != 1 || !strings.Contains(notes[0], "introspection disabled: schema recovered (partial)") {
+	if len(notes) != 1 || !strings.Contains(notes[0], "introspection disabled: schema recovered (partial") || !strings.Contains(notes[0], "not proof there is nothing more") {
+		t.Errorf("notes %v", notes)
+	}
+}
+
+// The recovered field count and how each was found (client, probe,
+// suggestion) reach the SDL export and the summary note, not only the
+// field names.
+func TestRecoveredGraphQLSchemaShowsCounts(t *testing.T) {
+	const u = "https://api.test/graphql"
+	payload := `{"url":"` + u + `","role":"graphql","introspection":false,"recovered":"suggestions","errors":4,` +
+		`"query_type":"Query","mutation_type":"Mutations","queries":["ping","vaultBalance"],"mutations":["login"],` +
+		`"client_words":3,` +
+		`"recovery":{"queries":{"fields":2,"by":{"client":1,"probe":1},"words_tried":140},"mutations":{"fields":1,"by":{"probe":1},"words_tried":60}},` +
+		`"signatures":{"queries":["ping","vaultBalance"],"mutations":["login(user: String!): [Session!]"]}}`
+	g := &graphView{path: "x.db", obs: []types.StoredObservation{
+		{Observation: types.Observation{Collector: "azhaq-graphql-schema", Kind: "graphql", Payload: json.RawMessage(payload)}},
+	}}
+	var sdl bytes.Buffer
+	if err := graphqlExport(g, "sdl", "", &sdl); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sdl.String(), "# recovered fields: query Query: 2 fields (1 client, 1 probe), 140 words tried; mutation Mutations: 1 fields (1 probe), 60 words tried") {
+		t.Errorf("sdl does not show the counts:\n%s", sdl.String())
+	}
+	notes := engine.GraphQLNotes(g.obs)
+	if len(notes) != 1 || !strings.Contains(notes[0], "2 fields (1 client, 1 probe)") || !strings.Contains(notes[0], "not proof there is nothing more") {
 		t.Errorf("notes %v", notes)
 	}
 }

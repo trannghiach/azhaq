@@ -149,3 +149,25 @@ func TestRegressDOC02ReadmeBenchmarkVersion(t *testing.T) {
 		t.Errorf("README's benchmark is of v%s, the latest release is v%s", m[1], heads[1][1])
 	}
 }
+
+// The docs say what a sign-in tab really sends: every method until the
+// session is read (the sign-in's own form or call, and whatever else the
+// page's own scripts send meanwhile, such as a socket's polling POSTs),
+// not only "the sign-in form".
+func TestDocsSignInSendsMoreThanItsOwnForm(t *testing.T) {
+	arch := readDoc(t, "../../docs/ARCHITECTURE.md")
+	if !strings.Contains(arch, "whatever else the page's own scripts send meanwhile") {
+		t.Error("ARCHITECTURE.md does not say the sign-in tab sends more than its own form or call")
+	}
+	if !strings.Contains(arch, "socket.io") {
+		t.Error("ARCHITECTURE.md drops the example of a page's own script sending during sign-in (a socket's polling)")
+	}
+	if strings.Contains(arch, "Chrome submitting a login form when given an account") {
+		t.Error("ARCHITECTURE.md still says sign-in is only a login form submission")
+	}
+	for _, l := range docLines(arch) {
+		if strings.Contains(l, "sign-in") && strings.Contains(l, "exception") && strings.Contains(l, "its form or its call with the credentials first") {
+			t.Errorf("a line still limits sign-in to its own form or call: %s", l)
+		}
+	}
+}

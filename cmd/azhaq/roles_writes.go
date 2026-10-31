@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -222,8 +224,11 @@ func routePath(raw string) string {
 // cross write. A map write (empty body) is sent first with its owner's
 // session: the owner must be let, and its own object must not change. A
 // DELETE goes to the others alone, the anonymous role first, and stops at
-// the first proven. Every request counts against budget.
-func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]answer, own map[string]bool, rate float64, budget int) ([]roleRow, int, error) {
+// the first proven. canary, with a PUT or PATCH that is not a map write,
+// changes one short field of the body to a value unique to each role it
+// is sent with, so replaying the owner's exact body (idempotent: nothing
+// to read back) can still be proved. Every request counts against budget.
+func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]answer, own map[string]bool, rate float64, budget int, canary bool) ([]roleRow, int, error) {
 	ctx := context.Background()
 	fetch.Reset()
 	defer fetch.Reset()
@@ -274,7 +279,7 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		// A POST to a collection makes a new object: never another role's
 		// object written.
 		if w.method == http.MethodPost {
-			if err := replayCollection(&row, roles, w, send); err != nil {
+			if err := replayCollection(&row, roles, w, answers, read, send); err != nil {
 				stop = err
 				rows = append(rows, finishWriteRow(row))
 				break
@@ -290,17 +295,23 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 		var before answer
 		haveBefore := false
 		if vu != "" {
-			if b, ok := latest[w.owner+"\x00"+vu]; ok {
-				before, haveBefore = b, reads(b)
-			} else if b := answers[w.owner][vu]; len(b.held) > 0 && reads(b) {
-				before, haveBefore = b, true
-			} else if b, ok := read(owner, vu); ok {
-				before, haveBefore = b, true
-			}
+			before, haveBefore = resolveBefore(owner, vu, answers, latest, read)
 		} else {
 			// The history did not read the owner's object: ask for the write's
 			// own URL, then its parents, as the owner.
 			vu, before, haveBefore = liveVerify(w, owner, live, read)
+		}
+		if !w.empty && w.method != http.MethodDelete && (vu == "" || !fieldsVisible(w, before)) {
+			// verifyURL only looks at the write's own path and its ancestors,
+			// which do not always carry the field the write sets (VAmPI's own
+			// GET of a user omits its email); another endpoint the map
+			// already knows may still show it (a debug or admin listing of
+			// everyone's fields).
+			if alt := knownReadBack(w, answers); alt != "" && alt != vu {
+				if altBefore, ok := resolveBefore(owner, alt, answers, latest, read); ok {
+					vu, before, haveBefore = alt, altBefore, true
+				}
+			}
 		}
 		if w.empty {
 			a, err := send(owner, w)
@@ -322,11 +333,20 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 				}
 			}
 		}
-		already := haveBefore && !w.empty && w.method != http.MethodDelete && alreadySet(before, w.body)
+		var canaryField string
+		var canaryable bool
+		if canary && !w.empty && w.method != http.MethodDelete {
+			_, canaryField, canaryable = withCanary(w.body, "azhaqcanaryprobe")
+		}
+		already := haveBefore && !w.empty && w.method != http.MethodDelete && !canaryable && alreadySet(before, w.body)
 		var let, proven []string
 		anon := map[string]bool{}
 		for _, r := range otherRoles(roles, w.owner) {
-			a, err := send(r, w)
+			wr := w
+			if canaryable {
+				wr.body, _, _ = withCanary(w.body, canaryToken())
+			}
+			a, err := send(r, wr)
 			if err != nil {
 				stop = err
 				break
@@ -346,9 +366,16 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 			if !ok {
 				continue
 			}
-			if provesCross(w, before, after) {
+			if provesCross(wr, before, after) {
 				proven = append(proven, r.name)
-				row.OwnerBy += "; " + writeProof(w, r.name, after)
+				proof := writeProof(wr, r.name, after)
+				if vu != w.url {
+					proof += " (read back at " + pathOf(vu) + ")"
+				}
+				if canaryable {
+					proof += fmt.Sprintf(" (canary: %s changed to a value only this replay sent)", canaryField)
+				}
+				row.OwnerBy += "; " + proof
 				if w.method == http.MethodDelete {
 					break // the object is gone
 				}
@@ -369,17 +396,30 @@ func replayWrites(roles []role, reqs []writeReq, answers map[string]map[string]a
 
 // replayCollection replays a POST, which creates a new object in a
 // collection. It is sent with the other roles, and a role that is let can
-// create there, but a create is never another role's object written.
-func replayCollection(row *roleRow, roles []role, w writeReq, send func(role, writeReq) (answer, error)) error {
+// create there, but a create is never another role's object written. When
+// the map already knows the member URL the created object would answer at
+// (createdURL), the first role let read it back, as itself, to confirm
+// the create is more than a 2xx.
+func replayCollection(row *roleRow, roles []role, w writeReq, answers map[string]map[string]answer, read func(role, string) (answer, bool), send func(role, writeReq) (answer, error)) error {
 	var let []string
+	confirmed := false
 	for _, r := range otherRoles(roles, w.owner) {
 		a, err := send(r, w)
 		if err != nil {
 			return err
 		}
 		row.Answers[r.name] = a
-		if reads(a) {
-			let = append(let, r.name)
+		if !reads(a) {
+			continue
+		}
+		let = append(let, r.name)
+		if !confirmed {
+			if u := createdURL(w, answers); u != "" {
+				if got, ok := read(r, u); ok && reads(got) {
+					row.OwnerBy += fmt.Sprintf("; %s's create is readable back at %s", r.name, pathOf(u))
+					confirmed = true
+				}
+			}
 		}
 	}
 	row.Readers = let
@@ -544,6 +584,141 @@ func verifyURL(w writeReq, answers map[string]map[string]answer) string {
 	return ""
 }
 
+// resolveBefore is the owner's object at u: the one its run already read
+// when its body is at hand, else read fresh; ok is false when neither
+// gives an answer that reads.
+func resolveBefore(owner role, u string, answers map[string]map[string]answer, latest map[string]answer, read func(role, string) (answer, bool)) (answer, bool) {
+	if b, ok := latest[owner.name+"\x00"+u]; ok {
+		return b, reads(b)
+	}
+	if b := answers[owner.name][u]; len(b.held) > 0 && reads(b) {
+		return b, true
+	}
+	return read(owner, u)
+}
+
+// objectIDs are u's path segments that could name an object: not the
+// version or framework segments (v1, api, rest) every route under it
+// shares.
+func objectIDs(u string) []string {
+	pu, err := url.Parse(u)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, seg := range strings.Split(strings.Trim(pu.Path, "/"), "/") {
+		if seg != "" && !versionSeg.MatchString(norm(seg)) {
+			out = append(out, seg)
+		}
+	}
+	return out
+}
+
+// knownReadBack is a GET URL the map already has an answer for, other
+// than the write's own path or an ancestor of it (verifyURL tries those
+// first), whose body already holds one of the write's object's path
+// segments or a field the write sets: an endpoint such as
+// /users/v1/_debug, which the read run found exposes every object's
+// fields, read again as the owner can confirm a write verifyURL's
+// narrower search would call unreadable. "" when none of the map's known
+// GETs qualifies.
+func knownReadBack(w writeReq, answers map[string]map[string]answer) string {
+	ids := objectIDs(w.url)
+	fields := setFields(w)
+	if len(ids) == 0 && len(fields) == 0 {
+		return ""
+	}
+	best, score := "", 0
+	seen := map[string]bool{}
+	for _, byURL := range answers {
+		for u, a := range byURL {
+			if u == w.url || seen[u] || !reads(a) {
+				continue
+			}
+			seen[u] = true
+			s := 0
+			for _, id := range ids {
+				if a.held[id] {
+					s += 2
+				}
+			}
+			for _, f := range fields {
+				if len(a.vals[norm(f)]) > 0 {
+					s++
+				}
+			}
+			if s > score || s == score && s > 0 && (best == "" || u < best) {
+				best, score = u, s
+			}
+		}
+	}
+	return best
+}
+
+// createdURL guesses the object a POST to a collection created, and
+// returns it only when the map already has an answer for that exact URL
+// (some role's run already reached it): the collection's path with one
+// more segment, one of the scalar values the write's body sets, in the
+// order the body names them.
+func createdURL(w writeReq, answers map[string]map[string]answer) string {
+	u, err := url.Parse(w.url)
+	if err != nil {
+		return ""
+	}
+	base := strings.TrimRight(u.Path, "/")
+	for _, p := range bodyPairs(w.body) {
+		cand := *u
+		cand.Path, cand.RawQuery, cand.Fragment = base+"/"+p[1], "", ""
+		out := cand.String()
+		for _, byURL := range answers {
+			if _, ok := byURL[out]; ok {
+				return out
+			}
+		}
+	}
+	return ""
+}
+
+// canaryToken is a value unlikely to already be anywhere in a target: a
+// fresh one for each role a write is replayed with, so a read-back can
+// tell which role's write landed.
+func canaryToken() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return "azhaq-" + hex.EncodeToString(b[:])
+}
+
+// withCanary changes one short string field of a JSON write body to
+// token: a field already in the body, never an identifier, an owner or a
+// reference field (changing whose the object is is not what this proves),
+// a credential, or a timestamp. ok is false, and body is given back
+// unchanged, when the body is not a JSON object or none of its fields
+// qualifies: the write is then sent as recorded, proving nothing new.
+func withCanary(body []byte, token string) (out []byte, field string, ok bool) {
+	var m map[string]any
+	if json.Unmarshal(body, &m) != nil {
+		return body, "", false
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		s, isStr := m[k].(string)
+		n := norm(k)
+		if !isStr || s == "" || ownerField(n) || refField(n) || sensitiveField(k) != "" || timeLike.MatchString(s) {
+			continue
+		}
+		m[k] = token
+		if raw, err := json.Marshal(m); err == nil {
+			return raw, k, true
+		}
+		return body, "", false
+	}
+	return body, "", false
+}
+
 // readAs reads u as role r, past the cache, inside the scope and pace,
 // without following a redirect; the body is kept as evidence.
 func readAs(ctx context.Context, client *http.Client, r role, u string) (answer, error) {
@@ -680,12 +855,24 @@ func unreadable(w writeReq, vu string, before answer) string {
 	if vu == "" {
 		return "no GET of the owner's object can be read, to see it change"
 	}
-	if w.method == http.MethodDelete {
+	if fieldsVisible(w, before) {
 		return ""
+	}
+	return fmt.Sprintf("%s shows no %s, the field the write sets", pathOf(vu), strings.Join(setFields(w), "/"))
+}
+
+// fieldsVisible: before, the object a write's read-back is checked
+// against, carries at least one of the fields the write sets -- or
+// nothing can be told either way (a DELETE sets none, the write is not
+// JSON or a form, or before is not JSON), in which case the read-back is
+// not ruled out on these grounds alone.
+func fieldsVisible(w writeReq, before answer) bool {
+	if w.method == http.MethodDelete {
+		return true
 	}
 	fields := setFields(w)
 	if len(fields) == 0 || len(before.Keys) == 0 {
-		return ""
+		return true
 	}
 	have := map[string]bool{}
 	for _, k := range before.Keys {
@@ -694,10 +881,10 @@ func unreadable(w writeReq, vu string, before answer) string {
 	}
 	for _, f := range fields {
 		if have[norm(f)] {
-			return ""
+			return true
 		}
 	}
-	return fmt.Sprintf("%s shows no %s, the field the write sets", pathOf(vu), strings.Join(fields, "/"))
+	return false
 }
 
 // setFields are the names of the fields a write's body sets: a JSON object's

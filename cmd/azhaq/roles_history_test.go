@@ -304,7 +304,7 @@ func TestWriteCannotBeReadBack(t *testing.T) {
 		{owner: "alice", method: "PUT", url: srv.URL + "/users/alice/email", header: jh, body: []byte(`{"email":"new@x.test"}`), status: 204},
 	}
 	// The history never read /users/alice: its own answers hold nothing to check by.
-	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("%+v %v", rows, err)
 	}
@@ -322,7 +322,7 @@ func TestWriteCannotBeReadBack(t *testing.T) {
 		t.Errorf("email row %+v", em)
 	}
 	// Nothing at all of the owner's object can be read: the same verdict.
-	rows, _, _ = replayWrites(roles, reqs[:1], map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, _ = replayWrites(roles, reqs[:1], map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteUnread {
 		t.Errorf("%+v", rows)
 	}
@@ -339,7 +339,7 @@ func TestWriteCannotBeReadBack(t *testing.T) {
 	}))
 	defer srv404.Close()
 	rows, _, _ = replayWrites(roles, []writeReq{{owner: "alice", method: "PUT", url: srv404.URL + "/x/alice/pw", header: jh, body: []byte(`{"password":"n"}`), status: 204}},
-		map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100)
+		map[string]map[string]answer{}, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteUnread || !strings.Contains(rows[0].Evidence, "no GET of the owner's object") {
 		t.Errorf("unreadable object: %+v", rows)
 	}
@@ -376,7 +376,7 @@ func TestRefusedWritesAreNotListed(t *testing.T) {
 		{owner: "alice", method: "DELETE", url: srv.URL + "/json/alice", header: http.Header{}, status: 200},
 		{owner: "alice", method: "PUT", url: srv.URL + "/forbidden/alice", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"email":"x@y.test"}`), status: 200},
 	}
-	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{"alice": {}}, map[string]bool{"127.0.0.1": true}, 0, 200)
+	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{"alice": {}}, map[string]bool{"127.0.0.1": true}, 0, 200, false)
 	if err != nil || len(rows) != len(reqs) {
 		t.Fatalf("%+v %v", rows, err)
 	}
@@ -397,6 +397,7 @@ func TestRefusedWritesAreNotListed(t *testing.T) {
 // origin.
 func TestRolesFromHistory(t *testing.T) {
 	notes := map[string]string{"n-alice": "alice", "n-bob": "bob"}
+	passwords := map[string]string{"alice": "pw-alice", "bob": "pw-bob"}
 	var mu sync.Mutex
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -409,7 +410,9 @@ func TestRolesFromHistory(t *testing.T) {
 		p := r.URL.Path
 		switch {
 		case p == "/api/debug":
-			fmt.Fprint(w, `{"users":[{"name":"alice","password":"pw-alice"},{"name":"bob","password":"pw-bob"}]}`)
+			mu.Lock()
+			fmt.Fprintf(w, `{"users":[{"name":"alice","password":%q},{"name":"bob","password":%q}]}`, passwords["alice"], passwords["bob"])
+			mu.Unlock()
 		case !signedIn:
 			w.WriteHeader(401)
 			fmt.Fprint(w, `{"error":"sign in"}`)
@@ -419,6 +422,17 @@ func TestRolesFromHistory(t *testing.T) {
 			id := strings.TrimPrefix(p, "/api/notes/")
 			fmt.Fprintf(w, `{"note_id":%q,"owner":%q,"secret":"what %s wrote"}`, id, notes[id], notes[id])
 		case r.Method == "PUT" && strings.HasPrefix(p, "/api/users/") && strings.HasSuffix(p, "/password"):
+			// Vulnerable like VAmPI: the path's user is changed, not the
+			// caller's, whoever the session belongs to.
+			target := strings.TrimSuffix(strings.TrimPrefix(p, "/api/users/"), "/password")
+			var body struct {
+				Password string `json:"password"`
+			}
+			b, _ := io.ReadAll(r.Body)
+			json.Unmarshal(b, &body)
+			mu.Lock()
+			passwords[target] = body.Password
+			mu.Unlock()
 			w.WriteHeader(204)
 		case r.Method == "DELETE" && strings.HasPrefix(p, "/api/users/"):
 			w.WriteHeader(401)
@@ -499,11 +513,13 @@ func TestRolesFromHistory(t *testing.T) {
 		t.Errorf("anonymous role added under -no-anon: %+v", r)
 	}
 
-	// With writes: the password PUT is accepted by the other account and cannot
-	// be read back; the refused DELETE is not a cross write.
+	// With writes: alice's own GET never shows a password, but /api/debug
+	// does, and the map already knows it (it was flagged verdictAnyoneSecrets
+	// above): bob's replay of alice's password PUT is read back there and
+	// proved. The refused DELETE is not a cross write.
 	rows, _ = run("-replay-writes", "put,delete", "-all")
 	pw := rows["PUT /api/users/alice/password"]
-	if pw.Verdict != verdictWriteUnread || strings.Join(pw.Readers, ",") != "bob" {
+	if pw.Verdict != verdictWriteCross || strings.Join(pw.Readers, ",") != "bob" || !strings.Contains(pw.OwnerBy, "debug") {
 		t.Errorf("password write: %+v", pw)
 	}
 	for k, r := range rows {
@@ -586,7 +602,7 @@ func TestWriteProvedInItsField(t *testing.T) {
 		{owner: "alice", method: "PUT", url: u, header: jh, body: []byte(`{"quantity":3}`), status: 200},
 		{owner: "alice", method: "PUT", url: u, header: jh, body: []byte(`{"quantity":3}`), status: 200},
 	}
-	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{"alice": {u: read()}}, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, err := replayWrites(roles, reqs, map[string]map[string]answer{"alice": {u: read()}}, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if err != nil || len(rows) != 3 {
 		t.Fatalf("%+v %v", rows, err)
 	}

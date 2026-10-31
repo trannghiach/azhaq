@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -122,7 +123,7 @@ func TestReplayWritesProved(t *testing.T) {
 	own := map[string]bool{"127.0.0.1": true}
 	// A HAR write with a body of alice's: bob's session changes alice's note.
 	put := writeReq{owner: "alice", method: "PUT", url: u, header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"note":"pwned"}`), status: 200, from: "alice.har"}
-	rows, _, err := replayWrites(roles, []writeReq{put}, answers, own, 0, 100)
+	rows, _, err := replayWrites(roles, []writeReq{put}, answers, own, 0, 100, false)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows %+v err %v", rows, err)
 	}
@@ -167,7 +168,7 @@ func TestReplayWriteDeleteProved(t *testing.T) {
 	before, _ := readAnswer(200, []byte(`{"id":3,"owner":"alice"}`), "application/json")
 	answers := map[string]map[string]answer{"alice": {u: before}}
 	del := writeReq{owner: "alice", method: "DELETE", url: u, header: http.Header{}}
-	rows, _, _ := replayWrites(roles, []writeReq{del}, answers, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, _ := replayWrites(roles, []writeReq{del}, answers, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if r := rows[0]; r.Verdict != verdictWriteCross || strings.Join(r.Readers, ",") != "bob" || !strings.Contains(r.OwnerBy, "the owner's object is gone") {
 		t.Errorf("delete row %+v", r)
 	}
@@ -217,12 +218,121 @@ func TestReplayWriteCallerObject(t *testing.T) {
 	answers := map[string]map[string]answer{"alice": {obj: before}}
 	put := writeReq{owner: "alice", method: "PUT", url: srv.URL + "/users/v1/alice/email",
 		header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"email":"pwned@x.test"}`), status: 204, from: "alice.har"}
-	rows, _, _ := replayWrites(roles, []writeReq{put}, answers, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, _ := replayWrites(roles, []writeReq{put}, answers, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteNoChange {
 		t.Fatalf("rows %+v", rows)
 	}
 	if emails["alice"] != "alice@x.test" {
 		t.Errorf("alice's email changed: %q", emails["alice"])
+	}
+}
+
+// VAmPI's PUT /users/v1/{username}/email: the owner's own GET never shows
+// its email, but /users/v1/_debug does (flagged verdictAnyoneSecrets on
+// the read run) and the map already has an answer for it. Without that
+// read-back the write is merely "accepted"; with it, bob's write is read
+// back at _debug and proved.
+func TestReplayWriteReadBackFromDebugEndpoint(t *testing.T) {
+	var mu sync.Mutex
+	emails := map[string]string{"alice": "alice@x.test", "bob": "bob@x.test"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("A") == "" {
+			w.WriteHeader(401)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/users/v1/_debug":
+			fmt.Fprintf(w, `{"users":[{"username":"alice","email":%q},{"username":"bob","email":%q}]}`, emails["alice"], emails["bob"])
+		case r.Method == http.MethodGet:
+			// The object's own GET never carries the email field.
+			who := strings.TrimPrefix(r.URL.Path, "/users/v1/")
+			fmt.Fprintf(w, `{"username":%q}`, who)
+		default:
+			// Vulnerable: the path's user is changed, not the caller's.
+			target := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/users/v1/"), "/email")
+			var m map[string]string
+			b, _ := io.ReadAll(r.Body)
+			json.Unmarshal(b, &m)
+			emails[target] = m["email"]
+			w.WriteHeader(204)
+		}
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	own := map[string]bool{"127.0.0.1": true}
+	ownAnswer, _ := readAnswer(200, []byte(`{"username":"alice"}`), "application/json")
+	debugAnswer, _ := readAnswer(200, []byte(`{"users":[{"username":"alice","email":"alice@x.test"},{"username":"bob","email":"bob@x.test"}]}`), "application/json")
+	answers := map[string]map[string]answer{"alice": {
+		srv.URL + "/users/v1/alice":  ownAnswer,
+		srv.URL + "/users/v1/_debug": debugAnswer,
+	}}
+	put := writeReq{owner: "alice", method: "PUT", url: srv.URL + "/users/v1/alice/email",
+		header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"email":"pwned@x.test"}`), status: 204, from: "alice.har"}
+	rows, _, err := replayWrites(roles, []writeReq{put}, answers, own, 0, 100, false)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows %+v err %v", rows, err)
+	}
+	if r := rows[0]; r.Verdict != verdictWriteCross || strings.Join(r.Readers, ",") != "bob" {
+		t.Fatalf("put row %+v", r)
+	}
+	if !strings.Contains(rows[0].OwnerBy, "_debug") {
+		t.Errorf("owner_by does not say the read-back came from _debug: %q", rows[0].OwnerBy)
+	}
+}
+
+// A write that replays the owner's exact body is idempotent (nothing to
+// read back) unless the field is changed to a value only this replay
+// sent: -replay-writes-canary does that, and proves the write a plain
+// replay could not.
+func TestReplayWriteCanaryProvesAnIdempotentReplay(t *testing.T) {
+	var mu sync.Mutex
+	notes := map[string]string{"3": "hello"}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("A") == "" {
+			w.WriteHeader(401)
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			fmt.Fprintf(w, `{"id":3,"owner":"alice","note":%q}`, notes["3"])
+			return
+		}
+		var m map[string]string
+		b, _ := io.ReadAll(r.Body)
+		json.Unmarshal(b, &m)
+		notes["3"] = m["note"]
+		w.WriteHeader(204)
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	u := srv.URL + "/api/notes/3"
+	own := map[string]bool{"127.0.0.1": true}
+	before, _ := readAnswer(200, []byte(`{"id":3,"owner":"alice","note":"hello"}`), "application/json")
+	answers := map[string]map[string]answer{"alice": {u: before}}
+	put := writeReq{owner: "alice", method: "PUT", url: u, header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"note":"hello"}`), status: 204, from: "alice.har"}
+
+	rows, _, _ := replayWrites(roles, []writeReq{put}, answers, own, 0, 100, false)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteNoChange {
+		t.Fatalf("without the canary, replaying the owner's own value should prove nothing: %+v", rows)
+	}
+
+	notes["3"] = "hello" // the plain replay above may have left it as is; reset for a clean compare
+	rows, _, _ = replayWrites(roles, []writeReq{put}, answers, own, 0, 100, true)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteCross {
+		t.Fatalf("with -replay-writes-canary, the write should be proved: %+v", rows)
+	}
+	if !strings.Contains(rows[0].OwnerBy, "canary") {
+		t.Errorf("owner_by does not mention the canary: %q", rows[0].OwnerBy)
+	}
+	if string(put.body) != `{"note":"hello"}` {
+		t.Errorf("the original write request was mutated: %s", put.body)
 	}
 }
 
@@ -242,12 +352,44 @@ func TestReplayWriteCreate(t *testing.T) {
 	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
 	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
 	post := writeReq{owner: "alice", method: "POST", url: srv.URL + "/books/v1", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"title":"t"}`), status: 201, from: "alice.har"}
-	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteCreate || !slices.Contains(rows[0].Readers, "bob") {
 		t.Fatalf("rows %+v", rows)
 	}
 	if listed(verdictWriteCreate) {
 		t.Errorf("a create should not be listed by default")
+	}
+}
+
+// VAmPI's POST /books/v1: when the map already has an answer for the
+// member URL the created book would answer at (/books/v1/{title}), it is
+// read back as evidence the create is more than a 2xx.
+func TestReplayWriteCreateConfirmedByKnownMemberURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("A") == "" {
+			w.WriteHeader(401)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			fmt.Fprint(w, `{"title":"My Book","owner":"bob"}`)
+			return
+		}
+		w.WriteHeader(201)
+	}))
+	defer srv.Close()
+	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
+	roles := []role{{name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
+	post := writeReq{owner: "alice", method: "POST", url: srv.URL + "/books/v1", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"title":"My Book"}`), status: 201, from: "alice.har"}
+	member := srv.URL + "/books/v1/My%20Book"
+	known, _ := readAnswer(200, []byte(`{"title":"My Book","owner":"alice"}`), "application/json")
+	answers := map[string]map[string]answer{"anybody": {member: known}}
+	rows, _, _ := replayWrites(roles, []writeReq{post}, answers, map[string]bool{"127.0.0.1": true}, 0, 100, false)
+	if len(rows) != 1 || rows[0].Verdict != verdictWriteCreate {
+		t.Fatalf("rows %+v", rows)
+	}
+	if !strings.Contains(rows[0].OwnerBy, "readable back at /books/v1/My Book") {
+		t.Errorf("owner_by does not confirm the create: %q", rows[0].OwnerBy)
 	}
 }
 
@@ -266,7 +408,7 @@ func TestReplayWriteServerError(t *testing.T) {
 	h := func(v string) http.Header { x := http.Header{}; x.Set("A", v); return x }
 	roles := []role{{name: "alice", headers: []string{"A: alice"}, session: h("alice")}, {name: "bob", headers: []string{"A: bob"}, session: h("bob")}}
 	post := writeReq{owner: "alice", method: "POST", url: srv.URL + "/books/v1", header: http.Header{"Content-Type": {"application/json"}}, body: []byte(`{"title":"t"}`), status: 200, from: "alice.har"}
-	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+	rows, _, _ := replayWrites(roles, []writeReq{post}, nil, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteFailed {
 		t.Fatalf("rows %+v", rows)
 	}
@@ -292,7 +434,7 @@ func TestReplayWriteChangedObject(t *testing.T) {
 	u := srv.URL + "/api/items/3"
 	before, _ := readAnswer(200, []byte(`{"id":3,"name":""}`), "application/json")
 	rows, _, _ := replayWrites(roles, []writeReq{{owner: "alice", method: "PATCH", url: u, header: http.Header{}, body: []byte("{}"), empty: true}},
-		map[string]map[string]answer{"alice": {u: before}}, map[string]bool{"127.0.0.1": true}, 0, 100)
+		map[string]map[string]answer{"alice": {u: before}}, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteVoid || len(asked) != 2 {
 		t.Errorf("rows %+v asked %q", rows, asked)
 	}
@@ -370,7 +512,7 @@ func TestReplayWriteDeleteRefused(t *testing.T) {
 	h.Set("A", "1")
 	roles := []role{{name: "anon"}, {name: "alice", headers: []string{"A: 1"}, session: h}, {name: "bob", headers: []string{"A: 2"}, session: h}}
 	rows, _, _ := replayWrites(roles, []writeReq{{owner: "alice", method: "DELETE", url: srv.URL + "/api/items/3", header: http.Header{}}},
-		nil, map[string]bool{"127.0.0.1": true}, 0, 100)
+		nil, map[string]bool{"127.0.0.1": true}, 0, 100, false)
 	if len(rows) != 1 || rows[0].Verdict != verdictWriteRefused {
 		t.Errorf("%+v", rows)
 	}

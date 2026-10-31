@@ -37,6 +37,7 @@ func TestMCPArgumentTypes(t *testing.T) {
 		{"azhaq_show", `{}`, `azhaq_show needs the argument "key"`},
 		{"azhaq_ports", `{"hosts":["a.test", 7]}`, `argument hosts[1] of azhaq_ports must be a string, not the number 7`},
 		{"azhaq_scope", `{"x":null}`, `unknown argument "x" for azhaq_scope; it takes none`},
+		{"azhaq_status", `{"x":null}`, `unknown argument "x" for azhaq_status; it takes none`},
 		{"azhaq_workspaces", `{"workspace":null}`, `unknown argument "workspace" for azhaq_workspaces; it takes none`},
 		{"azhaq_diff", `{"workspace":null}`, `argument workspace of azhaq_diff must be a string, not null`},
 	} {
@@ -52,6 +53,7 @@ func TestMCPArgumentTypes(t *testing.T) {
 	for _, c := range []struct{ tool, args string }{
 		{"azhaq_scope", ``},
 		{"azhaq_scope", `{}`},
+		{"azhaq_status", ``},
 		{"azhaq_roles", `{"url":"http://127.0.0.1:5002/","roles":[{"name":"anon"},{"name":"bob","header":["Authorization: Bearer x"]},{"name":"alice","user":"a","password":"p"}],"ids":["alice:book_title=b"],"depth":0}`},
 		{"azhaq_query", `{"workspace":"w","fields":["key","first_seen"],"scope":"target","limit":5,"new":true}`},
 		{"azhaq_export", `{"workspace":"w","format":"burp","offset":0}`},

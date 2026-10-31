@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 
@@ -166,12 +167,12 @@ func TestSchemaFromSuggestions(t *testing.T) {
 		for _, f := range strings.Fields(strings.Trim(strings.SplitN(q.Query, "{", 2)[1], " }")) {
 			typ, ok := have[f]
 			switch {
-			case !ok && strings.HasPrefix(f, "paste") && root == "Query":
-				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "Query". Did you mean "pastes" or "paste"?`})
-			case !ok && f == "createPost" && root == "Mutations":
-				errs = append(errs, map[string]string{"message": `Cannot query field "createPost" on type "Mutations". Did you mean "createPaste" or "deletePaste"?`})
 			case !ok:
-				errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "` + root + `".`})
+				msg := `Cannot query field "` + f + `" on type "` + root + `".`
+				if near := suggest(f, have); len(near) > 0 {
+					msg += ` Did you mean "` + strings.Join(near, `" or "`) + `"?`
+				}
+				errs = append(errs, map[string]string{"message": msg})
 			case typ != "":
 				errs = append(errs, map[string]string{"message": `Field "` + f + `" of type "` + typ + `" must have a sub selection.`})
 			}
@@ -200,6 +201,89 @@ func TestSchemaFromSuggestions(t *testing.T) {
 	}
 }
 
+// Fields neither the built-in wordlist nor a suggestion would reach are
+// still recovered: one from a GraphQL operation the map already found in
+// a script on the endpoint's origin (vaultBalance, from: client), one
+// from words derived from the wordlist's verbs and nouns (deleteAllPastes
+// = delete + All + pastes, from: probe). The row reports how many fields
+// each root type has, how they were found, and that it may still be
+// incomplete.
+func TestSchemaRecoversClientAndDerivedWords(t *testing.T) {
+	fetch.Reset()
+	have := map[string]map[string]bool{
+		"Query":     {"pastes": true, "vaultBalance": true},
+		"Mutations": {"createPaste": true, "deleteAllPastes": true},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/app.js":
+			w.Header().Set("Content-Type", "application/javascript")
+			_, _ = w.Write([]byte("const Q = gql`query { vaultBalance pastes { id } }`, M = gql`mutation { createPaste(title: $t) { id } }`;"))
+		case "/graphql":
+			var q struct{ Query string }
+			_ = json.NewDecoder(r.Body).Decode(&q)
+			w.Header().Set("Content-Type", "application/json")
+			if strings.Contains(q.Query, "__schema") {
+				_, _ = w.Write([]byte(`{"errors":[{"message":"GraphQL introspection is not allowed"}]}`))
+				return
+			}
+			root := "Query"
+			if strings.HasPrefix(q.Query, "mutation") {
+				root = "Mutations"
+			}
+			var errs []map[string]string
+			for _, f := range strings.Fields(strings.Trim(strings.SplitN(q.Query, "{", 2)[1], " }")) {
+				if !have[root][f] {
+					// No "Did you mean": these two names are reachable only
+					// through client-code harvesting or derived words, never
+					// a suggestion.
+					errs = append(errs, map[string]string{"message": `Cannot query field "` + f + `" on type "` + root + `".`})
+				}
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"errors": errs})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	// The map already fetched this script before the schema was recovered.
+	if _, _, err := fetch.Do(context.Background(), srv.Client(), srv.URL+"/app.js"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, _ := run(t, NewSchema(srv.Client()), srv.URL+"/graphql")
+	if fmt.Sprint(got["queries"]) != "[pastes vaultBalance]" {
+		t.Fatalf("queries %v", got["queries"])
+	}
+	if fmt.Sprint(got["mutations"]) != "[createPaste deleteAllPastes]" {
+		t.Fatalf("mutations %v", got["mutations"])
+	}
+	if got["complete"] != false {
+		t.Errorf("complete %v, want false: recovery never proves there is nothing more", got["complete"])
+	}
+	if n, _ := got["client_words"].(float64); n < 1 {
+		t.Errorf("client_words %v, want at least vaultBalance", got["client_words"])
+	}
+	recovery, _ := got["recovery"].(map[string]any)
+	qr, _ := recovery["queries"].(map[string]any)
+	if qr["fields"] != float64(2) {
+		t.Errorf("query fields %v, want 2", qr["fields"])
+	}
+	qby, _ := qr["by"].(map[string]any)
+	if qby["client"] != float64(2) {
+		t.Errorf("queries by %v, want two client (vaultBalance, pastes)", qby)
+	}
+	if n, _ := qr["words_tried"].(float64); n == 0 {
+		t.Error("words_tried is 0")
+	}
+	mr, _ := recovery["mutations"].(map[string]any)
+	mby, _ := mr["by"].(map[string]any)
+	if mby["client"] != float64(1) || mby["probe"] != float64(1) {
+		t.Errorf("mutations by %v, want one client (createPaste) and one derived from Query's pastes (deleteAllPastes)", mby)
+	}
+}
+
 // An endpoint that runs a query sent with GET says so: {__typename}.
 func TestGETQueries(t *testing.T) {
 	fetch.Reset()
@@ -217,4 +301,49 @@ func TestGETQueries(t *testing.T) {
 	if got["get_queries"] != true {
 		t.Errorf("row %v", got)
 	}
+}
+
+// suggest names the fields a graphql-js server offers for an unknown one:
+// those within floor(len*0.4)+1 edits, a case-only difference counting 1.
+func suggest(f string, have map[string]string) []string {
+	var out []string
+	for name := range have {
+		if d := lexical(f, name); d <= len(f)*4/10+1 {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// lexical is graphql-js's lexicalDistance (optimal string alignment).
+func lexical(a, b string) int {
+	if a == b {
+		return 0
+	}
+	a, b = strings.ToLower(a), strings.ToLower(b)
+	if a == b {
+		return 1
+	}
+	d := make([][]int, len(a)+1)
+	for i := range d {
+		d[i] = make([]int, len(b)+1)
+		d[i][0] = i
+	}
+	for j := range d[0] {
+		d[0][j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
+				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
+			}
+		}
+	}
+	return d[len(a)][len(b)]
 }

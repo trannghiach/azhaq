@@ -111,12 +111,15 @@ func recoveredEndpoints(schemas []engine.GQLSchema, whole []gqlEndpoint) []gqlEn
 			continue
 		}
 		raw, _ := json.Marshal(sc)
-		mark := map[string]any{"introspection": false, "recovered": s.Recovered, "partial": true}
+		mark := map[string]any{"introspection": false, "recovered": s.Recovered, "partial": true, "complete": false}
 		if s.Errors > 0 {
 			mark["validation_errors"] = s.Errors
 		}
 		if len(s.ClientOps) > 0 {
 			mark["client_operations"] = s.ClientOps
+		}
+		if s.ClientWords > 0 {
+			mark["client_words"] = s.ClientWords
 		}
 		if len(untyped) > 0 {
 			mark["untyped_fields"] = untyped
@@ -130,6 +133,9 @@ func recoveredEndpoints(schemas []engine.GQLSchema, whole []gqlEndpoint) []gqlEn
 // export: what the schema does not hold.
 func recoveredSDLNotes(ep gqlEndpoint) string {
 	var b strings.Builder
+	if c := ep.Recovered.Counts(); c != "" {
+		b.WriteString("# recovered fields: " + c + "\n")
+	}
 	for _, root := range []string{ep.Recovered.QueryType, ep.Recovered.MutationType} {
 		if names := ep.Untyped[root]; len(names) > 0 {
 			b.WriteString("# fields whose type was not recovered, left out of " + root + ": " + strings.Join(names, ", ") + "\n")
