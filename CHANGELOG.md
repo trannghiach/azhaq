@@ -4,6 +4,9 @@
 
 ### Fixed
 
+- `-fill-forms` help said "GET only"; it says one GET request per form, and that a form that posts is not sent unless `-submit-forms`. `azhaq ingest` help said it prints "the map of what was added"; it prints only its summary, and the help says so.
+- `azhaq report` was documented with four verdicts; it writes up five, and it exits 0 with a note when no row qualifies.
+- The docs said 4 requests in flight per host (it is 10, `-host-parallel`), that azhaq never clicks (`-interact` does), and that `ports` scans every address of both families (it scans the first two of each, all with `-sa`); they now match the code.
 - `export -format openapi` of a workspace with no API route (a run whose target did not answer, exit 3) writes a valid OpenAPI 3.0.3 description with no paths and a stderr line `no API routes found on ORIGIN: wrote a description with no paths`, and exits 0; it printed nothing and exited 1.
 - Pages of one route that differ in which ID-like query names they carry (`?productId=1` and `?productId=1&storeId=1`) are one template row of the map, and its `params` list every name; a word that names a page (`?category=Gin`) stays its own row, and `crawl` still lists every URL.
 - The help of `plan` no longer says a run sends "GET requests only": it names what is planned besides GET (Chrome's HEAD and OPTIONS, a port scan's HEAD, UDP probes, POST bodies, sign-in).
@@ -67,6 +70,17 @@
 - Write replay no longer calls a server error a refusal: when every other role's write got a 5xx (a unique key the server already held: SQLAlchemy's 500), the verdict is `the other roles' writes failed with a server error (5xx): neither refused nor accepted`.
 - `ingest` reads naabu's JSON lines for an address, which carry `ip` and no `host`; they were refused as a format it does not know.
 - `azhaq mcp` answers a `shutdown` request (sent by clients built on the language-server pattern) instead of `method not found`, and ends when stdin closes.
+
+### Added
+
+- `azhaq docs COMMAND` prints a command's page (`azhaq docs ports`): every command has one in `docs/commands/`, with its synopsis, examples, what it does, output fields, exit codes, details and flags, and the pages ship in the release archive.
+- `azhaq docs -flags COMMAND` prints a command's flag table and `azhaq docs -flags-into DIR` (or `go generate ./docs`) rewrites the tables of the pages, both from the data `help -json` lists; a test fails when a table is stale, a command has no page, or a link in the docs leads to no heading.
+- CONTRIBUTING.md: commit messages follow Conventional Commits, checked by a commit-msg hook (`.githooks`) and on CI.
+
+### Changed
+
+- The documentation is rewritten for reading, every fact kept (two audits compared the old and new text, number by number). The README is a landing page of about 2,300 words, from 9,100. Each command's behaviour lives on its own page, shared ideas once in CONCEPTS.md, the output contract in OUTPUT.md (2,400 words, from 22,700), and MIGRATING, RECIPES, TROUBLESHOOTING, ARCHITECTURE, MCP and CONNECTOR have one heading per tool, task, symptom or mechanism. Sentences over 40 words went from more than 300 to 3, paragraphs over 200 words from more than 60 to none.
+- MIGRATING has an asnmap section (`azhaq asn`), checked against asnmap 1.1.1.
 
 ## v0.10.0
 
