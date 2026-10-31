@@ -31,15 +31,11 @@ type subsOut struct {
 	dir      string
 	perInput map[string]*bytes.Buffer
 	live     bool
-	cnameN   int // live names that are a CNAME with no address of their own
 	// takeover is the candidates DNS found, by name: -json rows carry them.
 	takeover map[string]takeoverRow
 }
 
 func (o *subsOut) put(input, name string, row map[string]any, ips, by []string) {
-	if o.live && len(ips) == 0 {
-		o.cnameN++
-	}
 	if t, ok := o.takeover[name]; ok && o.w.json {
 		row["takeover"] = t.Finding
 	}
@@ -234,6 +230,10 @@ func cmdSubs(args []string) error {
 	}
 	out := &subsOut{w: w, cs: *cs, oI: *oI, dir: *oD, perInput: map[string]*bytes.Buffer{}, live: *live}
 	var alive map[string]map[string]any
+	// dangling: names that are a CNAME whose chain ends without an address.
+	// They exist in DNS but are not live: takeover candidates, not names.
+	var dangling map[string]map[string]any
+	danglingN := 0
 	seen := map[string]bool{}
 	answered, ran, failedOff := 0, 0, 0
 	verbose := hasFlag(extra, "v")
@@ -325,6 +325,9 @@ func cmdSubs(args []string) error {
 			case !filt.keep(name):
 				filtered++
 				continue
+			case alive != nil && alive[name] == nil && dangling[name] != nil:
+				danglingN++
+				continue
 			case alive != nil && alive[name] == nil:
 				if unver[name] {
 					notChecked++
@@ -350,7 +353,7 @@ func cmdSubs(args []string) error {
 			}
 			var ips []string
 			if alive != nil {
-				liveFields(row, alive[name])
+				dnsFields(row, alive[name])
 				ips = strs(alive[name]["ips"])
 				if *oI && len(ips) > 0 {
 					row["ip"] = ips[0]
@@ -383,14 +386,10 @@ func cmdSubs(args []string) error {
 		out.takeover[t.Host] = t
 	}
 	if *live {
-		// A name with an address, or one that is a CNAME (dnsx -a -cname
-		// lists those too, dangling or not): it exists in DNS.
+		// A live name has an address, directly or through its CNAME chain.
+		// A chain that ends without one is a takeover candidate, not live.
 		alive = liveNames(st)
-		for name, p := range cnameNames(st) {
-			if alive[name] == nil {
-				alive[name] = p
-			}
-		}
+		dangling = cnameNames(st)
 	}
 	for _, p := range payloads(st, "azhaq-subdomains") {
 		process(p) // the ones not printed yet: every one with -live
@@ -414,6 +413,9 @@ func cmdSubs(args []string) error {
 				case !filt.keep(name):
 					guessFiltered++
 					continue
+				case alive != nil && alive[name] == nil && dangling[name] != nil:
+					danglingN++
+					continue
 				case alive != nil && alive[name] == nil:
 					guessDead++
 					continue
@@ -423,7 +425,7 @@ func cmdSubs(args []string) error {
 				row := map[string]any{"host": name, "input": apexOf(name, apexes), "source": g.source, "sources": []string{g.source}}
 				var ips []string
 				if alive != nil {
-					liveFields(row, alive[name])
+					dnsFields(row, alive[name])
 					ips = strs(alive[name]["ips"])
 					if *oI && len(ips) > 0 {
 						row["ip"] = ips[0]
@@ -448,7 +450,7 @@ func cmdSubs(args []string) error {
 			seen[name] = true
 			viaCNAME++
 			row := map[string]any{"host": name, "input": apexOf(name, apexes), "source": "cname", "sources": []string{"cname"}}
-			liveFields(row, alive[name])
+			dnsFields(row, alive[name])
 			ips := strs(alive[name]["ips"])
 			if *oI && len(ips) > 0 {
 				row["ip"] = ips[0]
@@ -496,7 +498,7 @@ func cmdSubs(args []string) error {
 		rep.Counts["resolved from sources"] = rep.Results - guessed - viaCNAME
 		set("found as CNAME targets", viaCNAME)
 	}
-	set("CNAME only", out.cnameN)
+	set("CNAME without an address", danglingN)
 	set("not checked", notChecked)
 	set("unverified", unverified)
 	set("left out by -m/-f", filtered+guessFiltered)
@@ -544,6 +546,7 @@ func nameSum(c map[string]int, results int, filtering bool) string {
 	}
 	minus("the domain itself", "the domain itself, not a subdomain")
 	minus("did not resolve", "did not resolve")
+	minus("CNAME without an address", "CNAME without an address")
 	minus("not checked", "not checked")
 	minus("left out by -m/-f", "left out by -m/-f")
 	minus("listed under another domain", "listed under another domain")
@@ -614,8 +617,8 @@ func topSources(by map[string]int, n int) string {
 	return strings.Join(parts, ", ")
 }
 
-// cnameNames maps each name azhaq-dns found as a CNAME with no address of
-// its own, a wildcard zone's answers left out, to its payload.
+// cnameNames maps each name azhaq-dns found as a CNAME whose chain ends
+// without an address, a wildcard zone's answers left out, to its payload.
 func cnameNames(st *store.Store) map[string]map[string]any {
 	out := map[string]map[string]any{}
 	for _, p := range payloads(st, "azhaq-dns") {
@@ -625,13 +628,4 @@ func cnameNames(st *store.Store) map[string]map[string]any {
 		}
 	}
 	return out
-}
-
-// liveFields is dnsFields for a name that may have no address: a CNAME
-// that leads nowhere has no a.
-func liveFields(row, p map[string]any) {
-	dnsFields(row, p)
-	if a, ok := row["a"].([]string); ok && len(a) == 0 {
-		delete(row, "a")
-	}
 }

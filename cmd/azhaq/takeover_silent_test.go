@@ -4,6 +4,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -83,7 +84,8 @@ func TestDNSTakeoverIsNotLostUnderSilent(t *testing.T) {
 	}
 }
 
-// subs -live: the same candidate is on its row, and under -silent on stderr.
+// subs -live: a dangling name is no live row; the candidate is in the
+// summary's takeover list, and under -silent on stderr.
 func TestSubsTakeoverIsNotLostUnderSilent(t *testing.T) {
 	t.Chdir(t.TempDir())
 	res := danglingZone(t)
@@ -92,17 +94,11 @@ func TestSubsTakeoverIsNotLostUnderSilent(t *testing.T) {
 	if code != exitOK || len(rep.Takeover) != 1 {
 		t.Fatalf("exit %d takeover %+v", code, rep.Takeover)
 	}
-	var found bool
-	for _, r := range jsonRows(t, out) {
-		if r["host"] == "shop.example.org" {
-			tk, _ := r["takeover"].(map[string]any)
-			found = tk != nil && tk["service"] == "Azure"
-		} else if r["takeover"] != nil {
-			t.Errorf("row %v", r)
-		}
+	if got := hosts(t, out); !reflect.DeepEqual(got, []string{"www.example.org"}) {
+		t.Errorf("printed %v: a dangling CNAME is not a live name", got)
 	}
-	if !found {
-		t.Errorf("no takeover on the row of shop.example.org:\n%s", out)
+	if tk := rep.Takeover[0]; tk.Host != "shop.example.org" || tk.Service != "Azure" || tk.Target != "gone.azurewebsites.net" || tk.Evidence == "" {
+		t.Errorf("summary takeover %+v", tk)
 	}
 	t.Setenv("AZHAQ_DATA_DIR", t.TempDir())
 	out, errOut, err := captureBoth(t, func() error {
@@ -111,7 +107,7 @@ func TestSubsTakeoverIsNotLostUnderSilent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Fields(out); len(got) != 2 || strings.Contains(out, "takeover") {
+	if got := strings.Fields(out); len(got) != 1 || strings.Contains(out, "takeover") {
 		t.Errorf("stdout %q", out)
 	}
 	if strings.TrimSpace(errOut) != takeoverLineWant {

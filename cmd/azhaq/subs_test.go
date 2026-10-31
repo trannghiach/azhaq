@@ -218,35 +218,47 @@ func TestSourceRatesParse(t *testing.T) {
 
 func runArgs(args ...string) error { return run(args) }
 
-// A name that is only a CNAME exists in DNS and is a live name, as dnsx
-// -a -cname lists it, whether its target answers or not.
-func TestSubsLiveListsCNAMEOnlyNames(t *testing.T) {
+// A live name resolves to an address, directly or through its CNAME chain
+// (a CDN's name). A chain that ends without one is a takeover candidate:
+// not a printed name, counted in the summary, its evidence in `takeover`.
+func TestSubsLiveLeavesOutDanglingCNAMEs(t *testing.T) {
 	t.Chdir(t.TempDir())
 	resolvers := serveZone(t, fakeZone{
-		a:     map[string]string{"www.example.org": "192.0.2.10"},
-		cname: map[string]string{"go.example.org": "www.example.org", "cdn.example.org": "gone.example.net"},
+		a: map[string]string{"www.example.org": "192.0.2.10"},
+		cname: map[string]string{"go.example.org": "www.example.org", "cdn.example.org": "gone.example.net",
+			"shop.example.org": "azq-gone.azurewebsites.net"},
+		nxGone: true,
 	})
-	// cdn is only guessed (a padding source): the guess check keeps it too.
+	// cdn and shop are only guessed (a padding source): the guess check finds them too.
 	defer subcol.UseTestSources(
 		subcol.TestSource{Name: "s", Default: true, Names: []string{"go.example.org", "dead.example.org", "www.example.org"}},
-		subcol.TestSource{Name: "pad", Default: true, Padding: true, Names: []string{"cdn.example.org", "junk.example.org"}},
+		subcol.TestSource{Name: "pad", Default: true, Padding: true, Names: []string{"cdn.example.org", "shop.example.org", "junk.example.org"}},
 	)()
 	out, rep, code := runContract(t, "subs", "-d", "example.org", "-live", "-resolvers", resolvers, "-no-history")
 	if code != exitOK {
 		t.Fatalf("exit %d %+v", code, rep)
 	}
-	rows := map[string]map[string]any{}
-	for _, r := range jsonRows(t, out) {
-		rows[r["host"].(string)] = r
+	got := hosts(t, out)
+	if !reflect.DeepEqual(got, []string{"go.example.org", "www.example.org"}) || rep.Results != 2 {
+		t.Fatalf("printed %v results %d: the dangling CNAMEs are not live names", got, rep.Results)
 	}
-	if len(rows) != 3 || rows["dead.example.org"] != nil {
-		t.Fatalf("printed %v", hosts(t, out))
-	}
-	if cdn := rows["cdn.example.org"]; cdn["a"] != nil || cdn["cname"] == nil {
-		t.Errorf("a CNAME to nowhere: %v", cdn)
-	}
-	if rep.Counts["CNAME only"] != 1 {
+	if n := rep.Counts["CNAME without an address"]; n != 2 || rep.Counts["CNAME only"] != 0 {
 		t.Errorf("counts %v", rep.Counts)
+	}
+	var tk []string
+	for _, x := range rep.Takeover {
+		tk = append(tk, x.Host+" "+x.Target)
+	}
+	if !reflect.DeepEqual(tk, []string{"cdn.example.org gone.example.net", "shop.example.org azq-gone.azurewebsites.net"}) || rep.Takeover[1].Service != "Azure" || rep.Takeover[1].Evidence == "" {
+		t.Errorf("takeover %+v", rep.Takeover)
+	}
+	// The count note adds up: collected - did not resolve - CNAME without an address = printed.
+	c := rep.Counts
+	if c["from sources"]+c["asked by guessing"]-c["did not resolve"]-c["CNAME without an address"]+c["found as CNAME targets"] != rep.Results {
+		t.Errorf("counts do not add up to %d: %v", rep.Results, c)
+	}
+	if !strings.Contains(strings.Join(rep.Notes, "\n"), "CNAME without an address") {
+		t.Errorf("the count note does not name them: %v", rep.Notes)
 	}
 }
 

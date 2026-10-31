@@ -30,6 +30,9 @@ import (
 type fakeZone struct {
 	a     map[string]string // name → IPv4
 	cname map[string]string // name → target
+	// nxGone: a CNAME whose target is in no zone answers NXDOMAIN with the
+	// chain, as a recursive resolver does, instead of NOERROR.
+	nxGone bool
 }
 
 func (z fakeZone) handle(w dns.ResponseWriter, r *dns.Msg) {
@@ -47,6 +50,11 @@ func (z fakeZone) handle(w dns.ResponseWriter, r *dns.Msg) {
 		if isAlias {
 			m.Answer = append(m.Answer, rr(name+". 60 IN CNAME "+target+"."))
 			name = target
+			_, inA := z.a[target]
+			_, inC := z.cname[target]
+			if z.nxGone && !inA && !inC {
+				m.Rcode = dns.RcodeNameError
+			}
 		}
 		if ip, ok := z.a[name]; ok {
 			m.Answer = append(m.Answer, rr(name+". 60 IN A "+ip))
