@@ -32,11 +32,16 @@ type subsOut struct {
 	perInput map[string]*bytes.Buffer
 	live     bool
 	cnameN   int // live names that are a CNAME with no address of their own
+	// takeover is the candidates DNS found, by name: -json rows carry them.
+	takeover map[string]takeoverRow
 }
 
 func (o *subsOut) put(input, name string, row map[string]any, ips, by []string) {
 	if o.live && len(ips) == 0 {
 		o.cnameN++
+	}
+	if t, ok := o.takeover[name]; ok && o.w.json {
+		row["takeover"] = t.Finding
 	}
 	var line string
 	switch {
@@ -236,6 +241,7 @@ func cmdSubs(args []string) error {
 	collected := map[string]bool{} // every passive name, before the -live filter
 	bySource := map[string]int{}   // how many each source returned
 	var union, dropped, unverified, notChecked, filtered, dup, cut, didNot int
+	health := newHealthTally(false)
 	var procMu sync.Mutex
 	processed := map[string]bool{}
 	process := func(p map[string]any) {
@@ -248,6 +254,7 @@ func cmdSubs(args []string) error {
 		processed[input] = true
 		foundBy, _ := p["found_by"].(map[string]any)
 		srcs, _ := p["sources"].(map[string]any)
+		health.add(input, srcs)
 		union += intOf(p["from_sources"])
 		dropped += intOf(p["dropped"])
 		cut += intOf(p["names_cut"])
@@ -285,7 +292,8 @@ func cmdSubs(args []string) error {
 		}
 		if verbose {
 			rep.Notes = append(rep.Notes, sourceDetail(input, srcs))
-		} else if n := slowSource(input, srcs); n != "" {
+		}
+		if n := slowSource(input, srcs); n != "" {
 			rep.Notes = append(rep.Notes, n)
 		}
 		if *stats {
@@ -361,6 +369,10 @@ func cmdSubs(args []string) error {
 		return err
 	}
 	defer done()
+	out.takeover = map[string]takeoverRow{}
+	for _, t := range rep.Takeover {
+		out.takeover[t.Host] = t
+	}
 	if *live {
 		// A name with an address, or one that is a CNAME (dnsx -a -cname
 		// lists those too, dangling or not): it exists in DNS.
@@ -432,6 +444,8 @@ func cmdSubs(args []string) error {
 		return err
 	}
 	rep.Results = w.count()
+	rep.Sources = health.result()
+	rep.failOnErrors = hasFlag(extra, "fail-on-errors")
 	rep.Counts = map[string]int{"sources asked": ran, "sources answered": answered, "sources failed": ran - answered - failedOff, "off-by-default failed": failedOff}
 	rep.Degraded = rep.Counts["sources failed"] > 0
 	if active {

@@ -46,7 +46,7 @@ type common struct {
 
 func (c *common) register(fs *flag.FlagSet) {
 	fs.BoolVar(&c.json, "json", false, "JSONL output, and the summary as one JSON object on stderr")
-	fs.BoolVar(&c.silent, "silent", false, "results only: no progress; the summary only when something failed")
+	fs.BoolVar(&c.silent, "silent", false, "results only: no progress; the summary only when something failed (a source that failed, a takeover candidate as a [takeover] line on stderr); stdout stays one result per line")
 	fs.StringVar(&c.out, "o", "", "also write results to this file")
 	fs.StringVar(&c.db, "db", "", "keep the graph in this database for query, show, export and diff (default: a temporary one)")
 }
@@ -639,6 +639,14 @@ func cmdURLs(args []string) error {
 	}
 	defer done()
 	urlsNotes(rep, payloads(st, "azhaq-urls"), *failCapped)
+	if !raw {
+		urlsJunk(rep, payloads(st, "azhaq-urls"))
+	}
+	rep.Sources = archiveHealth(payloads(st, "azhaq-urls"))
+	if n := rep.Sources.archivesNote(); n != "" {
+		rep.Notes = append(rep.Notes, n)
+	}
+	rep.failOnErrors = hasFlag(given(), "fail-on-errors")
 	rep.Results = w.count()
 	return rep.finish(c.json, c.silent)
 }
@@ -1044,7 +1052,7 @@ func slowSource(domain string, srcs map[string]any) string {
 	if first < 20 || first < 2*second {
 		return ""
 	}
-	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s (-source-timeout bounds each source, -exclude-sources %s drops it, -v lists them all)", domain, slow, first, second, slow)
+	return fmt.Sprintf("%s: %s took %.0f s, the next slowest source %.0f s, so it held the run (-source-timeout bounds each source: a shorter one ends the wait sooner and its names are then missing; -exclude-sources %s drops it; -v lists them all)", domain, slow, first, second, slow)
 }
 
 // guessCheck says where the time went when the DNS check of the names

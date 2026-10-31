@@ -870,7 +870,7 @@ func (r *dnsRun) one(ctx context.Context, name string) bool {
 	if cf.omitRaw {
 		d.AllRecords = nil
 	}
-	r.takeover(ctx, name, d)
+	row.Takeover = r.takeover(ctx, name, d)
 	r.keepRow(name, d, row)
 	selected := r.hasSelected(d)
 	switch {
@@ -964,12 +964,12 @@ func shortDNSError(s string) string {
 }
 
 // takeover notes a name whose CNAME points at what no longer exists.
-func (r *dnsRun) takeover(ctx context.Context, host string, d *dnsr.Data) {
+func (r *dnsRun) takeover(ctx context.Context, host string, d *dnsr.Data) *takeover.Finding {
 	if !r.cf.selected["a"] || len(d.CNAME) == 0 {
-		return
+		return nil
 	}
 	if rc, ok := d.Rcode(dns.TypeA); !ok || rc != dns.RcodeNameError {
-		return
+		return nil
 	}
 	target := d.CNAME[len(d.CNAME)-1]
 	registered := true
@@ -982,7 +982,9 @@ func (r *dnsRun) takeover(ctx context.Context, host string, d *dnsr.Data) {
 		r.mu.Lock()
 		r.takeovers = append(r.takeovers, takeoverRow{Host: host, Finding: f})
 		r.mu.Unlock()
+		return &f
 	}
+	return nil
 }
 
 // keepRow remembers what -db keeps: every name asked (the guesses of -w
@@ -1052,6 +1054,8 @@ type dnsRow struct {
 	CDNType   string  `json:"cdn-type,omitempty"`
 	ASN       *dnsASN `json:"asn,omitempty"`
 	QueryTime string  `json:"query-time,omitempty"`
+	// Takeover is set on a name whose CNAME points at what is gone (not a dnsx field).
+	Takeover *takeover.Finding `json:"takeover,omitempty"`
 }
 
 type dnsASN struct {

@@ -221,7 +221,7 @@ Piped, `urls` prints each URL once, as soon as its page arrives, so the next too
 | `--blacklist ttf,woff` | `-blacklist ttf,woff` (with or without the dot) |
 | `--fp` | `-fp` (the first URL of each host and path) |
 | `--threads N` | `-threads N` (domains asked at once; the five archives of a domain always run together) |
-| `--retries N` | `-retries N` (waits of 2, 5, 10 s between tries; 0 makes the first refusal final) |
+| `--retries N` | `-retries N` (a count: waits of 2, 5, 10, 20, 30 s between tries, or the `Retry-After`; 0 makes the first refusal final). Without it a 429 or 503 is waited out for as long as `-urls-timeout` and `-timeout` allow, a network error asked again 3 times |
 | `--proxy URL` | `-proxy URL` (http, https or socks5) |
 | `--timeout S` | `-urls-timeout` bounds each archive per domain; `-timeout` stops the whole run |
 | `--o FILE` | `-o FILE` (appends) |

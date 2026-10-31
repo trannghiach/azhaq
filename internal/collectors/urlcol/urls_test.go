@@ -66,7 +66,8 @@ func archives(t *testing.T) *httptest.Server {
 func TestSourcesMergeAndReport(t *testing.T) {
 	srv := archives(t)
 	out := filepath.Join(t.TempDir(), "urls.txt")
-	c := New(Options{Client: srv.Client(), Out: out})
+	three := 3
+	c := New(Options{Client: srv.Client(), Out: out, Retries: &three})
 	c.pauses = nil
 	var summary map[string]any
 	var rows []map[string]any
@@ -92,7 +93,7 @@ func TestSourcesMergeAndReport(t *testing.T) {
 	if w := srcs["wayback"].(map[string]any); w["count"].(float64) != 4 || w["error"] != nil {
 		t.Errorf("wayback after one 429: %v", w)
 	}
-	if cc := srcs["commoncrawl"].(map[string]any); !strings.Contains(fmt.Sprint(cc["error"]), "rate limited (503)") {
+	if cc := srcs["commoncrawl"].(map[string]any); !strings.Contains(fmt.Sprint(cc["error"]), "failed after 4 tries, 503 Service Unavailable") {
 		t.Errorf("commoncrawl %v", cc)
 	}
 	if summary["degraded"] != true || meta.Status != types.StatusDegraded {

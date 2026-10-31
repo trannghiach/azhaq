@@ -37,3 +37,22 @@ func TestMarkPartialNoneAnswered(t *testing.T) {
 		t.Error("no source answered, so the failure is not partial")
 	}
 }
+
+// An archive that kept failing keeps its tries and the server's words as
+// its reason, and is retryable when the words are a 429, a 5xx or a drop.
+func TestShortErrorKeepsTheTriesOfAnArchive(t *testing.T) {
+	for raw, retry := range map[string]bool{
+		"failed after 4 tries, 429 Too Many Requests":                                 true,
+		"failed after 4 tries, 503 Service Unavailable, Retry-After 1m0s (waited 3s)": true,
+		"failed after 4 tries, dial tcp 127.0.0.1:9: connect: connection refused":     false,
+		"failed after 4 tries, read tcp 10.0.0.1:5->1.2.3.4:443: i/o timeout":         true,
+		"failed after 1 try, 429 Too Many Requests; 3 pages were read before":         true,
+	} {
+		if got := ShortError(raw); got != raw {
+			t.Errorf("%q shortened to %q", raw, got)
+		}
+		if Retryable(raw) != retry {
+			t.Errorf("%q: retryable %v", raw, !retry)
+		}
+	}
+}

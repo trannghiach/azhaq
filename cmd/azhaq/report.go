@@ -12,6 +12,7 @@ import (
 	"github.com/trannghiach/azhaq/engine"
 	"github.com/trannghiach/azhaq/internal/collectors/pathscol"
 	"github.com/trannghiach/azhaq/internal/collectors/portcol"
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/takeover"
@@ -38,6 +39,8 @@ type report struct {
 	Skipped     []engine.Skip    `json:"skipped,omitempty"`
 	Takeover    []takeoverRow    `json:"takeover,omitempty"` // names another party may take over
 	Degraded    bool             `json:"degraded,omitempty"` // a source the run depends on failed (subs); the exit code is not changed
+	Junk        map[string]int   `json:"junk,omitempty"`     // urls: URLs left out as junk, by reason (-raw keeps them)
+	Sources     *sourceHealth    `json:"sources,omitempty"`  // subs and urls: how many sources answered, which failed and why, what each gave
 	Stopped     string           `json:"stopped,omitempty"`  // the limit that stopped the work
 	Resume      string           `json:"resume,omitempty"`
 	Notes       []string         `json:"notes,omitempty"`
@@ -45,7 +48,9 @@ type report struct {
 
 	what   string // the unit of Results: "names", "web services"
 	warned bool   // a note says the results mislead (a role's dead session): exit 3
-	start  time.Time
+	// failOnErrors: -fail-on-errors was given, so no failure is made up for.
+	failOnErrors bool
+	start        time.Time
 }
 
 func newReport(command string) *report {
@@ -96,7 +101,12 @@ func (r *report) finish(asJSON, silent bool) error {
 	case asJSON:
 		raw, _ := json.Marshal(r)
 		fmt.Fprintf(os.Stderr, "%s\n", raw)
-	case silent && r.Exit == exitOK:
+	case silent && r.Exit == exitOK && (r.Sources == nil || r.Sources.failures() == 0):
+		// A source that failed is something that failed: it is said under -silent too.
+		// So is a takeover candidate: a finding, not a note.
+		for _, t := range r.Takeover {
+			fmt.Fprintln(os.Stderr, takeoverLine(t))
+		}
 	default:
 		r.print(os.Stderr)
 	}
@@ -210,6 +220,9 @@ func (r *report) print(w io.Writer) {
 	}
 	for _, n := range r.Next {
 		fmt.Fprintf(w, "  next: %s\n", n)
+	}
+	if r.Sources != nil && r.Sources.failures() > 0 {
+		fmt.Fprintf(w, "  %s\n", r.Sources.line(r.Exit, r.ownFailures(), r.failOnErrors, r.Command == "urls"))
 	}
 	switch r.Exit {
 	case exitPartial:
@@ -385,6 +398,38 @@ func progressMode(quiet, verbose, asJSON bool, forced string) string {
 		return "json"
 	}
 	return "text"
+}
+
+// stillWaiting names the subdomain sources that have not answered, for the
+// progress line: a run held by one (crt.sh on a large domain) says so.
+func stillWaiting() string {
+	ws := subcol.Waiting()
+	if len(ws) == 0 {
+		return ""
+	}
+	var parts []string
+	for i, w := range ws {
+		if i == 3 {
+			parts = append(parts, fmt.Sprintf("%d more", len(ws)-3))
+			break
+		}
+		p := fmt.Sprintf("%s (%s", w.Source, w.Longest.Round(time.Second))
+		if w.Domains > 1 {
+			p += fmt.Sprintf(", %d domains", w.Domains)
+		}
+		parts = append(parts, p+")")
+	}
+	return "; still waiting for " + strings.Join(parts, ", ") + " (-source-timeout bounds each source)"
+}
+
+// takeoverLine is a candidate as -silent prints it on stderr, one per line:
+// [takeover] name -> cname (service, strength).
+func takeoverLine(t takeoverRow) string {
+	line := "[takeover] " + t.Host
+	if t.Target != "" {
+		line += " -> " + t.Target
+	}
+	return line + " (" + t.Service + ", " + t.Strength + ")"
 }
 
 // takeoverRow is a name another party may take over, and why.

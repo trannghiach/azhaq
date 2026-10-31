@@ -81,7 +81,7 @@ Rows of the kinds `domain` (a domain you gave) and `addr` (an address) carry no 
 | kill file | `-kill-file PATH` (default `DB.stop`): once it exists, nothing more is sent, and the run exits 4. Remove it and `azhaq resume`. |
 | pace | `-rate`: requests per second to targets, over all hosts. Chrome's requests too. |
 | fanout failure | A failure about something you did not ask about (a name found on the way). Listed with `"fanout": true`; the exit code stays 0. |
-| partial | One source failed while others answered for the same domain. Listed with `"partial": true`; the exit code stays 0, except for crt.sh (no other source holds as many names, so its failure counts). |
+| partial | One source failed while others answered for the same domain. Listed with `"partial": true`; the exit code stays 0, crt.sh's failure included (it is flaky, and a run whose names came from the other sources should not fail a gate on it). `-fail-on-errors` counts every failure. The summary's `sources` block and its last line say how many sources answered and which failed, so exit 0 is not read as "all answered". |
 | degraded | Every source or archive failed, so an empty answer is not an honest zero. In the `subs` summary, `degraded` is also set when a source in the default set failed while others answered: the names are listed, and the exit code is not changed. |
 | left alone | URLs not requested because a GET there would change something. |
 | takeover candidate | A name whose CNAME points at something gone (a service name anyone may create, a domain nobody holds), or whose front page is a hosting service's page for an unclaimed name. Confirm by hand. |

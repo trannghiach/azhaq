@@ -2,12 +2,16 @@ package subcol
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/answer"
 )
 
 // A source that answers 429 is asked again after the Retry-After it names
@@ -82,6 +86,9 @@ func (t *retryTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		resp, err := t.next.RoundTrip(req)
 		if err != nil || resp.StatusCode != http.StatusTooManyRequests {
+			if err == nil && resp.StatusCode == http.StatusOK {
+				screenAnswer(req, resp)
+			}
 			return resp, err
 		}
 		if th == nil {
@@ -139,4 +146,52 @@ func retryAfter(h string) (time.Duration, bool) {
 
 func withThrottle(ctx context.Context, t *throttle) context.Context {
 	return context.WithValue(ctx, throttleKey{}, t)
+}
+
+type answerKey struct{}
+
+// answerLog is what Run learns about a source's 200 answers that were
+// errors (a quota page, a JSON error): a source that gave no names after
+// one has failed, not found nothing.
+type answerLog struct {
+	mu   sync.Mutex
+	what []string
+}
+
+func (l *answerLog) add(s string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(l.what) < 3 {
+		l.what = append(l.what, s)
+	}
+}
+
+func (l *answerLog) text() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return strings.Join(l.what, "; ")
+}
+
+// screenAnswer reads the start of a 200 answer and logs it when it is an
+// error, for the source the request belongs to. The body is still the
+// source's to read, whole.
+func screenAnswer(req *http.Request, resp *http.Response) {
+	l, _ := req.Context().Value(answerKey{}).(*answerLog)
+	if l == nil || resp.Body == nil || resp.Body == http.NoBody {
+		return
+	}
+	body, why := answer.Screen(resp.Body)
+	resp.Body = body
+	if why != "" {
+		l.add(fmt.Sprintf("%s answered 200 with an error, not names: %s", req.URL.Host, why))
+	}
+}
+
+// answeredWithError is what the source's requests were answered with, when
+// an answer was an error page and not data.
+func answeredWithError(ctx context.Context) string {
+	if l, ok := ctx.Value(answerKey{}).(*answerLog); ok {
+		return l.text()
+	}
+	return ""
 }

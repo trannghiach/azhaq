@@ -126,8 +126,16 @@ func pd(newSource func() subscraping.Source, perSec float64) source {
 					}
 				}
 			}
-			if len(errs) > 0 {
+			why := answeredWithError(ctx)
+			switch {
+			case why != "" && len(names) == 0:
+				// The server's words, not the decoder's complaint about them;
+				// an error page has no names: not an honest zero.
+				return nil, errors.New(why)
+			case len(errs) > 0:
 				return names, errors.New(strings.Join(errs, "; "))
+			case why != "":
+				addNote(ctx, why)
 			}
 			return names, nil
 		},
@@ -551,5 +559,11 @@ func getJSON(ctx context.Context, sess *subscraping.Session, name, u string, hea
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s %d", resp.Request.URL.Host, resp.StatusCode)
 	}
-	return json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(into)
+	err = json.NewDecoder(io.LimitReader(resp.Body, 64<<20)).Decode(into)
+	if err != nil {
+		if why := answeredWithError(ctx); why != "" {
+			return errors.New(why) // the server's words, not a decoder's
+		}
+	}
+	return err
 }

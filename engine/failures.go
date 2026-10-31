@@ -233,6 +233,9 @@ func sourceTarget(p map[string]any, fallback string) string {
 
 var (
 	statusRE = regexp.MustCompile(`(?i)(?:status(?: code)?|http)[ :=]*([45]\d\d)\b`)
+	// triedRE is an archive request that kept failing: "failed after 4 tries, 429 Too Many Requests".
+	triedRE  = regexp.MustCompile(`^failed after \d+ tr(?:y|ies), (.*)$`)
+	leadHTTP = regexp.MustCompile(`^(429|5\d\d)\b`)
 	quotedRE = regexp.MustCompile(`"[^"]*"`)
 )
 
@@ -241,6 +244,12 @@ var (
 func ShortError(s string) string {
 	l := strings.ToLower(s)
 	switch {
+	case triedRE.MatchString(s) && !strings.Contains(s, types.CutShort):
+		// What the tries were and what the server said is the reason.
+		if len(s) > 160 {
+			s = s[:160] + "…"
+		}
+		return s
 	case strings.Contains(s, types.CutShort):
 		return types.CutShort
 	case strings.Contains(l, "timeout") || strings.Contains(l, "deadline exceeded") || strings.Contains(l, "timed out"):
@@ -276,6 +285,9 @@ func ShortError(s string) string {
 // Retryable: a later attempt may well succeed (timeouts, dropped
 // connections, rate limits, server errors).
 func Retryable(s string) bool {
+	if m := triedRE.FindStringSubmatch(s); m != nil {
+		return leadHTTP.MatchString(m[1]) || Retryable(m[1])
+	}
 	switch e := ShortError(s); {
 	case e == "timeout", e == types.CutShort, e == "connection reset", e == "connection closed (EOF)", strings.HasPrefix(e, "HTTP 429"):
 		return true

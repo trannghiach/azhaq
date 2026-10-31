@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -274,6 +275,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 	throttles := make([]throttle, len(run))
 	partials := make([]partialNames, len(run))
 	notes := make([]rowNote, len(run))
+	answers := make([]answerLog, len(run))
 	h := newHinter(ctx, domain, c.opts.MaxNames)
 	// A padding source's guesses are resolved as its rounds arrive; that
 	// needs resolvers and a reason: a source that guesses, or the history.
@@ -305,6 +307,7 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 		sctx = context.WithValue(sctx, partialKey{}, &partials[i])
 		sctx = withThrottle(sctx, &throttles[i])
 		sctx = context.WithValue(sctx, noteKey{}, &notes[i])
+		sctx = context.WithValue(sctx, answerKey{}, &answers[i])
 		if chk != nil {
 			sctx = context.WithValue(sctx, checkerKey{}, chk)
 		}
@@ -321,7 +324,9 @@ func (c *Collector) Run(ctx context.Context, seed types.Seed, emit func(types.Ob
 			}
 			done := timing.Start(ctx, "source."+s.name)
 			t0 := time.Now()
+			answered := begin(s.name, domain)
 			names, err := s.collect(sctx, domain, c.opts.Keys[s.name], sess)
+			answered()
 			done()
 			if !s.sampler && sctx.Err() != nil && ctx.Err() == nil && (err == nil || contextEnded(err)) {
 				err = errSource // the names it gave by then are kept
@@ -722,8 +727,14 @@ func contextEnded(err error) bool {
 }
 
 func shorten(s string) string {
+	s = keyParam.ReplaceAllString(s, "${1}…")
 	if len(s) > 200 {
 		return s[:200] + "…"
 	}
 	return s
 }
+
+// keyParam is a credential in a URL's query: sources that take their key
+// there (Shodan's ?key=, hackertarget's &apikey=) name the URL in an error,
+// and the error goes to the summary and the workspace.
+var keyParam = regexp.MustCompile(`(?i)([?&](?:api[_-]?key|apikey|key|token|access_token|auth|password|secret)=)[^&\s"')]+`)

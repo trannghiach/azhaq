@@ -244,7 +244,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	urlsTo := fs.String("urls-to", "", "only captures up to this time, in the same form")
 	urlsBlacklist := fs.String("urls-blacklist", "", "leave out URLs whose path ends in these extensions, comma-separated (png,jpg,svg)")
 	urlsFP := fs.Bool("urls-fp", false, "keep one URL for each host and path, dropping the variants that differ by parameters")
-	urlsRetries := fs.Int("urls-retries", 3, "times an archive request is asked again after a 429, 503 or network error (waits of 2, 5, then 10 s, or the Retry-After); 0 makes the first refusal final")
+	urlsRetries := fs.Int("urls-retries", 0, "times an archive request is asked again after a 429, 503 or network error, after its Retry-After (seconds or a date, however long) or 2, 5, 10, 20, then 30 s; 0 makes the first refusal final (default: a 429 or 503 is asked again until the archive's time, -urls-timeout, or the run's is spent, a network error 3 times; a wait longer than the time left ends the request at once, with the reason)")
 	urlsPages := fs.Int("urls-pages", 50, "pages read from each archive for a domain (0: no cap); an archive that stops at the cap says so in the summary")
 	urlsPause := fs.Duration("urls-pause", 0, "pause between the requests of one archive (default: 1 s for the Wayback Machine and Common Crawl, 0.5 s for OTX, 2 s for urlscan.io; 0 for none)")
 	urlsProxy := fs.String("urls-proxy", "", "send the archive requests through this proxy: http://HOST:PORT, https:// or socks5://")
@@ -908,7 +908,7 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 	}
 	opts.URLs = urlcol.Options{Keys: urlKeys, Out: *urlsOut, OutFrom: *urlsFrom, Timeout: *urlsTimeout,
 		Apex: !*urlsSubs, Only: splitList(*urlsSources), FirstPath: *urlsFP, Blacklist: splitList(*urlsBlacklist), Proxy: *urlsProxy,
-		MaxPages: *urlsPages, MaxURLs: *urlsMax, Raw: *urlsRaw, OnURL: urlSink, Retries: urlsRetries}
+		MaxPages: *urlsPages, MaxURLs: *urlsMax, Raw: *urlsRaw, OnURL: urlSink}
 	if *urlsPages == 0 {
 		opts.URLs.MaxPages = math.MaxInt32
 	}
@@ -919,8 +919,11 @@ func mapTarget(args []string, rep *report, out *runOut) (runErr error) {
 		return usagef("-urls-retries %d: give 0 or more", *urlsRetries)
 	}
 	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "urls-pause" {
+		switch f.Name {
+		case "urls-pause":
 			opts.URLs.Pause = urlsPause
+		case "urls-retries":
+			opts.URLs.Retries = urlsRetries // given: a count; not given: until the time is spent
 		}
 	})
 	opts.URLs.Filters = urlcol.Filters{MatchStatus: splitList(*urlsMC), DropStatus: splitList(*urlsFC), MatchMime: splitList(*urlsMT), DropMime: splitList(*urlsFT), From: *urlsFrom2, To: *urlsTo}

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/trannghiach/azhaq/internal/collectors/subcol"
 )
 
 // stderrProgressEvery is how often a command that is still working says so on
@@ -89,19 +91,21 @@ func (c progressCfg) line(prev, cur progressSnap) string {
 	if by, in, ok := c.ends(prev, cur); ok {
 		fmt.Fprintf(&b, "; %s ends it in about %s", by, aboutDuration(in))
 	}
+	b.WriteString(stillWaiting())
 	return b.String()
 }
 
 // progressObject is a progress line for -json.
 type progressObject struct {
-	Type       string  `json:"type"`
-	Seconds    int     `json:"seconds"`
-	Requests   int64   `json:"requests"`
-	PerSecond  float64 `json:"requests_per_second"`
-	TasksDone  int     `json:"tasks_done"`
-	TasksLeft  *int    `json:"tasks_left,omitempty"`
-	EndsBy     string  `json:"ends_by,omitempty"`
-	EndsInSecs *int    `json:"ends_in_seconds,omitempty"`
+	Type       string   `json:"type"`
+	Seconds    int      `json:"seconds"`
+	Requests   int64    `json:"requests"`
+	PerSecond  float64  `json:"requests_per_second"`
+	TasksDone  int      `json:"tasks_done"`
+	TasksLeft  *int     `json:"tasks_left,omitempty"`
+	EndsBy     string   `json:"ends_by,omitempty"`
+	EndsInSecs *int     `json:"ends_in_seconds,omitempty"`
+	WaitingFor []string `json:"waiting_for,omitempty"` // subdomain sources not answered yet
 }
 
 // object is the same line for -json.
@@ -114,6 +118,9 @@ func (c progressCfg) object(prev, cur progressSnap) progressObject {
 	if by, in, ok := c.ends(prev, cur); ok {
 		secs := int(in.Seconds())
 		o.EndsBy, o.EndsInSecs = by, &secs
+	}
+	for _, w := range subcol.Waiting() {
+		o.WaitingFor = append(o.WaitingFor, w.Source)
 	}
 	return o
 }
