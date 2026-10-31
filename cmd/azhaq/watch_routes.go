@@ -35,6 +35,8 @@ type routeInfo struct {
 	fields      map[string]map[string]string // method → lower-cased name → name, from operations
 	script      string
 	held        bool // a script or an API description names it
+	stated      bool // a call or a description gives it a method
+	answered    bool // the run's own request got an answer
 }
 
 // routeTable reads the routes of the store's selected run, the way the
@@ -99,9 +101,8 @@ func routesOf(rows []engine.MapEntry) (map[string]*routeInfo, map[string]bool) {
 				ri.fields[m][strings.ToLower(n)] = n
 			}
 		}
-		if len(ri.methods) == 0 {
-			ri.methods["GET"] = true // a route only fetched: a GET
-		}
+		ri.stated = ri.stated || scripted || len(r.Methods) > 0
+		ri.answered = ri.answered || r.Coverage == "visited"
 		if scripted || len(r.Found) > 0 {
 			ri.held = true
 		}
@@ -109,7 +110,26 @@ func routesOf(rows []engine.MapEntry) (map[string]*routeInfo, map[string]bool) {
 			ri.script = r.Found[0].Script
 		}
 	}
+	for key, ri := range routes {
+		switch {
+		case len(ri.methods) == 0 && ri.answered:
+			ri.methods["GET"] = true // the run's own GET got an answer
+		case !ri.stated && !ri.answered && extended(key, routes):
+			delete(routes, key) // a base the other routes are built on, named by a string and called by nothing
+		}
+	}
 	return routes, all
+}
+
+// extended says whether another route is under key's path (key is host and
+// path): /api/admin/users under /api/admin/users/{}/reset.
+func extended(key string, routes map[string]*routeInfo) bool {
+	for k := range routes {
+		if strings.HasPrefix(k, key+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // routeKey is a row's identity, host and path template with placeholder
@@ -265,7 +285,11 @@ func (c routeChange) text(withHost bool) string {
 	var b strings.Builder
 	switch c.Kind {
 	case "new":
-		b.WriteString("+ " + strings.Join(c.MethodsAdded, ",") + " " + route)
+		b.WriteString("+ ")
+		if len(c.MethodsAdded) > 0 {
+			b.WriteString(strings.Join(c.MethodsAdded, ",") + " ") // a route only a string names has none
+		}
+		b.WriteString(route)
 		if len(c.FieldsAdded) > 0 {
 			b.WriteString(fields(c.FieldsAdded))
 		}

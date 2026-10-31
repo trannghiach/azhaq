@@ -197,3 +197,94 @@ func TestWatchRoutesReachTheHook(t *testing.T) {
 		t.Errorf("hook posts %+v", posts)
 	}
 }
+
+// A deploy that renames a placeholder, and adds a route built from a
+// prefix with a body sent by PATCH: only the new route is reported. The
+// prefix is no route, the rename is no change (routes and URLs), and the
+// body's field is the route's.
+func TestWatchIgnoresRenamesAndPrefixesAndReadsBodies(t *testing.T) {
+	var mu sync.Mutex
+	deploy := 1
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.URL.Path == "/":
+			w.Header().Set("Content-Type", "text/html")
+			w.Write([]byte(`<html><title>app</title><script src="/main.js"></script></html>`))
+		case r.URL.Path == "/main.js":
+			w.Header().Set("Content-Type", "application/javascript")
+			if deploy == 1 {
+				w.Write([]byte(`function o(id){return fetch("/api/orders/" + id)}`))
+				return
+			}
+			w.Write([]byte(`function o(orderId){return fetch("/api/orders/" + orderId)}
+function lv(userId, level){
+  const payload = {level: level};
+  return fetch("/api/admin/users/" + userId + "/level", {method: "PATCH", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)});
+}
+function rs(userId){return fetch("/api/admin/users/" + userId + "/reset", {method: "POST"})}`))
+		case strings.HasPrefix(r.URL.Path, "/api/"):
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"ok":true}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer site.Close()
+	db := filepath.Join(t.TempDir(), "ws.db")
+	watch := func() changes {
+		out := capture(t, func() error {
+			return cmdWatch([]string{"-db", db, "-json", "--", "-url", site.URL + "/", "-skip", "azhaq-paths"})
+		})
+		var ch changes
+		if err := json.Unmarshal([]byte(out), &ch); err != nil {
+			t.Fatalf("%v: %q", err, out)
+		}
+		return ch
+	}
+	watch()
+	mu.Lock()
+	deploy = 2
+	mu.Unlock()
+	ch := watch()
+	lines := routeLines(ch.Routes)
+	want := []string{
+		"+ PATCH /api/admin/users/{userId}/level {level}  (main.js)",
+		"+ POST /api/admin/users/{userId}/reset  (main.js)",
+	}
+	if strings.Join(lines, "\n") != strings.Join(want, "\n") {
+		t.Errorf("routes\n%s\nwant\n%s", strings.Join(lines, "\n"), strings.Join(want, "\n"))
+	}
+	for _, r := range ch.Routes {
+		if strings.HasSuffix(r.Route, "/api/admin/users") || r.Route == "/api/orders/{id}" || r.Route == "/api/orders/{orderId}" {
+			t.Errorf("a prefix or a renamed placeholder is reported: %+v", r)
+		}
+	}
+	if len(ch.URLs)+len(ch.GoneURLs) != 0 {
+		t.Errorf("a placeholder renamed, and routes reported above, are no URL changes: %v %v", ch.URLs, ch.GoneURLs)
+	}
+	if again := watch(); again.any() {
+		t.Errorf("an unchanged run reported %+v", again)
+	}
+}
+
+// A route a script only names (no call, no description) claims no method,
+// and a base other routes extend is no route.
+func TestRoutesNamedOnlyClaimNoMethodAndBasesAreDropped(t *testing.T) {
+	named := engine.MapEntry{Entity: types.Entity{Type: types.TypeURL, Key: "http://h/api/ping"}, Role: "api", Found: []webextract.Site{{Script: "http://h/main.js"}}}
+	base := engine.MapEntry{Entity: types.Entity{Type: types.TypeURL, Key: "http://h/api/admin/users"}, Role: "api", Coverage: "catchall", Found: []webextract.Site{{Script: "http://h/main.js"}}}
+	call := routeRow("http://h/api/admin/users/{userId}/reset", "", []string{"POST"}, js("POST", nil, nil))
+	got := routeLines(changesOf(nil, []engine.MapEntry{named, base, call}))
+	want := []string{"+ POST /api/admin/users/{userId}/reset  (main.js)", "+ /api/ping  (main.js)"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+	// What the run's own GET answered is a GET, and a base it answered stays.
+	answered := engine.MapEntry{Entity: types.Entity{Type: types.TypeURL, Key: "http://h/api/users"}, Role: "api", Coverage: "visited", Status: 200, Found: []webextract.Site{{Script: "http://h/main.js"}}}
+	child := routeRow("http://h/api/users/{id}", "", []string{"GET"}, js("GET", nil, nil))
+	got = routeLines(changesOf(nil, []engine.MapEntry{answered, child}))
+	if want := []string{"+ GET /api/users  (main.js)", "+ GET /api/users/{id}  (main.js)"}; strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("a route the run's GET answered is a GET, and a base it answered stays: %q", got)
+	}
+}
