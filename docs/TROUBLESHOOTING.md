@@ -37,8 +37,8 @@ Entries are grouped by what you were doing:
 
 **Why:** Its name says a GET there could change something. The URL is listed under "left alone" with the word. Two cases differ:
 
-- A directory named after a verb, such as `/vulnerabilities/exec/` or `/admin/user/add/`, is a section with a form. It is requested.
-- A URL under an API path, such as `/api/jobs/run/`, is not requested.
+- A directory named `exec`, `execute`, `run`, `import`, `create`, `add`, `generate`, `send`, `start` or `checkout`, such as `/vulnerabilities/exec/` or `/admin/user/add/`, is a section with a form. It is requested.
+- The same directory under an API path, such as `/api/jobs/run/`, is not requested: it is an endpoint.
 
 **Fix:** You accept the side effect, or you do not ask.
 
@@ -76,7 +76,7 @@ Entries are grouped by what you were doing:
 
 ### The run stopped at once with exit 4 and a kill file
 
-**Why:** The file `W.stop` exists, from an earlier stop too. The file is the one `-kill-file` names. The `stopped` line says `the kill switch`. Nothing more is sent while the file exists.
+**Why:** The kill file exists, perhaps from an earlier stop. By default it is `W.stop`, next to the workspace `W`. `-kill-file` names another file in its place. The `stopped` line says `the kill switch`. Nothing more is sent while the file exists.
 
 In `roles` the file is `roles.stop` in the `-dir`. There it stops the runs of the roles, and not the replay after them.
 
@@ -84,7 +84,7 @@ In `roles` the file is `roles.stop` in the `-dir`. There it stops the runs of th
 
 ### Where did my database go?
 
-**Why:** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or in `$AZHAQ_DB`. It remembers the file in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
+**Why:** `run` without `-db` writes `azhaq-TIME-PID.db` in the current directory, or uses the file `$AZHAQ_DB` names. It remembers the file in `.azhaq-last` for `query` and `show`. Drop-ins (`subs`, `probe`, `dirs`, …) without `-db` use a temporary one, gone when they end.
 
 **Fix:** Give a drop-in `-db FILE` to keep its results.
 
