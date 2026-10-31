@@ -1,0 +1,58 @@
+name: range-smoke
+
+# Starts the environments of .github/ci/range/catalog.json in batches on
+# runners (four, each with a quarter of the catalog), checks every readiness
+# probe and records the seconds to answer, the memory after start and the
+# image size. Each shard's result goes, encrypted to the maintainer's age
+# key, to the ci-results branch under range-smoke/NAME/. After fetch.sh:
+#   python3 .github/ci/range/smoke_apply.py DIR/smoke-*.json
+# drops what failed from the catalog. Push a tag range-smoke-NAME; its
+# message may restrict the run: "only=jenkins--CVE-2018-1000861,nexus--CVE-2024-4956".
+on:
+  push:
+    tags: ["range-smoke-*"]
+
+permissions:
+  contents: write
+
+env:
+  AGE_RECIPIENT: age10llepsf6tflh3wjlfu8awk203049vfsn5vxw9uc3y23qlq9dhy7sm20pex
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+      - name: packages
+        run: sudo apt-get update -q && sudo apt-get install -y -q age
+      - name: free disk
+        run: .github/ci/range/free-disk.sh
+      - name: compose version
+        # The overrides use `ports: !override`, which needs Compose 2.24.
+        run: |
+          v=$(docker compose version --short)
+          echo "docker compose $v"
+          printf '%s\n2.24.0\n' "${v#v}" | sort -V -C -r || { echo "::error::Docker Compose $v is older than 2.24"; exit 1; }
+      - name: vulhub
+        run: .github/ci/range/fetch-vulhub.sh "$RUNNER_TEMP/vulhub"
+      - name: smoke
+        run: |
+          git fetch -q --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          msg=$(git for-each-ref --format='%(contents:subject)' "refs/tags/$GITHUB_REF_NAME")
+          only=$(echo "$msg" | sed -n 's/.*only=\([A-Za-z0-9._,-]*\).*/\1/p')
+          python3 .github/ci/range/smoke.py --vulhub "$RUNNER_TEMP/vulhub" --shard "${{ matrix.shard }}/4" ${only:+--only "$only"} --out "$RUNNER_TEMP/smoke-${{ matrix.shard }}.json"
+      - name: publish
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          f="$RUNNER_TEMP/smoke-${{ matrix.shard }}"
+          [ -s "$f.json" ] || { echo "::warning title=range-smoke::no result for shard ${{ matrix.shard }}"; exit 0; }
+          tar czf "$f.tgz" -C "$RUNNER_TEMP" "smoke-${{ matrix.shard }}.json"
+          age -r "$AGE_RECIPIENT" -o "$f.tgz.age" "$f.tgz"
+          .github/ci/publish.sh "range-smoke/$GITHUB_REF_NAME" "$f.tgz.age"
