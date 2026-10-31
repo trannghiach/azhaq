@@ -11,35 +11,131 @@ azhaq crawl -u URL | -l FILE | stdin  [-d N] [-fs rdn|fqdn|dn|REGEX] [-cs RE] [-
 ## Examples
 
 ```
+# Crawl three link levels deep, URLs only
 azhaq crawl -u https://app.example.com/ -d 3 -silent
+
+# katana's JSON lines, for tools that read them
 azhaq crawl -u https://app.example.com/ -jsonl > crawl.jsonl
+
+# Stay on the registrable domain, list URLs found outside it, print two fields, 5 requests a second
 azhaq crawl -u https://app.example.com/ -fs rdn -do -f rdn,path -rl 5
+
+# The map's rows, with the strings kept out of the URLs
 azhaq crawl -u https://app.example.com/ -json -rejected
 ```
 
+## What it does
+
+1. Starts from the URLs you give and follows links to the depth `-d`: 3 link levels below the start URL by default, as katana does.
+2. Reads forms, scripts and API descriptions for more URLs and routes. Library scripts are not read for routes.
+3. Asks only what a crawler does. The built-in path checks of `run` are off unless you add `-sweep`.
+4. Lists every page it asked and every URL it found, each distinct URL once.
+5. Lists routes that scripts call with POST, PUT or another method. Their GET may answer 404 or 405.
+6. Never drops links without a word. When a limit stops the crawl, it exits 4 and `azhaq resume` continues it.
+
 ## Output
 
-One URL per line (pages, scripts and stylesheets; -assets adds images, fonts and media); -jsonl: katana's {"request","response"} lines; -json: {"url","coverage","role","status","methods","params","forms","tech"} (routes a script calls with POST are listed, and their GET may answer 404 or 405: -json has methods, -ot '{{method}} {{url}}' prints them); -rejected adds the strings kept out of the URLs, with the reason.
+`crawl` prints one URL per line, as katana does: pages, scripts and stylesheets. `-assets` adds images, fonts and media. [What is listed](#what-is-listed) says what that includes.
 
-`url` and the map row's fields (`coverage`, `role`, `status`, `methods`, `params`, `forms`, `found_in`, `tech` on a page, and for a view or a socket `guard`, `protocol`, `namespace`). Views (`client-route`) and sockets (`websocket`) are listed with `-json` only, as routes with a parameter are: no GET gets them. `-jsonl` prints katana's lines instead, and `-f`, `-ot` and `-sf` its field output ([below](#output)).
-
-`crawl` prints one URL per line, as katana does: every page it asked and every URL it found, each distinct URL once, a link or a script's string with its query (`/catalog?category=Gin`, `/item?id=7`) as its own line. `-per-template N` limits how many URLs of one template (`/item?id={n}`) are asked, not how many are listed. Every script and stylesheet a page loads or a script imports is listed, whether it was fetched or only found, as katana lists them (`/main.js`, `/styles.css`, a lazy `chunk-*.js`), when it is in the crawl's scope. Lines of katana's default list are left out as there: images, fonts, archives, media, `.pdf`, `.txt`, `.map` (`-ndef` keeps them, `-ef php,bak` adds to the list, `-em php,html` lists only those, `none` for URLs without one, and `-mr` and `-fr` match the printed URL by regex). `-assets` brings back the images, fonts and media a page loads, and lists the source maps and build manifests azhaq reads, which no page names. These filters limit what is printed, not what is crawled. `-json` is the map's rows and is not cut by the extension list (its script and stylesheet rows are there by default, an image's with `-assets`). `run`'s map lists every row, scripts and images included.
-
-Routes a script calls with POST, PUT or another method are listed too, as katana lists them (`/snippets/fixes`, `/logger`). They are not pages: a GET may answer 404 or 405. `-json` rows carry `methods` (`["POST"]`) and a `proof` (`GET answers 404; called with POST`). In plain output `-ot '{{method}} {{url}}'` or `-f method,url` prints the methods, one line for each method of a route (`GET` for a page no script calls another way). A string a script only names, with no call, is listed with `proof` `GET answers 404; found only in scripts, method unknown` when a GET fails. The summary counts both kinds of listed URL and says where to look. Library scripts (`react`, `jquery`, `angular`, also under a versioned name such as `angular_1-7-7.js`) are not read for routes.
+- `-json` prints one object per row, with the map's fields. `-jsonl` prints katana's lines instead.
+- `-rejected` adds the strings that were kept out of the URLs, with the reason.
+- `-f`, `-ot` and `-sf` print katana's field output ([Field output](#field-output)).
 
 | Flag | Output |
 | --- | --- |
-| `-jsonl` (`-j`) | katana's line: `{"timestamp", "request": {"method", "endpoint", "tag", "attribute", "source"}, "response": {"status_code", "technologies", "forms": [{"method", "action", "enctype", "parameters"}], "content_length"}, "error"}`. `tag` and `attribute` say where the URL was read (`img` `srcset`, `header` `link`, `form` `action`, `call`, `js`); `source` is the page. A URL found and not asked has no `response`; a route with other methods has a line for each. `azhaq ingest` reads these lines back. |
-| `-f url,path,…` | the fields katana prints, from the URL: `url path fqdn rdn rurl qurl qpath file ufile key value kv dir udir`, and azhaq's `method` (the methods the route is called with, one line each). `-ot '{{rdn}}{{path}}'` fills a template with them, `-sf key,dir -sfd DIR` writes them to `DIR/SCHEME_HOST_FIELD.txt`, `-lof` lists the field names, `-eof request.tag,tech` leaves fields out of `-json` and `-jsonl`. |
-| `-rejected` | the strings read from scripts and pages and kept out of the URLs: text, `string<TAB>reason`; `-json`, `{"rejected", "reason", "url", "source", "via"}`. `url` is what the string makes against the page. They are never asked. |
-| `-do` | the URLs found outside the crawl's scope, never asked: text, the URL; `-json`, `{"url", "coverage":"out-of-scope", "source", "tag", "attribute"}`. |
-| `-sr` | each answer written to `-srd DIR` (`katana_response`) as `HOST/SHA1.txt` (the URL, the request line, the status line, the headers, the body; `-ob` leaves the body out), with an `index.txt`. |
+| `-json` | One object per row: `url`, `coverage`, `role`, `status`, `methods`, `params`, `forms`, `found_in` and `tech` on a page. See below. |
+| `-jsonl` (`-j`) | katana's lines, with a `request` and a `response`. See [Katana lines](#katana-lines). |
+| `-f url,path,…` | Katana's URL fields, and `method`. See [Field output](#field-output). |
+| `-rejected` | The strings kept out of the URLs, each with its reason. See [Rejected strings](#rejected-strings). |
+| `-do` | The URLs found outside the crawl's scope, never asked. See [Links outside the scope](#links-outside-the-scope). |
+| `-sr` | Each answer, written to `-srd DIR`. See [Saved responses](#saved-responses). |
 
-The summary counts the rejected strings and the links outside the scope, names a host that answered 429 or 503 and what was done about it, says how many POST forms `-submit-forms` sent, and says which POST forms it left alone and why. A crawl never drops links without a word: when `-max-items`, `-max-requests`, `-mdp` or the run's `-timeout` stops it, the run exits 4 and `azhaq resume` continues it.
+The fields of a `-json` row are the map row's. [run](run.md#output) defines them. A view or a socket also has `guard`, `protocol` and `namespace`.
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary of a crawl:
+
+- counts the rejected strings and the links outside the scope;
+- names a host that answered 429 or 503, and what was done about it;
+- counts both kinds of listed URL, and says where to look: routes that scripts call with other methods, and strings that scripts only name;
+- says how many POST forms `-submit-forms` sent, and which POST forms it left alone and why.
+
+A crawl never drops links without a word. When `-max-items`, `-max-requests`, `-mdp` or the run's `-timeout` stops it, the run exits 4 and `azhaq resume` continues it.
+
+## Details
+
+### What is listed
+
+- One URL per line, as katana lists them: every page asked and every URL found, each distinct URL once.
+- A link or a script's string with its query is its own line: `/catalog?category=Gin`, `/item?id=7`.
+- `-per-template N` limits how many URLs of one template (`/item?id={n}`) are asked, not how many are listed.
+- Every script and stylesheet a page loads or a script imports is listed, whether it was fetched or only found. This holds when it is in the crawl's scope. Examples are `/main.js`, `/styles.css` and a lazy `chunk-*.js`.
+- `-json` is the map's rows. The extension list does not cut it. Its script and stylesheet rows are there by default, and an image's with `-assets`.
+- `run`'s map lists every row, scripts and images included.
+- Views (`client-route`) and sockets (`websocket`) are listed with `-json` only, as routes with a parameter are. No GET gets them.
+
+### Filters
+
+These filters limit what is printed, not what is crawled.
+
+- Katana's default list is left out: images, fonts, archives, media, `.pdf`, `.txt` and `.map`.
+- `-ndef` keeps them. `-ef php,bak` adds to the list.
+- `-em php,html` lists only those extensions. `none` stands for URLs without one.
+- `-mr` and `-fr` match the printed URL by regex.
+- `-assets` brings back the images, fonts and media a page loads. It also lists the source maps and build manifests azhaq reads, which no page names.
+
+### Routes called with other methods
+
+- Routes that a script calls with POST, PUT or another method are listed too, as katana lists them: `/snippets/fixes`, `/logger`.
+- They are not pages. A GET may answer 404 or 405.
+- `-json` rows carry `methods` (`["POST"]`) and a `proof`: `GET answers 404; called with POST`.
+- In plain output, `-ot '{{method}} {{url}}'` or `-f method,url` prints the methods. A route gets one line for each method. A page that no script calls another way gets `GET`.
+- A string that a script only names, with no call, is listed when a GET fails. Its `proof` is `GET answers 404; found only in scripts, method unknown`.
+- Library scripts are not read for routes: `react`, `jquery` and `angular`, also under a versioned name such as `angular_1-7-7.js`.
+
+### Katana lines
+
+`-jsonl` (`-j`) prints katana's line:
+
+```json
+{"timestamp", "request": {"method", "endpoint", "tag", "attribute", "source"},
+ "response": {"status_code", "technologies", "forms": [{"method", "action", "enctype", "parameters"}], "content_length"},
+ "error"}
+```
+
+- `tag` and `attribute` say where the URL was read: `img` `srcset`, `header` `link`, `form` `action`, `call`, `js`.
+- `source` is the page.
+- A URL that was found and not asked has no `response`.
+- A route with other methods has a line for each.
+- `azhaq ingest` reads these lines back.
+
+### Field output
+
+- `-f` prints these fields of the URL, as katana does: `url`, `path`, `fqdn`, `rdn`, `rurl`, `qurl`, `qpath`, `file`, `ufile`, `key`, `value`, `kv`, `dir` and `udir`.
+- azhaq adds `method`: the methods the route is called with, one line each.
+- `-ot '{{rdn}}{{path}}'` fills a template with the fields.
+- `-sf key,dir -sfd DIR` writes the fields to `DIR/SCHEME_HOST_FIELD.txt`.
+- `-lof` lists the field names.
+- `-eof request.tag,tech` leaves fields out of `-json` and `-jsonl`.
+
+### Rejected strings
+
+- `-rejected` lists the strings read from scripts and pages and kept out of the URLs. They are never asked.
+- Text output is `string`, a tab, and the reason.
+- `-json` output is `{"rejected", "reason", "url", "source", "via"}`. `url` is what the string makes against the page.
+
+### Links outside the scope
+
+- `-do` lists the URLs found outside the crawl's scope. They are never asked.
+- Text output is the URL.
+- `-json` output is `{"url", "coverage":"out-of-scope", "source", "tag", "attribute"}`.
+
+### Saved responses
+
+- `-sr` writes each answer to `-srd DIR` (`katana_response`) as `HOST/SHA1.txt`.
+- A file holds the URL, the request line, the status line, the headers and the body. `-ob` leaves the body out.
+- `DIR` also gets an `index.txt`.
 
 ## Flags
 

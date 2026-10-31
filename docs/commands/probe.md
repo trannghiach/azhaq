@@ -11,23 +11,108 @@ azhaq probe -u TARGET | -l FILE | stdin  [-p PORTS] [-path P] [-fr] [-mc 200 -ms
 ## Examples
 
 ```
+# Names from subs, live ones only, as JSON
 azhaq subs -d example.com -live | azhaq probe -json
+
+# A list, held to a program's scope, 10 requests a second
 azhaq probe -l hosts.txt -scope hackerone -program security -rate 10
+
+# Several ports, keep 200 and 401 answers that hold "admin", print title and technologies
 azhaq probe -l hosts.txt -p 443,8000-8100 -mc 200,401 -ms 'admin' -title -td
-azhaq probe -l hosts.txt -fr -tls-grab -hash md5 -json   # follow redirects, certificate, body hash
-azhaq probe -l hosts.txt -sr -srd out -irh -irr -json   # keep every response
-azhaq probe -u https://app.example.com -x GET,POST -body 'a=1'   # sends POST: can change data on the target
+
+# Follow redirects, read the certificate, hash the body
+azhaq probe -l hosts.txt -fr -tls-grab -hash md5 -json
+
+# Keep every response
+azhaq probe -l hosts.txt -sr -srd out -irh -irr -json
+
+# Send POST too: this can change data on the target
+azhaq probe -u https://app.example.com -x GET,POST -body 'a=1'
 ```
+
+## What it does
+
+1. Takes targets from `-u`, `-l` or stdin: URLs, hosts, `host:port`, IPs, address ranges or AS numbers.
+2. Asks each name at the ports `-p` names, and prints one line per web service as it answers.
+3. Reads status, title, technologies, CDN, certificate and hashes from the answers. The flags choose which.
+4. Keeps or drops rows with matchers (`-mc`, `-ms`, `-ml`, `-mr`) and filters (`-fc`, `-fs`, `-fl`, `-fe`).
+5. Gives every target a row, a failure or a skip included.
+6. Sends other methods or your own request only when you ask: `-x` adds methods, `-request` sends a request file. Both can change data on the target.
 
 ## Output
 
-One web service per line, as it answers; -json: httpx's fields (url, host, host_ip, port, scheme, status_code, title, tech, tls, hash, …); a target with no answer is a row with failed:true (-probe prints [FAILED])
+One web service per line, as it answers. `-json` prints httpx's fields, one object per line, and the summary as one JSON object on stderr. `-csv` and `-md` use httpx's columns. `-oa FILE` writes the text, JSON, CSV and Markdown forms side by side.
 
-httpx's fields. Always: `timestamp`, `url`, `input` (the target as given), `host` (the name), `host_ip` (the address the request connected to), `port`, `scheme`, `path`, `method`, `status_code`, `content_length`, `words`, `lines`, `time` (a Go duration), `failed`. When present: `a` and `aaaa` (the addresses the name resolved to), `cname`, `resolvers`, `title`, `webserver`, `content_type`, `location`, `tech`, `cdn`, `cdn_name`, `cdn_type`, `favicon`, `favicon_md5`, `favicon_path`, `favicon_url` (with `-favicon`), `final_url` and `chain_status_codes` (with `-fr`), `catchall`. On request: `tls` (`-tls-grab`: `tls_version`, `cipher`, `subject_cn`, `subject_an`, `issuer_cn`, `serial`, `not_before`, `not_after`, `expired`, `self_signed`, `mismatched`, `wildcard_certificate`, `fingerprint_hash`), `hash` (`-hash`: `body_md5`, `header_md5`, …), `jarm_hash`, `body_preview` (`-bp`), `extracts` (`-er`, `-ep`), `asn` (`-asn`: `as_number`, `as_name`, `as_country`, `as_range`, from RIPEstat), `csp`, `body_fqdn`, `body_domains` (`-efqdn`), `websocket`, `http2`, `pipeline`, `vhost`, `sni`, `cpe` (`-cpe`), `wordpress` (`-wp`), `knowledgebase` (`-kb`), `header`, `raw_header` (`-irh`), `request`, `body` (`-irr`; also with `-mdc` and `-fdc`, as httpx), `chain` (`-include-chain`), `stored_response_path` (`-sr`), `screenshot_path` and `screenshot_path_rel` (`-ss`). `status_code`, `content_type`, `content_length`, `title` and `webserver` are one answer's: the first, or with `-fr` the last, and `chain_status_codes` lists the statuses of the chain. A target that got no answer (a name that does not resolve, a closed port) is a row with `failed: true` and an `error`, and the summary counts it under `without an answer`; every target given ends as a row, a failure or a skip, and one that resolved and got neither is listed as failed, `no answer and no failure recorded`. Each input line has its own row, whatever else was given: `https://h/`, `h` and `h:443` that reach one page are three rows (one request, the same answer, each row's `input` its own line), never one answer and a `no answer` for the others; a line given twice is one row. Matchers and filters leave rows out and the summary says how many. `-csv` and `-md` use httpx's columns; `-oa FILE` writes the text, JSON, CSV and Markdown forms side by side.
+A target with no answer is a row with `failed: true` (`-probe` prints `[FAILED]`). See [Targets with no answer](#targets-with-no-answer).
+
+Always present:
+
+| Field | Meaning |
+| --- | --- |
+| `input` | The target as given. |
+| `host` | The name. |
+| `host_ip` | The address the request connected to. |
+| `time` | How long the request took, as a Go duration. |
+| `timestamp`, `url`, `port`, `scheme`, `path`, `method`, `status_code`, `content_length`, `words`, `lines`, `failed` | As httpx. |
+
+Present when there is something to say:
+
+| Field | Meaning |
+| --- | --- |
+| `a`, `aaaa` | The addresses the name resolved to. |
+| `cname`, `resolvers`, `title`, `webserver`, `content_type`, `location`, `tech`, `cdn`, `cdn_name`, `cdn_type`, `catchall` | As httpx. |
+| `favicon`, `favicon_md5`, `favicon_path`, `favicon_url` | With `-favicon`. |
+| `final_url`, `chain_status_codes` | With `-fr`. |
+
+On request:
+
+| Field | With | Meaning |
+| --- | --- | --- |
+| `tls` | `-tls-grab` | `tls_version`, `cipher`, `subject_cn`, `subject_an`, `issuer_cn`, `serial`, `not_before`, `not_after`, `expired`, `self_signed`, `mismatched`, `wildcard_certificate`, `fingerprint_hash`. |
+| `hash` | `-hash` | `body_md5`, `header_md5`, … |
+| `jarm_hash` | `-jarm` | The JARM fingerprint of a TLS server. |
+| `body_preview` | `-bp` | The first characters of the body. |
+| `extracts` | `-er`, `-ep` | What the regex finds. |
+| `asn` | `-asn` | `as_number`, `as_name`, `as_country`, `as_range`, from RIPEstat. |
+| `csp`, `body_fqdn`, `body_domains` | `-efqdn` | The names a page and its policy name. |
+| `websocket` | `-websocket` | Set for a server that speaks it. |
+| `http2` | `-http2` | Whether the server speaks HTTP/2. |
+| `pipeline` | `-pipeline` | Whether the server answers pipelined requests. |
+| `vhost` | `-vhost` | A virtual host. |
+| `sni` | `-sni` | The TLS server name asked for. |
+| `cpe` | `-cpe` | Products, as CPE. |
+| `wordpress` | `-wp` | WordPress plugins and themes. |
+| `knowledgebase` | `-kb` | The kind of page. |
+| `header`, `raw_header` | `-irh` | The response headers. |
+| `request`, `body` | `-irr` | The request and the response. `body` is also set with `-mdc` and `-fdc`, as httpx does. |
+| `chain` | `-include-chain` | Each hop of a followed redirect. |
+| `stored_response_path` | `-sr` | Where the response is stored. |
+| `screenshot_path`, `screenshot_path_rel` | `-ss` | Where the screenshot is saved. |
 
 ## Summary and exit codes
 
-The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes).
+The summary and the exit codes are the shared ones: see [OUTPUT.md](../OUTPUT.md#exit-codes). The summary counts the targets that got no answer under `without an answer`, and says how many rows the matchers and filters left out.
+
+## Details
+
+### One answer's fields
+
+- `status_code`, `content_type`, `content_length`, `title` and `webserver` are one answer's: the first, or with `-fr` the last.
+- `chain_status_codes` lists the statuses of the whole chain.
+
+### Targets with no answer
+
+- A target that got no answer, such as a name that does not resolve or a closed port, is a row with `failed: true` and an `error`.
+- The summary counts it under `without an answer`.
+- Every target given ends as a row, a failure or a skip.
+- A target that resolved and got neither an answer nor a recorded failure is listed as failed, with `no answer and no failure recorded`.
+
+### One row for each input line
+
+- Each input line has its own row, whatever else was given.
+- `https://h/`, `h` and `h:443` that reach one page are three rows. There is one request and the same answer. Each row's `input` is its own line.
+- It is never one answer and a `no answer` for the others.
+- A line given twice is one row.
 
 ## Flags
 
