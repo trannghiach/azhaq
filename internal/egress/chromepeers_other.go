@@ -1,6 +1,6 @@
 //go:build !linux
 
-package browser
+package egress
 
 import "net"
 

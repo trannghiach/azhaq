@@ -1,4 +1,4 @@
-package browser
+package egress
 
 import (
 	"bufio"
@@ -19,24 +19,23 @@ import (
 
 	"golang.org/x/net/proxy"
 
-	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/ledger"
 )
 
-// guard is a SOCKS5 proxy on loopback that Chrome makes every connection
+// ChromeGuard is a SOCKS5 proxy on loopback that Chrome makes every connection
 // through. The Fetch domain pauses requests, not connections: a WebSocket,
 // a preconnect or Chrome's own services (updates, sign-in, time) reaching
 // for a host outside the scope stop here instead. Chrome cannot
 // authenticate to a SOCKS proxy: on Linux the guard relays only for the
 // processes of the Chrome it was started for (peers), elsewhere for any
 // local process, to hosts in the scope.
-type guard struct {
+type ChromeGuard struct {
 	ln      net.Listener
 	allowed func(host string) bool
 	peers   peers
 	ctx     context.Context
 	stop    context.CancelFunc
-	via     *url.URL // the proxy for Chrome's connections when it is not the environment's
+	via     *url.URL // the proxy for Chrome's connections when it is not the environment's (SetProxy)
 
 	mu     sync.Mutex
 	closed bool
@@ -44,8 +43,12 @@ type guard struct {
 	denied map[string]int // host → connections refused for being outside the scope
 }
 
+// SetProxy sends Chrome's connections through p (-chrome-proxy); nil: -proxy's,
+// else the environment's.
+func (g *ChromeGuard) SetProxy(p *url.URL) { g.via = p }
+
 // refuse counts a connection to a host outside the scope.
-func (g *guard) refuse(host string) {
+func (g *ChromeGuard) refuse(host string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.denied == nil {
@@ -56,7 +59,7 @@ func (g *guard) refuse(host string) {
 
 // Denied is how many connections Chrome opened to hosts outside the scope,
 // all refused, and the hosts, sorted.
-func (g *guard) Denied() (n int, hosts []string) {
+func (g *ChromeGuard) Denied() (n int, hosts []string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for h, c := range g.denied {
@@ -67,24 +70,26 @@ func (g *guard) Denied() (n int, hosts []string) {
 	return n, hosts
 }
 
-func newGuard(allowed func(string) bool) (*guard, error) {
+// NewChromeGuard listens on loopback for Chrome. allowed says which hosts its
+// connections may go to.
+func NewChromeGuard(allowed func(string) bool) (*ChromeGuard, error) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, err
 	}
-	g := &guard{ln: ln, allowed: allowed}
+	g := &ChromeGuard{ln: ln, allowed: allowed}
 	g.ctx, g.stop = context.WithCancel(context.Background())
 	go g.serve()
 	return g, nil
 }
 
-func (g *guard) addr() string { return g.ln.Addr().String() }
+func (g *ChromeGuard) Addr() string { return g.ln.Addr().String() }
 
-// chrome names the browser process whose processes the guard relays for.
-func (g *guard) chrome(pid int) { g.peers.set(pid) }
+// Chrome names the browser process whose processes the guard relays for.
+func (g *ChromeGuard) Chrome(pid int) { g.peers.set(pid) }
 
-// close stops the guard and the connections it relays, and waits for them.
-func (g *guard) close() {
+// Close stops the guard and the connections it relays, and waits for them.
+func (g *ChromeGuard) Close() {
 	g.mu.Lock()
 	g.closed = true
 	g.mu.Unlock()
@@ -93,7 +98,7 @@ func (g *guard) close() {
 	g.wg.Wait()
 }
 
-func (g *guard) serve() {
+func (g *ChromeGuard) serve() {
 	for {
 		c, err := g.ln.Accept()
 		if err != nil {
@@ -124,7 +129,7 @@ const (
 	socksNoAddress  = 8
 )
 
-func (g *guard) handle(c net.Conn) {
+func (g *ChromeGuard) handle(c net.Conn) {
 	defer c.Close()
 	if !g.peers.owns(c) {
 		return // not Chrome's
@@ -199,11 +204,11 @@ func (g *guard) handle(c net.Conn) {
 		return
 	}
 	if ws {
-		if egress.Take() != nil {
+		if Take() != nil {
 			return // the budget is spent
 		}
-		if egress.Pace(g.ctx) != nil {
-			egress.Refund() // never sent
+		if Pace(g.ctx) != nil {
+			Refund() // never sent
 			return
 		}
 	}
@@ -214,7 +219,7 @@ func (g *guard) handle(c net.Conn) {
 	p, err := upstream(scheme, addr, g.via)
 	if err != nil {
 		if ws {
-			egress.Refund()
+			Refund()
 		}
 		return
 	}
@@ -229,7 +234,7 @@ func (g *guard) handle(c net.Conn) {
 	cancel()
 	if err != nil {
 		if ws {
-			egress.Refund()
+			Refund()
 		}
 		return
 	}
@@ -398,14 +403,14 @@ func upstream(scheme, addr string, via *url.URL) (*url.URL, error) {
 	if via != nil {
 		return via, nil
 	}
-	return egress.ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
+	return ProxyFor(&http.Request{URL: &url.URL{Scheme: scheme, Host: addr}})
 }
 
 // dialOut connects to addr through the proxy p (Burp, a SOCKS tunnel), or
 // directly when there is none, a name through the run's resolver.
 func dialOut(ctx context.Context, p *url.URL, addr string) (net.Conn, error) {
 	if p == nil {
-		return egress.DialTarget(ctx, "tcp", addr)
+		return DialTarget(ctx, "tcp", addr)
 	}
 	switch p.Scheme {
 	case "socks5", "socks5h":
@@ -427,13 +432,13 @@ func dialOut(ctx context.Context, p *url.URL, addr string) (net.Conn, error) {
 // proxy p, each as the absolute URI a proxy reads (what the run's own
 // client sends it): a CONNECT tunnel would hide the request from the proxy,
 // and many proxies refuse one to any port but 443.
-func (g *guard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
+func (g *ChromeGuard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
 	at := p.Host
 	if p.Port() == "" {
 		at = net.JoinHostPort(p.Hostname(), "80")
 	}
 	ctx, cancel := context.WithTimeout(g.ctx, 10*time.Second)
-	up, err := egress.DialProxy(ctx, "tcp", at)
+	up, err := DialProxy(ctx, "tcp", at)
 	cancel()
 	if err != nil {
 		return
@@ -474,11 +479,11 @@ func (g *guard) forward(c net.Conn, r *bufio.Reader, p *url.URL, addr string) {
 type runDialer struct{}
 
 func (runDialer) Dial(network, addr string) (net.Conn, error) {
-	return egress.DialProxy(context.Background(), network, addr)
+	return DialProxy(context.Background(), network, addr)
 }
 
 func (runDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
-	return egress.DialProxy(ctx, network, addr)
+	return DialProxy(ctx, network, addr)
 }
 
 // connectVia opens a tunnel to addr through an HTTP proxy.
@@ -487,7 +492,7 @@ func connectVia(ctx context.Context, p *url.URL, addr string) (net.Conn, error) 
 	if p.Port() == "" {
 		at = net.JoinHostPort(p.Hostname(), "80")
 	}
-	c, err := egress.DialProxy(ctx, "tcp", at)
+	c, err := DialProxy(ctx, "tcp", at)
 	if err != nil {
 		return nil, err
 	}

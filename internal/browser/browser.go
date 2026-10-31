@@ -99,7 +99,7 @@ type Browser struct {
 	root   context.Context
 	gate   gate
 
-	guard *guard
+	guard *egress.ChromeGuard
 	lost  atomic.Bool // Chrome's paused requests are no longer heard of
 
 	closeMu sync.Mutex
@@ -154,7 +154,7 @@ func (b *Browser) start() error {
 		// started: a later fetch.Reset (a run ending, a test) does not move
 		// it under requests still being decided.
 		b.allow = egress.Current().Scope()
-		if b.guard, err = newGuard(b.allowedHost); err != nil {
+		if b.guard, err = egress.NewChromeGuard(b.allowedHost); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
 			return
 		}
@@ -162,10 +162,10 @@ func (b *Browser) start() error {
 			pu, err := url.Parse(b.Proxy)
 			if err != nil || pu.Host == "" {
 				b.err = fmt.Errorf("starting Chrome: -chrome-proxy wants a URL such as http://127.0.0.1:8080 or socks5://127.0.0.1:9050, got %q", b.Proxy)
-				b.guard.close()
+				b.guard.Close()
 				return
 			}
-			b.guard.via = pu
+			b.guard.SetProxy(pu)
 		}
 		opts := append(chromedp.DefaultExecAllocatorOptions[:],
 			chromedp.ExecPath(path),
@@ -193,11 +193,6 @@ func (b *Browser) start() error {
 			chromedp.Flag("disable-component-extensions-with-background-pages", true),
 			chromedp.Flag("safebrowsing-disable-auto-update", true),
 			chromedp.Flag("disable-features", chromeOff),
-			// Every connection, loopback ones too, through the guard; and
-			// no WebRTC packet outside it.
-			chromedp.ProxyServer("socks5://"+b.guard.addr()),
-			chromedp.Flag("proxy-bypass-list", "<-loopback>"),
-			chromedp.Flag("webrtc-ip-handling-policy", "disable_non_proxied_udp"),
 		)
 		// The sandbox stays on: the pages are the targets'. Where the system
 		// refuses it (AppArmor on recent Ubuntu, some containers), the user
@@ -214,9 +209,8 @@ func (b *Browser) start() error {
 		if b.AllowPorts {
 			opts = append(opts, chromedp.Flag("explicitly-allowed-ports", restrictedPorts))
 		}
-		b.alloc, b.cancel = chromedp.NewExecAllocator(context.Background(), opts...)
-		// The guard lives as long as this Chrome, and relays for it alone.
-		context.AfterFunc(b.alloc, b.guard.close)
+		// Every connection, loopback ones too, through the guard.
+		b.alloc, b.cancel = egress.LaunchChrome(b.guard, opts...)
 		root, _ := chromedp.NewContext(b.alloc)
 		if err := chromedp.Do(root); err != nil {
 			b.err = fmt.Errorf("starting Chrome: %w", err)
@@ -227,7 +221,7 @@ func (b *Browser) start() error {
 			return
 		}
 		if p := chromedp.FromContext(root).Browser.Process(); p != nil {
-			b.guard.chrome(p.Pid)
+			b.guard.Chrome(p.Pid)
 		}
 		// No page opens before every request is held to the scope, and
 		// every download refused.
@@ -255,7 +249,7 @@ func (b *Browser) Close() {
 		b.cancel()
 	}
 	if b.guard != nil {
-		b.guard.close()
+		b.guard.Close()
 	}
 	b.working.Wait()
 	b.unheard(nil)

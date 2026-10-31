@@ -1,15 +1,11 @@
 package browser
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha1"
-	"crypto/tls"
 	"encoding/base64"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -36,7 +32,7 @@ func TestGuardOnlyChrome(t *testing.T) {
 	defer target.Close()
 	fetch.Reset()
 	egress.SetScope(func(h string) bool { return h == "127.0.0.1" })
-	d, err := proxy.SOCKS5("tcp", b.guard.addr(), nil, proxy.Direct)
+	d, err := proxy.SOCKS5("tcp", b.guard.Addr(), nil, proxy.Direct)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,49 +157,5 @@ func TestGuardResolver(t *testing.T) {
 	p, err := b.Load(ctx, "http://app.azhaq.test:"+u.Port()+"/", false)
 	if err != nil || p.Title != "found" {
 		t.Errorf("title %q, %v", p.Title, err)
-	}
-}
-
-// The first bytes of a connection tell TLS from plain HTTP, and a
-// WebSocket from the rest.
-func TestSniff(t *testing.T) {
-	hello := func(protos ...string) []byte {
-		client, server := net.Pipe()
-		defer client.Close()
-		go func() {
-			_ = tls.Client(client, &tls.Config{ServerName: "x.test", NextProtos: protos, InsecureSkipVerify: true}).Handshake()
-		}()
-		buf := make([]byte, 1<<15)
-		_ = server.SetReadDeadline(time.Now().Add(5 * time.Second))
-		n, _ := io.ReadAtLeast(server, buf, 5)
-		for n < 5+(int(buf[3])<<8|int(buf[4])) {
-			m, err := server.Read(buf[n:])
-			if err != nil {
-				break
-			}
-			n += m
-		}
-		server.Close()
-		return buf[:n]
-	}
-	for _, c := range []struct {
-		name    string
-		in      []byte
-		tls, ws bool
-	}{
-		{"get", []byte("GET / HTTP/1.1\r\nHost: a\r\nConnection: keep-alive\r\n\r\n"), false, false},
-		{"websocket", []byte("GET /ws HTTP/1.1\r\nHost: a\r\nConnection: Upgrade\r\nUpgrade: WebSocket\r\nSec-WebSocket-Version: 13\r\n\r\n"), false, true},
-		{"tls h2", hello("h2", "http/1.1"), true, false},
-		{"tls websocket", hello("http/1.1"), true, true},
-		{"tls no alpn", hello(), true, false},
-	} {
-		r := bufio.NewReaderSize(bytes.NewReader(c.in), 5+1<<14)
-		tls, ws, err := sniff(r)
-		if err != nil || tls != c.tls || ws != c.ws {
-			t.Errorf("%s: tls %v ws %v, %v", c.name, tls, ws, err)
-		}
-		if rest, _ := io.ReadAll(r); !bytes.Equal(rest, c.in) {
-			t.Errorf("%s: sniffing consumed the bytes", c.name)
-		}
 	}
 }

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/catalog"
+	"github.com/trannghiach/azhaq/internal/egress"
 	"github.com/trannghiach/azhaq/internal/fetch"
 	"github.com/trannghiach/azhaq/internal/normalize"
 	"github.com/trannghiach/azhaq/internal/timing"
