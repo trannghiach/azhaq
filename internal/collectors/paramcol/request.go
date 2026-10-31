@@ -17,7 +17,7 @@ const placeholder = "$arjun$"
 
 // newRequest is the request carrying q: in the query for GET, otherwise in
 // a form, JSON or XML body.
-func (s *search) newRequest(q []pair) (*http.Request, error) {
+func (s *search) newRequest(base *url.URL, q []pair) (*http.Request, error) {
 	if len(s.fixed) > 0 {
 		q = append(append(make([]pair, 0, len(s.fixed)+len(q)), s.fixed...), q...)
 	}
@@ -35,13 +35,13 @@ func (s *search) newRequest(q []pair) (*http.Request, error) {
 		case XML:
 			body, ctype = xmlBody(s.include, q), "application/xml"
 		}
-		req, err = http.NewRequestWithContext(s.ctx, http.MethodPost, s.base.String(), bytes.NewReader(body))
+		req, err = http.NewRequestWithContext(s.ctx, http.MethodPost, base.String(), bytes.NewReader(body))
 		if err != nil {
 			return nil, err
 		}
 		req.Header.Set("Content-Type", ctype)
 	default:
-		u := *s.base
+		u := *base
 		var b strings.Builder
 		b.WriteString(u.RawQuery)
 		if s.include != "" {

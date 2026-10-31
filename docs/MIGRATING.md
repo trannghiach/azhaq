@@ -460,6 +460,7 @@ Behaviour, fields and edge cases: [`azhaq params`](commands/params.md).
 
 <!-- azhaq: params -->
 
+- A parameter already in the URL (`?q=apple`) is tested too and reported with its `why`, as arjun does: the name is renamed to one no page reads, or given another value, and a change that shows twice counts. See [params](commands/params.md).
 - A page that answers any name is judged against random names of the same lengths. Such a page prints the query string back or counts the names. arjun has no control request. Reflection is told apart by a random token.
 - The built-in list is 6,500 names, which is `-w large`. arjun's `large` is longer. Use `-w FILE` for a list of your own. Names are sent in the order given, without duplicates.
 - When a long query is refused with 414, the group of names shrinks.

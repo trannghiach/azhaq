@@ -27,7 +27,8 @@ azhaq params -i burp-export.xml -allow app.example.com -X POST
 2. Asks each page with random names first, to get a reference answer and the page's own noise.
 3. Sends the names of the list in groups and compares each answer with that reference.
 4. Narrows a group that changed the answer down to the names that did it, and prints them with `why`.
-5. When the page refuses a request without its input (400 or 422), asks the names not found again with the names found so far in every request, against a new reference taken the same way, and repeats while a pass finds more (at most 3 passes). A page that reports its required fields one at a time says nothing about the second until the first is given. A page that answers without input is not asked again.
+5. Tests the parameters the URL already carries (`?q=apple`), which the list skips: a name is found when asking with it renamed to a name no page reads changes the answer, or else when another value does, and the change shows twice. A name the page ignores (`utm_source`) is not reported. On a page that prints what it is sent, only the rename is judged. They are in `params` with the others and `why` says what changed.
+6. When the page refuses a request without its input (400 or 422), asks the names not found again with the names found so far in every request, against a new reference taken the same way, and repeats while a pass finds more (at most 3 passes). A page that reports its required fields one at a time says nothing about the second until the first is given. A page that answers without input is not asked again.
 
 A body method sends requests that may change data on the target.
 

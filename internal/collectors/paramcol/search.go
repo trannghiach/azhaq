@@ -229,6 +229,16 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 	found := map[string]string{}
 	notes := s.gather(page, chunks, found)
 	floodAt := s.floodAt
+	var inURL map[string]string
+	if floodAt == math.MaxInt && !s.halted() {
+		inURL = s.inURL()
+		if s.ctx.Err() != nil {
+			return types.RunMeta{Status: types.StatusCancelled}, s.ctx.Err()
+		}
+		if s.spentNow() {
+			return types.RunMeta{}, nil
+		}
+	}
 	values := map[string]string{}
 	if floodAt == math.MaxInt && !s.halted() {
 		s.toggles(toggled, found, values)
@@ -244,6 +254,10 @@ func (s *search) run(page string, emit func(types.Observation) error) (types.Run
 		case s.spentNow():
 			return types.RunMeta{}, nil
 		}
+	}
+	// After deepen, which sends found names with every request: the URL has these.
+	for n, why := range inURL {
+		found[n] = why
 	}
 	s.mu.Lock()
 	bad := s.badXML
@@ -578,9 +592,13 @@ func (s *search) get(q []pair) (answer, bool) { return s.ask(q, false) }
 
 // ask is get; quiet: a request that gets no answer is not counted as lost
 // (probing how long a query the server takes).
-func (s *search) ask(q []pair, quiet bool) (answer, bool) {
+func (s *search) ask(q []pair, quiet bool) (answer, bool) { return s.askAt(s.base, q, quiet) }
+
+// askAt is ask for the page at base: the search's own URL, or that URL with
+// its query changed.
+func (s *search) askAt(base *url.URL, q []pair, quiet bool) (answer, bool) {
 	for attempt := 0; ; attempt++ {
-		a, wait, ok := s.once(q, quiet)
+		a, wait, ok := s.once(base, q, quiet)
 		if wait == 0 {
 			return a, ok
 		}
@@ -628,7 +646,7 @@ func (s *search) lose(quiet bool, err error) {
 
 // once sends one request. wait is not zero when the page limited it: the
 // time its Retry-After asks for, or 1 ns.
-func (s *search) once(q []pair, quiet bool) (a answer, wait time.Duration, ok bool) {
+func (s *search) once(base *url.URL, q []pair, quiet bool) (a answer, wait time.Duration, ok bool) {
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()
@@ -660,7 +678,7 @@ func (s *search) once(q []pair, quiet bool) (a answer, wait time.Duration, ok bo
 	timeout := s.c.Opts.Timeout
 	refused := 0
 	for {
-		req, err := s.newRequest(q)
+		req, err := s.newRequest(base, q)
 		if err != nil {
 			return answer{}, 0, false
 		}
