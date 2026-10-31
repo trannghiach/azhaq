@@ -356,6 +356,9 @@ func TestCommandListRunsPerInput(t *testing.T) {
 // and a 4 KiB reader, and the collector's work on them slowed the sweep
 // (and the server it shares a machine with) against ffuf's.
 func TestReadingAnAnswerReusesItsBuffers(t *testing.T) {
+	if raceOn {
+		t.Skip("the race detector makes sync.Pool drop items")
+	}
 	body := strings.Repeat("word ", 41) // 205 bytes
 	resp := &http.Response{Header: http.Header{}}
 	const n = 500
