@@ -208,3 +208,29 @@ func TestGroupTemplatesFoldsShapesOfOneRoute(t *testing.T) {
 		t.Errorf("a category is a page of its own: %d rows\n%s", n, text)
 	}
 }
+
+// A tool that writes one row per port (naabu) leaves one open port in each
+// row; the address lists them all, and with an azhaq scan beside them the
+// union of that scan's ports and the imported ones, naming both.
+func TestMapJoinsThePortsOfImportedRows(t *testing.T) {
+	ents := []types.Entity{{ID: "a", Type: types.TypeIPAddress, Key: "127.0.0.1"}}
+	naabu := func(port string) types.StoredObservation {
+		return types.StoredObservation{EntityID: "a", Observation: types.Observation{Collector: "naabu", Kind: "ports", Payload: json.RawMessage(
+			`{"host":"127.0.0.1","ip":"127.0.0.1","open":["` + port + `"],"via":"naabu"}`)}}
+	}
+	own := func(payload string) types.StoredObservation {
+		return types.StoredObservation{EntityID: "a", Observation: types.Observation{Collector: "azhaq-ports", Kind: "ports", Payload: json.RawMessage(payload)}}
+	}
+	got := engine.BuildMap(ents, nil, []types.StoredObservation{naabu("5002"), naabu("3001")}, nil, false)
+	if len(got) != 1 || got[0].Proof != "open=[3001 5002] via=naabu" {
+		t.Errorf("imported rows: %+v", got)
+	}
+	got = engine.BuildMap(ents, nil, []types.StoredObservation{
+		own(`{"ip":"127.0.0.1","open":[22],"partial":true}`),
+		own(`{"ip":"127.0.0.1","open":[22,443]}`),
+		naabu("3001"), naabu("443"),
+	}, nil, false)
+	if len(got) != 1 || got[0].Proof != "open=[22 443 3001] via=azhaq,naabu" {
+		t.Errorf("both: %+v", got)
+	}
+}
