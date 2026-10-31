@@ -43,6 +43,26 @@ func answersAt(addr, name string) bool {
 	return false
 }
 
+// addressAt is true when name resolves to an address at addr, directly or
+// through its CNAME chain: what subs -live calls a live name.
+func addressAt(addr, name string) bool {
+	cli := &dns.Client{Timeout: 3 * time.Second}
+	for _, t := range []uint16{dns.TypeA, dns.TypeAAAA} {
+		q := new(dns.Msg)
+		q.SetQuestion(dns.Fqdn(name), t)
+		r, _, err := cli.Exchange(q, addr)
+		if err != nil || r.Rcode != dns.RcodeSuccess {
+			continue
+		}
+		for _, rr := range r.Answer {
+			if rr.Header().Rrtype == t {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // labAddr is the address of a DNS lab resolver, started once if needed.
 // The returned stop is a no-op: the lab lives until the bench exits.
 func labAddr() (string, func()) {
@@ -119,7 +139,7 @@ func benchLab() *labRow {
 	must(os.WriteFile(wl, []byte(strings.Join(words, "\n")+"\n"), 0o644))
 	truth := map[string]bool{}
 	for _, w := range words {
-		if n := w + "." + labDomain; answersAt(lab, n) {
+		if n := w + "." + labDomain; addressAt(lab, n) {
 			truth[n] = true
 		}
 	}
@@ -128,8 +148,8 @@ func benchLab() *labRow {
 	live := hostSet(lines(out))
 	row.Live = sortedKeys(live)
 	missing, extra := diffKeys(truth, live)
-	addCheck("lab: subs -w -live gives the names the lab answers (dangling CNAMEs included, as dnsx counts them)", len(missing) == 0 && len(extra) == 0,
-		"lab answers %d names, azhaq printed %d; missing %v, extra %v; azhaq subs -d %s -w WORDS -resolvers LAB -live%s", len(truth), len(live), missing, extra, labDomain, azErr(m))
+	addCheck("lab: subs -w -live gives the names that resolve to an address (a CNAME to nothing is a takeover candidate, not a live name)", len(missing) == 0 && len(extra) == 0,
+		"%d names resolve at the lab, azhaq printed %d; missing %v, extra %v; azhaq subs -d %s -w WORDS -resolvers LAB -live%s", len(truth), len(live), missing, extra, labDomain, azErr(m))
 
 	// The wildcard subzone: only the name that differs from the wildcard answer is real.
 	ww := filepath.Join(dir, "wild-words.txt")
