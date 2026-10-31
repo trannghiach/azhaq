@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/trannghiach/azhaq"
@@ -16,11 +17,14 @@ var topics = []struct{ name, file, about string }{
 	{"recipes", "RECIPES.md", "how do I…: map an app, log in, find IDOR, test writes, map a program, resume, watch, export, GraphQL, MCP, live subdomains"},
 	{"concepts", "CONCEPTS.md", "what the words mean: a map row, coverage, kinds, exit codes, roles verdicts, what Azhaq sends"},
 	{"troubleshooting", "TROUBLESHOOTING.md", "why is my URL hint, the map looks thin, exit 3, exit 4, Chrome, where is my database"},
-	{"output", "OUTPUT.md", "what every command prints: fields, the summary, exit codes"},
+	{"output", "OUTPUT.md", "what every command prints: the summary, exit codes, the ledger; each command's fields are on its page"},
 	{"mcp", "MCP.md", "serving Azhaq to MCP clients: tools, scope lock, budget"},
 	{"connector", "CONNECTOR.md", "feeding other tools' results in: facts and connectors"},
 	{"architecture", "ARCHITECTURE.md", "how the engine works: seeds, collectors, the graph"},
 }
+
+// commandPageName is what a command's name looks like: the pages of docs/commands.
+var commandPageName = regexp.MustCompile(`^[a-z][a-z-]*$`)
 
 // docsOverview is what azhaq docs prints before the list of topics.
 const docsOverview = `azhaq maps what an application or a bug bounty program exposes, and who may
@@ -71,11 +75,16 @@ func cmdDocs(args []string) error {
 		for _, t := range topics {
 			fmt.Printf("  %-16s %s\n", t.name, t.about)
 		}
+		fmt.Printf("  %-16s %s\n", "COMMAND", "the page of one command: azhaq docs ports (commands/mcp for mcp, which is also a topic)")
 		return nil
 	}
 	want := strings.ToLower(strings.TrimSuffix(fs.Arg(0), ".md"))
+	page, onlyCommand := strings.CutPrefix(want, "commands/")
+	if onlyCommand {
+		want = page
+	}
 	for _, t := range topics {
-		if t.name != want {
+		if t.name != want || onlyCommand {
 			continue
 		}
 		if t.file == "" {
@@ -89,5 +98,11 @@ func cmdDocs(args []string) error {
 		_, err = os.Stdout.Write(raw)
 		return err
 	}
-	return usagef("no topic %q; azhaq docs lists them", fs.Arg(0))
+	if commandPageName.MatchString(want) {
+		if raw, err := docs.Files.ReadFile("commands/" + want + ".md"); err == nil {
+			_, err = os.Stdout.Write(raw)
+			return err
+		}
+	}
+	return usagef("no topic or command %q; azhaq docs lists them", fs.Arg(0))
 }

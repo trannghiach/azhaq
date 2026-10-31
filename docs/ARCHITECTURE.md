@@ -78,7 +78,7 @@ A collector can also hand over seeds before it returns with `catalog.Hint(ctx, s
 | `azhaq-rdap` | registration data and nameservers |
 | `azhaq-cloud` | domains, hosts and URLs from a local cloud inventory |
 
-Sources Azhaq does not query itself can be plugged in as external programs: [docs/CONNECTOR.md](docs/CONNECTOR.md).
+Sources Azhaq does not query itself can be plugged in as external programs: [docs/CONNECTOR.md](CONNECTOR.md).
 
 ## Run options
 

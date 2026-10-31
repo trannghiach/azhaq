@@ -44,6 +44,8 @@ func benchDocs() *docsRow {
 			files = append(files, f)
 		}
 	}
+	pages, _ := filepath.Glob("docs/commands/*.md")
+	files = append(files, pages...)
 	text := map[string]string{}
 	for _, f := range files {
 		if b, err := os.ReadFile(f); err == nil {

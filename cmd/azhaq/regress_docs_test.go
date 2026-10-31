@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -70,8 +71,8 @@ func TestRegressROL20READMENamesRolesShowDir(t *testing.T) {
 // targets given are its scope.
 func TestRegressDOC01ScopeRuleOfActiveOptions(t *testing.T) {
 	bad := regexp.MustCompile("(?i)needs? (its flag, )?an? `?-allow`? scope|need(s)? a scope|refuses? without `?-allow")
-	docs := []string{"../../README.md", "../../docs/ARCHITECTURE.md", "../../docs/CONCEPTS.md", "../../docs/OUTPUT.md",
-		"../../docs/RECIPES.md", "../../docs/TROUBLESHOOTING.md", "../../docs/MCP.md"}
+	docs := append([]string{"../../README.md", "../../docs/ARCHITECTURE.md", "../../docs/CONCEPTS.md", "../../docs/OUTPUT.md",
+		"../../docs/RECIPES.md", "../../docs/TROUBLESHOOTING.md", "../../docs/MCP.md"}, commandPages()...)
 	for _, d := range docs {
 		for _, l := range docLines(readDoc(t, d)) {
 			if bad.MatchString(l) {
@@ -110,6 +111,15 @@ func TestRegressREL02ReadmeLinksAreInTheArchive(t *testing.T) {
 	if !inArchive["README.md"] || !inArchive["LICENSE"] {
 		t.Fatalf("archive files not read from .goreleaser.yaml: %v", inArchive)
 	}
+	// An archive entry may be a glob (docs/commands/*.md).
+	archived := func(file string) bool {
+		for entry := range inArchive {
+			if ok, _ := path.Match(entry, file); ok {
+				return true
+			}
+		}
+		return false
+	}
 	link := regexp.MustCompile(`\]\(([^)\s]+)\)`)
 	n := 0
 	for _, m := range link.FindAllStringSubmatch(readDoc(t, "../../README.md"), -1) {
@@ -119,7 +129,7 @@ func TestRegressREL02ReadmeLinksAreInTheArchive(t *testing.T) {
 		}
 		target, _, _ = strings.Cut(target, "#")
 		n++
-		if !inArchive[target] {
+		if !archived(target) {
 			t.Errorf("README links to %s, which the release archive does not hold", target)
 		}
 		if _, err := os.Stat("../../" + target); err != nil {

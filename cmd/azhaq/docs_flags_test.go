@@ -14,7 +14,7 @@ import (
 // The flags the public docs name must exist: a command line in a doc runs,
 // and a flag in a sentence about a command is one that command takes.
 
-var publicDocs = []string{
+var publicDocs = append([]string{
 	"../../README.md",
 	"../../docs/ARCHITECTURE.md",
 	"../../docs/CONCEPTS.md",
@@ -24,7 +24,7 @@ var publicDocs = []string{
 	"../../docs/OUTPUT.md",
 	"../../docs/RECIPES.md",
 	"../../docs/TROUBLESHOOTING.md",
-}
+}, commandPages()...)
 
 // foreignFlags are flags of other tools the docs name, to say azhaq has no
 // such flag. Anything else a doc names has to be one of azhaq's.

@@ -4,7 +4,13 @@ package docs
 
 import "embed"
 
-// Files are the documents, by file name.
+// The flag tables of the pages in commands/ are made from the binary:
+// go generate ./docs rewrites them, and a test fails when one is stale.
 //
-//go:embed ARCHITECTURE.md CONNECTOR.md OUTPUT.md MCP.md CONCEPTS.md RECIPES.md TROUBLESHOOTING.md MIGRATING.md
+//go:generate go run ../cmd/azhaq docs -flags-into commands
+
+// Files are the documents, by file name; commands/NAME.md is the page of
+// one command.
+//
+//go:embed ARCHITECTURE.md CONNECTOR.md OUTPUT.md MCP.md CONCEPTS.md RECIPES.md TROUBLESHOOTING.md MIGRATING.md commands/*.md
 var Files embed.FS

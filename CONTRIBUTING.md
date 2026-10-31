@@ -46,3 +46,14 @@ It needs commitlint, installed once: `npm i -g @commitlint/cli@19.8.1`. Merge, `
 - A fix comes with a test that fails before it.
 - Comments are short and say why, not what. An exported name's comment starts with the name.
 - Flags and output fields are documented in `docs/`; tests in `cmd/azhaq` check the docs against the flags.
+
+## Docs
+
+Every command has a page, `docs/commands/NAME.md`. The table of its flags sits between `<!-- flags:begin NAME -->` and `<!-- flags:end -->` and is made from the binary, so it is never edited by hand. After a flag is added, changed or removed, rewrite the tables and commit them:
+
+```
+go generate ./docs      # or: go run ./cmd/azhaq docs -flags-into docs/commands
+azhaq docs -flags NAME  # prints one table, to look at it
+```
+
+A test in `cmd/azhaq` fails when a table differs from what the binary makes, when a command has no page, and when a link in the docs leads to a heading that is not there.

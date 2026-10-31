@@ -42,6 +42,7 @@ archives:
       - docs/CONCEPTS.md
       - docs/TROUBLESHOOTING.md
       - docs/MIGRATING.md
+      - docs/commands/*.md
       - bench/README.md
       - src: third_party/**/*
         dst: third_party

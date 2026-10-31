@@ -294,11 +294,12 @@ func init() {
 			output:   "progress on stderr",
 			examples: []string{"AZHAQ_WORKER_TOKEN=… azhaq worker -server http://10.0.0.5:7777"}},
 		{name: "docs", group: groupOther, run: cmdDocs,
-			summary: "print the documentation: output fields, exit codes, connectors, MCP",
-			usage:   "[TOPIC] | -flags COMMAND | -flags-into DIR",
+			summary: "print the documentation: a page for each command, output fields, exit codes, connectors, MCP",
+			usage:   "[TOPIC | COMMAND] | -flags COMMAND | -flags-into DIR",
 			output:  "Markdown; -flags prints one command's flag table, -flags-into rewrites the flag tables of the pages in DIR",
 			examples: []string{
 				"azhaq docs output",
+				"azhaq docs ports",
 				"azhaq docs -flags ports",
 				"azhaq docs -flags-into docs/commands",
 			}},
@@ -597,7 +598,7 @@ type commandInfo struct {
 
 func buildManifest() manifest {
 	m := manifest{Name: "azhaq", Version: version, ExitCodes: exitCodes,
-		Output: "results on stdout (-json: JSONL); progress and a final summary on stderr (-json: one JSON object with \"type\":\"summary\"); azhaq docs output describes every field"}
+		Output: "results on stdout (-json: JSONL); progress and a final summary on stderr (-json: one JSON object with \"type\":\"summary\"); azhaq docs COMMAND describes the fields of one command, azhaq docs output the shared contract"}
 	for _, c := range commands {
 		ci := commandInfo{Name: c.name, Group: c.group, Summary: c.summary, Usage: "azhaq " + strings.TrimSpace(c.name+" "+c.usage), Like: c.like, Output: c.output, Examples: c.examples}
 		ci.Flags = flagInfos(flagsOf(c.name))
